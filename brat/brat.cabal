@@ -79,7 +79,7 @@ library
                        megaparsec >= 9.0.0,
                        mtl,
                        HUnit,
-                       containers >= 0.6.5.1,
+                       containers,
                        proto-lens-runtime,
                        proto-lens,
                        microlens,
@@ -97,7 +97,10 @@ executable brat
                        filepath,
                        mtl,
                        containers,
-                       proto-lens-runtime
+                       proto-lens-runtime,
+                       microlens,
+                       text,
+                       proto-lens
 
   other-modules:       Brat.Checker,
                        Brat.Compile.Circuit,
