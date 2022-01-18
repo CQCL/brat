@@ -2,34 +2,46 @@
 
 BRAT=~/.local/bin/brat
 
-FIX=0
-PIX=0
+# List the files we expect to fail.
+XFAILS="bell.brat first.brat fzbz.brat juxt.brat karlheinz.brat kernel.brat patterns.brat thin.brat"
+
 declare -a FAILURES
 declare -a PASSES
+declare -a XFAILED
 
-function die() {
-    echo "Failed to check " $1
-    exit 1
-}
+cd examples
 
-for i in examples/*.brat; do
-    $BRAT $i >/dev/null 2>&1
-    if [ 0 -eq $? ];
-    then
-        PASSES[$PIX]="$i"
-        PIX=$(($PIX+1))
+for i in *.brat; do
+    (echo " $XFAILS" | grep " $i" > /dev/null)
+    XFAIL=$?  # Result code whether this file was in the list or not.
+    if ($BRAT $i >/dev/null 2>&1); then
+        if [ 0 -eq $XFAIL ]; then
+            i="(XPASS) $i"  # Unexpected pass (but allowed)
+        fi
+        PASSES+=("$i")
     else
-        FAILURES[$FIX]="$i"
-        FIX=$(($FIX+1))
+        if [ 0 -eq $XFAIL ]; then
+            XFAILED+=("$i")
+        else
+            FAILURES+=("$i")
+        fi
     fi
 done
 
 echo Passes
-for i in ${PASSES[*]}; do
-    echo "> " $i
+for i in "${PASSES[@]}"; do
+    echo "> $i"
 done
-echo ""
-echo Failures
-for i in ${FAILURES[*]}; do
-    echo "> " $i
+echo
+echo "Expected failures (XFAILs)"
+for i in "${XFAILED[@]}"; do
+  echo "> $i"
 done
+echo
+if [ 0 -ne ${#FAILURES[@]} ]; then
+  echo "There were test failures:"
+  for i in "${FAILURES[@]}"; do
+    echo "> $i"
+  done
+  exit 1
+fi
