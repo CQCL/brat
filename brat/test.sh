@@ -16,7 +16,7 @@ for i in *.brat; do
     XFAIL=$?  # Result code whether this file was in the list or not.
     if ($BRAT $i >/dev/null 2>&1); then
         if [ 0 -eq $XFAIL ]; then
-            i="(XPASS) $i"  # Unexpected pass (but allowed)
+            i="(PASS) $i"  # Unexpected pass (but allowed)
         fi
         PASSES+=("$i")
     else
