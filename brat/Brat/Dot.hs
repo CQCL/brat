@@ -17,6 +17,7 @@ instance Graph (BGraph' tm) where
 
 nodeLabel :: Node' tm -> String
 nodeLabel (BratNode nm _ _ _) = show $ show nm
+nodeLabel (KernelNode nm _ _ _) = show $ show nm
 
 showType :: Show (tm Chk Noun) => Either (SType tm) (VType' tm) -> String
 showType (Left sty) = ""

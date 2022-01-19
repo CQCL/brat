@@ -5,6 +5,12 @@ module Brat.Graph where
 import Brat.Naming
 import Brat.Syntax.Common
 
+data Node' tm
+  = BratNode Name (Thing' tm) [Input' tm] [Output' tm]
+  | KernelNode Name (Thing' tm) [(Port, SType tm)] [(Port, SType tm)]
+
+deriving instance Show (tm Chk Noun) => Show (Node' tm)
+
 data Thing' tm
   = Prim String  -- Something in the env
   | Eval Src     -- Something on a wire
@@ -16,7 +22,6 @@ data Thing' tm
   | Combo Src Src
   | Cluster [Node' tm]
 
-deriving instance Eq (Node' tm) => Eq (Thing' tm)
 deriving instance Show (Node' tm) => Show (Thing' tm)
 
 type Graph' tm = ([Node' tm], [Wire' tm])
@@ -28,12 +33,6 @@ deriving instance Eq (tm Chk Noun) => Eq (BGraph tm)
 deriving instance Show (tm Chk Noun) => Show (BGraph tm)
 -}
 
-data Node' tm
-  = BratNode Name (Thing' tm) [Input' tm] [Output' tm]
-  | KernelNode Name (Thing' tm) [(Port, SType tm)] [(Port, SType tm)]
-
-deriving instance Eq (tm Chk Noun) => Eq (Node' tm)
-deriving instance Show (tm Chk Noun) => Show (Node' tm)
 
 type Wire' tm = (Src, Either (SType tm) (VType' tm), Tgt)
 
