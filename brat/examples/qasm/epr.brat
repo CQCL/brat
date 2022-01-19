@@ -1,9 +1,0 @@
-hello2 :: Nat -> Nat
-hello2 0 = 0
-hello2 (1+ n) = n
-
-hello :: (f :: {(x :: Nat) -> (y :: Nat)})
-hello = { x -> hello2(x) }
-
-aepr :: { Qubit, Qubit -o Qubit, Qubit }
-aepr = ?hell

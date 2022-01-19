@@ -15,9 +15,9 @@ halfDown 0 = 0
 halfDown (2* n) = n
 halfDown (1+ n) = halfDown(n)
 
-is-cool :: String -> Bool
-is-cool "cool" = true
-is-cool x = false
+is_cool :: String -> Bool
+is_cool "cool" = true
+is_cool x = false
 
 left :: Pair Nat Bool -> Nat
 left [nat , bool] = nat

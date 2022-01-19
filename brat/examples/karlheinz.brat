@@ -1,23 +1,37 @@
+# This file contains type signatures for various operations laid out in the
+# "Types for Composite Experiments" Confluence page
+
+# Expectation:
+#  - It should parse and type check
+#  - We should fill in the function bodies in future
+
+# Reality:
+#  - The body of execute_n fails to parse as a thunk
+#  - The semicolon operator doesn't parse right in composeCirc
+#  - No instance of List (Pair A B) seems to parse right
+#  - There's no way to write the body of var loop
+#  - Aliasing types to kernels doesn't seem to work
+
 # Suggested types:
 # Real, Nat, Int, Bool, (X * Y), X^n, X -> Y, [ X ], D(X), Dist (∀n. D(B^n))
 # K-circ, O-circ
 # P-circ, M-circ
 
-type Qubit = Nat
-
 type Dist = List Bool
-type KCirc q b = Vec Qubit q -> Vec Bool b
+type KCirc q b = { Vec Qubit q -o Vec Bool b }
 type OCirc q b = Circ q b
-type PCirc q = Vec Qubit q -> Vec Bool q
-type MCirc q b = Vec Qubit q -> Vec Bool b
+type PCirc q = { Vec Qubit q -o Vec Bool q }
+type MCirc q b = { Vec Qubit q -o Vec Bool b }
 
-type Real = Nat
+type Real = Float
 
 #sample :: Pair N D(X) -> List X
 #sample = ?sample
 
-#promote :: List X -> D(X)
-#promote = ?promote
+# We should be able to define D(X)
+# promote :: List X -> D(X)
+promote :: List X -> Dist
+promote = ?promote
 
 execute :: KCirc -> Dist
 execute = ?execute
@@ -26,21 +40,22 @@ execute = ?execute
 shoot :: KCirc -> (result :: List Bool)
 shoot = ?shoot
 
-get_shots :: (nshots :: Nat), Circ -> (shots :: List Bool)
+get_shots :: (nshots :: Nat), KCirc -> (shots :: List Bool)
 get_shots = ?get_shots
 
-# execute_n :: Nat -> (K-circ -> Dist)
-execute_n :: (n :: Nat) -> (f :: { KCirc -> Dist })
-execute_n = n -> {c -> promote (get_shots((n, c)))} # partial application would be good
+# This thunk isn't getting parsed for some reason
+# execute_n :: (n :: Nat) -> (f :: { KCirc -> Dist })
+# execute_n = n -> {c -> promote(get_shots((n, c)))} # partial application would be good
 
 # P-circ, M-circ -> K-circ
-composeCirc :: (n :: Nat), PCirc n, MCirc n n -> KCirc n n
-composeCirc = a, b -> a; b
+# This should work, but it failing should be its own test case
+# composeCirc :: (n :: Nat), PCirc n, MCirc n n -> KCirc n n
+# composeCirc = a, b -> a; b
 
 # ideally we want n quantified?
 # [P-circ] * [M-circ] ~~> [ P-circ * M-circ ] ~~> [K-circ]
-genericComposition :: List (Pair PCirc MCirc) -> List KCirc
-genericComposition = ?gc
+# genericComposition :: List (Pair PCirc MCirc) -> List KCirc
+# genericComposition = ?gc
 
 # compilationPass :: forall X Y. (ins :: (Pair X Circ)) -> (outs :: Pair Circ Y)
 # compilationPass = ?cp
@@ -60,11 +75,17 @@ observable = ?obs
 quant :: List (List Bool) -> Real
 quant = ?q
 
-circuits_to_run :: ?hmm
-circuits_to_run = (a p) o (map snd H) 
+circuits_to_run :: List KCirc
+circuits_to_run = ?todo # (a p) o (map snd H) 
 
-results = map((execute, circuits_to_run))
-answer = energy results
+results :: List Dist
+results = map(execute, circuits_to_run)
+
+energy :: List Dist -> Float
+energy = ?e
+
+answer :: Float
+answer = energy(results)
 
 evaluate :: (obs :: Observable),
             (q :: Quantity),
@@ -74,14 +95,14 @@ evaluate :: (obs :: Observable),
 evaluate = ?eval
 
 my_eval :: List Real -> Real
-my_eval = rs -> evaluate((my_obs,my_quant,a,rs))
+my_eval = rs -> evaluate(my_obs,my_quant,a,rs)
 #my_eval = evaluate (my_obs,my_quant) a
 
 update :: (obs :: Observable),
           (q :: Quantity),
           (a :: Ansatz),
           (rs :: List R),
-          (init :: Real),
+          (init :: Real)
        -> (result :: List R)
 update = ?update
 
@@ -91,22 +112,21 @@ my_obs = ?afe
 my_quant :: Quantity
 my_quant = ?qa
 
-my_update :: [R] -> R -> [R]
-my_update = rs, r -> update((my_obs, my_quant, a, rs, r))
-# This (below) would be better
-# my_update = update((my_obs, my_quant, a))
+my_update :: List Float, Float -> List Float
+my_update = rs, r -> update(my_obs, my_quant, a, rs, r)
+# This would be better: my_update = update((my_obs, my_quant, a))
 
-var_loop :: ([R]-> R) -> ([R] -> R -> [R]) -> [R] -> R -> R
-var_loop = eval, update, params, prev_guess ->
-   new_guess = eval params
-   if (good_enough(prev_guess, new_guess)) 
-      return new_guess
-   else
-      return var_loop eval update (update params new_guess) new_guess
+var_loop :: {List Float -> Float}, {List Float, Float -> List Float}, List Float, Float -> Float
+var_loop = ?todo #eval, update, params, prev_guess ->
+#   new_guess = eval params
+#   if (good_enough(prev_guess, new_guess)) 
+#      return new_guess
+#   else
+#      return var_loop eval update (update params new_guess) new_guess
       
-my_loop :: (rs :: List Real) -> (prev :: Real) -> (result :: Real)
-my_loop = var_loop my_eval my_update
-
-answer :: (result :: Real)
-answer = my_loop initial_params initial_guess
+# my_loop :: (rs :: List Real), (prev :: Real) -> (result :: Real)
+# my_loop = var_loop(my_eval, my_update)
+# 
+# answer :: Float
+# answer = my_loop(initial_params,initial_guess)
 

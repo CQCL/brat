@@ -1,11 +1,16 @@
+# Expectation: This file typechecks
+# Reality:
+#  - id2 looks for for `id` as a value instead of a computation
+#  - id2' confuses the parser for some reason
+
 id :: Nat -> Nat
 id = x -> x
 
-#nid2 :: Vec {Nat, Nat -> Nat, Nat} 1
-#id2 = id, id
+id2 :: Nat, Nat -> Nat, Nat
+id2 = x, y -> (id,id)(x, y)
 
-id2' :: Nat, Nat -> Nat, Nat
-id2' = x, y -> (id,id)(x, y)
+id2' :: (x :: Nat), (y :: Nat) -> (x :: Nat), (y :: Nat)
+id2' = id, id
 
 id3 :: Nat, Nat -> Nat, Nat
 id3 = x, y -> ?help

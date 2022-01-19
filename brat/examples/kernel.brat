@@ -1,4 +1,12 @@
-zero :: ( ni-'9 :: Nat)
+# This shows a basic bell circuit
+
+# Expectation:
+#  - It should type check
+
+# Reality:
+#  - pba fails to parse (see juxt.brat)
+
+zero :: Nat
 zero = 9
 
 H :: { a :: Qubit -o b :: Qubit}
@@ -9,15 +17,6 @@ Rz = ?rz
 
 pba :: Float -> {c :: Qubit,d::Qubit -o c::Qubit,d::Qubit}
 pba = th -> { x, y -> (H, id)(x, y) }
-
-# f
-# a
-# a 
-
-# hell?
-# hello ?ha;e;
-# f :: {a :: Bit -o b::Qubit}
-# f = { x, y -> ?x }
 
 th :: {Bool -> Bool}
 th = ?th

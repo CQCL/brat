@@ -1,3 +1,6 @@
+# Experiments with selecting out of vectors with first class selections
+# This feature has fallen by the wayside, so expect this to fail
+
 # This type is WRONG
 test :: Vec X 2 <<< Vec X 2
 test = {0..} # The identity thinning
@@ -15,6 +18,6 @@ test'' = vec{0} # vec{2,4,5}
 # test''' = <0>
 
 mapOn :: (th :: x <<< y), (f :: X -> X), (Vec X y) -> Vec X y
-
+mapOn = ?mapOn
 
 map = mapOn {1,4} f vec
