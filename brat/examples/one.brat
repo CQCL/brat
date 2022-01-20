@@ -1,0 +1,40 @@
+test_input :: List Int
+test_input = 
+ [199
+ ,200
+ ,208
+ ,210
+ ,200
+ ,207
+ ,240
+ ,269
+ ,260
+ ,263
+ ]
+
+gt :: (this :: Nat), (that :: Nat) -> Bool
+gt 0, n = false
+gt (1+ n), 0 = true
+gt (1+ n), (1+ m) = gt(n, m)
+
+aux :: Bool, Nat -> Nat
+aux true, n = (1+ n)
+aux false, n = n
+
+mkList :: Nat, List Nat -> List Nat
+mkList x, xs = (cons x xs)
+
+increments :: Nat, List Nat -> Nat, List Nat
+increments n, (cons x (cons y xs)) = increments(aux(gt(y,x), n), mkList(y, xs))
+# increments n, xs = n, (nil)
+
+window :: List Nat -> List (Vec Nat 3)
+window (cons x (cons y (cons z xs))) = (cons [x,y,z] window((cons y (cons z xs))))
+window nil = nil
+
+fold :: (f :: {Nat, Nat -> Nat}), (acc :: Nat), List Nat -> (acc :: Nat)
+fold f, x, nil = x
+fold {f}, x, (cons y ys) = fold({ x -> f(x)}, f(x,y), ys)
+
+fold1 :: (f :: {Nat, Nat -> Nat}), Vec Nat (1+ n) -> Nat
+fold1 = ?unn

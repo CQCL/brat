@@ -1,0 +1,31 @@
+which :: Bool, Type, Type -> Type
+which true, a, b = a
+which false, a, b = b
+
+if :: Bool, { Unit -> Nat }, { Unit -> Nat } -> Nat
+if true, then, else = then(<>)
+if false, then, else = else(<>)
+
+vec :: Vec Nat 4
+vec = [0,1,2,3]
+
+unpack_vec :: Vec Nat 4 -> Nat, Nat, Nat, Nat
+unpack_vec [a,b,c,d] = a,b,c,d
+
+add :: (x :: Nat), (y :: Nat) -> (z :: Nat)
+add 0, y = y
+add (1+ x), y = (1+ add(x,y))
+
+main :: (value :: Nat)
+main = add((add,add)(unpack_vec(vec)))
+
+ext H :: { Qubit -o Qubit }
+ext cnot :: { ctrl :: Qubit, tgt :: Qubit -o ctrl :: Qubit, tgt :: Qubit }
+ext M :: { Qubit -o Bool }
+
+main2 :: { Qubit, Qubit -o Bit, Bit }
+main2 = { q0, q1 -> (M,M)(cnot((H,id)(q0,q1))) }
+# main2 =
+# H,id;
+# cnot;
+# M,M
