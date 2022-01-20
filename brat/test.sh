@@ -3,7 +3,7 @@
 BRAT=~/.local/bin/brat
 
 # List the files we expect to fail.
-XFAILS="juxt.brat karlheinz.brat kernel.brat thin.brat hea.brat cqcconf.brat"
+XFAILS="juxt.brat juxt2.brat karlheinz.brat kernel.brat thin.brat hea.brat cqcconf.brat"
 
 declare -a FAILURES
 declare -a PASSES
