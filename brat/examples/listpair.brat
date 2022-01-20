@@ -1,0 +1,25 @@
+# Expectation:
+#  - This file should parse and typecheck
+
+# Reality:
+#  - Pair doesn't accept a type alias as its first argument
+
+noun :: List (Pair Nat Bool)
+noun = nil
+
+id :: List (Pair Nat Float) -> List (Pair Nat Float)
+id x = x
+
+type Real = Float
+
+idRs :: List Real -> List Real
+idRs x = x
+
+idPos' :: List (Pair Unit Real) -> List (Pair Unit Real)
+idPos' = ?id'
+
+idPos'' :: List (Pair Real Unit) -> List (Pair Real Unit)
+idPos'' = ?id''
+
+idPos :: List (Pair Real Real) -> List (Pair Real Real)
+idPos = ?id

@@ -6,11 +6,11 @@
 #  - We should fill in the function bodies in future
 
 # Reality:
-#  - The body of execute_n fails to parse as a thunk
-#  - The semicolon operator doesn't parse right in composeCirc
-#  - No instance of List (Pair A B) seems to parse right
+#  - The body of execute_n fails to parse as a thunk (see composition.brat)
+#  - The semicolon operator doesn't parse right in composeCirc (see composition.brat)
+#  - No instance of List (Pair A B) seems to parse right (see listpair.brat)
 #  - There's no way to write the body of var loop
-#  - Aliasing types to kernels doesn't seem to work
+#  - Aliasing types to kernels doesn't work (see karlheinz_alias.brat)
 
 # Suggested types:
 # Real, Nat, Int, Bool, (X * Y), X^n, X -> Y, [ X ], D(X), Dist (∀n. D(B^n))
@@ -33,7 +33,7 @@ type Real = Float
 promote :: List X -> Dist
 promote = ?promote
 
-execute :: KCirc -> Dist
+execute :: KCirc 2 2 -> Dist
 execute = ?execute
 
 # shoot : K-circ -> B^q
