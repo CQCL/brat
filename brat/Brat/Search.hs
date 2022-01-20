@@ -35,6 +35,7 @@ tokenValues (K ss ts) = undefined
 tokenValues (Option ty) = (:) (Pattern (Uhh PNone)) $ do
   val <- tokenValues ty
   [Pattern (Uhh (PSome (Uhh val)))]
+tokenValues _ = []
 
 tokenFuncs :: CType -> [Term Chk Verb]
 tokenFuncs (ss :-> ts)
