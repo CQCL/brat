@@ -6,7 +6,6 @@ BRAT=~/.local/bin/brat
 XFAILS="composition.brat
         cqcconf.brat
         juxt.brat
-        juxt2.brat
         karlheinz.brat
         karlheinz_alias.brat
         kernel.brat

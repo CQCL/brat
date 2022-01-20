@@ -1,6 +1,4 @@
 # Expectation: This file typechecks
-# Reality:
-#  - id2 looks for `id` as a value instead of a computation
 
 id :: Nat -> Nat
 id = x -> x

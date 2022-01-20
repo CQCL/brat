@@ -365,17 +365,67 @@ check' (Do t) (overs, ())
       pure ([ ((this, port), ty) | (port, ty) <- ts], (overs, ()))
 check' (fun :$: arg) ((), ())
   | Var f <- unWC fun = do
-      (ss :-> ts) <- req $ CLup f
-      resultNode  <- next ("prim " ++ f) (Prim f) ss ts
-      argResult <- check arg ((), [ ((resultNode, port), ty) | (port, ty) <- ss ])
+      (node, ss, ts) <- lookupThunk f
+      argResult <- check arg ((), ss)
       let ((), ((), [])) = argResult
-      pure ([ ((resultNode, port), ty) | (port, ty) <- ts], ((), ()))
+      pure (ts, ((), ()))
+
+  | (f :|: g) <- unWC fun, Var f <- unWC f, Var g <- unWC g = do
+      (lnode, lins, louts) <- lookupThunk f
+      (rnode, rins, routs) <- lookupThunk g
+      argResult <- check arg ((), lins <> rins)
+      let ((), ((), [])) = argResult
+      pure (louts <> routs, ((), ()))
+
+  | (f :|: g) <- unWC fun, Var f <- unWC f = do
+      (lnode, lins, louts) <- lookupThunk f
+      ([((src, _), C (us :-> vs))], ((), ())) <- check g ((), ())
+      let rins  = [ ((src, port), ty) | (port, ty) <- us]
+      let routs = [ ((src, port), ty) | (port, ty) <- vs]
+      argResult <- check arg ((), lins ++ rins)
+      let ((), ((), [])) = argResult
+      pure (louts ++ routs, ((), ()))
+
+  | (f :|: g) <- unWC fun, Var g <- unWC g = do
+      ([((src, _), C (ss :-> ts))], ((), ())) <- check f ((), ())
+      let lins  = [((src, port), ty) | (port, ty) <- ss]
+      let louts = [((src, port), ty) | (port, ty) <- ts]
+      (rnode, rins, routs) <- lookupThunk g
+      argResult <- check arg ((), lins ++ rins)
+      let ((), ((), [])) = argResult
+      pure (louts ++ routs, ((), ()))
+
+{-
+  | (f :|: g) <- unWC fun = do
+--      let f' = (maybe Uhh WC (fcOf f)) (Do f)
+      ([((fSrc, _), C (ss :-> ts))], ((), ())) <- check f ((), ())
+      ([((gSrc, _), C (us :-> vs))], ((), ())) <- check g ((), ())
+      ((), ((), [])) <- check arg (()
+                                  ,[ ((fSrc, port), ty) | (port, ty) <- ss ] ++
+                                   [ ((gSrc, port), ty) | (port, ty) <- us ]
+                                  )
+      let outs = [ ((fSrc, port), ty) | (port, ty) <- ts ] ++
+                 [ ((gSrc, port), ty) | (port, ty) <- vs ]
+
+      pure (outs, ((), ()))
+-}
+
   | otherwise = do
       traceShowM fun
       ([(src, C (ss :-> ts))], ((), ())) <- check fun ((), ())
       evalNode <- next "eval" (Eval src) ss ts
       ((), ((), [])) <- check arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
       pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
+ where
+  lookupThunk :: String -> Checking (Name, [(Src, VType)], [(Src, VType)])
+  lookupThunk f = do
+      (ss :-> ts) <- req $ CLup f
+      resultNode  <- next ("prim " ++ f) (Prim f) ss ts
+      pure (resultNode
+           ,([ ((resultNode, port), ty) | (port, ty) <- ss])
+           ,([ ((resultNode, port), ty) | (port, ty) <- ts])
+           )
+
 check' (Simple tm) ((), (_, SimpleTy ty):unders) = do
   simpleCheck ty tm
   pure ((), ((), unders))
