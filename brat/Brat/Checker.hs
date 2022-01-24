@@ -833,7 +833,7 @@ kcheck' (fun :$: arg) ((), ())
       ((), ((), [])) <- kcheck arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
       pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
 -- Check applications of kernels
-kcheck' (fun :$: arg) ((), ()) = do
+  | otherwise = do
   (tys, ((), ())) <- check fun ((), ())
   (src, ss, ts) <- case tys of
                      [(src, K (R ss) (R ts)), (_, K (R us) (R vs))] -> pure (src, (ss <> us), (ts <> vs))
