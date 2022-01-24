@@ -813,6 +813,7 @@ kcheck' (Do t) (overs, ()) = do
   overs <- ksolder this overs ss
   pure ([ ((this, port), ty) | (port, ty) <- ts], (overs, ()))
 -- TODO: find a way to make check perceive this as a function
+-- Check brat functions and arguments assuming they'll produce a kernel
 kcheck' (fun :$: arg) ((), ())
   | Var f <- unWC fun = do
       (ss :-> ts) <- req $ CLup f
@@ -827,6 +828,7 @@ kcheck' (fun :$: arg) ((), ())
       evalNode <- knext "eval" (Eval src) ss ts
       ((), ((), [])) <- kcheck arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
       pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
+-- Check applications of kernels
 kcheck' (fun :$: arg) ((), ()) = do
   (tys, ((), ())) <- check fun ((), ())
   (src, ss, ts) <- case tys of
