@@ -17,6 +17,7 @@ data ErrorMsg
  | EvalErr String
  | NameClash String
  | MainNotFound
+ | PatFail String
  -- function, [argument]
  | Unimplemented String [String]
 
@@ -29,6 +30,7 @@ instance Show ErrorMsg where
   show (EvalErr x) = "Eval error " ++ x
   show (NameClash x) = "Name clash: " ++ x
   show MainNotFound = "No function found called \"main\""
+  show (PatFail x) = "Sorry: " ++ x
   show (Unimplemented f args) = unwords ("Unimplemented, sorry! --":f:args)
 
 data Error = Err { fc  :: Maybe FC
@@ -45,4 +47,7 @@ debug e@(Err Nothing _ _) = unlines ["err@???", show e]
 
 addSrc :: String -> Error -> Error
 addSrc name (Err fc _ msg) = Err fc (Just name) msg
+
+instance MonadFail (Either Error) where
+  fail = Left . Err Nothing Nothing . PatFail
 
