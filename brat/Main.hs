@@ -1,8 +1,14 @@
-import Brat.Compile.Scheme
+import Brat.Compile.Circuit
+import Brat.Compile.Dummy
+import Brat.FC
+import Brat.Syntax.Common (Decl(..), Row(..), VType'(..), Clause(..))
 import Brat.Error
 import Brat.Load
+import Util
 
+import qualified Data.ByteString as BS
 import Options.Applicative
+import Data.ProtoLens (encodeMessage)
 import System.FilePath (dropExtension)
 
 data Options = Opt {
@@ -33,14 +39,8 @@ main = do
          else pure ([], [])
   contents <- readFile file
   (nouns, verbs, holes) <- eitherIO (loadFileWithEnv env file contents)
-  if compile
-    then do let output = compileFile (nouns, verbs)
-            let outFile = (dropExtension file) <> ".ss"
-            writeFile outFile output
-            putStrLn output
-            putStrLn $ "Wrote to file " ++ outFile
-
-    else do putStrLn "Nouns:"
+  if not compile
+    then do putStrLn "Nouns:"
             print nouns
             putStrLn ""
             putStrLn "Verbs:"
@@ -48,3 +48,14 @@ main = do
             putStrLn ""
             putStrLn "Holes:"
             mapM_ print holes
+
+    else do mn <- eitherIO $
+                  maybeToRight (Err Nothing Nothing MainNotFound) $
+                  lookupBy ((== "main") . fnName) id nouns
+            let outFile = (dropExtension file) <> ".tk"
+            let [NounBody cls] = fnBody mn
+            let [(_, K ss ts)] = fnSig mn
+            let bin = wrapCircuit (compileCircuit (unWC cls) (ss, ts))
+            BS.writeFile outFile (encodeMessage bin)
+            putStrLn $ "Wrote to file " ++ outFile
+

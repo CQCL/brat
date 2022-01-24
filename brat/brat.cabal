@@ -101,7 +101,8 @@ executable brat
                        microlens,
                        text,
                        proto-lens,
-                       optparse-applicative
+                       optparse-applicative,
+                       bytestring
 
   other-modules:       Brat.Checker,
                        Brat.Compile.Circuit,

@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
 
-module Brat.Compile.Circuit where
+module Brat.Compile.Circuit (compileCircuit) where
 
 import Lens.Micro hiding (_Just, _Nothing)
 import Lens.Micro.Type (ASetter)
@@ -9,9 +9,17 @@ import Data.ProtoLens (defMessage)
 import Data.ProtoLens.Prism
 import Proto.Graph as G
 import Proto.Graph_Fields as G
-import Data.Text (Text)
+import Data.List
+import Data.Text (Text, pack)
+import Brat.Checker (run)
+import Brat.Error
+import Brat.FC
+import Brat.Load
+import Brat.Parser
 import Brat.Syntax.Core (VType, Term(..))
-import Brat.Syntax.Common (Quantum, Row(..), SType, Dir(..), Kind(..))
+import Brat.Syntax.Common
+import Brat.Syntax.Raw (desugarEnv)
+import Util
 
 type Classical = ()
 type Conditional = ()
@@ -19,7 +27,7 @@ type Conditional = ()
 data Pauli = I | X | Y | Z deriving Show
 
 data Box = Box { boxType :: OpType
-               , id :: Int -- Uh oh need to keep track of this now
+               , ident :: Int -- Uh oh need to keep track of this now
                , paulis :: Maybe [Pauli]
                } deriving Show
 
@@ -41,7 +49,7 @@ data Operation = Op { opType :: OpType
                     , classical :: Maybe Classical
                     } deriving Show
 
-data Command = Command { op :: Operation
+data Command = Command { op   :: Operation
                        , args :: [UnitId]
                        } deriving Show
 
@@ -54,8 +62,8 @@ type Array = [UnitId]
 
 data Circuit
   = Circuit { phase  :: String
-            , qubits :: UnitId
-            , bits   :: UnitId
+            , qubits :: Int
+            , bits   :: Int
             , permutation :: ()
             , commands :: [Command]
             } deriving Show
@@ -63,11 +71,37 @@ data Circuit
 process :: Term Chk Noun
         -> (Row Term Quantum, Row Term Quantum)
         -> Circuit
-process tm (ins, outs) = undefined
+process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
+                             bits  = max (count countB ins) (count countB outs)
+                         in  Circuit { phase  = "0.0" -- isn't actually read
+                                     , qubits = qbits
+                                     , bits   = bits
+                                     , permutation = ()
+                                     , commands = []
+                                     }
+ where
+  count :: (SType' Term Quantum -> Int) -> Row Term Quantum -> Int
+  count f (R r) = sum $ fmap (f . snd) r
+
+  countQ :: SType' Term Quantum -> Int
+  countQ (Q _) = 1
+  countQ Bit = 0
+  -- Absolute hack
+  countQ (Of sty (Simple (Num n))) | copyable sty = 0
+                                   | otherwise = n
+  countQ (Rho r) = count countQ r
+
+  countB :: SType' Term Quantum -> Int
+  countB (Q _) = 0
+  countB Bit = 1
+  -- Absolute hack
+  countB (Of sty (Simple (Num n))) | copyable sty = 1
+                                   | otherwise = 0
+  countB (Rho r) = count countB r
 
 none :: G.Value
 none = let nothing :: G.OptionValue = defMessage & G.maybe'inner .~ Nothing in
-         defMessage & G.maybe'option .~ (_Just # nothing)
+         defMessage & G.maybe'option .- nothing
          
 -- Shortcut for setting a `maybe` field
 (.-) :: ASetter s t k (Maybe v) -> v -> s -> t
@@ -79,22 +113,33 @@ circuit2Tierkreis Circuit{..} = defMessage & G.map .~ m
   m :: M.Map Text G.Value
   m = M.fromList
       [("implicitPermutation", emptyStruct)
-      ,("bits",     defMessage & G.maybe'vec .- bits)
-      ,("commands", defMessage & G.maybe'vec .- commands)
+      ,("bits",     toReg "c" bits)
+      ,("commands", defMessage & G.maybe'vec .- cmds)
       ,("name",     none)
       ,("phase",    defMessage & G.maybe'flt .- 0.0)
-      ,("qubits",   defMessage & G.maybe'vec .- qubits)
+      ,("qubits",   toReg "q" qubits)
       ]
 
-  bits :: G.VecValue
-  bits = undefined
+  cmds :: G.VecValue
+  cmds = undefined
 
-  commands :: G.VecValue
-  commands = undefined
+  toReg :: Text -> Int -> G.Value
+  toReg reg n = let structs :: [G.StructValue]
+                      = (\bit -> defMessage & G.map .~ M.fromList [("reg_name", mkStr reg)
+                                                                  ,("index", mkStr . pack $ show bit)])
+                        <$> [0..n-1]
+                    vecVal = defMessage & G.vec .~ ((\x -> defMessage & G.maybe'struct .- x)
+                                                    <$> structs)
+                in  defMessage & G.maybe'vec .- vecVal
 
-  qubits :: G.VecValue
-  qubits = undefined
+  mkStr :: Text -> G.Value
+  mkStr txt = defMessage & G.maybe'str .- txt
 
   emptyStruct :: G.Value
   emptyStruct = let struct :: G.StructValue = (defMessage & G.map .~ M.empty) in
-                  defMessage & G.maybe'struct .~ (_Just # struct)
+                  defMessage & G.maybe'struct .- struct
+
+compileCircuit :: Term Chk Noun
+               -> (Row Term Quantum, Row Term Quantum)
+               -> G.Value
+compileCircuit tm tys = defMessage & G.maybe'struct .- (circuit2Tierkreis $ process tm tys)

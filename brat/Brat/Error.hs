@@ -16,6 +16,7 @@ data ErrorMsg
  | DesugarErr String
  | EvalErr String
  | NameClash String
+ | MainNotFound
  -- function, [argument]
  | Unimplemented String [String]
 
@@ -27,6 +28,7 @@ instance Show ErrorMsg where
   show (DesugarErr x) = "Desugar error " ++ x
   show (EvalErr x) = "Eval error " ++ x
   show (NameClash x) = "Name clash: " ++ x
+  show MainNotFound = "No function found called \"main\""
   show (Unimplemented f args) = unwords ("Unimplemented, sorry! --":f:args)
 
 data Error = Err { fc  :: Maybe FC
