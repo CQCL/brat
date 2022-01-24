@@ -22,7 +22,7 @@ tokenValues (Product s t)
   = zipWith (\a b -> Pair (Uhh a) (Uhh b)) (cycle $ tokenValues s) (cycle $ tokenValues t)
 tokenValues (Vector ty (Simple (Num n))) = Vec <$> (replicate n . Uhh <$> tokenValues (SimpleTy Natural))
 tokenValues (Vector _ _) = [] -- not enough info
-tokenValues (K ss ts) = undefined
+tokenValues (K ss ts) = []
  where
   aux :: SType Term -> [Term Chk Noun]
   aux (Q q) = []
