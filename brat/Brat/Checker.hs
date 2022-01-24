@@ -323,9 +323,13 @@ check' (Emb t) (overs, unders) = do
  where
   checkOutputs :: [(Tgt, VType)] -> [(Src, VType)] -> Checking [(Tgt, VType)]
   checkOutputs tys [] = pure tys
+  -- HACK: Try to merge kernels willy-nilly
+  checkOutputs top@((tgt, K _ _):tys) ((src, K (R ss) (R ts)):(src', K (R us) (R vs)):outs) = do
+    src <- next "kcombo" (Combo src src') [] [("fun", K (R (ss <> us)) (R (ts <> vs)))]
+    checkOutputs top (((src, "fun"), K (R (ss <> us)) (R (ts <> vs))):outs)
   checkOutputs ((tgt, ty):tys) ((src, ty'):outs)
    | ty == ty' = wire (src, Right ty, tgt) *> checkOutputs tys outs
-  checkOutputs tgt src = err $ unlines ["ncheck: checkOutputs failed"
+  checkOutputs tgt src = err $ unlines ["check (brat): checkOutputs failed"
                                        ,"top: " ++ show tgt
                                        ,"bot: " ++ show src
                                        ]
@@ -801,7 +805,7 @@ kcheck' (Emb t) (overs, unders) = do
   kcheckOutputs tys [] = pure tys
   kcheckOutputs ((tgt, ty):tys) ((src, ty'):outs)
    | ty == ty' = wire (src, Left ty, tgt) *> kcheckOutputs tys outs
-  kcheckOutputs _ _ = fail "ncheck: checkOutputs failed"
+  kcheckOutputs _ _ = fail "check (kernel): checkOutputs failed"
 kcheck' (Th _) _ = fail "no higher order signals! (Th)"
 kcheck' (Var x) ((), ()) = do
   output <- req $ KLup x
