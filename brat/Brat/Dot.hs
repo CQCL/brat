@@ -19,12 +19,12 @@ nodeLabel :: Node' tm -> String
 nodeLabel (BratNode nm _ _ _) = show $ show nm
 nodeLabel (KernelNode nm _ _ _) = show $ show nm
 
-showType :: Show (tm Chk Noun) => Either (SType tm) (VType' tm) -> String
-showType (Left sty) = ""
-showType (Right vty) = show (show vty)
+labelType :: Show (tm Chk Noun) => Either (SType tm) (VType' tm) -> String
+labelType (Left sty) = ""
+labelType (Right vty) = unwords ["[label =", show (show vty), "]"]
 
 mkEdge :: Show (tm Chk Noun) => Wire' tm -> String
-mkEdge ((src,_), ty, (tgt,_)) = unwords [show (show src), "->", show (show tgt), "[label =", showType ty, "]"]
+mkEdge ((src,_), ty, (tgt,_)) = unwords [show (show src), "->", show (show tgt), labelType ty]
 
 dot :: Show (tm Chk Noun) => Graph' tm -> String
 dot (ns, es) = unlines ("digraph {":(nodeLabel <$> ns) ++ (mkEdge <$> es) ++ ["}"])
