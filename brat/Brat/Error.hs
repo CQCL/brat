@@ -15,6 +15,7 @@ data ErrorMsg
  | LexErr ParseError
  | DesugarErr String
  | EvalErr String
+ | NameClash String
  -- function, [argument]
  | Unimplemented String [String]
 
@@ -25,6 +26,7 @@ instance Show ErrorMsg where
   show (LexErr x) = "Lex error " ++ show x
   show (DesugarErr x) = "Desugar error " ++ x
   show (EvalErr x) = "Eval error " ++ x
+  show (NameClash x) = "Name clash: " ++ x
   show (Unimplemented f args) = unwords ("Unimplemented, sorry! --":f:args)
 
 data Error = Err { fc  :: Maybe FC

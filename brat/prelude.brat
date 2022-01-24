@@ -1,0 +1,18 @@
+# Stuff available in tket for compiling circuits
+
+ext X :: { Qubit -o Qubit }
+ext Y :: { Qubit -o Qubit }
+ext Z :: { Qubit -o Qubit }
+ext H :: { Qubit -o Qubit }
+ext S :: { Qubit -o Qubit }
+ext T :: { Qubit -o Qubit }
+ext Rx :: Float -> { Qubit -o Qubit }
+ext Ry :: Float -> { Qubit -o Qubit }
+ext Rz :: Float -> { Qubit -o Qubit }
+ext CX :: { Qubit, Qubit -o Qubit, Qubit }
+ext CY :: { Qubit, Qubit -o Qubit, Qubit }
+ext CZ :: { Qubit, Qubit -o Qubit, Qubit }
+ext CH :: { Qubit, Qubit -o Qubit, Qubit }
+ext CRx :: Float -> { Qubit, Qubit -o Qubit, Qubit }
+ext CRy :: Float -> { Qubit, Qubit -o Qubit, Qubit }
+ext CRz :: Float -> { Qubit, Qubit -o Qubit, Qubit }

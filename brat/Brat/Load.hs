@@ -1,4 +1,4 @@
-module Brat.Load (loadFile) where
+module Brat.Load (loadFile, loadFileWithEnv) where
 
 import Brat.Checker
 import Brat.Dot
@@ -11,6 +11,8 @@ import Brat.Syntax.Core
 import Brat.Syntax.Raw
 import Control.Monad.Freer (req)
 
+import Control.Monad (unless)
+import Data.List (intersect)
 import Data.List.NonEmpty (nonEmpty)
 import Debug.Trace
 
@@ -46,11 +48,19 @@ checkNoun Decl{..} = do
     (check body ((), [((tgt, port), ty) | (port, ty) <- fnSig]))
   pure ()
 
-loadFile :: String -> String -> Either Error ([NDecl], [VDecl], [TypedHole])
-loadFile fname contents = do
-  (nouns, verbs) <- desugarEnv =<< parseFile fname contents
-  let cenv = addVerbsToEnv verbs
-  let venv = addNounsToEnv nouns
+loadFileWithEnv :: ([NDecl],[VDecl]) -> String -> String
+                -> Either Error ([NDecl], [VDecl], [TypedHole])
+loadFileWithEnv (nouns, verbs) fname contents = do
+  (fnouns, fverbs) <- desugarEnv =<< parseFile fname contents
+  -- hacky mess - cleanup!
+  let _noun = intersect (fnName <$> nouns) (fnName <$> fnouns)
+  let _verb = intersect (fnName <$> verbs) (fnName <$> fverbs)
+  unless (null _noun) $
+    Left . Err Nothing Nothing . NameClash $ "Multidef in _noun: " ++ show _noun
+  unless (null _verb) $
+    Left . Err Nothing Nothing . NameClash $ "Multidef in _verb: " ++ show _verb
+  let cenv = addVerbsToEnv (fverbs ++ verbs)
+  let venv = addNounsToEnv (fnouns ++ nouns)
   -- giving a dummy file context - not ideal
   let env = (cenv, venv, nouns, verbs, FC (Pos 0 0) (Pos 0 0))
   (_, (holes, graph)) <- run env (mapM checkNoun (filter (not . null . fnBody) nouns))
@@ -58,4 +68,7 @@ loadFile fname contents = do
   traceM "----------------"
   traceM (dot $ graph <> graph')
   traceM "----------------"
-  pure (nouns, verbs, holes ++ holes')
+  pure (fnouns ++ nouns, fverbs ++ verbs, holes ++ holes')
+
+loadFile :: String -> String -> Either Error ([NDecl], [VDecl], [TypedHole])
+loadFile = loadFileWithEnv ([], [])
