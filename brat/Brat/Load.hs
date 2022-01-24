@@ -10,6 +10,7 @@ import Brat.Syntax.Common
 import Brat.Syntax.Core
 import Brat.Syntax.Raw
 import Control.Monad.Freer (req)
+import Util
 
 import Control.Monad (unless)
 import Data.List (intersect)
@@ -52,23 +53,24 @@ loadFileWithEnv :: ([NDecl],[VDecl]) -> String -> String
                 -> Either Error ([NDecl], [VDecl], [TypedHole])
 loadFileWithEnv (nouns, verbs) fname contents = do
   (fnouns, fverbs) <- desugarEnv =<< parseFile fname contents
+  nouns <- pure (fnouns ++ nouns)
+  verbs <- pure (fverbs ++ verbs)
   -- hacky mess - cleanup!
-  let _noun = intersect (fnName <$> nouns) (fnName <$> fnouns)
-  let _verb = intersect (fnName <$> verbs) (fnName <$> fverbs)
-  unless (null _noun) $
-    Left . Err Nothing Nothing . NameClash $ "Multidef in _noun: " ++ show _noun
-  unless (null _verb) $
-    Left . Err Nothing Nothing . NameClash $ "Multidef in _verb: " ++ show _verb
-  let cenv = addVerbsToEnv (fverbs ++ verbs)
-  let venv = addNounsToEnv (fnouns ++ nouns)
+  unless (null (duplicates nouns)) $
+    Left . Err Nothing Nothing . NameClash $ show (duplicates nouns)
+  unless (null (duplicates verbs)) $
+    Left . Err Nothing Nothing . NameClash $ show (duplicates verbs)
+  let cenv = addVerbsToEnv verbs
+  let venv = addNounsToEnv nouns
   -- giving a dummy file context - not ideal
   let env = (cenv, venv, nouns, verbs, FC (Pos 0 0) (Pos 0 0))
-  (_, (holes, graph)) <- run env (mapM checkNoun (filter (not . null . fnBody) nouns))
+  (_, (holes, graph))   <- run env (mapM checkNoun (filter (not . null . fnBody) nouns))
   (_, (holes', graph')) <- run env (mapM checkVerb (filter (not . null . fnBody) verbs))
+
   traceM "----------------"
   traceM (dot $ graph <> graph')
   traceM "----------------"
-  pure (fnouns ++ nouns, fverbs ++ verbs, holes ++ holes')
+  pure (nouns, verbs, holes ++ holes')
 
 loadFile :: String -> String -> Either Error ([NDecl], [VDecl], [TypedHole])
 loadFile = loadFileWithEnv ([], [])
