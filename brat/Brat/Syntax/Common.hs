@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE FlexibleContexts, UndecidableInstances #-}
 {-# LANGUAGE RankNTypes, QuantifiedConstraints #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
@@ -131,22 +130,6 @@ data Slice t = These [t] | From t deriving (Eq, Foldable, Functor, Traversable)
 instance Show t => Show (Slice t) where
   show (These xs) = intercalate "," (show <$> xs)
   show (From t)  = show t ++ ".."
-
-data WC a = WC FC a | Uhh a deriving (Foldable, Functor, Traversable)
-instance Show a => Show (WC a) where
-  show (WC _ a) = show a
-  show (Uhh a)  = show a
-
-instance Eq a => Eq (WC a) where
-  a == b = unWC a == unWC b
-
-unWC :: WC a -> a
-unWC (WC _ a) = a
-unWC (Uhh a)  = a
-
-fcOf :: WC a -> Maybe FC
-fcOf (WC fc _) = Just fc
-fcOf (Uhh _) = Nothing
 
 -- TODO: allow combinations thereof
 -- default to local

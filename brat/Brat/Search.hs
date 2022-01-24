@@ -2,6 +2,7 @@ module Brat.Search (vsearch, csearch) where
 
 import Data.List (transpose,zipWith)
 
+import Brat.FC
 import Brat.Syntax.Core
 import Brat.Syntax.Common
 

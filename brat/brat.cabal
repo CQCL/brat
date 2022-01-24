@@ -16,6 +16,7 @@ custom-setup
 
 common haskell
   default-extensions:  DataKinds,
+                       DeriveTraversable,
                        FlexibleInstances,
                        GADTs,
                        GeneralizedNewtypeDeriving,

@@ -1,5 +1,6 @@
 module Brat.Compile.Scheme (compileFile) where
 
+import Brat.FC
 import Brat.Syntax.Skel
 import Brat.Syntax.Core
 import Brat.Syntax.Common hiding (List)

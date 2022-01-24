@@ -1,5 +1,6 @@
 module Brat.Syntax.Skel where
 
+import Brat.FC
 import Brat.Syntax.Common
 import Brat.Syntax.Core
 

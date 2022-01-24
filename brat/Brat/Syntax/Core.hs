@@ -2,6 +2,7 @@
 
 module Brat.Syntax.Core where
 
+import Brat.FC
 import Brat.Graph
 import Brat.Naming
 import Brat.Syntax.Common

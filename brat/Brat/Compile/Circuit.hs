@@ -9,13 +9,8 @@ import Data.ProtoLens (defMessage)
 import Data.ProtoLens.Prism
 import Proto.Graph as G
 import Proto.Graph_Fields as G
-import Data.List
-import Data.Text (Text, pack)
-import Brat.Checker (run)
-import Brat.Error
+import Data.Text (Text)
 import Brat.FC
-import Brat.Load
-import Brat.Parser
 import Brat.Syntax.Core (VType, Term(..))
 import Brat.Syntax.Common
 import Brat.Syntax.Raw (desugarEnv)

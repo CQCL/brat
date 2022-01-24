@@ -14,3 +14,20 @@ data FC = FC { start :: Pos
 
 inside :: Pos -> FC -> Bool
 inside pos (FC start end) = (pos >= start) && (pos <= end)
+
+data WC a = WC FC a | Uhh a deriving (Foldable, Functor, Traversable)
+instance Show a => Show (WC a) where
+  show (WC _ a) = show a
+  show (Uhh a)  = show a
+
+instance Eq a => Eq (WC a) where
+  a == b = unWC a == unWC b
+
+unWC :: WC a -> a
+unWC (WC _ a) = a
+unWC (Uhh a)  = a
+
+fcOf :: WC a -> Maybe FC
+fcOf (WC fc _) = Just fc
+fcOf (Uhh _) = Nothing
+
