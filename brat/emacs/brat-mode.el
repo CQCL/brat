@@ -4,7 +4,7 @@
 (defconst brat-tricky-punctuation "\\(-o\\)\\|:\\|,")
 (defconst brat-comments "\\(#\\)\\(.*\\)$")
 (defconst brat-holes "?[[:alnum:]'_-]*")
-(defconst brat-keywords "type\\|import\\|ext")
+(defconst brat-keywords "^[[:space:]]*\\(type\\|import\\|ext\\)")
 (defconst brat-decl
   "^[[:space:]]*\\(ext\\)?[[:space:]]*\\([[:alnum:]'_-]*\\)[[:space:]]*::")
 (defconst brat-decl2 "^[[:space:]]*\\([[:alnum:]'_-]*\\)[[:print:]]*=")
@@ -13,7 +13,7 @@
 
 (defvar brat-font-lock-keywords
   (list
-   (cons brat-keywords    'font-lock-keyword-face)
+   (cons brat-keywords    '(1 font-lock-keyword-face))
    (cons brat-decl        '(2 font-lock-function-name-face))
    (cons brat-decl2       '(1 font-lock-function-name-face))
    (cons brat-prim-types  '(1 font-lock-type-face))
