@@ -4,6 +4,7 @@ import Brat.Checker
 import Brat.Dot
 import Brat.Error
 import Brat.FC
+import Brat.Graph (Thing(..))
 import Brat.Naming
 import Brat.Parser
 import Brat.Syntax.Common

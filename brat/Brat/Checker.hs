@@ -41,7 +41,6 @@ import Debug.Trace
 type Graph = Graph' Term
 type Node = Node' Term
 type Wire = Wire' Term
-type Thing = Thing' Term
 
 type family Overs (m :: Mode) (k :: Kind) :: Type where
   Overs m Noun = ()

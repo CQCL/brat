@@ -6,12 +6,12 @@ import Brat.Naming
 import Brat.Syntax.Common
 
 data Node' tm
-  = BratNode Name (Thing' tm) [Input' tm] [Output' tm]
-  | KernelNode Name (Thing' tm) [(Port, SType tm)] [(Port, SType tm)]
+  = BratNode Name Thing [Input' tm] [Output' tm]
+  | KernelNode Name Thing [(Port, SType tm)] [(Port, SType tm)]
 
 deriving instance Show (tm Chk Noun) => Show (Node' tm)
 
-data Thing' tm
+data Thing
   = Prim String  -- Something in the env
   | Eval Src     -- Something on a wire
   | Name :>>: Name -- Graph in a box
@@ -20,9 +20,7 @@ data Thing' tm
   | Id           -- Identity node for convenient wiring
   | Hypo         -- Hypothesis for type checking
   | Combo Src Src
-  | Cluster [Node' tm]
-
-deriving instance Show (Node' tm) => Show (Thing' tm)
+  deriving Show
 
 type Graph' tm = ([Node' tm], [Wire' tm])
 {-
