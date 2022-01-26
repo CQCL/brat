@@ -6,7 +6,7 @@
 (defconst brat-holes "?[[:alnum:]'_-]*")
 (defconst brat-keywords "^[[:space:]]*\\(type\\|import\\|ext\\)")
 (defconst brat-decl
-  "^[[:space:]]*\\(ext\\)?[[:space:]]*\\([[:alnum:]'_-]*\\)[[:space:]]*::")
+  "^[[:space:]]*\\(ext[[:space:]]*\".*\"\\)?[[:space:]]*\\([[:alnum:]'_-]*\\)[[:space:]]*::")
 (defconst brat-decl2 "^[[:space:]]*\\([[:alnum:]'_-]*\\)[[:print:]]*=")
 (defconst brat-literal "\\(^\\|[[:space:]]\\|[^[:alpha:]]\\)\\(true\\|false\\|[-]?[[:digit:]]+\\)")
 (defconst brat-con "1\\+\\|2\\*\\|nil\\|cons\\|some\\|none")

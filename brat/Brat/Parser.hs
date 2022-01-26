@@ -601,39 +601,43 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , [] , []))
   mkParser str = ident $ \x -> if x == str then Just (RTypeFree str) else Nothing
 
   extNDecl :: Parser RawNDecl
-  extNDecl = do (WC fc (fnName, ty)) <- withFC $ do
+  extNDecl = do (WC fc (fnName, ty, symbol)) <- withFC $ do
                   match (K KExt)
+                  space
+                  symbol <- string
                   space
                   fnName <- name
                   spaced (match TypeColon)
                   ty <- outputs
                   optional hspace
                   vspace
-                  pure (fnName, ty)
+                  pure (fnName, ty, symbol)
                 pure Decl { fnName = fnName
                           , fnSig = ty
                           , fnBody = []
                           , fnLoc = fc
                           , fnRT = RtLocal
-                          , fnLocality = Extern
+                          , fnLocality = Extern symbol
                           }
 
   extVDecl :: Parser RawVDecl
-  extVDecl = do (WC fc (fnName, ty)) <- withFC $ do
+  extVDecl = do (WC fc (fnName, ty, symbol)) <- withFC $ do
                   match (K KExt)
+                  space
+                  symbol <- string
                   space
                   fnName <- name
                   spaced (match TypeColon)
                   ty <- ctype
                   optional hspace
                   vspace
-                  pure (fnName, ty)
+                  pure (fnName, ty, symbol)
                 pure Decl { fnName = fnName
                           , fnSig = ty
                           , fnBody = []
                           , fnLoc = fc
                           , fnRT = RtLocal
-                          , fnLocality = Extern
+                          , fnLocality = Extern symbol
                           }
 
 pfile :: Parser Env

@@ -150,7 +150,7 @@ compileFile (nds, vds) = flip runReader cenv $ do
 
   compileNDecl :: NDecl -> M String
   compileNDecl Decl {..}
-   | fnLocality == Extern = pure ""
+   | Extern _ <- fnLocality = pure ""
    | otherwise = toString . Define fnName <$>
     case fnBody of
       [NounBody body] -> scheme (stripInfo (unWC body))
@@ -158,7 +158,7 @@ compileFile (nds, vds) = flip runReader cenv $ do
 
   compileVDecl :: VDecl -> M String
   compileVDecl Decl {..}
-   | fnLocality == Extern = pure ""
+   | Extern _ <- fnLocality = pure ""
    | otherwise = toString . Define fnName <$>
     case fnBody of
       [NoLhs rhs] -> todo

@@ -104,7 +104,7 @@ type family TypeForKind (k :: Kind) (io :: Type) where
   TypeForKind Noun io = [io]
   TypeForKind Verb io = CType' io
 
-data Locality = Extern | Local deriving (Eq, Show)
+data Locality = Extern String | Local deriving (Eq, Show)
 
 data Decl (k :: Kind) (io :: Type) (raw :: Dir -> Kind -> Type)
   = Decl { fnName :: String

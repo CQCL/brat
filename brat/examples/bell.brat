@@ -1,10 +1,10 @@
-ext cnot :: { ctrl :: Qubit, tgt :: Qubit -o ctrl :: Bool, tgt :: Bool }
+ext "cnot" cnot :: { ctrl :: Qubit, tgt :: Qubit -o ctrl :: Bool, tgt :: Bool }
 
-ext H :: { x :: Qubit -o x :: Qubit }
+ext "H" H :: { x :: Qubit -o x :: Qubit }
 
-ext measure :: { q :: Qubit -o b :: Bit }
+ext "M" measure :: { q :: Qubit -o b :: Bit }
 
-ext Rz :: (th :: Float) -> (k :: { q :: Qubit -o q :: Qubit })
+ext "Rz" Rz :: (th :: Float) -> (k :: { q :: Qubit -o q :: Qubit })
 
 type A = Bool
 type B = Nat
