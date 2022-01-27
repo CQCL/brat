@@ -6,7 +6,6 @@ import Control.Concurrent.MVar
 import Control.Lens hiding (Iso)
 import Control.Monad.IO.Class (liftIO)
 import Data.Rope.UTF16 (toString)
-import Data.Maybe (fromMaybe)
 import Data.Text (pack)
 import Language.LSP.Server
 import Language.LSP.Diagnostics
@@ -101,17 +100,17 @@ loadVFile state method msg = do
     Just (VirtualFile _version str rope) -> do
       let file = toString rope
       liftIO $ debugM "loadVFile" $ "Found file: " ++ show str
-      case loadFile (show fileName) file of
+      case loadFile Lib (show fileName) file of
         Left er -> do allGood fileName
                       sendError fileName (fixParseError er)
 
-        Right config@(_,_,holes) -> do
+        Right (_,_,newNouns,newVerbs,holes) -> do
           old@(PS oldNouns oldVerbs _ oldHoles) <- liftIO $ takeMVar state
-          if (oldNouns,oldVerbs, oldHoles) == config
+          if (oldNouns, oldVerbs, oldHoles) == (newNouns,newVerbs,holes)
             then liftIO (putMVar state old) >> allGood fileName
             else do
             liftIO $ debugM "loadVFile" $ "Updated ProgramState"
-            liftIO $ putMVar state (ps config)
+            liftIO $ putMVar state (ps (newNouns, newVerbs, holes))
             allGood fileName
             logHoles holes fileName
     Nothing -> do

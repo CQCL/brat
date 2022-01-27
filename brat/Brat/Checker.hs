@@ -15,6 +15,8 @@ module Brat.Checker (check
                     ,TypedHole(..)
                     ,Wire
                     ,wrapError
+                    ,next, knext
+                    ,localFC
                     ) where
 
 import Control.Arrow ((***))

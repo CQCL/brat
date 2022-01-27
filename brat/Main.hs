@@ -34,11 +34,11 @@ main = do
   Opt{..} <- execParser (info opts (progDesc "Compile a BRAT program"))
   env <- if prelude
          then do cts <- readFile "prelude.brat"
-                 (nouns, verbs, _) <- eitherIO $ loadFile "prelude.brat" cts
-                 pure (nouns, verbs)
-         else pure ([], [])
+                 (cenv, venv, nouns, verbs, _) <- eitherIO $ loadFile Lib "prelude.brat" cts
+                 pure (cenv, venv, nouns, verbs)
+         else pure ([], [], [], [])
   contents <- readFile file
-  (nouns, verbs, holes) <- eitherIO (loadFileWithEnv env file contents)
+  (cenv, venv, nouns, verbs, holes) <- eitherIO (loadFileWithEnv env Exe file contents)
   if not compile
     then do putStrLn "Nouns:"
             print nouns
@@ -52,10 +52,10 @@ main = do
     else do mn <- eitherIO $
                   maybeToRight (Err Nothing Nothing MainNotFound) $
                   lookupBy ((== "main") . fnName) id nouns
+            graph <- eitherIO $ typeGraph (cenv, venv) mn
             let outFile = (dropExtension file) <> ".tk"
-            let [NounBody cls] = fnBody mn
             let [(_, K ss ts)] = fnSig mn
-            let bin = wrapCircuit (compileCircuit (unWC cls) (ss, ts))
+            let bin = wrapCircuit (compileCircuit graph (ss, ts))
             BS.writeFile outFile (encodeMessage bin)
             putStrLn $ "Wrote to file " ++ outFile
 

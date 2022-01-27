@@ -1,6 +1,8 @@
-module Brat.Load (loadFile, loadFileWithEnv) where
+module Brat.Load (loadFile, loadFileWithEnv, LoadType(..), typeGraph) where
 
 import Brat.Checker
+import Brat.Compile.Circuit
+import Brat.Compile.Simple
 import Brat.Dot
 import Brat.Error
 import Brat.FC
@@ -13,10 +15,13 @@ import Brat.Syntax.Raw
 import Control.Monad.Freer (req)
 import Util
 
-import Control.Monad (unless)
+import Control.Monad (unless, when)
+import Data.Functor  (($>))
 import Data.List (intersect)
 import Data.List.NonEmpty (nonEmpty)
 import Debug.Trace
+
+data LoadType = Lib | Exe deriving (Eq, Show)
 
 addNounsToEnv :: [NDecl] -> VEnv
 addNounsToEnv = aux root
@@ -32,27 +37,44 @@ addVerbsToEnv :: [VDecl] -> CEnv
 addVerbsToEnv = foldr (\d cenv -> (fnName d, fnSig d):cenv) []
 
 checkVerb :: VDecl -> Checking ((), Connectors Brat Chk Verb)
-checkVerb Decl{..} = do
-  src <- req $ Fresh "above"
-  tgt <- req $ Fresh "below"
+checkVerb Decl{..}
+  | Local <- fnLocality = do
+  src <- req $ Fresh (fnName <> "/in")
+  tgt <- req $ Fresh (fnName <> "/out")
   let (ss :-> ts) = fnSig
   case nonEmpty fnBody of
-    Nothing -> fail $ "No body found for " ++ fnName
+    -- We should fail if compiling, but if we're just checking it's fine?
+    Nothing -> pure ((), ([], [])) -- fail $ "No body found for " ++ fnName
     Just body -> wrapError (addSrc fnName) $
-      checkClauses body ([((src, port), ty) | (port, ty) <- ss]
-                        ,[((tgt, port), ty) | (port, ty) <- ts])
+                 checkClauses body ([((src, port), ty) | (port, ty) <- ss]
+                                   ,[((tgt, port), ty) | (port, ty) <- ts])
+  | Extern sym <- fnLocality = do
+      let (ss :-> ts) = fnSig
+      next fnName (Prim sym) ss ts
+      pure ((), ([], []))
 
 checkNoun :: NDecl -> Checking ()
-checkNoun Decl{..} = do
-  tgt <- req $ Fresh "hypothesis"
+checkNoun Decl{..}
+  | Local <- fnLocality = do
+  tgt <- req $ Fresh fnName
   let [NounBody body] = fnBody
   wrapError (addSrc fnName) $
     (check body ((), [((tgt, port), ty) | (port, ty) <- fnSig]))
   pure ()
+  | Extern sym <- fnLocality = mapM_ (addNode sym) fnSig
+   where
+    addNode :: String -> (Port, VType) -> Checking ()
+    addNode sym (p, K (R ss) (R ts)) = knext (fnName ++ "/" ++ p) (Prim sym) ss ts $> ()
+    addNode sym (p, ty) = next (fnName ++ "/" ++ p) (Prim sym) [] [(p, ty)] $> ()
 
-loadFileWithEnv :: ([NDecl],[VDecl]) -> String -> String
-                -> Either Error ([NDecl], [VDecl], [TypedHole])
-loadFileWithEnv (nouns, verbs) fname contents = do
+typeGraph :: (CEnv, VEnv) -> NDecl -> Either Error Graph
+typeGraph (cenv, venv) fn = do
+  (_, (_, g)) <- run (cenv, venv, [], [], fnLoc fn) (checkNoun fn)
+  pure g
+
+loadFileWithEnv :: (CEnv, VEnv, [NDecl],[VDecl]) -> LoadType -> String -> String
+                -> Either Error (CEnv, VEnv, [NDecl], [VDecl], [TypedHole])
+loadFileWithEnv (cenv, venv, nouns, verbs) loadType fname contents = do
   (fnouns, fverbs) <- desugarEnv =<< parseFile fname contents
   nouns <- pure (fnouns ++ nouns)
   verbs <- pure (fverbs ++ verbs)
@@ -61,17 +83,27 @@ loadFileWithEnv (nouns, verbs) fname contents = do
     Left . Err Nothing Nothing . NameClash $ show (duplicates nouns)
   unless (null (duplicates verbs)) $
     Left . Err Nothing Nothing . NameClash $ show (duplicates verbs)
-  let cenv = addVerbsToEnv verbs
-  let venv = addNounsToEnv nouns
+  cenv <- pure $ cenv <> addVerbsToEnv verbs
+  venv <- pure $ venv <> addNounsToEnv nouns
   -- giving a dummy file context - not ideal
   let env = (cenv, venv, nouns, verbs, FC (Pos 0 0) (Pos 0 0))
-  (_, (holes, graph))   <- run env (mapM checkNoun (filter (not . null . fnBody) nouns))
-  (_, (holes', graph')) <- run env (mapM checkVerb (filter (not . null . fnBody) verbs))
+  (_, (holes, graph))   <- run env (mapM (\d -> localFC (fnLoc d) $ checkNoun d) nouns)
+  (_, (holes', graph')) <- run env (mapM (\d -> localFC (fnLoc d) $ checkVerb d) verbs)
 
-  traceM "----------------"
-  traceM (dot $ graph <> graph')
-  traceM "----------------"
-  pure (nouns, verbs, holes ++ holes')
+  -- all good? Let's just get the graph for `main` (and assume it's a noun)
+  when (loadType == Exe) $ do
+    main <- maybeToRight (Err Nothing Nothing MainNotFound) $ lookupBy ((=="main") . fnName) id nouns
+    (_, (_, graph)) <- run env (checkNoun main)
+    traceM "-----------------"
+    traceM (dot $ graph)
+    traceM "------------------"
+    traceM (show $ graph)
+    traceM "-------------------"
+    traceM (let [(_, K ss ts)] = fnSig main in show . flip compileCircuit (ss,ts) $ graph)
+    traceM "--------------------"
 
-loadFile :: String -> String -> Either Error ([NDecl], [VDecl], [TypedHole])
-loadFile = loadFileWithEnv ([], [])
+  pure (cenv, venv, nouns, verbs, holes ++ holes')
+
+loadFile :: LoadType -> String -> String
+         -> Either Error (CEnv, VEnv, [NDecl], [VDecl], [TypedHole])
+loadFile = loadFileWithEnv ([], [], [], [])

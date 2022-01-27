@@ -9,7 +9,9 @@ import Data.ProtoLens (defMessage)
 import Data.ProtoLens.Prism
 import Proto.Graph as G
 import Proto.Graph_Fields as G
-import Data.Text (Text)
+import Data.Text (Text, pack)
+
+import Brat.Graph
 import Brat.FC
 import Brat.Syntax.Core (VType, Term(..))
 import Brat.Syntax.Common
@@ -63,7 +65,7 @@ data Circuit
             , commands :: [Command]
             } deriving Show
 
-process :: Term Chk Noun
+process :: Graph' Term
         -> (Row Term Quantum, Row Term Quantum)
         -> Circuit
 process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
@@ -116,7 +118,7 @@ circuit2Tierkreis Circuit{..} = defMessage & G.map .~ m
       ]
 
   cmds :: G.VecValue
-  cmds = undefined
+  cmds = defMessage & G.vec .~ [] -- TODO
 
   toReg :: Text -> Int -> G.Value
   toReg reg n = let structs :: [G.StructValue]
@@ -134,7 +136,8 @@ circuit2Tierkreis Circuit{..} = defMessage & G.map .~ m
   emptyStruct = let struct :: G.StructValue = (defMessage & G.map .~ M.empty) in
                   defMessage & G.maybe'struct .- struct
 
-compileCircuit :: Term Chk Noun
+compileCircuit :: Graph' Term
                -> (Row Term Quantum, Row Term Quantum)
                -> G.Value
 compileCircuit tm tys = defMessage & G.maybe'struct .- (circuit2Tierkreis $ process tm tys)
+
