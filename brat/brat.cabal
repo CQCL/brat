@@ -61,8 +61,6 @@ library
                        Brat.Search,
                        Brat.Thin,
                        Control.Monad.Freer,
-                       Proto.Graph, Proto.Graph_Fields,
-                       Proto.Signature, Proto.Signature_Fields,
                        Util
 
   exposed-modules:     Brat.Checker,
@@ -73,7 +71,9 @@ library
                        Brat.Syntax.Common,
                        Brat.Syntax.Core,
                        Brat.Syntax.Raw,
-                       Brat.Syntax.Skel
+                       Brat.Syntax.Skel,
+                       Proto.Graph, Proto.Graph_Fields,
+                       Proto.Signature, Proto.Signature_Fields
 
   autogen-modules:     Proto.Graph, Proto.Graph_Fields,
                        Proto.Signature, Proto.Signature_Fields
@@ -128,8 +128,8 @@ executable brat
                        Brat.Syntax.Skel
                        Brat.Thin,
                        Control.Monad.Freer,
-                       Proto.Graph, Proto.Graph_Fields,
-                       Proto.Signature, Proto.Signature_Fields,
+                       Proto.Graph,
+                       Proto.Graph_Fields,
                        Util
 
 
