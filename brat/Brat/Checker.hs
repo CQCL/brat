@@ -333,8 +333,8 @@ check' (Emb t) (overs, unders) = do
                                        ,"bot: " ++ show src
                                        ]
 check' (Th t) (overs, (tgt, ty@(C (ss :-> ts))):unders) = do
-  srcNode <- next "thunk source" Source [] ss
-  tgtNode <- next "thunk target" Target ts []
+  srcNode <- next "thunk_source" Source [] ss
+  tgtNode <- next "thunk_target" Target ts []
   let thOvers  = [ ((srcNode, port), ty)| (port, ty) <- ss]
   let thUnders = [ ((tgtNode, port), ty)| (port, ty) <- ts]
   fnResult <- check t (thOvers, thUnders)
@@ -343,8 +343,8 @@ check' (Th t) (overs, (tgt, ty@(C (ss :-> ts))):unders) = do
   wire ((funNode, "fun"), Right ty, tgt)
   pure ((), (overs, unders))
 check' (Th t) (overs, (tgt, ty@(K (R ss) (R ts))):unders) = do
-  srcNode <- knext "thunk source" Source [] ss
-  tgtNode <- knext "thunk target" Target ts []
+  srcNode <- knext "thunk_source" Source [] ss
+  tgtNode <- knext "thunk_target" Target ts []
   let thOvers  = [ ((srcNode, port), ty)| (port, ty) <- ss]
   let thUnders = [ ((tgtNode, port), ty)| (port, ty) <- ts]
   ((), ([], [])) <- kcheck t (thOvers, thUnders)
