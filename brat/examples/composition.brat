@@ -2,9 +2,8 @@
 #  - These 3 'compose' functions should be equivalent
 
 # Reality:
-#  - The first has a problem looking up functions
-#  - The second confuses the parser because of the thunk
-#  - The third confuses the parser by using the ; operator
+#  - `compose1` confuses the parser because of the thunk
+#  - `compose2` confuses the parser by using the ; operator
 
 type A = Nat
 type B = Bool
@@ -12,7 +11,7 @@ type C = Unit
 
 # A workaround for not having the ; operator
 compose :: { A -> B }, { B -> C } -> {A -> C}
-compose f, g = { x -> g(f(x)) }
+compose {f}, {g} = { x -> g(f(x)) }
 
 compose1 :: { A -> B }, { B -> C } -> {A -> C}
 compose1 f, g = { x -> (f;g)(x) }
