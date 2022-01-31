@@ -1,6 +1,12 @@
 {-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
 
-module Brat.Compile.Circuit (compileCircuit) where
+module Brat.Compile.Circuit (Circuit(..)
+                            ,Command(..)
+                            ,Operation(..)
+                            ,compileCircuit
+                            ,process
+                            ,wrapCircuit
+                            ) where
 
 import Control.Arrow ((***), (&&&))
 import Control.Monad (unless)
@@ -47,17 +53,17 @@ data OpType
   | ExplicitModifier
   deriving Show
 
-                    } deriving Show
 data Operation = Op { opType :: String --OpType
 --                    , n_qb :: Int
                     , params :: [String]
 --                    , box :: Maybe Box
 --                    , conditional :: Maybe Conditional
 --                    , classical :: Maybe Classical
+                    } deriving (Eq, Show)
 
-                       } deriving Show
 data Command = Cmd { op   :: Operation
                    , args :: [Int]
+                   } deriving (Eq, Show)
 
 type Qubit = ()
 
