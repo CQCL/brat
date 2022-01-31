@@ -64,8 +64,10 @@ library
                        Util
 
   exposed-modules:     Brat.Checker,
+                       Brat.Compile.Circuit,
                        Brat.Error,
                        Brat.FC,
+                       Brat.Graph,
                        Brat.Load,
                        Brat.Naming,
                        Brat.Syntax.Common,
@@ -88,7 +90,8 @@ library
                        microlens,
                        vector,
                        text,
-                       deepseq
+                       deepseq,
+                       array
 
 executable brat
   import:              haskell, warning-flags
@@ -105,11 +108,11 @@ executable brat
                        text,
                        proto-lens,
                        optparse-applicative,
-                       bytestring
+                       bytestring,
+                       array
 
   other-modules:       Brat.Checker,
                        Brat.Compile.Circuit,
-                       Brat.Compile.Dummy,
                        Brat.Compile.Simple,
                        Brat.Compile.Scheme,
                        Brat.Dot,

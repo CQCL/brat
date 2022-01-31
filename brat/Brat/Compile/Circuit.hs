@@ -2,21 +2,30 @@
 
 module Brat.Compile.Circuit (compileCircuit) where
 
+import Control.Arrow ((***), (&&&))
+import Control.Monad (unless)
+import Data.Array ((!))
+import Data.Graph as Graph
+import Data.Maybe (fromJust)
 import Lens.Micro hiding (_Just, _Nothing)
 import Lens.Micro.Type (ASetter)
 import qualified Data.Map as M
 import Data.ProtoLens (defMessage)
 import Data.ProtoLens.Prism
-import Proto.Graph as G
-import Proto.Graph_Fields as G
+import qualified Data.Map as Map
 import Data.Text (Text, pack)
 
 import Brat.Graph
 import Brat.FC
+import Brat.Naming
 import Brat.Syntax.Core (VType, Term(..))
 import Brat.Syntax.Common
 import Brat.Syntax.Raw (desugarEnv)
+import Proto.Graph as G
+import Proto.Graph_Fields as G
 import Util
+
+import Debug.Trace
 
 type Classical = ()
 type Conditional = ()
@@ -38,17 +47,17 @@ data OpType
   | ExplicitModifier
   deriving Show
 
-data Operation = Op { opType :: OpType
-                    , n_qb :: Int
-                    , params :: Array
-                    , box :: Maybe Box
-                    , conditional :: Maybe Conditional
-                    , classical :: Maybe Classical
                     } deriving Show
+data Operation = Op { opType :: String --OpType
+--                    , n_qb :: Int
+                    , params :: [String]
+--                    , box :: Maybe Box
+--                    , conditional :: Maybe Conditional
+--                    , classical :: Maybe Classical
 
-data Command = Command { op   :: Operation
-                       , args :: [UnitId]
                        } deriving Show
+data Command = Cmd { op   :: Operation
+                   , args :: [Int]
 
 type Qubit = ()
 
@@ -74,7 +83,7 @@ process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
                                      , qubits = qbits
                                      , bits   = bits
                                      , permutation = ()
-                                     , commands = []
+                                     , commands = trace ("graph: " ++show tm) (fromJust (smth tm))
                                      }
  where
   count :: (SType' Term Quantum -> Int) -> Row Term Quantum -> Int
@@ -95,6 +104,29 @@ process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
   countB (Of sty (Simple (Num n))) | copyable sty = 1
                                    | otherwise = 0
   countB (Rho r) = count countB r
+
+  cmds :: [Command]
+  cmds = let (g, f, _) = toGraph tm
+             ns = Graph.topSort g
+             cmds = (nodeToCmd . f) <$> ns
+         in  cmds
+
+  smth :: Graph' Term -> Maybe [Command]
+  smth graph = do
+    let (g, f, _) = toGraph graph
+    let t = transposeG g
+    let sources = [ f n | n <- topSort g, t ! n == []]
+    traceM ("sources: " ++ show sources)
+    traceM ("ins: " ++ show ins)
+    unless (length sources == length ins) $ Nothing
+    traceShowM sources
+    pure []
+
+  nodeToCmd :: (Node' Term, Name, [Name]) -> Command
+  nodeToCmd (KernelNode _ (Prim p) _ _, nm, tgts)
+    = Cmd { op = Op { opType = p, params = [] }
+          , args = [] -- hmmmmmmm!!! (TODO:)
+          }
 
 none :: G.Value
 none = let nothing :: G.OptionValue = defMessage & G.maybe'inner .~ Nothing in
@@ -117,8 +149,19 @@ circuit2Tierkreis Circuit{..} = defMessage & G.map .~ m
       ,("qubits",   toReg "q" qubits)
       ]
 
+  mkCmd :: Command -> G.Value
+  mkCmd Cmd{..} = let qs = defMessage
+                           & G.maybe'vec .- (defMessage
+                                             & G.vec .~ (toReg "q" <$> args))
+                      m :: Map.Map Text G.Value
+                        = Map.fromList [("op"
+                                        ,defMessage & G.maybe'str .- pack (opType op))
+                                       ,("args", qs)]
+                      struct :: G.StructValue = defMessage & G.map .~ m
+                  in  defMessage & G.maybe'struct .- struct
+
   cmds :: G.VecValue
-  cmds = defMessage & G.vec .~ [] -- TODO
+  cmds = defMessage & G.vec .~ (mkCmd <$> commands)
 
   toReg :: Text -> Int -> G.Value
   toReg reg n = let structs :: [G.StructValue]
@@ -141,3 +184,19 @@ compileCircuit :: Graph' Term
                -> G.Value
 compileCircuit tm tys = defMessage & G.maybe'struct .- (circuit2Tierkreis $ process tm tys)
 
+empty :: G.Empty
+empty = defMessage
+
+wrapCircuit :: G.Value -> G.Graph
+wrapCircuit v = let node :: G.Node = defMessage & G.maybe'const .~ (_Just # v) in
+                   defMessage
+                   & G.nodes .~ (Map.fromList [("circuit", node)
+                                              ,("output", defMessage
+                                                          & G.maybe'output .~ (_Just # empty))
+                                              ])
+                   & G.edges .~ [defMessage
+                                 & G.portFrom .~ "value"
+                                 & G.portTo   .~ "value"
+                                 & G.nodeFrom .~ "circuit"
+                                 & G.nodeTo   .~ "output"
+                                ]

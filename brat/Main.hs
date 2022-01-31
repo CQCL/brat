@@ -1,5 +1,4 @@
 import Brat.Compile.Circuit
-import Brat.Compile.Dummy
 import Brat.FC
 import Brat.Syntax.Common (Decl(..), Row(..), VType'(..), Clause(..))
 import Brat.Error
