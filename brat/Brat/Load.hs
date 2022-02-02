@@ -87,8 +87,8 @@ loadFileWithEnv (cenv, venv, nouns, verbs) loadType fname contents = do
   venv <- pure $ venv <> addNounsToEnv nouns
   -- giving a dummy file context - not ideal
   let env = (cenv, venv, nouns, verbs, FC (Pos 0 0) (Pos 0 0))
-  (_, (holes, graph))   <- run env (mapM (\d -> localFC (fnLoc d) $ checkNoun d) nouns)
-  (_, (holes', graph')) <- run env (mapM (\d -> localFC (fnLoc d) $ checkVerb d) verbs)
+  (_, (holes, _))   <- run env (mapM (\d -> localFC (fnLoc d) $ checkNoun d) nouns)
+  (_, (holes', _)) <- run env (mapM (\d -> localFC (fnLoc d) $ checkVerb d) verbs)
 
   -- all good? Let's just get the graph for `main` (and assume it's a noun)
   when (loadType == Exe) $ do

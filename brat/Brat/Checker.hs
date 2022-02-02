@@ -562,9 +562,9 @@ check' t _ = fail $ "Won't check " ++ show t
 checkRPat :: (Tgt, VType) -> Pattern (WC (Term Chk Noun)) -> Checking ()
 checkRPat tgt@(_, SimpleTy Natural) (POnePlus x) = check1 tgt x
 checkRPat tgt@(_, SimpleTy Natural) (PTwoTimes x) = check1 tgt x
-checkRPat (_, List ty) PNil = pure ()
+checkRPat (_, List _) PNil = pure ()
 checkRPat (tgt, List ty) (PCons x xs) = check1 (tgt,ty) x *> check1 (tgt, List ty) xs $> ()
-checkRPat (_, Vector ty n) PNil = do
+checkRPat (_, Vector _ n) PNil = do
   n <- evalNat n
   if n == 0
     then pure ()
@@ -619,7 +619,7 @@ abstract inputs (APull ports abst) = do
   inputs <- pullPorts ports inputs
   abstract inputs abst
 abstract ((_, SimpleTy ty):inputs) (Lit tm) = simpleCheck ty tm $> ([], [], inputs)
-abstract ((src, Vector ty n):inputs) (VecLit xs) = do
+abstract ((_, Vector ty n):inputs) (VecLit xs) = do
   node <- next "natHypo" Hypo [] [("value", SimpleTy Natural)]
   check' n ((), [((node, "value"), SimpleTy Natural)])
   n <- evalNat n
@@ -631,7 +631,7 @@ abstract ((src, Vector ty n):inputs) (VecLit xs) = do
     aux node elem = do
       (venv, cenv, []) <- abstract [((node, "type"), ty)] elem
       pure (venv, cenv)
-abstract ((src, List ty):inputs) (VecLit xs) = do
+abstract ((_, List ty):inputs) (VecLit xs) = do
     node <- next "List literal pattern" Hypo [("type", ty)] []
     (venvs, cenvs) <- unzip <$> mapM (aux node) xs
     pure $ (concat venvs, concat cenvs, inputs)
@@ -648,27 +648,27 @@ abstract (input:inputs) (Pat pat) = checkPat input pat
   checkPat :: (Src, VType) -> Pattern Abstractor -> Checking (VEnv, CEnv, [(Src, VType)])
   checkPat (_, SimpleTy Natural) (POnePlus (Bind x)) = abstract (input:inputs) (Bind x)
   checkPat (_, SimpleTy Natural) (PTwoTimes (Bind x)) = abstract (input:inputs) (Bind x)
-  checkPat (_, Vector ty n) PNil = evalNatSoft n >>= \case
+  checkPat (_, Vector _ n) PNil = evalNatSoft n >>= \case
     Right n -> if n == 0
                then pure ([], [], inputs)
                else err "Vector length isn't 0 for pattern `Nil`"
     -- If we can't work out what the size is, it might be 0
     Left _  -> pure ([], [], inputs)
-  checkPat (src, Vector ty n) (PCons x xs) = do
+  checkPat (_, Vector ty n) (PCons x xs) = do
     n <- evalNat n
     let tailTy = Vector ty (Simple (Num (n - 1)))
     node <- next "PCons (Vec)" Hypo [("head", ty), ("tail", tailTy)] []
     (venv, cenv, []) <- abstract [((node, "head"), ty)] x
     (venv', cenv', []) <- abstract [((node, "tail"), tailTy)] xs
     pure (venv ++ venv', cenv ++ cenv', inputs)
-  checkPat (src, List ty) PNil = pure ([], [], inputs)
+  checkPat (_, List _) PNil = pure ([], [], inputs)
   checkPat (src, List ty) (PCons x xs) = do
     node <- next "PCons (List)" Hypo [("head", ty), ("tail", List ty)] []
     (venv, cenv, []) <- abstract [((node, "head"), ty)] x
     (venv', cenv', []) <- abstract [((node, "tail"), List ty)] xs
     pure (venv ++ venv', cenv ++ cenv', inputs)
   checkPat (src, Option ty) (PSome x) = abstract ((src, ty):inputs) x
-  checkPat (src, Option _) PNone = pure ([], [], inputs)
+  checkPat (_, Option _) PNone = pure ([], [], inputs)
   checkPat (_, ty) pat = do
     fc <- req AskFC
     let msg = "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty
@@ -681,7 +681,7 @@ kabstract :: [(Src, SType Term)]
                       ,[(Src, SType Term)] -- rightovers
                       )
 kabstract [] (Bind x) = fail $ "abstractor: no wires available to bind to " ++ show x
-kabstract (input:inputs) (AThunk x) = fail $ "Can't match kernel thunks"
+kabstract _ (AThunk _) = fail $ "Can't match kernel thunks"
 kabstract (input@(_, ty):inputs) (Bind x)
   = let q = if copyable ty then Tons else One
     in  pure ([(x, (q, input))], inputs)
@@ -694,7 +694,7 @@ kabstract inputs (APull ports abst) = do
   kabstract inputs abst
 kabstract ((_, Bit):inputs) (Lit (Bool b)) = simpleCheck Boolean (Bool b) $> ([], inputs)
 kabstract _ (Lit lit) = err $ "Can't match literal " ++ show lit ++ " in a kernel"
-kabstract ((src, Of ty n):inputs) (VecLit xs) = do
+kabstract ((_, Of ty n):inputs) (VecLit xs) = do
   node <- next "natHypo" Hypo [] [("value", SimpleTy Natural)]
   check' n ((), [((node, "value"), SimpleTy Natural)])
   n <- evalNat n
@@ -709,13 +709,13 @@ kabstract ((src, Of ty n):inputs) (VecLit xs) = do
 kabstract (input:inputs) (Pat pat) = checkPat input pat
  where
   checkPat :: (Src, SType Term) -> Pattern Abstractor -> Checking (KEnv, [(Src, SType Term)])
-  checkPat (_, Of ty n) PNil = evalNatSoft n >>= \case
+  checkPat (_, Of _ n) PNil = evalNatSoft n >>= \case
     Right n -> if n == 0
                then pure ([], inputs)
                else err "Vector length isn't 0 for pattern `Nil`"
     -- If we can't work out what the size is, it might be 0
     Left _  -> pure ([], inputs)
-  checkPat (src, Of ty n) (PCons x xs) = do
+  checkPat (_, Of ty n) (PCons x xs) = do
     n <- evalNat n
     let tailTy = Of ty (Simple (Num (n - 1)))
     node <- knext "PCons" Hypo [("head", ty), ("tail", tailTy)] []
@@ -889,7 +889,7 @@ kcheck' (Vec elems) ((), (_, Of ty n):unders) = do
   mapM_ (aux [((hypo, "ty"), ty)]) elems
 
   ceval n >>= \case
-    Left err@(Err _ src msg) -> req AskFC >>= \fc -> req (Throw $ Err (Just fc) src msg)
+    Left (Err _ src msg) -> req AskFC >>= \fc -> req (Throw $ Err (Just fc) src msg)
     Right (VSimple (Num n)) -> if length elems == n
                                then pure ((), ((), unders))
                                else fail $ unwords ["Vector is length"
