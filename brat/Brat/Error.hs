@@ -16,6 +16,7 @@ data ErrorMsg
  | DesugarErr String
  | EvalErr String
  | NameClash String
+ | VarNotFound String
  | MainNotFound
  | PatFail String
  -- function, [argument]
@@ -29,6 +30,7 @@ instance Show ErrorMsg where
   show (DesugarErr x) = "Desugar error " ++ x
   show (EvalErr x) = "Eval error " ++ x
   show (NameClash x) = "Name clash: " ++ x
+  show (VarNotFound x) = x ++ " not found"
   show MainNotFound = "No function found called \"main\""
   show (PatFail x) = "Sorry: " ++ x
   show (Unimplemented f args) = unwords ("Unimplemented, sorry! --":f:args)

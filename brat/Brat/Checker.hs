@@ -27,7 +27,7 @@ import Data.Functor (($>))
 import Data.Kind (Type)
 import Data.List (intercalate, transpose)
 import Data.List.NonEmpty (NonEmpty(..))
-import Prelude hiding (head)
+import Prelude
 
 import Brat.Error
 import Brat.Eval
@@ -113,18 +113,17 @@ data Context = Ctx { cenv :: CEnv
                    } deriving Show
 
 data CheckingSig ty where
-  Fresh :: String -> CheckingSig Name
-  Throw :: Error  -> CheckingSig a
-  Fail  :: Error  -> CheckingSig a
+  Fresh   :: String -> CheckingSig Name
+  Throw   :: Error  -> CheckingSig a
   LogHole :: TypedHole -> CheckingSig ()
-  AskFC :: CheckingSig FC
-  VLup :: String -> CheckingSig (Src, VType)
-  CLup :: String -> CheckingSig CType
-  Node :: Node -> CheckingSig ()
-  Wire :: Wire -> CheckingSig ()
-  Decls :: CheckingSig ([NDecl], [VDecl])
-  KLup :: String -> CheckingSig (Src, SType Term)
-  KDone :: CheckingSig ()
+  AskFC   :: CheckingSig FC
+  VLup    :: String -> CheckingSig (Maybe (Src, VType))
+  CLup    :: String -> CheckingSig (Maybe CType)
+  Node    :: Node -> CheckingSig ()
+  Wire    :: Wire -> CheckingSig ()
+  Decls   :: CheckingSig ([NDecl], [VDecl])
+  KLup    :: String -> CheckingSig (Src, SType Term)
+  KDone   :: CheckingSig ()
   AskVEnv :: CheckingSig VEnv
 
 data Quantity = None | One | Tons deriving (Eq, Show)
@@ -141,21 +140,34 @@ localFC f (Req r k) = Req r (localFC f . k)
 
 localVEnv :: [(String, (Src, VType))] -> Free CheckingSig v -> Free CheckingSig v
 localVEnv _   (Ret v) = Ret v
-localVEnv ext (Req (VLup x) k) | Just x <- lookup x ext = localVEnv ext (k x)
+localVEnv ext (Req (VLup x) k) | Just x <- lookup x ext = localVEnv ext (k (Just x))
 localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
                                    localVEnv ext (k (ext ++ env))
 localVEnv ext (Req r k) = Req r (localVEnv ext . k)
 
 localCEnv :: [(String, CType)] -> Free CheckingSig v -> Free CheckingSig v
 localCEnv _   (Ret v) = Ret v
-localCEnv ext (Req (CLup x) k) | Just x <- lookup x ext = localCEnv ext (k x)
+localCEnv ext (Req (CLup x) k) | Just x <- lookup x ext = localCEnv ext (k (Just x))
 localCEnv ext (Req r k) = Req r (localCEnv ext . k)
 
 wrapError :: (Error -> Error) -> Free CheckingSig v -> Free CheckingSig v
 wrapError f (Ret v) = Ret v
 wrapError f (Req (Throw e) k) = Req (Throw (f e)) k
-wrapError f (Req (Fail e) k) = Req (Fail (f e)) k
 wrapError f (Req r k) = Req r (wrapError f . k)
+
+vlup :: String -> Checking (Src, VType)
+vlup s = do
+  fc <- req AskFC
+  req (VLup s) >>= \case
+    Just vty -> pure vty
+    Nothing -> err $ s ++ " not in (value) environment"
+
+clup :: String -> Checking CType
+clup s = do
+  fc <- req AskFC
+  req (CLup s) >>= \case
+    Just cty -> pure cty
+    Nothing -> err $ s ++ " not in (computation) environment"
 
 type KEnv = [(String, (Quantity, (Src, SType Term)))]
 
@@ -200,14 +212,8 @@ handler (Req s k) ctx ns@(MkName name, i)
       LogHole hole -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
                          return (v,(hole:holes,g),ns)
       AskFC -> handler (k (typeFC ctx)) ctx ns
-      VLup s -> case lookup s (venv ctx) of
-                  Just ty -> handler (k ty) ctx ns
-                  Nothing -> Barf . Left . Err (Just (typeFC ctx)) Nothing $ TypeErr $
-                              s ++ " not in (value) environment"
-      CLup s -> case lookup s (cenv ctx) of
-                  Just ty -> handler (k ty) ctx ns
-                  Nothing -> Barf . Left . Err (Just (typeFC ctx)) Nothing $ TypeErr $
-                              s ++ " not in (computation) environment"
+      VLup s -> handler (k $ lookup s (venv ctx)) ctx ns
+      CLup s -> handler (k $ lookup s (cenv ctx)) ctx ns
       Node n -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
                    return (v,(holes,([n],[]) <> g),ns)
       Wire w -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
@@ -354,11 +360,11 @@ check' (Th t) (overs, (tgt, ty@(K (R ss) (R ts))):unders) = do
   wire ((funNode, "fun"), Right ty, tgt)
   pure ((), (overs, unders))
 check' (Var x) ((), ()) = do
-  output <- req $ VLup x
+  output <- vlup x
   pure ([output], ((), ()))
 check' (Do t) (overs, ())
   | Var s <- unWC t = do
-      (ss :-> ts) <- req $ CLup s
+      (ss :-> ts) <- clup s
       this <- next ("Prim " ++ s) (Prim s) ss ts
       overs <- solder this overs ss
       pure ([((this, port), ty) | (port, ty) <- ts], (overs, ()))
@@ -424,7 +430,7 @@ check' (fun :$: arg) ((), ())
  where
   lookupThunk :: String -> Checking (Name, [(Src, VType)], [(Src, VType)])
   lookupThunk f = do
-      (ss :-> ts) <- req $ CLup f
+      (ss :-> ts) <- clup f
       resultNode  <- next ("prim " ++ f) (Prim f) ss ts
       pure (resultNode
            ,([ ((resultNode, port), ty) | (port, ty) <- ss])
@@ -820,12 +826,37 @@ kcheck' (Do t) (overs, ()) = do
 -- TODO: find a way to make check perceive this as a function
 -- Check brat functions and arguments assuming they'll produce a kernel
 kcheck' (fun :$: arg) ((), ())
-  | Var f <- unWC fun = do
-      (ss :-> ts) <- req $ CLup f
-      resultNode  <- next ("prim " ++ f) (Prim f) ss ts
-      argResult <- check arg ((), [ ((resultNode, port), ty) | (port, ty) <- ss ])
+   | Var f <- unWC fun = do
+      traceM $ "Looking for " ++ f
+      mv <- req $ VLup f
+      case mv of
+        Just (src, (K (R ss) (R ts))) -> trace "kernel" $ kernel f ss ts
+        Nothing -> trace "function" $ req (CLup f) >>= \case
+          Just (ss :-> ts) -> function f ss ts
+          Nothing -> req AskFC >>= \fc -> req $ Throw $ Err (Just fc) Nothing $ VarNotFound f
+
+-- Check applications of kernels
+  | otherwise = do
+  (tys, ((), ())) <- check fun ((), ())
+  (src, ss, ts) <- case tys of
+                     {- TODO:
+                       This logic is not flexible enough:
+                        - What if there's more than 2 kernels?
+                        - What if there's three kernels but the arg is 2 qubits?
+                        - Ultimately kernels need to behave more like normal functions
+                     -}
+                     [(src, K (R ss) (R ts)), (_, K (R us) (R vs))] -> pure (src, (ss <> us), (ts <> vs))
+                     ((src, K (R ss) (R ts)):_) -> pure (src, ss, ts)
+                     _ -> err "BRAT function called from kernel"
+  evalNode <- knext "eval" (Eval src) ss ts
+  ((), ((), [])) <- kcheck arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
+  pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
+   where
+     function f ss ts = do
+      funNode  <- next ("prim " ++ f) (Prim f) ss ts
+      argResult <- check arg ((), [ ((funNode, port), ty) | (port, ty) <- ss ])
       let ((), ((), [])) = argResult
-      let tys = [ ((resultNode, port), ty) | (port, ty) <- ts ]
+      let tys = [ ((funNode, port), ty) | (port, ty) <- ts ]
       (src, ss, ts) <- case tys of
                          [(src, K (R ss) (R ts)), (_, K (R us) (R vs))] -> pure (src, (ss <> us), (ts <> vs))
                          ((src, K (R ss) (R ts)):_) -> pure (src, ss, ts)
@@ -833,16 +864,15 @@ kcheck' (fun :$: arg) ((), ())
       evalNode <- knext "eval" (Eval src) ss ts
       ((), ((), [])) <- kcheck arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
       pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
--- Check applications of kernels
-  | otherwise = do
-  (tys, ((), ())) <- check fun ((), ())
-  (src, ss, ts) <- case tys of
-                     [(src, K (R ss) (R ts)), (_, K (R us) (R vs))] -> pure (src, (ss <> us), (ts <> vs))
-                     ((src, K (R ss) (R ts)):_) -> pure (src, ss, ts)
-                     _ -> err "BRAT function called from kernel"
-  evalNode <- knext "eval" (Eval src) ss ts
-  ((), ((), [])) <- kcheck arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
-  pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
+
+
+     kernel f ss ts = do
+      funNode  <- knext ("prim " ++ f) (Prim f) ss ts
+      argResult <- kcheck arg ((), [ ((funNode, port), ty) | (port, ty) <- ss ])
+      let ((), ((), [])) = argResult
+      let tys = [ ((funNode, port), ty) | (port, ty) <- ts ]
+      pure (tys, ((), ()))
+
 kcheck' (NHole name) ((), unders) = do
   fc <- req AskFC
   req $ LogHole $ NKHole name fc ((), unders)
