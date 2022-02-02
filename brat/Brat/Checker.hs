@@ -659,7 +659,7 @@ abstract (input:inputs) (Pat pat) = checkPat input pat
     let tailTy = Vector ty (Simple (Num (n - 1)))
     node <- next "PCons (Vec)" Hypo [("head", ty), ("tail", tailTy)] []
     (venv, cenv, []) <- abstract [((node, "head"), ty)] x
-    (venv', cenv', []) <- abstract [((node, "tail"), tailTy)] x
+    (venv', cenv', []) <- abstract [((node, "tail"), tailTy)] xs
     pure (venv ++ venv', cenv ++ cenv', inputs)
   checkPat (src, List ty) PNil = pure ([], [], inputs)
   checkPat (src, List ty) (PCons x xs) = do
@@ -720,7 +720,7 @@ kabstract (input:inputs) (Pat pat) = checkPat input pat
     let tailTy = Of ty (Simple (Num (n - 1)))
     node <- knext "PCons" Hypo [("head", ty), ("tail", tailTy)] []
     (venv, []) <- kabstract [((node, "head"), ty)] x
-    (venv', []) <- kabstract [((node, "tail"), tailTy)] x
+    (venv', []) <- kabstract [((node, "tail"), tailTy)] xs
     pure (venv ++ venv', inputs)
   checkPat (_, ty) pat = do
     fc <- req AskFC
