@@ -1,6 +1,5 @@
 import Brat.Compile.Circuit
-import Brat.FC
-import Brat.Syntax.Common (Decl(..), Row(..), VType'(..), Clause(..))
+import Brat.Syntax.Common (Decl(..), VType'(..))
 import Brat.Error
 import Brat.Load
 import Util
@@ -17,7 +16,7 @@ data Options = Opt {
 }
 
 preludeFlag :: Parser Bool
-preludeFlag = switch (long "prelude" <> short 'p' <> help "Use prelude")
+preludeFlag = switch (long "prelude" <> short 'p' <> help "Use kernel prelude")
 
 compileFlag :: Parser Bool
 compileFlag = switch (long "compile" <> short 'c' <> help "Compile to TIERKREIS")
@@ -37,9 +36,9 @@ main = do
                  pure (cenv, venv, nouns, verbs)
          else pure ([], [], [], [])
   contents <- readFile file
-  (cenv, venv, nouns, verbs, holes) <- eitherIO (loadFileWithEnv env Exe file contents)
   if not compile
-    then do putStrLn "Nouns:"
+    then do (cenv, venv, nouns, verbs, holes) <- eitherIO (loadFileWithEnv env Lib file contents)
+            putStrLn "Nouns:"
             print nouns
             putStrLn ""
             putStrLn "Verbs:"
@@ -48,7 +47,8 @@ main = do
             putStrLn "Holes:"
             mapM_ print holes
 
-    else do mn <- eitherIO $
+    else do (cenv, venv, nouns, verbs, holes) <- eitherIO (loadFileWithEnv env Exe file contents)
+            mn <- eitherIO $
                   maybeToRight (Err Nothing Nothing MainNotFound) $
                   lookupBy ((== "main") . fnName) id nouns
             graph <- eitherIO $ typeGraph (cenv, venv) mn
