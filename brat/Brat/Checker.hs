@@ -265,22 +265,25 @@ ceval tm = do env <- req Decls
               fc <- req AskFC
               pure $ evalTerm env (WC fc tm)
 
-checkClauses :: NonEmpty (Clause Term Verb)
+checkClauses :: Clause Term Verb
              -> Connectors Brat Chk Verb
              -> Checking (Outputs Brat Chk
                          ,Connectors Brat Chk Verb)
-checkClauses clauses conn = do
-  (res :| results) <- mapM (\c -> checkClause c conn) clauses
+checkClauses (NoLhs verb) conn = check verb conn
+checkClauses (Clauses cs) conn = do
+  (res :| results) <- mapM (\c -> checkClause c conn) cs
   unless (all (== res) results)
     (fail "Clauses had different rightovers")
   pure res
  where
-  checkClause :: Clause Term Verb
+  checkClause :: (WC Abstractor, WC (Term Chk Noun))
               -> Connectors Brat Chk Verb
               -> Checking (Outputs Brat Chk
                           ,Connectors Brat Chk Verb)
-  checkClause (NoLhs verb) = check verb
-  checkClause (Clause (WC lfc lhs) rhs@(WC rfc _)) = check (WC (FC (start lfc) (end rfc)) (traceShowId (lhs :\: rhs)))
+  checkClause (lhs, rhs)
+   | Just lfc <- fcOf lhs
+   , Just rfc <- fcOf rhs = check (WC (FC (start lfc) (end rfc)) (lhs :\: rhs))
+   | otherwise = check' (lhs :\: rhs)
 
 check :: Combine (Outputs Brat d)
       => WC (Term d k)
@@ -305,7 +308,7 @@ check' (s :-: t) (overs, unders) = do
   (outs,  ([], rightunders)) <- check t (overs, unders)
   pure (outs, (rightovers, rightunders))
 check' (binder :\: body) (overs, unders) = do
-  (vext, cext, overs) <- abstract overs binder
+  (vext, cext, overs) <- abstract overs (unWC binder)
   (outs, ((), unders)) <- localVEnv vext $ localCEnv cext $ check body ((), unders)
   pure (outs, (overs, unders))
 check' (Pull ports t) (overs, unders) = do
@@ -785,7 +788,7 @@ kcheck' (s :-: t) (overs, unders) = do
   (outs,  ([], rightunders)) <- kcheck t (overs, unders)
   pure (outs, (rightovers, rightunders))
 kcheck' (binder :\: body) (overs, unders) = do
-  (ext, overs) <- kabstract overs binder
+  (ext, overs) <- kabstract overs (unWC binder)
   (outs, ((), unders)) <- localKVar ext $ kcheck body ((), unders) <* req KDone
   pure (outs, (overs, unders))
 kcheck' (Pull ports t) (overs, unders) = do

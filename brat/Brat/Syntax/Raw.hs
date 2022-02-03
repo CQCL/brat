@@ -73,7 +73,7 @@ data Raw :: Dir -> Kind -> Type where
   (:::::)   :: WC (Raw Chk k) -> [RawIO] -> Raw Syn k
   RDo       :: WC (Raw Syn Noun) -> Raw Syn Verb
   (::-::)   :: WC (Raw Syn k) -> WC (Raw d Verb) -> Raw d k -- vertical juxtaposition (diagrammatic composition)
-  (::\::)   :: Abstractor -> WC (Raw d Noun) -> Raw d Verb
+  (::\::)   :: WC Abstractor -> WC (Raw d Noun) -> Raw d Verb
   RVec      :: [WC (Raw Chk Noun)] -> Raw Chk Noun
   RSlice    :: RawSlice -> Raw Chk Noun
   RSelect   :: WC (Raw Syn Noun) -> WC (Raw Chk Noun) -> Raw Chk Noun
@@ -263,17 +263,20 @@ vsynth (_ ::\:: body) = do [C cty] <- nsynth (unWC body)
 
 desugarNClause :: Clause Raw Noun -> Desugar (Clause Term Noun)
 desugarNClause (NounBody body) = NounBody <$> desugar body
+desugarNClause Undefined = pure Undefined
 
 desugarVClause :: Clause Raw Verb -> Desugar (Clause Term Verb)
-desugarVClause (Clause lhs rhs) = do
-  rhs <- desugar rhs
-  pure $ Clause lhs rhs
+desugarVClause (Clauses cs) = Clauses <$> mapM branch cs
+ where
+  branch :: (WC Abstractor, WC (Raw Chk Noun)) -> Desugar (WC Abstractor, WC (Term Chk Noun))
+  branch (lhs, rhs) = (lhs,) <$> desugar rhs
 desugarVClause (NoLhs rhs) = NoLhs <$> desugar rhs
+desugarVClause Undefined = pure Undefined
 
 desugarNDecl :: RawNDecl -> Desugar NDecl
 desugarNDecl d@Decl{..} = do
   tys  <- desugarIO fnSig
-  noun <- {- fmap bindTerm <$> -} traverse desugarNClause fnBody
+  noun <- {- fmap bindTerm <$> -} desugarNClause fnBody
   pure $ d { fnBody = noun
            , fnSig  = tys
            }
@@ -281,7 +284,7 @@ desugarNDecl d@Decl{..} = do
 desugarVDecl :: RawVDecl -> Desugar VDecl
 desugarVDecl d@Decl{..} = do
   cty <- desugarCTy fnSig
-  verb <- {- fmap bindTerm <$> -} traverse desugarVClause fnBody
+  verb <- {- fmap bindTerm <$> -} desugarVClause fnBody
   pure $ d { fnBody = verb
            , fnSig  = cty
            }
@@ -355,7 +358,7 @@ abstractTerm abst tm = let bindings = zip (aux abst) [0..]
   nameTo xn (tm ::: ty) = (nameTo xn <$> tm) ::: ty
   nameTo xn (Do f) = Do $ nameTo xn <$> f
   nameTo xn (a :-: b) = (nameTo xn <$> a) :-: (nameTo xn <$> b)
-  nameTo (x, n) (abst :\: body) = abst :\: (nameTo (x, n + len abst) <$> body)
+  nameTo (x, n) (abst :\: body) = abst :\: (nameTo (x, n + len (unWC abst)) <$> body)
   nameTo xn (Vec xs) = Vec (fmap (nameTo xn) <$> xs)
   nameTo xn (Select from th) = Select (nameTo xn <$> from) (nameTo xn <$> th)
   nameTo xn (Slice size slice) = Slice (nameTo xn <$> size) (fmap (nameTo xn) <$> slice)
@@ -371,7 +374,7 @@ bindTerm (fun :$: arg) = (bindTerm <$> fun) :$: (bindTerm <$> arg)
 bindTerm (tm ::: ty) = (bindTerm <$> tm) ::: ty
 bindTerm (Do f) = Do $ bindTerm <$> f
 bindTerm (a :-: b) = (bindTerm <$> a) :-: (bindTerm <$> b)
-bindTerm (abst :\: body) = abst :\: (abstractTerm abst <$> body)
+bindTerm (abst :\: body) = abst :\: (abstractTerm (unWC abst) <$> body)
 bindTerm (Vec xs) = Vec (fmap bindTerm <$> xs)
 bindTerm (Select from th) = Select (bindTerm <$> from) (bindTerm <$> th)
 bindTerm (Slice size slice) = Slice (bindTerm <$> size) (fmap bindTerm <$> slice)

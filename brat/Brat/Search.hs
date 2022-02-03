@@ -46,7 +46,7 @@ tokenFuncs (ss :-> ts)
         let n = length ss
         let lhs = binders (length ss) 0
         outs <- outputs ts
-        [lhs :\: Uhh outs]
+        [Uhh lhs :\: Uhh outs]
  where
   binders :: Int -> Int -> Abstractor
   binders 1 n = Bind ((:[]) ['a'..]!!n)

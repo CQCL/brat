@@ -66,7 +66,7 @@ scheme (SApp fun arg)
 scheme (SAnn tm _) = scheme (unWC tm)
 scheme (SDo f) = scheme (unWC f) <&> (:@ [])
 -- scheme (:-:)    :: WC (Term Syn k) -> WC (Term d Verb) -> Term d k -- vertical juxtaposition (diagrammatic composition)
-scheme (SLam abst body) = Lambda (aux abst) . singleton <$> scheme (unWC body)
+scheme (SLam abst body) = Lambda (aux (unWC abst)) . singleton <$> scheme (unWC body)
  where
   aux :: Abstractor -> [String]
   aux (Bind x) = [x]
@@ -151,22 +151,20 @@ compileFile (nds, vds) = flip runReader cenv $ do
   compileNDecl :: NDecl -> M String
   compileNDecl Decl {..}
    | Extern _ <- fnLocality = pure ""
-   | otherwise = toString . Define fnName <$>
-    case fnBody of
-      [NounBody body] -> scheme (stripInfo (unWC body))
-      other -> todo
+   | NounBody body <- fnBody = toString . Define fnName <$> scheme (stripInfo (unWC body))
+   | Undefined <- fnBody = pure ""
 
   compileVDecl :: VDecl -> M String
   compileVDecl Decl {..}
    | Extern _ <- fnLocality = pure ""
    | otherwise = toString . Define fnName <$>
     case fnBody of
-      [NoLhs rhs] -> todo
-      (x@(Clause _ _):xs) -> schemeClause (clause x :| (clause <$> xs))
-      cs -> trace ("cs: " ++ fnName ++ " " ++ show cs) undefined
+      NoLhs rhs -> todo
+      Clauses (c :| cs) -> schemeClause (clause c :| (clause <$> cs))
+      Undefined -> todo
    where
-    clause :: Clause Term Verb -> (Abstractor, Skel)
-    clause (Clause lhs rhs) = (unWC lhs, stripInfo (unWC rhs))
+    clause :: (WC Abstractor, WC (Term Chk Noun)) -> (Abstractor, Skel)
+    clause (lhs, rhs) = (unWC lhs, stripInfo (unWC rhs))
 
 {-
   compileVDecl Decl {..} = case fnBody of
@@ -189,7 +187,7 @@ arity (SApp f a) = pure 0
 arity (SAnn tm _) = arity (unWC tm)
 arity (SDo x) = arity (unWC x)
 arity (SComp a b) = arity (unWC a)
-arity (SLam abst _) = pure $ abstArity abst
+arity (SLam abst _) = pure $ abstArity (unWC abst)
  where
   abstArity (Bind _) = 1
   abstArity (a :||: b) = abstArity a + abstArity b

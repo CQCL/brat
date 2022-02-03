@@ -72,7 +72,7 @@ data Skel where
   SAnn      :: WC Skel -> [Output] -> Skel
   SDo       :: WC Skel -> Skel
   SComp     :: WC Skel -> WC Skel -> Skel
-  SLam      :: Abstractor -> WC Skel -> Skel
+  SLam      :: WC Abstractor -> WC Skel -> Skel
   SVec      :: [WC Skel] -> Skel
   SSlice    :: WC Skel -> Slice (WC Skel) -> Skel
   SSelect   :: WC Skel -> WC Skel -> Skel

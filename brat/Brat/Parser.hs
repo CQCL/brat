@@ -10,6 +10,8 @@ import Control.Monad (guard, void)
 import Data.Bifunctor
 import Data.List.NonEmpty (toList, NonEmpty(..))
 import Data.Functor (($>), (<&>))
+import Data.List.NonEmpty (nonEmpty)
+import Data.Maybe (fromJust)
 import Data.Set (empty)
 import Data.Void
 import Prelude hiding (lex, round)
@@ -199,7 +201,7 @@ sverb = verbAndJuxt `chainl1` semicolon
 
   func :: Parser (Raw Syn Verb)
   func = do
-    xs <- binding
+    xs <- withFC binding
     spaced $ match Arrow
     body <- snoun
     pure $ xs ::\:: body
@@ -223,7 +225,7 @@ cverb = withFC $
 
   func :: Parser (Raw Chk Verb)
   func = do
-    xs <- binding <?> "bindings"
+    xs <- withFC binding <?> "bindings"
     spaced $ match Arrow
     body <- cnoun
     pure $ xs ::\:: body
@@ -502,7 +504,7 @@ ndecl = do (WC fc (nm, ty, body, rt)) <- withFC $ do
            pure $ Decl { fnName = nm
                        , fnLoc  = fc
                        , fnSig  = ty
-                       , fnBody = [NounBody body]
+                       , fnBody = NounBody body
                        , fnRT   = rt
                        , fnLocality = Local
                        }
@@ -558,18 +560,24 @@ go p fname contents = do
                     start = Pos l (if c == 0 then 0 else c - 1)
                 in  FC start (Pos l (c + 1))
 
-clauses :: String -> Parser [Clause Raw Verb]
-clauses declName = some $ do
-  label declName $
-    ident $ \x -> if x == declName then Just () else Nothing
-  space
-  lhs <- optional (withFC binding) <?> "binding"
-  spaced (match Equal)
-  clause <- case lhs of
-              Just lhs -> Clause lhs <$> cnoun
-              Nothing -> NoLhs <$> cverb
-  vspace
-  pure clause
+clauses :: String -> Parser (Clause Raw Verb)
+clauses declName = try noLhs <|> branches
+ where
+  branches = label "clauses" $ fmap (Clauses . fromJust . nonEmpty) $ some $ do
+    label declName $
+      ident $ \x -> if x == declName then Just () else Nothing
+    space
+    lhs <- (withFC binding) <?> "binding"
+    spaced (match Equal)
+    rhs <- cnoun
+    vspace
+    pure (lhs,rhs)
+
+  noLhs = label "noLhs" $ do
+    label declName $
+      ident $ \x -> if x == declName then Just () else Nothing
+    spaced (match Equal)
+    NoLhs <$> cverb
 
 pstmt :: Parser Env
 pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , [] , []))
@@ -614,7 +622,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , [] , []))
                   pure (fnName, ty, symbol)
                 pure Decl { fnName = fnName
                           , fnSig = ty
-                          , fnBody = []
+                          , fnBody = Undefined
                           , fnLoc = fc
                           , fnRT = RtLocal
                           , fnLocality = Extern symbol
@@ -634,7 +642,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , [] , []))
                   pure (fnName, ty, symbol)
                 pure Decl { fnName = fnName
                           , fnSig = ty
-                          , fnBody = []
+                          , fnBody = Undefined
                           , fnLoc = fc
                           , fnRT = RtLocal
                           , fnLocality = Extern symbol

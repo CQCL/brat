@@ -1,7 +1,8 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE DataKinds, GADTs #-}
 
 module Brat.LSP.Find (Context(..), getInfo) where
 
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe (catMaybes)
 
 import Brat.FC
@@ -31,7 +32,7 @@ getInfo ps pos
 
   buildContext :: Pos -> Decl k io Term -> Maybe Context
   buildContext pos Decl{..} = do
-    body <- findInClauses pos fnBody
+    body <- findInClause pos fnBody
     subject <- getThing pos body
     pure $ Context { declName = fnName
                    , root = unWC body
@@ -39,17 +40,20 @@ getInfo ps pos
                    , runtime = fnRT
                    }
 
-  findInClauses :: Pos -> [Clause Term k] -> Maybe (WC Skel)
-  findInClauses _ [] = Nothing
-  findInClauses pos [NounBody (WC fc body)]
+  findInClause :: Pos -> Clause Term k -> Maybe (WC Skel)
+  findInClause pos (NounBody (WC fc body))
     | pos `inside` fc = Just (WC fc (stripInfo body))
-  findInClauses pos (NoLhs (WC fc rhs):xs)
+  findInClause pos (NoLhs (WC fc rhs))
     | pos `inside` fc = Just (WC fc (stripInfo rhs))
-    | otherwise = findInClauses pos xs
   -- TODO: Doesn't search in LHS
-  findInClauses pos (Clause _ (WC fc rhs):_)
-    | pos `inside` fc = Just (WC fc (stripInfo rhs))
-  findInClauses pos (_:xs) = findInClauses pos xs
+  findInClause pos (Clauses (c :| cs)) = findInClauses (c:cs)
+   where
+    findInClauses :: [(WC Abstractor, WC (Term Chk Noun))] -> Maybe (WC Skel)
+    findInClauses [] = Nothing
+    findInClauses ((_, rhs):cs)
+     | Just rfc <- fcOf rhs, pos `inside` rfc = Just (stripInfo <$> rhs)
+     | otherwise = findInClauses cs
+  findInClause pos _ = Nothing
 
   getThing :: Pos -> WC Skel -> Maybe Skel
   getThing _ (Uhh _) = Nothing

@@ -45,7 +45,7 @@ data Term :: Dir -> Kind -> Type where
   Do       :: WC (Term Syn Noun) -> Term Syn Verb
   -- vertical juxtaposition (diagrammatic composition)
   (:-:)    :: WC (Term Syn k) -> WC (Term d Verb) -> Term d k
-  (:\:)    :: Abstractor -> WC (Term d Noun) -> Term d Verb
+  (:\:)    :: WC Abstractor -> WC (Term d Noun) -> Term d Verb
   Vec      :: [WC (Term Chk Noun)] -> Term Chk Noun
   Slice    :: WC (Term Chk Noun) -> Slice (WC (Term Chk Noun)) -> Term Chk Noun
   Select   :: WC (Term Syn Noun) -> WC (Term Chk Noun) -> Term Chk Noun

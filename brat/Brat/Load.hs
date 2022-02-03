@@ -40,12 +40,9 @@ checkVerb Decl{..}
   src <- req $ Fresh (fnName <> "/in")
   tgt <- req $ Fresh (fnName <> "/out")
   let (ss :-> ts) = fnSig
-  case nonEmpty fnBody of
-    -- We should fail if compiling, but if we're just checking it's fine?
-    Nothing -> pure ((), ([], [])) -- fail $ "No body found for " ++ fnName
-    Just body -> wrapError (addSrc fnName) $
-                 checkClauses body ([((src, port), ty) | (port, ty) <- ss]
-                                   ,[((tgt, port), ty) | (port, ty) <- ts])
+  wrapError (addSrc fnName) $
+    checkClauses fnBody ([((src, port), ty) | (port, ty) <- ss]
+                        ,[((tgt, port), ty) | (port, ty) <- ts])
   | Extern sym <- fnLocality = do
       let (ss :-> ts) = fnSig
       next fnName (Prim sym) ss ts
@@ -55,7 +52,7 @@ checkNoun :: NDecl -> Checking ()
 checkNoun Decl{..}
   | Local <- fnLocality = do
   tgt <- req $ Fresh (fnName ++ "/out")
-  let [NounBody body] = fnBody
+  let NounBody body = fnBody
   wrapError (addSrc fnName) $
     (check body ((), [((tgt, port), ty) | (port, ty) <- fnSig]))
   pure ()

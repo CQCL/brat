@@ -7,6 +7,7 @@ module Brat.Syntax.Common where
 import Brat.FC
 
 import Data.List (intercalate)
+import Data.List.NonEmpty (NonEmpty)
 import Data.Kind (Type)
 
 type Port = String
@@ -109,7 +110,7 @@ data Locality = Extern String | Local deriving (Eq, Show)
 data Decl (k :: Kind) (io :: Type) (raw :: Dir -> Kind -> Type)
   = Decl { fnName :: String
          , fnSig  :: TypeForKind k io
-         , fnBody :: [Clause raw k]
+         , fnBody :: Clause raw k
          , fnLoc  :: FC
          , fnRT   :: Runtime
          , fnLocality :: Locality
@@ -173,9 +174,10 @@ instance Show (Abstractor) where
 
 data Clause (tm :: Dir -> Kind -> Type) (k :: Kind) where
   -- lhs and rhs
-  Clause :: (WC Abstractor) -> (WC (tm Chk Noun)) -> Clause tm Verb
-  NoLhs  :: (WC (tm Chk Verb)) -> Clause tm Verb
-  NounBody :: (WC (tm Chk Noun)) -> Clause tm Noun
+  Clauses   :: NonEmpty (WC Abstractor, WC (tm Chk Noun)) -> Clause tm Verb
+  NoLhs     :: (WC (tm Chk Verb)) -> Clause tm Verb
+  NounBody  :: (WC (tm Chk Noun)) -> Clause tm Noun
+  Undefined :: Clause tm k
 
 deriving instance (forall d k. Show (tm d k)) => Show (Clause tm k)
 deriving instance (forall d k. Eq (tm d k)) => Eq (Clause tm k)
