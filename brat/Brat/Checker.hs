@@ -437,8 +437,10 @@ check' (fun :$: arg) ((), ())
            ,([ ((resultNode, port), ty) | (port, ty) <- ts])
            )
 
-check' (Simple tm) ((), (_, SimpleTy ty):unders) = do
+check' (Simple tm) ((), ((src, p), SimpleTy ty):unders) = do
   simpleCheck ty tm
+  this <- next (show tm) (Prim (show tm)) [] [(p, SimpleTy ty)]
+  wire ((this, "value"), Right (SimpleTy ty), (src, p))
   pure ((), ((), unders))
 check' (Pair a b) ((), (_, Product s t):unders) = do
   unpack <- next "pairCheck" Hypo [] [("first", s), ("second", t)]
