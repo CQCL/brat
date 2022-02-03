@@ -20,6 +20,7 @@ nodeThing (BratNode _ t _ _) = t
 nodeThing (KernelNode _ t _ _) = t
 
 deriving instance Show (tm Chk Noun) => Show (Node' tm)
+deriving instance Eq (tm Chk Noun) => Eq (Node' tm)
 
 data Thing
   = Prim String  -- Something in the env
@@ -30,7 +31,7 @@ data Thing
   | Id           -- Identity node for convenient wiring
   | Hypo         -- Hypothesis for type checking
   | Combo Src Src
-  deriving Show
+  deriving (Eq, Show)
 
 type Graph' tm = ([Node' tm], [Wire' tm])
 {-
@@ -44,7 +45,6 @@ instance {-# OVERLAPPING #-} Show (tm Chk Noun) => Show (Graph' tm) where
   show (ns, ws) = unlines (("Nodes:":(show <$> ns)) ++ ("":"Wires:":(show <$> ws)))
 
 type Wire' tm = (Src, Either (SType tm) (VType' tm), Tgt)
-
 
 type Src = (Name, Port)
 type Tgt = (Name, Port)

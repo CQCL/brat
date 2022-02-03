@@ -104,7 +104,7 @@ loadVFile state method msg = do
         Left er -> do allGood fileName
                       sendError fileName (fixParseError er)
 
-        Right (_,_,newNouns,newVerbs,holes) -> do
+        Right (_,_,newNouns,newVerbs,holes, _) -> do
           old@(PS oldNouns oldVerbs _ oldHoles) <- liftIO $ takeMVar state
           if (oldNouns, oldVerbs, oldHoles) == (newNouns,newVerbs,holes)
             then liftIO (putMVar state old) >> allGood fileName

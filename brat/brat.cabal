@@ -149,5 +149,8 @@ test-suite tests
   default-language:    Haskell2010
   hs-source-dirs:      test
   main-is:             Main.hs
-  other-modules:       Test.Circuit
+  other-modules:       Test.Circuit.Common,
+                       Test.Circuit.Gen,
+                       Test.Circuit.Graph
+
   build-depends:       base <5, brat, tasty, tasty-hunit, mtl

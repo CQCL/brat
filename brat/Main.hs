@@ -32,12 +32,12 @@ main = do
   Opt{..} <- execParser (info opts (progDesc "Compile a BRAT program"))
   env <- if prelude
          then do cts <- readFile "prelude.brat"
-                 (cenv, venv, nouns, verbs, _) <- eitherIO $ loadFile Lib "prelude.brat" cts
+                 (cenv, venv, nouns, verbs, _, _) <- eitherIO $ loadFile Lib "prelude.brat" cts
                  pure (cenv, venv, nouns, verbs)
          else pure ([], [], [], [])
   contents <- readFile file
   if not compile
-    then do (cenv, venv, nouns, verbs, holes) <- eitherIO (loadFileWithEnv env Lib file contents)
+    then do (cenv, venv, nouns, verbs, holes, _) <- eitherIO (loadFileWithEnv env Lib file contents)
             putStrLn "Nouns:"
             print nouns
             putStrLn ""
@@ -47,7 +47,7 @@ main = do
             putStrLn "Holes:"
             mapM_ print holes
 
-    else do (cenv, venv, nouns, verbs, holes) <- eitherIO (loadFileWithEnv env Exe file contents)
+    else do (cenv, venv, nouns, verbs, holes, _) <- eitherIO (loadFileWithEnv env Exe file contents)
             mn <- eitherIO $
                   maybeToRight (Err Nothing Nothing MainNotFound) $
                   lookupBy ((== "main") . fnName) id nouns
