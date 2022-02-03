@@ -365,7 +365,7 @@ check' (Var x) ((), ()) = do
 check' (Do t) (overs, ())
   | Var s <- unWC t = do
       (ss :-> ts) <- clup s
-      this <- next ("Prim " ++ s) (Prim s) ss ts
+      this <- next ("Prim_" ++ s) (Prim s) ss ts
       overs <- solder this overs ss
       pure ([((this, port), ty) | (port, ty) <- ts], (overs, ()))
   | (n :|: n') <- unWC t = check' (Uhh (Do n) :|: Uhh (Do n')) (overs, ())
@@ -431,7 +431,7 @@ check' (fun :$: arg) ((), ())
   lookupThunk :: String -> Checking (Name, [(Src, VType)], [(Src, VType)])
   lookupThunk f = do
       (ss :-> ts) <- clup f
-      resultNode  <- next ("prim " ++ f) (Prim f) ss ts
+      resultNode  <- next ("prim_" ++ f) (Prim f) ss ts
       pure (resultNode
            ,([ ((resultNode, port), ty) | (port, ty) <- ss])
            ,([ ((resultNode, port), ty) | (port, ty) <- ts])
@@ -853,7 +853,7 @@ kcheck' (fun :$: arg) ((), ())
   pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
    where
      function f ss ts = do
-      funNode  <- next ("prim " ++ f) (Prim f) ss ts
+      funNode  <- next ("prim_" ++ f) (Prim f) ss ts
       argResult <- check arg ((), [ ((funNode, port), ty) | (port, ty) <- ss ])
       let ((), ((), [])) = argResult
       let tys = [ ((funNode, port), ty) | (port, ty) <- ts ]
@@ -867,7 +867,7 @@ kcheck' (fun :$: arg) ((), ())
 
 
      kernel f ss ts = do
-      funNode  <- knext ("prim " ++ f) (Prim f) ss ts
+      funNode  <- knext ("prim_" ++ f) (Prim f) ss ts
       argResult <- kcheck arg ((), [ ((funNode, port), ty) | (port, ty) <- ss ])
       let ((), ((), [])) = argResult
       let tys = [ ((funNode, port), ty) | (port, ty) <- ts ]
