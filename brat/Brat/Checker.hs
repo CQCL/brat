@@ -281,8 +281,8 @@ checkClauses (Clauses cs) conn = do
               -> Checking (Outputs Brat Chk
                           ,Connectors Brat Chk Verb)
   checkClause (lhs, rhs)
-   | Just lfc <- fcOf lhs
-   , Just rfc <- fcOf rhs = check (WC (FC (start lfc) (end rfc)) (lhs :\: rhs))
+   | lfc <- fcOf lhs
+   , rfc <- fcOf rhs = check (WC (FC (start lfc) (end rfc)) (lhs :\: rhs))
    | otherwise = check' (lhs :\: rhs)
 
 check :: Combine (Outputs Brat d)
@@ -291,7 +291,6 @@ check :: Combine (Outputs Brat d)
       -> Checking (Outputs Brat d
                   ,Connectors Brat d k)
 check (WC fc tm) conn = localFC fc (check' tm conn)
-check (Uhh tm) conn = check' tm conn
 
 check' :: Combine (Outputs Brat d)
       => Term d k
@@ -371,7 +370,10 @@ check' (Do t) (overs, ())
       this <- next ("Prim_" ++ s) (Prim s) ss ts
       overs <- solder this overs ss
       pure ([((this, port), ty) | (port, ty) <- ts], (overs, ()))
-  | (n :|: n') <- unWC t = check' (Uhh (Do n) :|: Uhh (Do n')) (overs, ())
+  | (n :|: n') <- unWC t = do
+      let lfc = fcOf n
+      let rfc = fcOf n
+      check' ((WC lfc (Do n)) :|: (WC rfc (Do n'))) (overs, ())
   | otherwise = do
       ([(src, C (ss :-> ts))], ((), ())) <- check t ((), ())
       this <- next "eval" (Eval src) ss ts
@@ -452,7 +454,8 @@ check' (Pair a b) ((), (_, Product s t):unders) = do
   pure ((), ((), unders))
 check' (Vec elems) ((), (_, Vector ty n):unders) = do
   hypo <- next "nat hypo" Hypo [] []
-  check1 ((hypo, "ty"), SimpleTy Natural) (Uhh n)
+  fc <- req AskFC
+  check1 ((hypo, "ty"), SimpleTy Natural) (WC fc n)
 
   hypo <- next "vec type hypo" Hypo [] []
   mapM_ (aux [((hypo, "ty"), ty)]) elems
@@ -479,14 +482,14 @@ check' (Vec elems) ((), (_, List ty):unders) = do
                   pure ()
 check' (NHole name) ((), unders) = do
   fc <- req AskFC
-  suggestions <- getSuggestions
+  suggestions <- getSuggestions fc
   req $ LogHole $ NBHole name fc suggestions ((), unders)
   pure ((), ((), []))
  where
-  getSuggestions :: Checking [String]
-  getSuggestions = do
+  getSuggestions :: FC -> Checking [String]
+  getSuggestions fc = do
     matches <- findMatchingNouns
-    let sugg = transpose [ [ tm | tm <- vsearch ty ]
+    let sugg = transpose [ [ tm | tm <- vsearch fc ty ]
                          | (_, ty) <- unders]
     let ms = intercalate ", " <$> matches
     let ss = intercalate ", " . fmap show <$> sugg
@@ -509,8 +512,9 @@ check' (VHole name) (overs, unders) = do
   pure ((), ([], []))
 check' (Slice big slice) ((), (_, s :<<<: t):unders) = do
   natHyp <- next "slice check" Hypo [] []
-  check1 ((natHyp, "weeEnd"), SimpleTy Natural) (Uhh s)
-  check1 ((natHyp, "bigEnd"), SimpleTy Natural) (Uhh t)
+  fc <- req AskFC
+  check1 ((natHyp, "weeEnd"), SimpleTy Natural) (WC fc s)
+  check1 ((natHyp, "bigEnd"), SimpleTy Natural) (WC fc t)
   check1 ((natHyp, "bigEnd2"), SimpleTy Natural) big
   checkNats ((natHyp, "slice"), SimpleTy Natural) slice
   pred <- bigEndPred slice
@@ -771,7 +775,6 @@ kcheck :: Combine (Outputs Kernel d)
       -> Checking (Outputs Kernel d
                   ,Connectors Kernel d k)
 kcheck (WC fc tm) conn = localFC fc $ kcheck' tm conn
-kcheck (Uhh tm) conn = kcheck' tm conn
 
 kcheck' :: Combine (Outputs Kernel d)
        => Term d k
@@ -822,7 +825,10 @@ kcheck' (Th _) _ = fail "no higher order signals! (Th)"
 kcheck' (Var x) ((), ()) = do
   output <- req $ KLup x
   pure ([output], ((), ()))
-kcheck' (Do (WC fc (n :|: n'))) (overs, ()) = kcheck (WC fc ((Uhh $ Do n) :|: (Uhh $ Do n'))) (overs, ())
+kcheck' (Do x) (overs, ()) | (n :|: n') <- unWC x = do
+  let lfc = fcOf n
+  let rfc = fcOf n'
+  kcheck' ((WC lfc (Do n)) :|: (WC rfc (Do n'))) (overs, ())
 kcheck' (Do t) (overs, ()) = do
   ([(src, K (R ss) (R ts))], ((), ())) <- check t ((), ())
   this <- knext "eval" (Eval src) ss ts
@@ -888,7 +894,8 @@ kcheck' (VHole name) (overs, unders) = do
   pure ((), ([], []))
 kcheck' (Vec elems) ((), (_, Of ty n):unders) = do
   hypo <- next "nat hypo" Hypo [] []
-  check1 ((hypo, "ty"), SimpleTy Natural) (Uhh n)
+  fc   <- req AskFC
+  check1 ((hypo, "ty"), SimpleTy Natural) (WC fc n)
 
   hypo <- next "vec type hypo" Hypo [] []
   mapM_ (aux [((hypo, "ty"), ty)]) elems

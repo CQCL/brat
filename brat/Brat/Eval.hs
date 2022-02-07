@@ -45,6 +45,7 @@ type Eval = Except Error
 
 class Valuable x where
   eval :: [Value] -> WC x -> Eval Value
+  eval' :: [Value] -> x -> Eval Value
 
 instance Valuable (Term Chk k) where
   eval = ceval
@@ -55,11 +56,8 @@ instance Valuable (Term Syn k) where
 instance Valuable (Pattern (WC (Term Chk Noun))) where
   eval = evalPat
 
-err :: FC -> String -> Except Error a
-err fc msg = throwError (Err (Just fc) Nothing (EvalErr msg))
-
-dumbErr :: String -> Except Error a
-dumbErr msg = throwError (Err Nothing Nothing (EvalErr msg))
+err :: String -> Except Error a
+err msg = throwError (Err Nothing Nothing (EvalErr msg))
 
 addFCToError :: FC -> Eval a -> Eval a
 addFCToError fc m = case runExcept m of
@@ -68,7 +66,6 @@ addFCToError fc m = case runExcept m of
 
 ceval :: [Value] -> WC (Term Chk k) -> Eval Value
 ceval g (WC fc tm) = addFCToError fc (ceval' g tm)
-ceval g (Uhh tm) = ceval' g tm
 
 ceval' :: [Value] -> Term Chk k -> Eval Value
 ceval' _ (Simple tm) = pure $ VSimple tm
@@ -95,7 +92,6 @@ ceval' _ tm = throwError $ Err Nothing Nothing (Unimplemented "ceval" [show tm])
 
 seval :: [Value] -> WC (Term Syn k) -> Eval Value
 seval g (WC fc tm) = addFCToError fc (seval' g tm)
-seval g (Uhh tm) = seval' g tm
 
 seval' :: [Value] -> Term Syn k -> Eval Value
 seval' g (Bound i) = pure $ g !! i
@@ -110,7 +106,6 @@ seval' _ tm = throwError $ Err Nothing Nothing (Unimplemented "seval" [show tm])
 
 evalPat :: [Value] -> WC (Pattern (WC (Term Chk Noun))) -> Eval Value
 evalPat g (WC fc pat) = addFCToError fc (evalPat' g pat)
-evalPat g (Uhh pat) = evalPat' g pat
 
 evalPat' :: [Value] -> Pattern (WC (Term Chk Noun)) -> Eval Value
 evalPat' g (POnePlus tm) = eval g tm >>= flip apply [EPlus (VNat 1)]
@@ -128,7 +123,7 @@ evalPat' g PNone = pure VNone
 pattern VNat n = VSimple (Num n)
 
 apply :: Value -> [Elim] -> Eval Value
-apply (VClos g v) (EApp v':es) = eval (v':g) (Uhh v) >>= \v -> apply v es
+apply (VClos g v) (EApp v':es) = eval' (v':g) v >>= flip apply es
 apply (VNat m) ((EPlus (VNat n)):es) = apply (VNat (m + n)) es
 apply (VNat m) ((ETimes (VNat n)):es) = apply (VNat (m + n)) es
 apply v [] = pure v
@@ -139,8 +134,7 @@ evalNat g tm = do
   v <- ceval g tm
   case v of
     (VSimple (Num n)) -> pure n
-    _ -> let f = maybe dumbErr err (fcOf tm)
-         in  f $ "Couldn't compute a nat from " ++ show tm ++ ". Got " ++ show v
+    _ -> err $ "Couldn't compute a nat from " ++ show tm ++ ". Got " ++ show v
 
 evalSlice :: Int -> Slice Int -> Value
 evalSlice bigEnd (From n) = VTh (fromNatFrom bigEnd n)

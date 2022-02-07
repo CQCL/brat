@@ -51,17 +51,16 @@ getInfo ps pos
     findInClauses :: [(WC Abstractor, WC (Term Chk Noun))] -> Maybe (WC Skel)
     findInClauses [] = Nothing
     findInClauses ((_, rhs):cs)
-     | Just rfc <- fcOf rhs, pos `inside` rfc = Just (stripInfo <$> rhs)
+     | rfc <- fcOf rhs, pos `inside` rfc = Just (stripInfo <$> rhs)
      | otherwise = findInClauses cs
   findInClause pos _ = Nothing
 
   getThing :: Pos -> WC Skel -> Maybe Skel
-  getThing _ (Uhh _) = Nothing
   getThing pos (WC fc x)
     | pos `inside` fc = case catMaybes (getThing pos <$> subTerms x) of
                           [] -> Just x
-                        -- xs should be the empty list, but I don't think it's
-                        -- worth crashing the server over
+                          -- xs should be the empty list, but I don't think it's
+                          -- worth crashing the server over
                           (x:_) -> Just x
     | otherwise = Nothing
 

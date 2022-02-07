@@ -105,17 +105,15 @@ port = name
 comma :: Parser (WC (Raw d k) -> WC (Raw d k) -> WC (Raw d k))
 comma = spaced $ token0 $ \case
   Token _ Comma -> Just $ \a b ->
-    case (a, b) of
-      (WC fca _, WC fcb _) -> WC (FC (start fca) (end fcb)) (a ::|:: b)
-      _ -> Uhh (a ::|:: b)
+    let fc = FC (start (fcOf a)) (end (fcOf b))
+    in  WC fc (a ::|:: b)
   _ -> Nothing
 
 semicolon :: Parser (WC (Raw Syn k) -> WC (Raw d Verb) -> WC (Raw d k))
 semicolon = spaced $ token0 $ \case
   Token _ Semicolon -> Just $ \a b ->
-    case (a, b) of
-      (WC fca _, WC fcb _) -> WC (FC (start fca) (end fcb)) (a ::-:: b)
-      _ -> Uhh (a ::-:: b)
+    let fc = FC (start (fcOf a)) (end (fcOf b))
+    in  WC fc (a ::-:: b)
   _ -> Nothing
 
 chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a

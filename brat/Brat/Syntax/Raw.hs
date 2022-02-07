@@ -194,7 +194,6 @@ desugar (WC fc tm)
   = (WC fc <$> desugar' tm)
     `catchError`
     (\(Err _ src msg) -> throwError (Err (Just fc) src msg))
-desugar (Uhh tm) = Uhh <$> desugar' tm
 
 desugar' :: Raw d k
          -> Desugar (Term d k)

@@ -7,57 +7,57 @@ import Brat.Syntax.Core
 import Brat.Syntax.Common
 
 -- Easiest answers
-tokenValues :: VType -> [Term Chk Noun]
-tokenValues (C cty) = Th . Uhh <$> tokenFuncs cty
-tokenValues (SimpleTy Natural) = Simple . Num <$> [0..]
-tokenValues (SimpleTy IntTy) = Simple . Num <$> [0..]
-tokenValues (SimpleTy Boolean) = [Simple (Bool True), Simple (Bool False)]
-tokenValues (SimpleTy FloatTy) = Simple . Float <$> [0.0..]
-tokenValues (SimpleTy TextType) = Simple . Text <$> ("":((:[])<$>['A'..]))
-tokenValues (SimpleTy Star) = []
-tokenValues (List ty) = concat $ do tm <- tokenValues ty
-                                    list <- iterate (tm:) []
-                                    [[Vec (Uhh <$> list)]]
-tokenValues (Product s t)
-  = zipWith (\a b -> Pair (Uhh a) (Uhh b)) (cycle $ tokenValues s) (cycle $ tokenValues t)
-tokenValues (Vector ty (Simple (Num n))) = Vec <$> (replicate n . Uhh <$> tokenValues (SimpleTy Natural))
-tokenValues (Vector _ _) = [] -- not enough info
-tokenValues (K ss ts) = []
+tokenValues :: FC -> VType -> [Term Chk Noun]
+tokenValues fc (C cty) = Th . WC fc <$> tokenFuncs fc cty
+tokenValues fc (SimpleTy Natural) = Simple . Num <$> [0..]
+tokenValues fc (SimpleTy IntTy) = Simple . Num <$> [0..]
+tokenValues fc (SimpleTy Boolean) = [Simple (Bool True), Simple (Bool False)]
+tokenValues fc (SimpleTy FloatTy) = Simple . Float <$> [0.0..]
+tokenValues fc (SimpleTy TextType) = Simple . Text <$> ("":((:[])<$>['A'..]))
+tokenValues fc (SimpleTy Star) = []
+tokenValues fc (List ty) = concat $ do tm <- tokenValues fc ty
+                                       list <- iterate (tm:) []
+                                       [[Vec (WC fc <$> list)]]
+tokenValues fc (Product s t)
+  = zipWith (\a b -> Pair (WC fc a) (WC fc b)) (cycle $ tokenValues fc s) (cycle $ tokenValues fc t)
+tokenValues fc (Vector ty (Simple (Num n))) = Vec <$> (replicate n . WC fc <$> tokenValues fc (SimpleTy Natural))
+tokenValues fc (Vector _ _) = [] -- not enough info
+tokenValues fc (K ss ts) = []
  where
   aux :: SType Term -> [Term Chk Noun]
   aux (Q q) = []
-  aux Bit = tokenValues (SimpleTy Boolean)
+  aux Bit = tokenValues fc (SimpleTy Boolean)
   aux (Of (Q q) n) = []
   aux (Of sty (Simple (Num n))) = do
     sty <- aux sty
-    [Vec (Uhh <$> replicate n sty)]
+    [Vec (WC fc <$> replicate n sty)]
   aux (Of _ _) = []
   aux (Rho _) = undefined
-tokenValues (Option ty) = (:) (Pattern (Uhh PNone)) $ do
-  val <- tokenValues ty
-  [Pattern (Uhh (PSome (Uhh val)))]
-tokenValues _ = []
+tokenValues fc (Option ty) = (:) (Pattern (WC fc PNone)) $ do
+  val <- tokenValues fc ty
+  [Pattern (WC fc (PSome (WC fc val)))]
+tokenValues _ _ = []
 
-tokenFuncs :: CType -> [Term Chk Verb]
-tokenFuncs (ss :-> ts)
+tokenFuncs :: FC -> CType -> [Term Chk Verb]
+tokenFuncs fc (ss :-> ts)
   = case ss of
       [] -> []
       _  -> do
         let n = length ss
         let lhs = binders (length ss) 0
         outs <- outputs ts
-        [Uhh lhs :\: Uhh outs]
+        [WC fc lhs :\: WC fc outs]
  where
   binders :: Int -> Int -> Abstractor
   binders 1 n = Bind ((:[]) ['a'..]!!n)
   binders m n = Bind ((:[]) ['a'..]!!n) :||: binders (m - 1) (n + 1)
 
   outputs :: [InOut] -> [Term Chk Noun]
-  outputs ts = do outs <- transpose $ tokenValues . snd <$> ts
-                  [(foldr1 (\ a b -> (Uhh a :|: Uhh b)) outs)]
+  outputs ts = do outs <- transpose $ tokenValues fc . snd <$> ts
+                  [(foldr1 (\ a b -> (WC fc a :|: WC fc b)) outs)]
 
-vsearch :: VType -> [Term Chk Noun]
-vsearch = take 5 . tokenValues
+vsearch :: FC -> VType -> [Term Chk Noun]
+vsearch fc = take 5 . tokenValues fc
 
-csearch :: CType -> [Term Chk Verb]
-csearch = take 5 . tokenFuncs
+csearch :: FC -> CType -> [Term Chk Verb]
+csearch fc = take 5 . tokenFuncs fc
