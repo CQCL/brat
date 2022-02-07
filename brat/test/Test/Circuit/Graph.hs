@@ -58,5 +58,5 @@ two =
 graphTests = testGroup "Graph" [graphTest "id" idFile idGraph
                                ,graphTest "X"  xFile  xGraph
                                ,graphTest "Rx" rxFile rxGraph
-                               ,graphTest "two" two ([], [])
+                               ,graphTest "two" two   twoGraph
                                ]

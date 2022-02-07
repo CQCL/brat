@@ -60,3 +60,20 @@ rxGraph = ([BratNode "id" (Prim "Rx")
            ]
           ,[]
           )
+
+int = SimpleTy IntTy
+
+twoGraph :: Graph' Term
+twoGraph = ([BratNode "add" (Prim "add") [("a", int), ("b", int)] [("c", int)]
+            ,BratNode "1a" (Prim "1") [] [("value", int)]
+            ,BratNode "1b" (Prim "1") [] [("value", int)]
+            ,BratNode "one" Id [("n", int)] [("n", int)]
+            ,BratNode "two" Id [("_0", int)] [("_0", int)]
+            ]
+           ,[(("1a", "value"), Right int, ("one", "n"))
+            ,(("1b", "value"), Right int, ("add", "a"))
+            ,(("one", "n"), Right int, ("add", "b"))
+            ,(("add", "c"), Right int, ("two", "_0"))
+            ]
+           )
+
