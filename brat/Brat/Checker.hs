@@ -444,7 +444,7 @@ check' (fun :$: arg) ((), ())
 
 check' (Simple tm) ((), ((src, p), SimpleTy ty):unders) = do
   simpleCheck ty tm
-  this <- next (show tm) (Prim (show tm)) [] [(p, SimpleTy ty)]
+  this <- next (show tm) (Prim (show tm)) [] [("value", SimpleTy ty)]
   wire ((this, "value"), Right (SimpleTy ty), (src, p))
   pure ((), ((), unders))
 check' (Pair a b) ((), (_, Product s t):unders) = do
