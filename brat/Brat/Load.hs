@@ -51,7 +51,7 @@ checkVerb Decl{..}
 checkNoun :: NDecl -> Checking ()
 checkNoun Decl{..}
   | Local <- fnLocality = do
-  tgt <- req $ Fresh (fnName ++ "/out")
+  tgt <- next fnName Id fnSig fnSig
   let NounBody body = fnBody
   wrapError (addSrc fnName) $
     (check body ((), [((tgt, port), ty) | (port, ty) <- fnSig]))
