@@ -1,11 +1,14 @@
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ScopedTypeVariables, UndecidableInstances #-}
 
 module Brat.Graph where
 
 import Brat.Naming
 import Brat.Syntax.Common
 
+import Data.Functor
+import Data.List ((\\))
 import qualified Data.Graph as G
+import Data.Maybe (fromJust)
 
 data Node' tm
   = BratNode Name Thing [Input' tm] [Output' tm]
@@ -60,3 +63,44 @@ toGraph (ns, ws) = G.graphFromEdges $ adj
           ,[ tgt | ((src,_), _, (tgt, _)) <- ws, src == nodeName n ]
           )
         | n <- ns]
+
+wiresFrom :: Name -> Graph' tm -> [Wire' tm]
+wiresFrom src (_, ws) = [ w | w@((a, _), _, (_, _)) <- ws, a == src ]
+
+lookupNode :: Name -> Graph' tm -> Maybe (Node' tm)
+lookupNode name (ns, _) = case [ node | node <- ns, nodeName node == name ] of
+                            [x] -> Just x
+                            _ -> Nothing
+
+wireStart :: Wire' tm -> Name
+wireStart ((x, _), _, _) = x
+
+wireEnd :: Wire' tm -> Name
+wireEnd (_, _, (x, _)) = x
+
+boxSubgraphs :: forall tm. (Eq (tm Chk Noun), Show (tm Chk Noun))
+             => Graph' tm -> (Graph' tm, [(String, Graph' tm)])
+boxSubgraphs g@(ns,ws) = let subs = fromJust subGraphs
+                             (subNodes, subWires) = myConcat $ snd <$> subs
+                         in  ((ns \\ subNodes, ws \\ subWires), subs)
+ where
+  boxes :: [Node' tm] -> [(String, (Name, Name))]
+  boxes [] = []
+  boxes (n:ns) | (src :>>: tgt) <- nodeThing n = (show (nodeName n), (src,tgt)) : boxes ns
+               | otherwise = boxes ns
+
+  subGraphs :: Maybe [(String, Graph' tm)]
+  subGraphs = traverse (\(lbl, x) -> (lbl,) <$> boxInsides x) (boxes ns)
+
+  boxInsides :: (Name, Name) -> Maybe (Graph' tm)
+  boxInsides (srcId, tgtId) = do
+    node  <- lookupNode srcId g
+    let wires = wiresFrom srcId g
+    case wires of
+      [w] | wireEnd w == tgtId -> lookupNode tgtId g <&> \n -> ([n,node], wires)
+      _ -> myConcat <$> traverse boxInsides ((\w -> (wireEnd w, tgtId)) <$> wires)
+
+  -- The correct version of `concat`
+  myConcat :: (Traversable t, Monoid a) => t a -> a
+  myConcat = foldr (<>) mempty
+
