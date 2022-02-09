@@ -37,9 +37,13 @@ addVerbsToEnv = foldr (\d cenv -> (fnName d, fnSig d):cenv) []
 checkVerb :: VDecl -> Checking ((), Connectors Brat Chk Verb)
 checkVerb Decl{..}
   | Local <- fnLocality = do
-  src <- req $ Fresh (fnName <> "/in")
-  tgt <- req $ Fresh (fnName <> "/out")
   let (ss :-> ts) = fnSig
+  src <- next (fnName <> "/in") Source ss ss
+  tgt <- next (fnName <> "/out") Target ts ts
+  let thunkTy = ("value", C (ss :-> ts))
+  thunk <- next (fnName ++ "_thunk") (src :>>: tgt) [] [thunkTy]
+  eval  <- next ("Eval(" ++ fnName ++ ")") (Eval (thunk, "value")) (thunkTy:ss) ts
+  wire ((thunk, "value"), Right (snd thunkTy), (eval, "value"))
   wrapError (addSrc fnName) $
     checkClauses fnBody ([((src, port), ty) | (port, ty) <- ss]
                         ,[((tgt, port), ty) | (port, ty) <- ts])
