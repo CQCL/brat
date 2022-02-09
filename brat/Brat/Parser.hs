@@ -81,7 +81,7 @@ number = label "nat" $ token0 $ \case
   Token _ (Number n) -> Just n
   _ -> Nothing
 
-float :: Parser Float
+float :: Parser Double
 float = label "float" $ token0 $ \case
   Token _ (FloatLit x) -> Just x
   _ -> Nothing

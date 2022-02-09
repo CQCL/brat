@@ -83,7 +83,7 @@ data SimpleTerm
   = Num Int
   | Bool Bool
   | Text String
-  | Float Float
+  | Float Double
   | Unit
   deriving Eq
 instance Show SimpleTerm where

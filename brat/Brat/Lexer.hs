@@ -35,7 +35,7 @@ data Tok
  | K Keyword
  | DotDot
  | Number Int
- | FloatLit Float
+ | FloatLit Double
  | Comment String
  | ThinType
  | Newline
@@ -201,7 +201,7 @@ tok = comment
   hspace' = do xs <- some $ satisfy $ \ x -> isSpace x && x `notElem` ['\n','\r']
                pure $ HSpace (length xs)
 
-  float :: Lexer Float
+  float :: Lexer Double
   float = label "float literal" $ do
     msign <- optional (char '-')
     n <- some digitChar
