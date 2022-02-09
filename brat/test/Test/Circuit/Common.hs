@@ -52,7 +52,7 @@ rxGraph :: Graph' Term
 rxGraph = ([BratNode "id" (Prim "Rx")
             [("th", SimpleTy FloatTy)]
             [("kernel", K (R [("a", Q Qubit)]) (R [("b", Q Qubit)]))]
-           ,BratNode "angle" (Prim "angle") [("th", SimpleTy FloatTy)] []
+           ,BratNode "angle" (Const (Float 30.0)) [("th", SimpleTy FloatTy)] []
            --,KernelNode "eval" (Eval "") testProcess
            ,BratNode "main" ("src" :>>: "tgt") [] [("fun", K (R [("a", Q Qubit)]) (R [("b", Q Qubit)]))]
            ,KernelNode "src" Source [] [("a", Q Qubit)]
@@ -65,8 +65,9 @@ int = SimpleTy IntTy
 
 twoGraph :: Graph' Term
 twoGraph = ([BratNode "add" (Prim "add") [("a", int), ("b", int)] [("c", int)]
-            ,BratNode "1a" (Prim "1") [] [("value", int)]
-            ,BratNode "1b" (Prim "1") [] [("value", int)]
+--            ,BratNode "add2" (Prim "add") [("a", int), ("b", int)] [("c", int)]
+            ,BratNode "1a" (Const (Num 1)) [] [("value", int)]
+            ,BratNode "1b" (Const (Num 1)) [] [("value", int)]
             ,BratNode "one" Id [("n", int)] [("n", int)]
             ,BratNode "two" Id [("_0", int)] [("_0", int)]
             ]

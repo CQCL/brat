@@ -27,6 +27,7 @@ deriving instance Eq (tm Chk Noun) => Eq (Node' tm)
 
 data Thing
   = Prim String  -- Something in the env
+  | Const SimpleTerm
   | Eval Src     -- Something on a wire
   | Name :>>: Name -- Graph in a box
   | Source       -- For building..
