@@ -56,11 +56,7 @@ checkNoun Decl{..}
   wrapError (addSrc fnName) $
     (check body ((), [((tgt, port), ty) | (port, ty) <- fnSig]))
   pure ()
-  | Extern sym <- fnLocality = mapM_ (addNode sym) fnSig
-   where
-    addNode :: String -> (Port, VType) -> Checking ()
-    addNode sym (p, K (R ss) (R ts)) = knext (fnName ++ "/" ++ p) (Prim sym) ss ts $> ()
-    addNode sym (p, ty) = next (fnName ++ "/" ++ p) (Prim sym) [] [(p, ty)] $> ()
+  | Extern sym <- fnLocality = () <$ next fnName (Prim sym) [] fnSig
 
 typeGraph :: (CEnv, VEnv) -> NDecl -> Either Error Graph
 typeGraph (cenv, venv) fn = do
