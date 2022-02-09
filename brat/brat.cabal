@@ -50,8 +50,7 @@ common warning-flags
 library
   import:              haskell, warning-flags
   default-language:    Haskell2010
-  other-modules:       Brat.Compile.Scheme,
-                       Brat.Compile.Simple,
+  other-modules:       Brat.Compile.Simple,
                        Brat.Dot,
                        Brat.Eval,
                        Brat.Lexer,
@@ -112,7 +111,6 @@ executable brat
   other-modules:       Brat.Checker,
                        Brat.Compile.Circuit,
                        Brat.Compile.Simple,
-                       Brat.Compile.Scheme,
                        Brat.Dot,
                        Brat.Error,
                        Brat.Eval,
