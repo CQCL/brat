@@ -14,6 +14,7 @@ module Brat.Checker (check
                     ,checkClauses
                     ,TypedHole(..)
                     ,Wire
+                    ,wire
                     ,wrapError
                     ,next, knext
                     ,localFC
