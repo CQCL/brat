@@ -14,14 +14,17 @@ instance Ord Name where
     | x == y = compare i j
     | otherwise = compare x y
 
-class Naming (m :: Type -> Type) where
-  fresh :: String -> m Name
+fresh :: String -> Namespace -> (Name, Namespace)
+fresh str (MkName nm, i) = (MkName ((str, i):nm), (MkName nm, i + 1))
+
+split :: String -> Namespace -> (Namespace, Namespace)
+split str (MkName nm, i) = ((MkName ((str,i):nm), 0), (MkName nm, i + 1))
 
 root :: Namespace
 root = (MkName [], 0)
 
 instance Show Name where
-  show (MkName x) = intercalate "/"  $ fmap (\(str, n) ->
+  show (MkName x) = intercalate "_"  $ fmap (\(str, n) ->
                                                 case n of
                                                   0 -> str
                                                   _ -> str ++ "_" ++ show n) (reverse x)

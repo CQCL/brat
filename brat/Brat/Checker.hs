@@ -17,6 +17,7 @@ module Brat.Checker (check
                     ,wrapError
                     ,next, knext
                     ,localFC
+                    ,withPrefix
                     ) where
 
 import Control.Arrow ((***))
@@ -82,7 +83,6 @@ type family ValueType (m :: Mode) where
 type CEnv = [(String, CType)]
 type VEnv = [(String, (Src, VType))]
 
-
 data TypedHole
   = NBHole Name FC [String] (Connectors Brat Chk Noun)
   | VBHole Name FC (Connectors Brat Chk Verb)
@@ -114,6 +114,7 @@ data Context = Ctx { cenv :: CEnv
 
 data CheckingSig ty where
   Fresh   :: String -> CheckingSig Name
+  Split   :: String -> CheckingSig Namespace
   Throw   :: Error  -> CheckingSig a
   LogHole :: TypedHole -> CheckingSig ()
   AskFC   :: CheckingSig FC
@@ -182,7 +183,6 @@ lookupAndUse x (curr@(y, (q, rest)):kenv)
                   Right (Just (thing, kenv)) -> Right $ Just (thing, curr:kenv)
                   Right Nothing -> Right Nothing
 
-
 localKVar :: [(String, (Quantity, (Src, SType Term)))] -> Free CheckingSig v -> Free CheckingSig v
 localKVar _   (Ret v) = Ret v
 localKVar env (Req (KLup x) k) = case lookupAndUse x env of
@@ -200,14 +200,28 @@ localKVar env (Req KDone k) = case [ x | (x,(One,_)) <- env ] of
                                                     ]
 localKVar env (Req r k) = Req r (localKVar env . k)
 
+withPrefix :: String -> Checking v -> Checking v
+withPrefix str m = do
+  ns <- req $ Split str
+  prefixHandler ns m
+ where
+  prefixHandler :: Namespace -> Checking v -> Checking v
+  prefixHandler _ (Ret x) = Ret x
+  prefixHandler pre (Req (Fresh str) k) = let (nm, ns) = fresh str pre in
+                                            (prefixHandler ns $ k nm)
+  prefixHandler pre (Req r k) = Req r (prefixHandler pre . k)
+
 handler :: Free CheckingSig v
         -> Context
         -> Namespace
         -> Barf (v,([TypedHole],Graph),Namespace)
 handler (Ret v) _ ns = return (v, mempty, ns)
-handler (Req s k) ctx ns@(MkName name, i)
+handler (Req s k) ctx ns
   = case s of
-      Fresh str -> handler (k (MkName ((str, i):name))) ctx (MkName name, i + 1)
+      Fresh str -> let (name, root) = fresh str ns in
+                     handler (k name) ctx root
+      Split str -> let (newRoot, oldRoot) = split str ns in
+                     handler (k newRoot) ctx oldRoot
       Throw err -> Barf $ Left err
       LogHole hole -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
                          return (v,(hole:holes,g),ns)
@@ -223,6 +237,7 @@ handler (Req s k) ctx ns@(MkName name, i)
       -- Receiving KDone may become possible when merging the two check functions
       KDone -> error "KDone in handler - this shouldn't happen"
       AskVEnv -> handler (k (venv ctx)) ctx ns
+
 type Checking = Free CheckingSig
 
 -- This way we get file contexts when pattern matching fails

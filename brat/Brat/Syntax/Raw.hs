@@ -115,12 +115,12 @@ type Desugar = StateT Namespace (ReaderT Env (Except Error))
 instance {-# OVERLAPPING #-} MonadFail Desugar where
   fail = dumbErr
 
-instance Naming Desugar where
-  fresh str = do
-    (MkName name, i) <- get
-    let freshName = MkName ((str, i):name)
-    put (freshName, 0)
-    return freshName
+freshM :: String -> Desugar Name
+freshM str = do
+  ns <- get
+  let (name, ns') = fresh str ns
+  put ns'
+  pure name
 
 {-
 findDuplicates :: Env -> Desugar ()
@@ -198,8 +198,8 @@ desugar (WC fc tm)
 desugar' :: Raw d k
          -> Desugar (Term d k)
 -- TODO: holes need to know their arity for type checking
-desugar' (RNHole name) = NHole <$> fresh name
-desugar' (RVHole name) = VHole <$> fresh name
+desugar' (RNHole name) = NHole <$> freshM name
+desugar' (RVHole name) = VHole <$> freshM name
 desugar' (RSimple simp) = pure $ Simple simp
 desugar' (RPair a b) = Pair <$> desugar a <*> desugar b
 desugar' (a ::|:: b) = (:|:) <$> desugar a <*> desugar b
