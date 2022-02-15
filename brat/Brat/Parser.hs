@@ -28,7 +28,7 @@ spaced :: Parser a -> Parser a
 spaced p = space *> p <* space
 
 vspace :: Parser ()
-vspace = optional hspace *> many (newline <|> (comment $> ())) $> ()
+vspace = many (optional hspace *> (newline <|> (comment $> ()))) $> ()
 
 hspace :: Parser ()
 hspace = label "Horizontal space" $ token0 $ \case
