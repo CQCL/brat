@@ -135,24 +135,24 @@ qpred None = Nothing
 qpred One  = Just None
 qpred Tons = Just Tons
 
-localFC :: FC -> Free CheckingSig v -> Free CheckingSig v
+localFC :: FC -> Checking v -> Checking v
 localFC _ (Ret v) = Ret v
 localFC f (Req AskFC k) = localFC f (k f)
 localFC f (Req r k) = Req r (localFC f . k)
 
-localVEnv :: [(String, (Src, VType))] -> Free CheckingSig v -> Free CheckingSig v
+localVEnv :: VEnv -> Checking v -> Checking v
 localVEnv _   (Ret v) = Ret v
 localVEnv ext (Req (VLup x) k) | Just x <- lookup x ext = localVEnv ext (k (Just x))
 localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
                                    localVEnv ext (k (ext ++ env))
 localVEnv ext (Req r k) = Req r (localVEnv ext . k)
 
-localCEnv :: [(String, CType)] -> Free CheckingSig v -> Free CheckingSig v
+localCEnv :: CEnv -> Checking v -> Checking v
 localCEnv _   (Ret v) = Ret v
 localCEnv ext (Req (CLup x) k) | Just x <- lookup x ext = localCEnv ext (k (Just x))
 localCEnv ext (Req r k) = Req r (localCEnv ext . k)
 
-wrapError :: (Error -> Error) -> Free CheckingSig v -> Free CheckingSig v
+wrapError :: (Error -> Error) -> Checking v -> Checking v
 wrapError f (Ret v) = Ret v
 wrapError f (Req (Throw e) k) = Req (Throw (f e)) k
 wrapError f (Req r k) = Req r (wrapError f . k)
