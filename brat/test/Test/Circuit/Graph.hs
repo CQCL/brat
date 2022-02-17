@@ -18,10 +18,15 @@ assertEither (Left err) = assertFailure (debug err)
 assertEither (Right ass) = ass
 
 graphTest :: String -> String -> Graph' Term -> TestTree
-graphTest name contents gExp = testCase name $ assertEither $ do
-  (cenv, venv, nouns, _, _, gAct) <- loadFile Lib name contents
-  -- gAct <- typeGraph (cenv, venv) (head $ [ n | n <- nouns, fnName n == "main" ])
-  pure $ gAct @?= gExp
+graphTest name contents gExp = testCase name $ do
+  case loadFile Lib name contents of
+    Right (_, _, _, _, _, gAct) -> do
+--      putStrLn "Actual:"
+--      print gAct
+--      putStrLn "Expected:"
+--      print gExp
+      gAct =? gExp
+    Left err -> assertFailure $ debug err
 
 idFile =
   "main :: { a :: Qubit -o b :: Qubit }\
@@ -55,8 +60,25 @@ two =
   \two :: Int\
   \two = add(1, one)"
 
+one =
+  "one :: (n :: Int)\
+  \one = 1"
+
+addN =
+  "ext \"n\" N :: (value :: Int)\
+  \ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)\
+  \\
+  \addN :: (in :: Int) -> (out :: Int)\
+  \addN n = add(n, N)"
+
+ext =
+  "ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)"
+
 graphTests = testGroup "Graph" [graphTest "id" idFile idGraph
                                ,graphTest "X"  xFile  xGraph
                                ,graphTest "Rx" rxFile rxGraph
                                ,graphTest "two" two   twoGraph
+                               ,graphTest "one" one   oneGraph
+                               ,graphTest "addN" addN addNGraph
+                               ,graphTest "ext"  ext  extGraph
                                ]

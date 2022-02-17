@@ -2,7 +2,9 @@
 
 module Test.Circuit.Common where
 
+import qualified Data.Map as Map
 import Data.String (IsString(..))
+import Test.Tasty.HUnit
 
 import Brat.Graph
 import Brat.Naming
@@ -78,3 +80,77 @@ twoGraph = ([BratNode "add" (Prim "add") [("a", int), ("b", int)] [("c", int)]
             ]
            )
 
+oneGraph :: Graph' Term
+oneGraph = ([BratNode "1" (Const (Num 1)) [] [("value", int)]
+            ,BratNode "one" Id [("n", int)] [("n", int)]
+            ]
+           ,[(("1", "value"), Right int, ("one", "n"))]
+           )
+
+addNGraph :: Graph' Term
+addNGraph
+  = ([BratNode "add" (Prim "add") [("a", int), ("b", int)] [("c", int)]
+     ,BratNode "N" (Prim "N") [] [("value", int)]
+     ,BratNode "addN_box" ("addN_src" :>>: "addN_tgt") [] [("value", addN_ty)]
+     ,BratNode "addN_src" Source [("in", int)] [("in", int)]
+     ,BratNode "addN_tgt" Target [("out", int)] [("out", int)]
+     ,BratNode "addN_eval" (Eval ("addN_box", "value")) [("value", addN_ty), ("in", int)] [("out", int)]
+     ,BratNode "addN" (Prim "addN") [("in", int)] [("out", int)]
+     ]
+    ,[(("addN_src", "in"), Right int, ("add", "a"))
+     ,(("N", "value"), Right int, ("add", "b"))
+     ,(("add", "c"), Right int, ("addN_tgt", "out"))
+     ,(("addN_box", "value"), Right addN_ty, ("addN_eval", "value"))
+     ]
+    )
+ where
+  addN_ty = C ([("in", int)] :-> [("out", int)])
+
+extGraph :: Graph' Term
+extGraph
+ = ([BratNode "add" (Prim "add") [("a", int), ("b", int)] [("c", int)]]
+   ,[]
+   )
+
+-- Test the "close-enough" "equality" of two graphs
+(=?) :: Graph' Term -> Graph' Term -> Assertion
+(ns, ws) =? (ns', ws') = nodeEq >> wireEq
+ where
+  wireEq :: Assertion
+  wireEq = let (s1, s2) = (wireSet ws, wireSet ws')
+           in assertEqual (unlines [show s1, show s2]) (Map.empty) (Map.difference s1 s2)
+
+  wireSet :: [Wire' Term] -> Map.Map String Int
+  wireSet ws = foldr (Map.alter inc) Map.empty (wireKey <$> ws)
+
+  wireKey :: Wire' Term -> String
+  wireKey ((_, p), ty, (_, q)) = unwords [p, "--", show ty, "->", q]
+
+  nodeEq :: Assertion
+  nodeEq = let (s1, s2) = (nodeSet ns, nodeSet ns')
+               pp = unlines . fmap show . Map.toList
+           in  assertEqual (unlines ["Actual:", pp s1, "Expected:", pp s2]) Map.empty (Map.difference s1 s2)
+
+  inc :: Maybe Int -> Maybe Int
+  inc = Just . maybe 1 (1+)
+
+  thingKey :: Bool -> Thing -> String
+  thingKey k = (if k then ('k':) else id) . \case
+    Prim x     -> "prim_" ++ x
+    Const x    -> "const_" ++ show x
+    Eval _     -> "eval"
+    (_ :>>: _) -> "box"
+    Source     -> "source"
+    Target     -> "target"
+    Id         -> "id"
+    Hypo       -> "hypo"
+    Combo _ _  -> "combo"
+
+  nodeKey :: Node' Term -> String
+  nodeKey (BratNode _ thing ins outs)
+    = thingKey False thing ++ (unlines [show ins, show outs])
+  nodeKey (KernelNode _ thing ins outs)
+    = thingKey True thing ++ (unlines [show ins, show outs])
+
+  nodeSet :: [Node' Term] -> Map.Map String Int
+  nodeSet ns = foldr (Map.alter inc) Map.empty (nodeKey <$> ns)
