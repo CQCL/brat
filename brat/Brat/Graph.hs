@@ -57,7 +57,7 @@ type Input' tm = (Port, VType' tm)
 type Output' tm = (Port, VType' tm)
 
 toGraph :: Graph' tm -> (G.Graph, G.Vertex -> (Node' tm, Name, [Name]), Name -> Maybe G.Vertex)
-toGraph (ns, ws) = G.graphFromEdges $ adj
+toGraph (ns, ws) = G.graphFromEdges adj
  where
   adj = [ (n
           ,nodeName n
@@ -80,9 +80,10 @@ wireEnd :: Wire' tm -> Name
 wireEnd (_, _, (x, _)) = x
 
 boxSubgraphs :: forall tm. (Eq (tm Chk Noun), Show (tm Chk Noun))
-             => Graph' tm -> (Graph' tm, [(String, Graph' tm)])
+             => Graph' tm
+             -> (Graph' tm, [(String, Graph' tm)])
 boxSubgraphs g@(ns,ws) = let subs = fromJust subGraphs
-                             (subNodes, subWires) = myConcat $ snd <$> subs
+                             (subNodes, subWires) = mconcat $ snd <$> subs
                          in  ((ns \\ subNodes, ws \\ subWires), subs)
  where
   boxes :: [Node' tm] -> [(String, (Name, Name))]
@@ -99,9 +100,5 @@ boxSubgraphs g@(ns,ws) = let subs = fromJust subGraphs
     let wires = wiresFrom srcId g
     case wires of
       [w] | wireEnd w == tgtId -> lookupNode tgtId g <&> \n -> ([n,node], wires)
-      _ -> myConcat <$> traverse boxInsides ((\w -> (wireEnd w, tgtId)) <$> wires)
-
-  -- The correct version of `concat`
-  myConcat :: (Traversable t, Monoid a) => t a -> a
-  myConcat = foldr (<>) mempty
+      _ -> mconcat <$> traverse boxInsides ((\w -> (wireEnd w, tgtId)) <$> wires)
 
