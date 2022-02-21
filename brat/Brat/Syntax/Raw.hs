@@ -53,7 +53,7 @@ data TypeAlias = Alias FC String [String] RawVType deriving (Eq, Show)
 
 type RawNDecl = NDecl' RawIO Raw
 type RawVDecl = VDecl' RawIO Raw
-type Env = ([RawNDecl], [RawVDecl], [(String, TypeAlias)])
+type RawEnv = ([RawNDecl], [RawVDecl], [(String, TypeAlias)])
 
 type RawSlice = Slice (WC (Raw Chk Noun))
 
@@ -110,7 +110,7 @@ instance Show (Raw d k) where
   show (RThin tm) = '~' : show tm
   show (RPattern p) = show p
 
-type Desugar = StateT Namespace (ReaderT Env (Except Error))
+type Desugar = StateT Namespace (ReaderT RawEnv (Except Error))
 
 instance {-# OVERLAPPING #-} MonadFail Desugar where
   fail = dumbErr
@@ -288,7 +288,7 @@ desugarVDecl d@Decl{..} = do
            , fnSig  = cty
            }
 
-desugarEnv :: Env -> Either Error ([NDecl], [VDecl])
+desugarEnv :: RawEnv -> Either Error ([NDecl], [VDecl])
 desugarEnv env@(ndecls, vdecls, _)
   = fmap fst
     . runExcept
@@ -309,7 +309,7 @@ abstractVType x n (RProduct a b) = RProduct
                                      (abstractVType x n b)
 abstractVType x n (RAlias name args) = RAlias name (abstractVType x n <$> args)
 abstractVType x n free@(RTypeFree y) | x == y = RTypeVar n
-                                         | otherwise = free
+                                     | otherwise = free
 abstractVType _ _ ty@(RTypeVar _) = ty
 abstractVType x n (RVector ty size) = RVector (abstractVType x n ty) size
 abstractVType _ _ (RThinning a b) = RThinning a b

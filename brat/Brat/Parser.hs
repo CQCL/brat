@@ -577,7 +577,7 @@ clauses declName = try noLhs <|> branches
     spaced (match Equal)
     NoLhs <$> cverb
 
-pstmt :: Parser Env
+pstmt :: Parser RawEnv
 pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , [] , []))
         <|> try ((alias <?> "type alias")        <&> \x -> ([] , [] ,[x]))
         <|> try (extVDecl                        <&> \x -> ([] , [x], []))
@@ -646,5 +646,5 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , [] , []))
                           , fnLocality = Extern symbol
                           }
 
-pfile :: Parser Env
+pfile :: Parser RawEnv
 pfile = space *> (foldr (<>) ([], [], []) <$> ((pstmt <* space) `manyTill` eof))
