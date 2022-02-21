@@ -53,3 +53,6 @@ addSrc name (Err fc _ msg) = Err fc (Just name) msg
 instance MonadFail (Either Error) where
   fail = Left . Err Nothing Nothing . PatFail
 
+eitherIO :: Either Error a -> IO a
+eitherIO (Left e) = fail (debug e)
+eitherIO (Right a) = pure a

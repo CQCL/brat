@@ -21,10 +21,6 @@ preludeFlag = switch (long "prelude" <> short 'p' <> help "Use kernel prelude")
 compileFlag :: Parser Bool
 compileFlag = switch (long "compile" <> short 'c' <> help "Compile to TIERKREIS")
 
-eitherIO :: Either Error a -> IO a
-eitherIO (Left e) = fail (debug e)
-eitherIO (Right a) = pure a
-
 opts :: Parser Options
 opts = Opt <$> preludeFlag <*> compileFlag <*> (strArgument (metavar "FILE"))
 
