@@ -854,7 +854,7 @@ kcheck' (Do t) (overs, ()) = do
 -- Check brat functions and arguments assuming they'll produce a kernel
 kcheck' (fun :$: arg) ((), ())
    | Var f <- unWC fun = do
-      traceM $ "Looking for " ++ f
+      -- traceM $ "Looking for " ++ show f
       mv <- req $ VLup f
       case mv of
         Just (src, (K (R ss) (R ts))) -> trace "kernel" $ kernel f ss ts
