@@ -32,6 +32,10 @@ idFile =
   "main :: { a :: Qubit -o b :: Qubit }\
   \main = { q -> q }"
 
+swapFile =
+  "main :: { a :: Qubit, b :: Qubit -o b :: Qubit, a :: Qubit}\
+  \main = { q0, q1 -> q1, q0 }"
+
 xFile =
   "ext \"tket.X\" X :: { xa :: Qubit -o xb :: Qubit }\
   \\
@@ -75,6 +79,7 @@ ext =
   "ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)"
 
 graphTests = testGroup "Graph" [graphTest "id" idFile idGraph
+                               ,graphTest "swap" swapFile swapGraph
                                ,graphTest "X"  xFile  xGraph
                                ,graphTest "Rx" rxFile rxGraph
                                ,graphTest "two" two   twoGraph

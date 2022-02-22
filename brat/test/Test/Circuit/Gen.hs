@@ -20,9 +20,9 @@ processTest g io c = commands (process g io) @?= c
 testId = testCase "id" $
          processTest idGraph (R [("in", Q Qubit)], R [("out", Q Qubit)]) []
 
-testId2 = testCase "id2" $
-  let sig = (R [("ina", Q Qubit), ("inb", Q Qubit)], R [("outa", Q Qubit), ("outb", Q Qubit)])
-  in processTest id2Graph sig []
+testSwap = testCase "swap" $
+  let sig = (R [("ina", Q Qubit), ("inb", Q Qubit)], R [("outb", Q Qubit), ("outa", Q Qubit)])
+  in processTest swapGraph sig []
 
 testX = testCase "X" $
         processTest xGraph (R [("in", Q Qubit)], R [("out", Q Qubit)]) [Cmd (Op "X" []) []]
@@ -31,4 +31,4 @@ testX = testCase "X" $
 testRx = testCase "Rx" $
          processTest rxGraph (R [("in", Q Qubit)], R [("out", Q Qubit)]) [Cmd (Op "Rx" [{- angle?? -}]) []]
 
-circuitTests = testGroup "Circuit" [testId, testId2, testX] -- not yet: , testRx]
+circuitTests = testGroup "Circuit" [testId, testX] -- not yet: testRx]
