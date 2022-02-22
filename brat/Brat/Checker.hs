@@ -519,6 +519,10 @@ check' (Select from slice) ((), (_, Vector ty n):unders) = do
   pure ((), ((), unders))
 check' (Pattern p) ((), (tgt:unders))
  = checkRPat tgt (unWC p) $> ((), ((), unders))
+check' (Let abs x y) conn = do
+  (dangling, ((), ())) <- check x ((), ())
+  venv <- abstractAll dangling (unWC abs)
+  localVEnv venv $ check y conn
 check' t _ = fail $ "Won't check " ++ show t
 
 -- Check a pattern used as a constructor (on the Rhs of a definition)

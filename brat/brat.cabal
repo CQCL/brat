@@ -158,6 +158,7 @@ test-suite tests
                        Test.Circuit.Gen,
                        Test.Circuit.Graph,
                        Test.Import.Cycle,
-                       Test.Checking
+                       Test.Checking,
+                       Test.Syntax.Let
 
   build-depends:       base <5, brat, tasty, tasty-hunit, tasty-expected-failure, tasty-silver, mtl, containers, filepath

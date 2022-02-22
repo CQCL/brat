@@ -41,6 +41,7 @@ type Decl = Decl' InOut Term
 
 data Term :: Dir -> Kind -> Type where
   Simple   :: SimpleTerm -> Term Chk Noun
+  Let      :: WC Abstractor -> WC (Term Syn Noun) -> WC (Term d k) -> Term d k
   Pair     :: WC (Term Chk Noun) -> WC (Term Chk Noun) -> Term Chk Noun
   NHole    :: Name -> Term Chk Noun
   VHole    :: Name -> Term Chk Verb
