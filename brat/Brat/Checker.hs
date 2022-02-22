@@ -857,7 +857,7 @@ kcheck' (fun :$: arg) ((), ())
       -- traceM $ "Looking for " ++ show f
       mv <- req $ VLup f
       case mv of
-        Just (src, (K (R ss) (R ts))) -> trace "kernel" $ kernel f ss ts
+        Just (src, (K (R ss) (R ts))) -> trace "kernel" $ kernel src ss ts
         Nothing -> trace "function" $ req (CLup f) >>= \case
           Just (ss :-> ts) -> function f ss ts
           Nothing -> req AskFC >>= \fc -> req $ Throw $ Err (Just fc) Nothing $ VarNotFound f
@@ -893,12 +893,12 @@ kcheck' (fun :$: arg) ((), ())
       pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
 
 
-     kernel f ss ts = do
-      funNode  <- knext ("prim_" ++ f) (Prim f) ss ts
-      argResult <- kcheck arg ((), [ ((funNode, port), ty) | (port, ty) <- ss ])
-      let ((), ((), [])) = argResult
-      let tys = [ ((funNode, port), ty) | (port, ty) <- ts ]
-      pure (tys, ((), ()))
+     kernel src ss ts = do
+       evalNode <- knext "eval" (Eval src) ss ts
+       argResult <- kcheck arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
+       let ((), ((), [])) = argResult
+       pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
+
 
 kcheck' (NHole name) ((), unders) = do
   fc <- req AskFC

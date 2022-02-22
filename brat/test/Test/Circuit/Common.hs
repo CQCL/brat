@@ -38,16 +38,21 @@ id2Graph = ([KernelNode "id" (Prim "X") [("xq_in", Q Qubit)] [("xq_out", Q Qubit
            )
 
 xGraph :: Graph' Term
-xGraph = ([BratNode "tket.X" (Prim "tket.X") [("kernel", K (R [("a", Q Qubit)]) (R [("b", Q Qubit)]))] []
-          ,KernelNode "X" (Eval ("tket.X", "kernel")) [("a", Q Qubit)] [("b", Q Qubit)]
-          ,BratNode "main" ("src" :>>: "tgt") [] [("fun", K (R [("a", Q Qubit)]) (R [("b", Q Qubit)]))]
+xGraph = ([BratNode "tket.X" (Prim "tket.X") [] [("_0", xTy)]
+          ,KernelNode "X" (Eval ("tket.X", "_0")) [("xa", Q Qubit)] [("xb", Q Qubit)]
+          ,BratNode "main_box" ("src" :>>: "tgt") [] [("fun", mainTy)]
+          ,BratNode "main" Id [("_0", mainTy)] [("_0", mainTy)]
           ,KernelNode "src" Source [] [("a", Q Qubit)]
           ,KernelNode "tgt" Target [("b", Q Qubit)] []
           ]
-         ,[(("src", "a"), Left (Q Qubit), ("X", "a"))
-          ,(("X", "b"), Left (Q Qubit), ("tgt", "b"))
+         ,[(("src", "a"), Left (Q Qubit), ("X", "xa"))
+          ,(("X", "xb"), Left (Q Qubit), ("tgt", "b"))
+          ,(("main_box", "fun"), Right mainTy, ("main", "_0"))
           ]
          )
+ where
+  xTy = K (R [("xa", Q Qubit)]) (R [("xb", Q Qubit)])
+  mainTy = K (R [("a", Q Qubit)]) (R [("b", Q Qubit)])
 
 -- TODO:
 rxGraph :: Graph' Term

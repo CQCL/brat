@@ -33,7 +33,7 @@ idFile =
   \main = { q -> q }"
 
 xFile =
-  "ext \"X\" X :: { xa :: Qubit -o xb :: Qubit }\
+  "ext \"tket.X\" X :: { xa :: Qubit -o xb :: Qubit }\
   \\
   \main :: { a :: Qubit -o b :: Qubit }\
   \main = { q -> X(q) }"
