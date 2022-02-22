@@ -15,12 +15,17 @@ instance IsString Name where
   fromString s = MkName [(s, 0)]
 
 idGraph :: Graph' Term
-idGraph = ([BratNode "main" ("src" :>>: "tgt") [] [("fun", K (R [("a", Q Qubit)]) (R [("b", Q Qubit)]))]
+idGraph = ([BratNode "main_box" ("src" :>>: "tgt") [] [("fun", kty)]
+           ,BratNode "main" Id [("_0", kty)] [("_0", kty)]
            ,KernelNode "src" Source [] [("a", Q Qubit)]
            ,KernelNode "tgt" Target [("b", Q Qubit)] []
            ]
-          ,[(("src", "a"), Left (Q Qubit), ("tgt", "b"))]
+          ,[(("src", "a"), Left (Q Qubit), ("tgt", "b"))
+           ,(("main_box", "fun"), Right kty, ("main", "_0"))
+           ]
           )
+ where
+  kty = K (R [("a", Q Qubit)]) (R [("b", Q Qubit)])
 
 id2Graph :: Graph' Term
 id2Graph = ([KernelNode "id" (Prim "X") [("xq_in", Q Qubit)] [("xq_out", Q Qubit)]
