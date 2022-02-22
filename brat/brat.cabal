@@ -151,4 +151,4 @@ test-suite tests
                        Test.Circuit.Gen,
                        Test.Circuit.Graph
 
-  build-depends:       base <5, brat, tasty, tasty-hunit, mtl, containers
+  build-depends:       base <5, brat, tasty, tasty-hunit, tasty-expected-failure, mtl, containers
