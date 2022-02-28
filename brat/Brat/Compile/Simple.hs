@@ -9,8 +9,6 @@ import Brat.Syntax.Common
 import Brat.Syntax.Core
 import Brat.Checker
 
-import qualified Data.Map as M
-import qualified Data.Set as S
 import Debug.Trace
 
 --simplify :: Eq (tm Chk Noun) => Graph' tm -> Graph' tm
