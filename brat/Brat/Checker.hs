@@ -388,7 +388,7 @@ check' (Do t) (overs, ())
       pure ([((this, port), ty) | (port, ty) <- ts], (overs, ()))
   | (n :|: n') <- unWC t = do
       let lfc = fcOf n
-      let rfc = fcOf n
+      let rfc = fcOf n'
       check' ((WC lfc (Do n)) :|: (WC rfc (Do n'))) (overs, ())
   | otherwise = do
       ([(src, C (ss :-> ts))], ((), ())) <- check t ((), ())
