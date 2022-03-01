@@ -67,6 +67,8 @@ data Term :: Dir -> Kind -> Type where
 deriving instance Eq (Term d k)
 
 instance Show (Term d k) where
+  show (Let abs xs body)
+    = unwords ["let", show abs, "=", show xs, "in", show body]
   show (Simple tm) = show tm
   show (Pair a b) = '[' : show a ++ ", " ++ show b ++ "]"
   show (NHole (MkName (name:_))) = '?' : show (MkName [name])

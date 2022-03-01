@@ -46,6 +46,7 @@ data Tok
  | Plus
  | Times
  | UnitElem
+ | LetIn [Token]
  deriving Eq
 
 instance Show Tok where
@@ -75,6 +76,7 @@ instance Show Tok where
   show Plus = "+"
   show Times = "*"
   show UnitElem = "<>"
+  show (LetIn xs) = "let" ++ (concat (show <$> xs)) ++ "in"
 
 data Token = Token { fc :: FC
                    , _tok :: Tok
@@ -144,34 +146,38 @@ instance Show Keyword where
   show KImport = "import"
 
 keyword :: Lexer Keyword
-keyword = (try (string "type") $> KType)
-          <|> string "Vec"   $> KVec
-          <|> string "List"  $> KList
-          <|> (try (string "Bool")
-               <|> string "Bit") $> KBool
-          <|> string "Nat"   $> KNat
-          <|> string "Int"   $> KInt
-          <|> string "Qubit" $> KQubit
-          <|> string "Money" $> KMoney
-          <|> string "Type"  $> KTypeType
-          <|> string "true"  $> KTrue
-          <|> string "false" $> KFalse
-          <|> string "Pair"  $> KPair
-          <|> string "ext"   $> KExt
-          <|> try (string "String" $> KString)
-          <|> string "Float" $> KFloat
-          <|> try (string "nil") $> KNil
-          <|> string "cons"  $> KCons
-          <|> string "Option" $> KOption
-          <|> string "some"  $> KSome
-          <|> string "none"  $> KNone
-          <|> string "Unit"  $> KUnit
-          <|> string "import" $> KImport
+keyword
+  = ((try (string "type") $> KType)
+     <|> string "Vec"   $> KVec
+     <|> string "List"  $> KList
+     <|> (try (string "Bool")
+           <|> string "Bit") $> KBool
+     <|> string "Nat"   $> KNat
+     <|> string "Int"   $> KInt
+     <|> string "Qubit" $> KQubit
+     <|> string "Money" $> KMoney
+     <|> string "Type"  $> KTypeType
+     <|> string "true"  $> KTrue
+     <|> string "false" $> KFalse
+     <|> string "Pair"  $> KPair
+     <|> string "ext"   $> KExt
+     <|> try (string "String" $> KString)
+     <|> string "Float" $> KFloat
+     <|> try (string "nil") $> KNil
+     <|> string "cons"  $> KCons
+     <|> string "Option" $> KOption
+     <|> string "some"  $> KSome
+     <|> string "none"  $> KNone
+     <|> string "Unit"  $> KUnit
+     <|> string "import" $> KImport) <* notFollowedBy identChar
+
+identChar :: Lexer Char
+identChar = alphaNumChar <|> oneOf "_'"
 
 ident :: Lexer String
 ident = (<?> "name") $ do
   a <- letterChar
-  bc <- many (alphaNumChar <|> oneOf "_'")
+  bc <- many identChar
   pure (a:bc)
 
 qualified :: Lexer Tok
@@ -190,6 +196,7 @@ tok = comment
       <|> try (between (char '{') (char '}') (Curly <$> many token))
       <|> try (between (char '[') (char ']') (Square <$> many (try (en $ char ',' $> VecComma)
                                                                 <|> token)))
+      <|> try letIn
       <|> try (Quoted <$> (char '"' *> printChar `manyTill` char '"'))
       <|> try (FloatLit <$> float)
       <|> try (Number <$> number)
@@ -206,11 +213,22 @@ tok = comment
       <|> try (string ".." $> DotDot)
       <|> try (string "<>" $> UnitElem)
       <|> try (K <$> try keyword)
-      <|> try (newline $> Newline)
+      <|> try newline'
       <|> try hspace'
       <|> try qualified
       <|> Ident <$> ident
  where
+  letIn = do
+    string "let"
+    spc <- whiteSpace
+    lhs <- token `manyTill` (string "in" <* lookAhead whiteSpace)
+    pure $ LetIn (spc <> lhs)
+
+  whiteSpace :: Lexer [Token]
+  whiteSpace = some (try (en hspace') <|> en newline')
+
+  newline' = newline $> Newline
+
   hspace' :: Lexer Tok
   hspace' = do xs <- some $ satisfy $ \ x -> isSpace x && x `notElem` ['\n','\r']
                pure $ HSpace (length xs)

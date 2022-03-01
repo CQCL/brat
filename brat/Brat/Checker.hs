@@ -523,7 +523,7 @@ check' (Let abs x y) conn = do
   (dangling, ((), ())) <- check x ((), ())
   venv <- abstractAll dangling (unWC abs)
   localVEnv venv $ check y conn
-check' t _ = fail $ "Won't check " ++ show t
+check' t cons = fail $ "Won't check " ++ show t
 
 -- Check a pattern used as a constructor (on the Rhs of a definition)
 checkRPat :: (Tgt, VType) -> Pattern (WC (Term Chk Noun)) -> Checking ()

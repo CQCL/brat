@@ -58,8 +58,7 @@ type RawEnv = ([RawDecl], [(UserName, TypeAlias)])
 type RawSlice = Slice (WC (Raw Chk Noun))
 
 data Raw :: Dir -> Kind -> Type where
-  -- not sure about this
-  RLet      :: WC (Raw Chk k) -> WC (Raw d k) -> Raw d k
+  RLet      :: WC Abstractor -> WC (Raw Syn Noun) -> WC (Raw d k) -> Raw d k
   RNHole    :: String -> Raw Chk Noun
   RVHole    :: String -> Raw Chk Verb
   RSimple   :: SimpleTerm -> Raw Chk Noun
@@ -83,7 +82,8 @@ data Raw :: Dir -> Kind -> Type where
 deriving instance Eq (Raw d k)
 
 instance Show (Raw d k) where
-  show (RLet _ _) = undefined
+  show (RLet abs xs body)
+    = unwords ["let", show abs, "=", show xs, "in", show body]
   show (RNHole name) = '?':name
   show (RVHole name) = '?':name
   show (RSimple tm) = show tm
@@ -232,6 +232,7 @@ desugar' (RPattern x) = Pattern <$> traverse desugarPattern x
  where
   desugarPattern :: Pattern (WC (Raw Chk Noun)) -> Desugar (Pattern (WC (Term Chk Noun)))
   desugarPattern p = traverse (traverse desugar') p
+desugar' (RLet abs thing body) = Let abs <$> desugar thing <*> desugar body
 desugar' x = throwError . desugarErr $ "desugar'"  ++ show x
 {-
 nsynth :: Raw Syn Noun -> Desugar [VType]

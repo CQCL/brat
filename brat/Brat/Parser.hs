@@ -85,6 +85,11 @@ curly p = label "{...}" $ token0 $ \case
   Token _ (Curly toks) -> parseMaybe (spaced p) toks
   _ -> Nothing
 
+inLet :: Parser a -> Parser a
+inLet p = label "let ... in" $ token0 $ \case
+  Token _ (LetIn toks) -> parseMaybe (spaced p) toks
+  _ -> Nothing
+
 number :: Parser Int
 number = label "nat" $ token0 $ \case
   Token _ (Number n) -> Just n
@@ -196,7 +201,7 @@ sverb = verbAndJuxt `chainl1` semicolon
   plainVerb :: Parser (Raw Syn Verb)
   plainVerb = try func <|> try doNoun
 
-  verbAndJuxt = withFC plainVerb `chainl1` (try comma)
+  verbAndJuxt = (try (letin sverb) <|> withFC plainVerb) `chainl1` (try comma)
 
   func :: Parser (Raw Syn Verb)
   func = do
@@ -212,13 +217,25 @@ doNoun = do
   match (Round [])
   pure (RDo n)
 
+letin :: Parser (WC (Raw d k)) -> Parser (WC (Raw d k))
+letin p = withFC $ do
+  (lhs,rhs) <- inLet $ do
+    abs <- withFC binding
+    spaced $ match Equal
+    thing <- snoun
+    pure (abs, thing)
+  space
+  body <- p
+  pure $ RLet lhs rhs body
+
 -- not usable yet
 cverb :: Parser (WC (Raw Chk Verb))
-cverb = withFC $
-  try (composition <?> "composition")
+cverb = try (letin cverb <?> "let binding") <|> withFC
+  (try (composition <?> "composition")
   <|> try (func <?> "function")
   <|> try (nhole <?> "typed hole")
   <|> (REmb <$> sverb <?> "syn verb")
+  )
  where
   nhole = RVHole <$> hole
 
@@ -241,7 +258,7 @@ snoun' = try application <|> simpleNoun
 --  thin = withFC $ RThin <$> (char '~' *> cnoun)
 
   simpleNoun :: Parser (WC (Raw Syn Noun))
-  simpleNoun = withFC var
+  simpleNoun = try (letin snoun) <|> withFC var
 
   nounAndJuxt :: Parser (WC (Raw Syn Noun))
   nounAndJuxt = round (juxtaposition snoun)
@@ -273,6 +290,7 @@ compose p1 p2 = do
   y <- p2
   pure (x ::-:: y)
 
+cnoun :: Parser (WC (Raw Chk Noun))
 cnoun = try (withFC $ compose snoun cverb) <|> cnounWithJuxt
  where
   cnounWithJuxt :: Parser (WC (Raw Chk Noun))
@@ -291,8 +309,8 @@ simpleTerm =
                    <|> kmatch KFalse $> False)
 
 cnoun' :: Parser (WC (Raw Chk Noun))
-cnoun' = withFC $
-  try (thunk <?> "thunk")
+cnoun' = try (letin cnoun) <|> withFC
+  (try (thunk <?> "thunk")
   <|> try (pull <?> "port pull")
   <|> try (nounIntoVerb <?> "composition")
   <|> try (pair <?> "pair")
@@ -305,6 +323,7 @@ cnoun' = withFC $
   <|> try (RPattern <$> withFC (pat cnoun) <?> "pattern")
   <|> try (RSimple <$> simpleTerm)
   <|> try emb
+  )
  where
   selection :: Parser (Raw Chk Noun)
   selection = RSelect <$> snoun <*> (space *> curly cnoun')
