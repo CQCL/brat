@@ -41,11 +41,11 @@ jobs:
       run: stack build --only-dependencies
     - name: Build
       run: stack build
+    - name: Run stack install
+      run: stack install
     - name: Build stack tests
       run: stack test --no-run-tests --no-run-benchmarks
     - name: Run stack tests
       run: stack test
-    - name: Run stack install
-      run: stack install
     - name: Run test.sh
       run: bash ./test.sh

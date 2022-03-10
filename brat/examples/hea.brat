@@ -6,6 +6,8 @@
 # Reality:
 #  - the parser is struggling with variables being plugged into the end of vectors
 
+import lib.kernel
+
 type Real = Nat # Temporary hack
 
 type Operator = Pair (Pair Nat Nat) Real
@@ -29,8 +31,6 @@ apply_operators = ?help
 
 # map :: (f :: {A -> B}), (xs :: Vec A n) -> (ys :: Vec B n)
 # map = f, xs -> ?ys
-
-ext measure :: Qubit -> Bool, Money
 
 hea :: (rotations :: Vec Operator numEdges),
        (meas :: Vec Pauli numNodes),

@@ -1,14 +1,20 @@
-ext "cnot" cnot :: { ctrl :: Qubit, tgt :: Qubit -o ctrl :: Bool, tgt :: Bool }
-
-ext "H" H :: { x :: Qubit -o x :: Qubit }
-
-ext "M" measure :: { q :: Qubit -o b :: Bit }
-
-ext "Rz" Rz :: (th :: Float) -> (k :: { q :: Qubit -o q :: Qubit })
+import lib.kernel
 
 type A = Bool
 type B = Nat
 type C = Bool
+
+Rx :: Float -> { Qubit -o Qubit }
+Rx th = lib.kernel.Rx(th)
+
+H :: { Qubit -o Qubit }
+H = lib.kernel.H
+
+M2 :: { Qubit, Qubit -o Bit, Bit }
+M2 = { q0, q1 -> (lib.kernel.measure, lib.kernel.measure)(q0, q1) }
+
+M :: { Qubit -o Bit }
+M = lib.kernel.measure
 
 id :: A -> A
 id = a -> a
@@ -55,10 +61,10 @@ compTest {f}, {g} = { x -> g(f(x)) }
 # phasedBell = th -> (H ; id , id) ; (measure, measure)
 
 justMeasure :: { c :: Qubit, d :: Qubit -o c :: Bit, d :: Bit }
-justMeasure = { c, d -> (measure,measure)(c, d) }
+justMeasure = { c, d -> M2(c, d) }
 
 idq :: { Qubit -o Qubit }
 idq = { q -> q }
 
 phasedBell :: Float -> { c :: Qubit, d :: Qubit -o c :: Bit, d :: Bit }
-phasedBell th = { c, d -> (measure,measure)((Rz(th),idq)((H,idq)(c,d))) }
+phasedBell th = { c, d -> (M,M)((Rz(th),idq)((H,idq)(c,d))) }

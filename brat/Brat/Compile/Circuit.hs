@@ -129,7 +129,7 @@ process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
 
   nodeToCmd :: (Node' Term, Name, [Name]) -> Command
   nodeToCmd (KernelNode _ (Prim p) _ _, nm, tgts)
-    = Cmd { op = Op { opType = p, params = [] }
+    = Cmd { op = Op { opType = (show p), params = [] }
           , args = [] -- hmmmmmmm!!! (TODO:)
           }
 

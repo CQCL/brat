@@ -5,12 +5,13 @@ import Brat.FC
 import Brat.Lexer
 import Brat.Syntax.Common hiding (K)
 import Brat.Syntax.Raw
+import Brat.UserName
 
 import Control.Monad (guard, void)
 import Data.Bifunctor
 import Data.List.NonEmpty (toList, NonEmpty(..))
 import Data.Functor (($>), (<&>))
-import Data.List.NonEmpty (nonEmpty)
+import Data.List.NonEmpty (nonEmpty, NonEmpty)
 import Data.Maybe (fromJust)
 import Data.Set (empty)
 import Data.Void
@@ -56,10 +57,18 @@ hole = label "hole" $ token0 $ \case
   Token _ (Hole h) -> Just h
   _ -> Nothing
 
-name :: Parser String
-name = (<?> "name") $ token0 $ \case
+simpleName :: Parser String
+simpleName = token0 $ \case
   Token _ (Ident str) -> Just str
   _ -> Nothing
+
+qualifiedName :: Parser UserName
+qualifiedName = (<?> "qualified name") . token0 $ \case
+  Token _ (QualifiedId prefix str) -> Just (PrefixName (toList prefix) str)
+  _ -> Nothing
+
+userName :: Parser UserName
+userName = (<?> "name") $ try qualifiedName <|> (PrefixName [] <$> simpleName)
 
 round :: Parser a -> Parser a
 round p = label "(...)" $ token0 $ \case
@@ -96,11 +105,7 @@ string = token0 $ \case
   (Token _ (Quoted txt)) -> Just txt
   _ -> Nothing
 
--- For the sake of ease, type aliases need to start with capital letters
-typeName :: Parser String
-typeName = name
-
-port = name
+port = simpleName
 
 comma :: Parser (WC (Raw d k) -> WC (Raw d k) -> WC (Raw d k))
 comma = spaced $ token0 $ \case
@@ -136,18 +141,18 @@ binding = do ps <- many (try $ portPull <* space)
                     <|> try (Pat <$> pat binding)
                     <|> try vecLit
                     <|> try (Lit <$> simpleTerm)
-                    <|> (Bind <$> name)
+                    <|> (Bind <$> simpleName)
                    ) `chainl1` (try portComma)
              if null ps
                then pure xs
                else pure $ APull ps xs
  where
   thunk :: Parser Abstractor
-  thunk = AThunk <$> curly name
+  thunk = AThunk <$> curly simpleName
 
   vecLit = VecLit <$> square (binding `sepBy` (spaced (match VecComma)))
 
-  portPull = name <* match PortColon
+  portPull = simpleName <* match PortColon
 
   portComma :: Parser (Abstractor -> Abstractor -> Abstractor)
   portComma = spaced $ token0 $ \case
@@ -231,7 +236,7 @@ cverb = withFC $
   composition = compose sverb cverb
 
 var :: Parser (Raw Syn Noun)
-var = RVar <$> name
+var = RVar <$> userName
 
 snoun :: Parser (WC (Raw Syn Noun))
 snoun = (try application <|> simpleNoun) `chainl1` (try comma)
@@ -355,13 +360,13 @@ vtype' ps = try (round vty) <|> vty
  where
   vty = choice (try <$> ps) <|> try base <|> try alias <|> typeVar
 
-  typeVar = RTypeFree <$> name
+  typeVar = RTypeFree <$> userName
 
   base = try kernel <|> try comp <|> try vec <|> try thinning <|> simple
 
   alias = try aliasWithArgs <|> justAlias
 
-  justAlias = RAlias <$> typeName <*> pure []
+  justAlias = RAlias <$> userName <*> pure []
 
   kernel = curly $ do
     ss <- row
@@ -370,7 +375,7 @@ vtype' ps = try (round vty) <|> vty
     return $ RK ss ts
 
   aliasWithArgs = do
-    alias <- typeName
+    alias <- userName
     optional hspace
     args  <- (vtype' ps <* optional hspace)
              `manyTill`
@@ -491,7 +496,7 @@ runtime = try (char '@' *> aux <* newline) <|> pure RtLocal
 ndecl :: Parser RawNDecl
 ndecl = do (WC fc (nm, ty, body, rt)) <- withFC $ do
              rt <- pure RtLocal -- runtime
-             nm <- name
+             nm <- simpleName
              spaced $ match TypeColon
              ty   <- outputs
              vspace
@@ -510,7 +515,7 @@ ndecl = do (WC fc (nm, ty, body, rt)) <- withFC $ do
 vdecl :: Parser RawVDecl
 vdecl = do (WC fc (nm, ty, body, rt)) <- withFC $ do
              rt   <- pure RtLocal -- runtime
-             nm <- name
+             nm <- simpleName
              spaced $ match TypeColon
              ty   <- ctype
              vspace
@@ -577,6 +582,9 @@ clauses declName = try noLhs <|> branches
     spaced (match Equal)
     NoLhs <$> cverb
 
+pimport :: Parser UserName
+pimport = kmatch KImport *> space *> userName
+
 pstmt :: Parser RawEnv
 pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , [] , []))
         <|> try ((alias <?> "type alias")        <&> \x -> ([] , [] ,[x]))
@@ -585,26 +593,29 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , [] , []))
         <|> try ((vdecl <?> "verb declaration")  <&> \x -> ([] , [x], []))
         <|> ((ndecl <?> "noun declaration")      <&> \x -> ([x], [] , []))
  where
-  alias :: Parser (String, TypeAlias)
-  alias = do (WC fc (alias, args, ty)) <- withFC aliasContents
-             pure (alias, Alias fc alias args ty)
+  alias :: Parser (UserName, TypeAlias)
+  alias = withFC aliasContents <&>
+          \(WC fc (alias, args, ty)) -> (plain alias, Alias fc alias args ty)
 
 
-  aliasContents :: Parser (String, [String], RawVType)
+  aliasContents :: Parser (String, [UserName], RawVType)
   aliasContents = do
     match (K KType)
     hspace
-    alias <- typeName
+    alias <- simpleName
     optional hspace
-    args  <- (name <* space) `manyTill` lookAhead (match Equal)
+    args  <- (userName <* space) `manyTill` lookAhead (match Equal)
     spaced (match Equal)
     ty <- vtype' (mkParser <$> args)
     vspace
     let abstractTy = foldr (uncurry abstractVType) ty (zip args [0..])
     pure (alias, args, abstractTy)
 
-  mkParser :: String -> Parser RawVType
-  mkParser str = ident $ \x -> if x == str then Just (RTypeFree str) else Nothing
+  mkParser :: UserName -> Parser RawVType
+  mkParser str = do
+    name <- userName
+    guard (name == str)
+    pure $ RTypeFree name
 
   extNDecl :: Parser RawNDecl
   extNDecl = do (WC fc (fnName, ty, symbol)) <- withFC $ do
@@ -612,7 +623,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , [] , []))
                   space
                   symbol <- string
                   space
-                  fnName <- name
+                  fnName <- simpleName
                   spaced (match TypeColon)
                   ty <- outputs
                   optional hspace
@@ -632,7 +643,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , [] , []))
                   space
                   symbol <- string
                   space
-                  fnName <- name
+                  fnName <- simpleName
                   spaced (match TypeColon)
                   ty <- ctype
                   optional hspace
@@ -646,5 +657,8 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , [] , []))
                           , fnLocality = Extern symbol
                           }
 
-pfile :: Parser RawEnv
-pfile = space *> (foldr (<>) ([], [], []) <$> ((pstmt <* space) `manyTill` eof))
+pfile :: Parser ([UserName], RawEnv)
+pfile = do
+  imports <- many (pimport <* vspace)
+  env     <- foldr (<>) ([], [], []) <$> ((pstmt <* vspace) `manyTill` eof)
+  pure (imports, env)

@@ -4,7 +4,6 @@ BRAT=~/.local/bin/brat
 
 # List the files we expect to fail.
 XFAILS="composition.brat
-        cqcconf.brat
         juxt.brat
         karlheinz.brat
         karlheinz_alias.brat

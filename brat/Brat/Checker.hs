@@ -39,6 +39,7 @@ import Brat.Naming
 import Brat.Search
 import Brat.Syntax.Common
 import Brat.Syntax.Core
+import Brat.UserName
 
 import Debug.Trace
 
@@ -81,8 +82,9 @@ type family ValueType (m :: Mode) where
   ValueType Brat = VType
   ValueType Kernel = SType Term
 
-type CEnv = [(String, CType)]
-type VEnv = [(String, (Src, VType))]
+type CEnv = [(UserName, CType)]
+type VEnv = [(UserName, (Src, VType))]
+type KEnv = [(UserName, (Quantity, (Src, SType Term)))]
 
 data TypedHole
   = NBHole Name FC [String] (Connectors Brat Chk Noun)
@@ -119,12 +121,12 @@ data CheckingSig ty where
   Throw   :: Error  -> CheckingSig a
   LogHole :: TypedHole -> CheckingSig ()
   AskFC   :: CheckingSig FC
-  VLup    :: String -> CheckingSig (Maybe (Src, VType))
-  CLup    :: String -> CheckingSig (Maybe CType)
+  VLup    :: UserName -> CheckingSig (Maybe (Src, VType))
+  CLup    :: UserName -> CheckingSig (Maybe CType)
+  KLup    :: UserName -> CheckingSig (Src, SType Term)
   Node    :: Node -> CheckingSig ()
   Wire    :: Wire -> CheckingSig ()
   Decls   :: CheckingSig ([NDecl], [VDecl])
-  KLup    :: String -> CheckingSig (Src, SType Term)
   KDone   :: CheckingSig ()
   AskVEnv :: CheckingSig VEnv
 
@@ -157,34 +159,32 @@ wrapError f (Ret v) = Ret v
 wrapError f (Req (Throw e) k) = Req (Throw (f e)) k
 wrapError f (Req r k) = Req r (wrapError f . k)
 
-vlup :: String -> Checking (Src, VType)
+vlup :: UserName -> Checking (Src, VType)
 vlup s = do
   fc <- req AskFC
   req (VLup s) >>= \case
     Just vty -> pure vty
-    Nothing -> err $ s ++ " not in (value) environment"
+    Nothing -> err $ (show s) ++ " not in (value) environment"
 
-clup :: String -> Checking CType
+clup :: UserName -> Checking CType
 clup s = do
   fc <- req AskFC
   req (CLup s) >>= \case
     Just cty -> pure cty
-    Nothing -> err $ s ++ " not in (computation) environment"
+    Nothing -> err $ (show s) ++ " not in (computation) environment"
 
-type KEnv = [(String, (Quantity, (Src, SType Term)))]
-
-lookupAndUse :: String -> KEnv -> Either Error (Maybe ((Src, SType Term), KEnv))
+lookupAndUse :: UserName -> KEnv -> Either Error (Maybe ((Src, SType Term), KEnv))
 lookupAndUse _ [] = Right Nothing
 lookupAndUse x (curr@(y, (q, rest)):kenv)
   | x == y = case qpred q of
-               Nothing -> Left $ Err Nothing Nothing $ TypeErr $ x ++ " has already been used"
+               Nothing -> Left $ Err Nothing Nothing $ TypeErr $ (show x) ++ " has already been used"
                Just q -> Right $ Just (rest, (x, (q, rest)):kenv)
   | otherwise = case lookupAndUse x kenv of
                   Left err -> Left err
                   Right (Just (thing, kenv)) -> Right $ Just (thing, curr:kenv)
                   Right Nothing -> Right Nothing
 
-localKVar :: [(String, (Quantity, (Src, SType Term)))] -> Free CheckingSig v -> Free CheckingSig v
+localKVar :: [(UserName, (Quantity, (Src, SType Term)))] -> Free CheckingSig v -> Free CheckingSig v
 localKVar _   (Ret v) = Ret v
 localKVar env (Req (KLup x) k) = case lookupAndUse x env of
                                    Left err@(Err (Just _) _ _) -> req $ Throw err
@@ -196,7 +196,7 @@ localKVar env (Req (KLup x) k) = case lookupAndUse x env of
 localKVar env (Req KDone k) = case [ x | (x,(One,_)) <- env ] of
                                 [] -> (localKVar env . k) ()
                                 xs -> err $ unwords ["Variable(s)"
-                                                    ,intercalate ", " xs
+                                                    ,intercalate ", " (fmap show xs)
                                                     ,"haven't been used"
                                                     ]
 localKVar env (Req r k) = Req r (localKVar env . k)
@@ -234,7 +234,7 @@ handler (Req s k) ctx ns
       Wire w -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
                    return (v,(holes,([],[w]) <> g),ns)
       Decls ->  handler (k (ndecls ctx, vdecls ctx)) ctx ns
-      KLup x -> fail (x ++ " not found in kernel context")
+      KLup x -> fail (show x ++ " not found in kernel context")
       -- Receiving KDone may become possible when merging the two check functions
       KDone -> error "KDone in handler - this shouldn't happen"
       AskVEnv -> handler (k (venv ctx)) ctx ns
@@ -383,7 +383,7 @@ check' (Var x) ((), ()) = do
 check' (Do t) (overs, ())
   | Var s <- unWC t = do
       (ss :-> ts) <- clup s
-      this <- next ("Prim_" ++ s) (Prim s) ss ts
+      this <- next ("Prim_" ++ (show s)) (Prim (show s)) ss ts
       overs <- solder this overs ss
       pure ([((this, port), ty) | (port, ty) <- ts], (overs, ()))
   | (n :|: n') <- unWC t = do
@@ -449,10 +449,10 @@ check' (fun :$: arg) ((), ())
       ((), ((), [])) <- check arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
       pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
  where
-  lookupThunk :: String -> Checking (Name, [(Src, VType)], [(Src, VType)])
+  lookupThunk :: UserName -> Checking (Name, [(Src, VType)], [(Src, VType)])
   lookupThunk f = do
       (ss :-> ts) <- clup f
-      resultNode  <- next ("prim_" ++ f) (Prim f) ss ts
+      resultNode  <- next ("prim" ++ (show f)) (Prim (show f)) ss ts
       pure (resultNode
            ,([ ((resultNode, port), ty) | (port, ty) <- ss])
            ,([ ((resultNode, port), ty) | (port, ty) <- ts])
@@ -507,17 +507,16 @@ check' (NHole name) ((), unders) = do
     matches <- findMatchingNouns
     let sugg = transpose [ [ tm | tm <- vsearch fc ty ]
                          | (_, ty) <- unders]
-    let ms = intercalate ", " <$> matches
+    let ms = intercalate ", " . fmap show <$> matches
     let ss = intercalate ", " . fmap show <$> sugg
     pure $ take 5 (ms ++ ss)
 
-  findMatchingNouns :: Checking [[String]]
+  findMatchingNouns :: Checking [[UserName]]
   findMatchingNouns = do
     let tys = snd <$> unders
     env <- req $ AskVEnv
-    traceM ("FindMatchingNouns " ++ show tys)
-    let matches = traceShowId $ transpose $
-          [ [ (nm, src) | (nm, (src, vty)) <- traceShowId env, vty == ty ]
+    let matches = transpose $
+          [ [ (nm, src) | (nm, (src, vty)) <- env, vty == ty ]
           | ty <- tys
           ]
     pure $ fmap fst <$> matches
@@ -634,8 +633,8 @@ abstract :: [(Src, VType)]
                      ,[(Src, VType)] -- rightovers
                      )
 abstract [] (Bind x) = fail $ "abstractor: no wires available to bind to " ++ show x
-abstract (vty@(_, C cty):inputs) (AThunk x) = pure ([(x, vty)], [(x, cty)], inputs)
-abstract (input:inputs) (Bind x) = pure ([(x, input)], [], inputs)
+abstract (vty@(_, C cty):inputs) (AThunk x) = pure ([(plain x, vty)], [(plain x, cty)], inputs)
+abstract (input:inputs) (Bind x) = pure ([(plain x, input)], [], inputs)
 abstract inputs (x :||: y) = do
   (venv, cenv, inputs)  <- abstract inputs x
   (venv', cenv', inputs) <- abstract inputs y
@@ -709,7 +708,7 @@ kabstract [] (Bind x) = fail $ "abstractor: no wires available to bind to " ++ s
 kabstract _ (AThunk _) = fail $ "Can't match kernel thunks"
 kabstract (input@(_, ty):inputs) (Bind x)
   = let q = if copyable ty then Tons else One
-    in  pure ([(x, (q, input))], inputs)
+    in  pure ([(plain x, (q, input))], inputs)
 kabstract inputs (x :||: y) = do
   (kenv, inputs)  <- kabstract inputs x
   (kenv', inputs) <- kabstract inputs y
@@ -860,7 +859,7 @@ kcheck' (fun :$: arg) ((), ())
         Just (src, (K (R ss) (R ts))) -> trace "kernel" $ kernel src ss ts
         Nothing -> trace "function" $ req (CLup f) >>= \case
           Just (ss :-> ts) -> function f ss ts
-          Nothing -> req AskFC >>= \fc -> req $ Throw $ Err (Just fc) Nothing $ VarNotFound f
+          Nothing -> req AskFC >>= \fc -> req $ Throw $ Err (Just fc) Nothing $ VarNotFound (show f)
 
 -- Check applications of kernels
   | otherwise = do
@@ -880,7 +879,7 @@ kcheck' (fun :$: arg) ((), ())
   pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
    where
      function f ss ts = do
-      funNode  <- next ("prim_" ++ f) (Prim f) ss ts
+      funNode  <- next ("prim_" ++ show f) (Prim (show f)) ss ts
       argResult <- check arg ((), [ ((funNode, port), ty) | (port, ty) <- ss ])
       let ((), ((), [])) = argResult
       let tys = [ ((funNode, port), ty) | (port, ty) <- ts ]

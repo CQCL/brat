@@ -3,7 +3,8 @@ module Brat.Lexer (Tok(..), Token(..), Keyword(..), lex) where
 import Prelude hiding (lex)
 import Data.Char (isSpace)
 import Data.Functor (($>), (<&>), void)
-import Data.List.NonEmpty (nonEmpty)
+import Data.List (intercalate)
+import Data.List.NonEmpty (nonEmpty, NonEmpty(..))
 import Data.Proxy
 import Data.Void
 import Text.Megaparsec hiding (Token, Pos, token)
@@ -20,6 +21,7 @@ type Lexer a = Parsec Void String a
 
 data Tok
  = Ident String
+ | QualifiedId (NonEmpty String) String
  | Equal
  | TypeColon
  | PortColon
@@ -48,6 +50,7 @@ data Tok
 
 instance Show Tok where
   show (Ident s) = s
+  show (QualifiedId (p :| ps) s) = intercalate "." (p:ps ++ [s])
   show Equal = "="
   show TypeColon = "::"
   show PortColon = ":"
@@ -110,6 +113,7 @@ data Keyword
   | KOption
   | KSome
   | KNone
+  | KImport
   deriving Eq
 
 instance Show Keyword where
@@ -137,6 +141,7 @@ instance Show Keyword where
   show KOption = "Option"
   show KSome = "some"
   show KNone = "none"
+  show KImport = "import"
 
 keyword :: Lexer Keyword
 keyword = (try (string "type") $> KType)
@@ -161,12 +166,20 @@ keyword = (try (string "type") $> KType)
           <|> string "some"  $> KSome
           <|> string "none"  $> KNone
           <|> string "Unit"  $> KUnit
+          <|> string "import" $> KImport
 
 ident :: Lexer String
 ident = (<?> "name") $ do
   a <- letterChar
   bc <- many (alphaNumChar <|> oneOf "_'")
   pure (a:bc)
+
+qualified :: Lexer Tok
+qualified = (<?> "qualified name") $ do
+  first <- ident <* string "."
+  rest  <- many (try $ ident <* string ".")
+  last  <- ident
+  pure (QualifiedId (first :| rest) last)
 
 comment :: Lexer Tok
 comment = char '#' *> ((printChar `manyTill` lookAhead (void newline <|> void eof)) <&> Comment)
@@ -195,6 +208,7 @@ tok = comment
       <|> try (K <$> try keyword)
       <|> try (newline $> Newline)
       <|> try hspace'
+      <|> try qualified
       <|> Ident <$> ident
  where
   hspace' :: Lexer Tok

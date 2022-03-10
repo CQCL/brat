@@ -1,0 +1,5 @@
+ret > ExitFailure 1
+err > brat: user error (err@???
+err > cycle_aux: Cycle detected in imports: cycle_aux is reachable from cycle
+err > )
+err >

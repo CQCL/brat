@@ -6,6 +6,7 @@ import Brat.FC
 import Brat.Graph
 import Brat.Naming
 import Brat.Syntax.Common
+import Brat.UserName
 import Util
 
 import Control.Arrow ((&&&))
@@ -37,7 +38,7 @@ data Term :: Dir -> Kind -> Type where
   Th       :: WC (Term Chk Verb) -> Term Chk Noun
   Emb      :: WC (Term Syn k) -> Term Chk k
   Pull     :: [Port] -> WC (Term Chk k) -> Term Chk k
-  Var      :: String -> Term Syn Noun  -- Look up in noun (value) env
+  Var      :: UserName -> Term Syn Noun  -- Look up in noun (value) env
   Bound    :: Int -> Term Syn Noun  -- Look up in noun (value) env
   (:$:)    :: WC (Term Syn Noun) -> WC (Term Chk Noun) -> Term Syn Noun
   -- TODO: Make it possible for Output to be (Port, SType) when using this in kernels
@@ -70,7 +71,7 @@ instance Show (Term d k) where
               ,show arg ++ ")"
               ]
   show (Pull ps x) = concat ((++":") <$> ps) ++ show x
-  show (Var x) = x
+  show (Var x) = show x
   show (Bound i) = '^':show i
   show (fun :$: arg) = show fun ++ ('(' : show arg ++ ")")
   show (tm ::: ty) = show tm ++ " :: " ++ show ty

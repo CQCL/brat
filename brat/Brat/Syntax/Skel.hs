@@ -3,6 +3,7 @@ module Brat.Syntax.Skel where
 import Brat.FC
 import Brat.Syntax.Common
 import Brat.Syntax.Core
+import Brat.UserName
 
 -- A version of `Term` which doesn't include directions or kinds for easy
 -- manipulation in the LSP mode (for now). This should be produced by forgetting
@@ -66,7 +67,7 @@ data Skel where
   SJuxtNoun :: WC Skel -> WC Skel -> Skel
   STh       :: WC Skel -> Skel
   SPull     :: [Port] -> WC Skel -> Skel
-  SVar      :: String -> Skel
+  SVar      :: UserName -> Skel
   SBound    :: Int -> Skel
   SApp      :: WC Skel -> WC Skel -> Skel
   SAnn      :: WC Skel -> [Output] -> Skel

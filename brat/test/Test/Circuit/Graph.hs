@@ -8,26 +8,19 @@ import Brat.Syntax.Core (Term)
 import Brat.Syntax.Common (Decl(..))
 import Test.Circuit.Common
 
+import Control.Monad.Except
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.ExpectedFailure
 
 type Graph = Graph' Term
 
-assertEither :: Either Error Assertion -> Assertion
-assertEither (Left err) = assertFailure (debug err)
-assertEither (Right ass) = ass
-
 graphTest :: String -> String -> Graph' Term -> TestTree
 graphTest name contents gExp = testCase name $ do
-  case loadFile Lib name contents of
-    Right (_, _, _, _, _, gAct) -> do
---      putStrLn "Actual:"
---      print gAct
---      putStrLn "Expected:"
---      print gExp
-      gAct =? gExp
-    Left err -> assertFailure $ debug err
+  env <- runExceptT $ loadFile Lib "" name contents
+  case env of
+    Left err -> assertFailure (show err)
+    Right (_, _, _, _, _, gAct) -> gAct =? gExp
 
 idFile =
   "main :: { a :: Qubit -o b :: Qubit }\

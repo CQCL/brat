@@ -1,0 +1,4 @@
+import cycle_aux
+
+main :: Unit
+main = <>

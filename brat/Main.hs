@@ -4,36 +4,30 @@ import Brat.Error
 import Brat.Load
 import Util
 
+import Control.Monad.Except
 import qualified Data.ByteString as BS
 import Options.Applicative
 import Data.ProtoLens (encodeMessage)
-import System.FilePath (dropExtension)
+import System.FilePath (dropExtension, splitFileName)
 
 data Options = Opt {
-  prelude :: Bool,
   compile :: Bool,
   file    :: String
 }
-
-preludeFlag :: Parser Bool
-preludeFlag = switch (long "prelude" <> short 'p' <> help "Use kernel prelude")
 
 compileFlag :: Parser Bool
 compileFlag = switch (long "compile" <> short 'c' <> help "Compile to TIERKREIS")
 
 opts :: Parser Options
-opts = Opt <$> preludeFlag <*> compileFlag <*> (strArgument (metavar "FILE"))
+opts = Opt <$> compileFlag <*> (strArgument (metavar "FILE"))
 
 main = do
   Opt{..} <- execParser (info opts (progDesc "Compile a BRAT program"))
-  env <- if prelude
-         then do cts <- readFile "prelude.brat"
-                 (cenv, venv, nouns, verbs, _, _) <- eitherIO $ loadFile Lib "prelude.brat" cts
-                 pure (cenv, venv, nouns, verbs)
-         else pure ([], [], [], [])
   contents <- readFile file
+  (cwd, file) <- pure $ splitFileName $ dropExtension file
   if not compile
-    then do (cenv, venv, nouns, verbs, holes, _) <- eitherIO (loadFileWithEnv env Lib file contents)
+    then do env <- runExceptT $ loadFile Lib cwd file contents
+            (cenv, venv, nouns, verbs, holes, _) <- eitherIO env
             putStrLn "Nouns:"
             print nouns
             putStrLn ""
@@ -43,7 +37,8 @@ main = do
             putStrLn "Holes:"
             mapM_ print holes
 
-    else do (cenv, venv, nouns, verbs, holes, _) <- eitherIO (loadFileWithEnv env Exe file contents)
+    else do env <- runExceptT $ loadFile Exe cwd file contents
+            (cenv, venv, nouns, verbs, holes, _) <- eitherIO env
             mn <- eitherIO $
                   maybeToRight (Err Nothing Nothing MainNotFound) $
                   lookupBy ((== "main") . fnName) id nouns

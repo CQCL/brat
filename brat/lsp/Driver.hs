@@ -4,7 +4,7 @@
 
 import Control.Concurrent.MVar
 import Control.Lens hiding (Iso)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Except
 import Data.Rope.UTF16 (toString)
 import Data.Text (pack)
 import Language.LSP.Server
@@ -100,19 +100,19 @@ loadVFile state method msg = do
     Just (VirtualFile _version str rope) -> do
       let file = toString rope
       liftIO $ debugM "loadVFile" $ "Found file: " ++ show str
-      case loadFile Lib (show fileName) file of
-        Left er -> do allGood fileName
-                      sendError fileName (fixParseError er)
-
-        Right (_,_,newNouns,newVerbs,holes, _) -> do
+      cwd <- pure "" -- what should *actually* go here?
+      env <- liftIO . runExceptT $ loadFile Lib cwd (show fileName) file
+      case env of
+        Right (_,_,newNouns,newVerbs,holes,_) -> do
           old@(PS oldNouns oldVerbs _ oldHoles) <- liftIO $ takeMVar state
           if (oldNouns, oldVerbs, oldHoles) == (newNouns,newVerbs,holes)
             then liftIO (putMVar state old) >> allGood fileName
             else do
-            liftIO $ debugM "loadVFile" $ "Updated ProgramState"
-            liftIO $ putMVar state (ps (newNouns, newVerbs, holes))
-            allGood fileName
-            logHoles holes fileName
+              liftIO $ debugM "loadVFile" $ "Updated ProgramState"
+              liftIO $ putMVar state (ps (newNouns, newVerbs, holes))
+              allGood fileName
+              logHoles holes fileName
+        Left err -> allGood fileName *> sendError fileName (fixParseError err)
     Nothing -> do
       liftIO $ debugM "loadVFile" $ "Couldn't find " ++ show fileName ++ " in VFS"
  where

@@ -71,6 +71,7 @@ library
                        Brat.Syntax.Core,
                        Brat.Syntax.Raw,
                        Brat.Syntax.Skel,
+                       Brat.UserName,
                        Proto.Graph, Proto.Graph_Fields,
                        Proto.Signature, Proto.Signature_Fields
 
@@ -88,7 +89,10 @@ library
                        vector,
                        text,
                        deepseq,
-                       array
+                       array,
+                       filepath,
+                       directory,
+                       utility-ht
 
 executable brat
   import:              haskell, warning-flags
@@ -106,7 +110,9 @@ executable brat
                        proto-lens,
                        optparse-applicative,
                        bytestring,
-                       array
+                       array,
+                       directory,
+                       utility-ht
 
   other-modules:       Brat.Checker,
                        Brat.Compile.Circuit,
@@ -126,6 +132,7 @@ executable brat
                        Brat.Syntax.Raw,
                        Brat.Syntax.Skel
                        Brat.Thin,
+                       Brat.UserName,
                        Control.Monad.Freer,
                        Proto.Graph,
                        Proto.Graph_Fields,
@@ -138,7 +145,7 @@ executable lsp-brat
   main-is:             Driver.hs
   other-modules:       Brat.LSP.Find, Brat.LSP.Holes, Brat.LSP.State
   hs-source-dirs:      lsp
-  build-depends:       base <5, brat, lsp, lsp-types, text, lens, hslogger, rope-utf16-splay
+  build-depends:       base <5, brat, lsp, lsp-types, text, lens, hslogger, rope-utf16-splay, mtl
   default-extensions:  RecordWildCards
 
 test-suite tests
@@ -149,6 +156,7 @@ test-suite tests
   main-is:             Main.hs
   other-modules:       Test.Circuit.Common,
                        Test.Circuit.Gen,
-                       Test.Circuit.Graph
+                       Test.Circuit.Graph,
+                       Test.Import.Cycle
 
-  build-depends:       base <5, brat, tasty, tasty-hunit, tasty-expected-failure, mtl, containers
+  build-depends:       base <5, brat, tasty, tasty-hunit, tasty-expected-failure, tasty-silver, mtl, containers, filepath

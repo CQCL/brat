@@ -16,6 +16,7 @@ import Brat.FC
 import Brat.Naming
 import Brat.Syntax.Common
 import Brat.Syntax.Core
+import Brat.UserName
 
 type family TypeOf (k :: Kind) :: Type where
   TypeOf Noun = [InOut]
@@ -26,8 +27,8 @@ data RawVType
   | RSimpleTy SimpleType
   | RList RawVType
   | RProduct RawVType RawVType
-  | RAlias String [RawVType]
-  | RTypeFree String
+  | RAlias UserName [RawVType]
+  | RTypeFree UserName
   | RTypeVar Int
   | RVector RawVType (WC (Raw Chk Noun))
   | RThinning (WC (Raw Chk Noun)) (WC (Raw Chk Noun))
@@ -49,11 +50,11 @@ type RawCType = CType' RawIO
 
 deriving instance Eq RawCType
 
-data TypeAlias = Alias FC String [String] RawVType deriving (Eq, Show)
+data TypeAlias = Alias FC String [UserName] RawVType deriving (Eq, Show)
 
 type RawNDecl = NDecl' RawIO Raw
 type RawVDecl = VDecl' RawIO Raw
-type RawEnv = ([RawNDecl], [RawVDecl], [(String, TypeAlias)])
+type RawEnv = ([RawNDecl], [RawVDecl], [(UserName, TypeAlias)])
 
 type RawSlice = Slice (WC (Raw Chk Noun))
 
@@ -68,7 +69,7 @@ data Raw :: Dir -> Kind -> Type where
   RTh       :: WC (Raw Chk Verb) -> Raw Chk Noun
   REmb      :: WC (Raw Syn k) -> Raw Chk k
   RPull     :: [Port] -> WC (Raw Chk k) -> Raw Chk k
-  RVar      :: String -> Raw Syn Noun
+  RVar      :: UserName -> Raw Syn Noun
   (::$::)   :: WC (Raw Syn Noun) -> WC (Raw Chk Noun) -> Raw Syn Noun -- Eval with ChkRaw n argument
   (:::::)   :: WC (Raw Chk k) -> [RawIO] -> Raw Syn k
   RDo       :: WC (Raw Syn Noun) -> Raw Syn Verb
@@ -98,7 +99,7 @@ instance Show (Raw d k) where
               ]
   show (RPull [] x) = "[]:" ++ show x
   show (RPull ps x) = concat ((++":") <$> ps) ++ show x
-  show (RVar x) = x
+  show (RVar x) = show x
   show (fun ::$:: arg) = show fun ++ ('(' : show arg ++ ")")
   show (tm ::::: ty) = show tm ++ " :: " ++ show ty
   show (RDo f) = show f ++ "!"
@@ -113,7 +114,7 @@ instance Show (Raw d k) where
 type Desugar = StateT Namespace (ReaderT RawEnv (Except Error))
 
 instance {-# OVERLAPPING #-} MonadFail Desugar where
-  fail = dumbErr
+  fail = throwError . desugarErr
 
 freshM :: String -> Desugar Name
 freshM str = do
@@ -134,13 +135,13 @@ findDuplicates (ndecls, vdecls, aliases)
              []  -> pure () -- all good
              ([]:_) -> undefined -- this should be unreachable
              -- TODO: Include FC
-             ((x:xs):_) -> dumbErr . unlines $ (("Multiple definitions of " ++ fst x)
-                                                :(snd <$> (x:xs))
-                                               )
+             ((x:xs):_) -> desugarErr . unlines $ (("Multiple definitions of " ++ fst x)
+                                                   :(snd <$> (x:xs))
+                                                  )
 -}
 
-dumbErr :: String -> Desugar a
-dumbErr = throwError . Err Nothing Nothing . DesugarErr
+desugarErr :: String -> Error
+desugarErr = dumbErr . DesugarErr
 
 desugarVTy :: RawVType -> Desugar VType
 desugarVTy (RK ss ts) = K <$> (desugarRow ss) <*> (desugarRow ts)
@@ -161,16 +162,19 @@ desugarVTy (RProduct raw raw') = Product <$> desugarVTy raw <*> desugarVTy raw'
 desugarVTy (RAlias s args) = do
   (_, _, aliases) <- ask
   case lookup s aliases of
-    Nothing -> let msg = DesugarErr $ "Couldn't find an alias for type " ++ unwords (s:fmap show args)
-               in  throwError $ Err Nothing (Just s) msg
-    Just (Alias fc _ vars ty) -> do
+    Nothing -> let msg = DesugarErr $ "Couldn't find an alias for type "
+                         ++ unwords (show s:fmap show args)
+               in  throwError $ Err Nothing (Just (show s)) msg
+    Just (Alias fc _s vars ty) -> do
       unless (length vars == length args)
-        (throwError . Err (Just fc) (Just s) . DesugarErr $
-          unwords ("Type alias isn't fully applied:":s:(show <$> args)))
+        (throwError . Err (Just fc) (Just (show s)) . DesugarErr $
+          unwords ("Type alias isn't fully applied:":show s:(show <$> args)))
       let concreteTy = foldr (uncurry instantiateVType) ty (zip [0..] args)
       desugarVTy concreteTy
-desugarVTy (RTypeFree f) = dumbErr ("Trying to desugar free type var: " ++ f)
-desugarVTy (RTypeVar x) = dumbErr ("Trying to desugar bound type var: " ++ show x)
+desugarVTy (RTypeFree f) = throwError $
+                           desugarErr ("Trying to desugar free type var: " ++ show f)
+desugarVTy (RTypeVar x) = throwError $
+                          desugarErr ("Trying to desugar bound type var: " ++ show x)
 desugarVTy (RVector vty n)
   = Vector <$> desugarVTy vty <*> (unWC <$> desugar n)
 desugarVTy (RThinning wee big) = (:<<<:)
@@ -229,7 +233,7 @@ desugar' (RPattern x) = Pattern <$> traverse desugarPattern x
  where
   desugarPattern :: Pattern (WC (Raw Chk Noun)) -> Desugar (Pattern (WC (Term Chk Noun)))
   desugarPattern p = traverse (traverse desugar') p
-desugar' x = dumbErr $ "desugar'"  ++ show x
+desugar' x = throwError . desugarErr $ "desugar'"  ++ show x
 {-
 nsynth :: Raw Syn Noun -> Desugar [VType]
 nsynth (RLet _ _) = undefined
@@ -299,7 +303,7 @@ desugarEnv env@(ndecls, vdecls, _)
          vdecls <- mapM desugarVDecl vdecls
          pure (ndecls, vdecls)
 
-abstractVType :: String -> Int -> RawVType -> RawVType
+abstractVType :: UserName -> Int -> RawVType -> RawVType
 abstractVType x n (RC ctype) = RC (fmap (abstractVType x n) <$> ctype)
 -- All of our simple types are first order for now
 abstractVType _ _ ty@(RSimpleTy _) = ty
@@ -330,6 +334,7 @@ instantiateVType n to (RVector ty m) = RVector (instantiateVType n to ty) m
 instantiateVType _ _  (RThinning a b) = RThinning a b
 instantiateVType n to (RK r r') = RK r r'
 
+{-
 abstractTerm :: Abstractor -> Term d k -> Term d k
 abstractTerm abst tm = let bindings = zip (aux abst) [0..]
                        in  foldr nameTo tm bindings
@@ -378,3 +383,4 @@ bindTerm (Vec xs) = Vec (fmap bindTerm <$> xs)
 bindTerm (Select from th) = Select (bindTerm <$> from) (bindTerm <$> th)
 bindTerm (Slice size slice) = Slice (bindTerm <$> size) (fmap bindTerm <$> slice)
 bindTerm x = x
+-}

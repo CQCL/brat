@@ -1,0 +1,4 @@
+import cycle
+
+unit :: Unit
+unit = <>

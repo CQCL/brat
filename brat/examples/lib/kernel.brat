@@ -17,3 +17,6 @@ ext "tket.CRx" CRx :: Float -> { Qubit, Qubit -o Qubit, Qubit }
 ext "tket.CRy" CRy :: Float -> { Qubit, Qubit -o Qubit, Qubit }
 ext "tket.CRz" CRz :: Float -> { Qubit, Qubit -o Qubit, Qubit }
 ext "tket.M" measure :: { Qubit -o Bool }
+
+qid :: { Qubit -o Qubit }
+qid = { q -> q }

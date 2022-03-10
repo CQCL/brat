@@ -21,6 +21,9 @@ data ErrorMsg
  | PatFail String
  -- function, [argument]
  | Unimplemented String [String]
+ | ImportCycle String String
+ | FileNotFound String
+ | InternalError String
 
 instance Show ErrorMsg where
   show (TypeErr x) = "Type error: " ++ x
@@ -34,6 +37,9 @@ instance Show ErrorMsg where
   show MainNotFound = "No function found called \"main\""
   show (PatFail x) = "Sorry: " ++ x
   show (Unimplemented f args) = unwords ("Unimplemented, sorry! --":f:args)
+  show (ImportCycle a b) = unwords ["Cycle detected in imports:", a, "is reachable from", b]
+  show (FileNotFound f) = "File not found: " ++ show f
+  show (InternalError x) = "Internal error: " ++ x
 
 data Error = Err { fc  :: Maybe FC
                  , src :: Maybe String
@@ -56,3 +62,6 @@ instance MonadFail (Either Error) where
 eitherIO :: Either Error a -> IO a
 eitherIO (Left e) = fail (debug e)
 eitherIO (Right a) = pure a
+
+dumbErr :: ErrorMsg -> Error
+dumbErr = Err Nothing Nothing
