@@ -2,6 +2,8 @@ module Brat.Error where
 
 import Brat.FC
 
+import System.Exit
+
 data ParseError = PE { ugly :: String
                      , pretty :: String
                      }
@@ -46,12 +48,12 @@ data Error = Err { fc  :: Maybe FC
                  , msg :: ErrorMsg
                  }
 instance Show Error where
-  show (Err _ (Just src) msg) = src ++ ": " ++ show msg
+  show (Err mfc (Just src) msg)
+    = let bonus = maybe "" (\fc -> '@':show fc) mfc in
+        unlines ["Error in " ++ src ++ bonus ++ ":"
+                ,"  " ++ show msg
+                ]
   show (Err _ Nothing msg) = show msg
-
-debug :: Error -> String
-debug e@(Err (Just fc) _ _) = unlines ["err@" ++ show fc, show e]
-debug e@(Err Nothing _ _) = unlines ["err@???", show e]
 
 addSrc :: String -> Error -> Error
 addSrc name (Err fc _ msg) = Err fc (Just name) msg
@@ -60,7 +62,7 @@ instance MonadFail (Either Error) where
   fail = Left . Err Nothing Nothing . PatFail
 
 eitherIO :: Either Error a -> IO a
-eitherIO (Left e) = fail (debug e)
+eitherIO (Left e) = die (show e)
 eitherIO (Right a) = pure a
 
 dumbErr :: ErrorMsg -> Error

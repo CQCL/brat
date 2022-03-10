@@ -47,9 +47,8 @@ main = do
 
 sendError :: NormalizedUri -> Error -> LspM () ()
 sendError fileUri Err{..} =
-  let nilPos = Position 0 0
-      startPos = maybe nilPos (conv . FC.start) fc
-      endPos = maybe (Position 0 5) (conv . FC.end) fc
+  let startPos = maybe (Position 0 0)   (conv . FC.start) fc
+      endPos   = maybe (Position 0 100) (conv . FC.end) fc
       diags = [Diagnostic
                (Range startPos endPos)
                (Just DsError)

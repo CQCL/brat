@@ -1,5 +1,5 @@
 ret > ExitFailure 1
-err > brat: user error (err@???
-err > c: Cycle detected in imports: c is reachable from a
-err > )
+err > Error in c:
+err >   Cycle detected in imports: c is reachable from a
+err >
 err >
