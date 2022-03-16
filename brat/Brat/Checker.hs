@@ -132,6 +132,18 @@ qpred None = Nothing
 qpred One  = Just None
 qpred Tons = Just Tons
 
+ensureEmpty :: Show a => String -> [a] -> Checking ()
+ensureEmpty _ [] = pure ()
+ensureEmpty str xs = do
+  fc <- req AskFC
+  let msg = InternalError $ "Expected empty " ++ str ++ ", got:\n  " ++ show xs
+  req $ Throw (Err (Just fc) Nothing msg)
+
+noUnders m = do
+  (outs, (overs, unders)) <- m
+  ensureEmpty "unders" unders
+  pure (outs, overs)
+
 localFC :: FC -> Checking v -> Checking v
 localFC _ (Ret v) = Ret v
 localFC f (Req AskFC k) = localFC f (k f)
@@ -305,7 +317,8 @@ check' (s :|: t) tys = do
   pure (outs, tys)
 check' (s :-: t) (overs, unders) = do
   (overs, (rightovers, ())) <- check s (overs, ())
-  (outs,  ([], rightunders)) <- check t (overs, unders)
+  (outs,  (emptyOvers, rightunders)) <- check t (overs, unders)
+  ensureEmpty "overs" emptyOvers
   pure (outs, (rightovers, rightunders))
 check' (binder :\: body) (overs, unders) = do
   (vext, overs) <- abstract overs (unWC binder)
@@ -316,7 +329,7 @@ check' (Pull ports t) (overs, unders) = do
   check t (overs, unders)
 check'  (t ::: outs) (overs, ()) = do
   (unders, dangling) <- mkIds outs
-  ((), (overs, [])) <- check t (overs, unders)
+  ((), overs) <- noUnders $ check t (overs, unders)
   pure (dangling, (overs, ()))
  where
   mkIds :: [Output] -> Checking ([(Tgt, VType)] -- Hungry wires
@@ -348,8 +361,9 @@ check' (Th t) (overs, (tgt, ty@(C (ss :-> ts))):unders) = do
   tgtNode <- next "thunk_target" Target ts []
   let thOvers  = [ ((srcNode, port), ty)| (port, ty) <- ss]
   let thUnders = [ ((tgtNode, port), ty)| (port, ty) <- ts]
-  fnResult <- check t (thOvers, thUnders)
-  let ((), ([], [])) = fnResult
+  ((), (emptyOvers, emptyUnders)) <- check t (thOvers, thUnders)
+  ensureEmpty "overs" emptyOvers
+  ensureEmpty "unders" emptyUnders
   funNode <- next "box" (srcNode :>>: tgtNode) [] [("fun", C $ ss :-> ts)]
   wire ((funNode, "fun"), Right ty, tgt)
   pure ((), (overs, unders))
@@ -358,7 +372,9 @@ check' (Th t) (overs, (tgt, ty@(K (R ss) (R ts))):unders) = do
   tgtNode <- knext "thunk_target" Target ts []
   let thOvers  = [ ((srcNode, port), ty)| (port, ty) <- ss]
   let thUnders = [ ((tgtNode, port), ty)| (port, ty) <- ts]
-  ((), ([], [])) <- kcheck t (thOvers, thUnders)
+  ((), (emptyOvers, emptyUnders)) <- kcheck t (thOvers, thUnders)
+  ensureEmpty "overs" emptyOvers
+  ensureEmpty "unders" emptyUnders
   funNode <- next "box" (srcNode :>>: tgtNode) [] [("fun", K (R ss) (R ts))]
   wire ((funNode, "fun"), Right ty, tgt)
   pure ((), (overs, unders))
@@ -373,7 +389,7 @@ check' (Do t) (overs, ()) = do
 check' (fun :$: arg) ((), ()) = do
   ([(src, C (ss :-> ts))], ((), ())) <- check fun ((), ())
   evalNode <- next "eval" (Eval src) ss ts
-  ((), ((), [])) <- check arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
+  ((), ()) <- noUnders $ check arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
   pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
 check' (Simple tm) ((), ((src, p), SimpleTy ty):unders) = do
   simpleCheck ty tm
@@ -404,15 +420,21 @@ check' (Vec elems) ((), (_, Vector ty n):unders) = do
                                                    ]
     Right v -> fail $ unwords ["Trying to reduce", show n, "but got", show v]
  where
-  aux ty tm = do ((), ((), [])) <- check tm ((), ty)
-                 pure ()
+  aux :: [(Src, VType)] -> WC (Term Chk Noun) -> Checking ()
+  aux ty tm = do
+    ((), ()) <- noUnders (check tm ((), ty))
+    pure ()
+
 check' (Vec elems) ((), (_, List ty):unders) = do
   hypo <- next "list type hypo" Hypo [] [("type", ty)]
   mapM_ (aux hypo . unWC) elems
   pure ((), ((), unders))
  where
-  aux hypo e = do ((), ((), [])) <- check' e ((), [((hypo, "type"), ty)])
-                  pure ()
+  aux :: Name -> Term Chk Noun -> Checking ()
+  aux hypo e = do
+    ((), ()) <- noUnders (check' e ((), [((hypo, "type"), ty)]))
+    pure ()
+
 check' (NHole name) ((), unders) = do
   fc <- req AskFC
   suggestions <- getSuggestions fc
@@ -520,8 +542,9 @@ checkRPat (_, Option ty) PNone = pure ()
 checkRPat (tgt, Option ty) (PSome x) = check1 (tgt, ty) x
 
 check1 :: (Tgt, VType) -> WC (Term Chk Noun) -> Checking ()
-check1 tgt tm = do ((), ((), [])) <- check tm ((), [tgt])
-                   pure ()
+check1 tgt tm = do
+  ((), ()) <- noUnders (check tm ((), [tgt]))
+  pure ()
 
 simpleCheck :: SimpleType -> SimpleTerm -> Checking ()
 simpleCheck Natural (Num n) | n >= 0 = pure ()
@@ -542,6 +565,14 @@ evalNat :: Term Chk Noun -> Checking Int
 evalNat tm = evalNatSoft tm >>= \case
   Right n -> pure n
   Left er -> err er
+
+abstractAll :: [(Src, VType)]
+            -> Abstractor
+            -> Checking VEnv
+abstractAll stuff binder = do
+  (venv, unders) <- abstract stuff binder
+  ensureEmpty "unders after abstract" unders
+  pure venv
 
 abstract :: [(Src, VType)]
          -> Abstractor
@@ -567,20 +598,18 @@ abstract ((_, Vector ty n):inputs) (VecLit xs) = do
   venvs <- mapM (aux node) xs
   pure $ (concat venvs, inputs)
    where
-    aux node elem = do
-      (venv, []) <- abstract [((node, "type"), ty)] elem
-      pure venv
+    aux node elem = abstractAll [((node, "type"), ty)] elem
+
 abstract ((_, List ty):inputs) (VecLit xs) = do
     node <- next "List literal pattern" Hypo [("type", ty)] []
     venvs <- mapM (aux node) xs
     pure $ (concat venvs, inputs)
    where
-    aux node elem = do
-      (venv, []) <- abstract [((node, "type"), ty)] elem
-      pure venv
+    aux node elem = abstractAll [((node, "type"), ty)] elem
+
 abstract ((src, Product l r):inputs) (VecLit [a,b]) = do
-  (venv,  []) <- abstract [(src, l)] a
-  (venv', []) <- abstract [(src, r)] b
+  venv <- abstractAll [(src, l)] a
+  venv' <- abstractAll [(src, r)] b
   pure (venv ++ venv', inputs)
 abstract (input:inputs) (Pat pat) = checkPat input pat
  where
@@ -597,14 +626,14 @@ abstract (input:inputs) (Pat pat) = checkPat input pat
     n <- evalNat n
     let tailTy = Vector ty (Simple (Num (n - 1)))
     node <- next "PCons (Vec)" Hypo [("head", ty), ("tail", tailTy)] []
-    (venv, []) <- abstract [((node, "head"), ty)] x
-    (venv', []) <- abstract [((node, "tail"), tailTy)] xs
+    venv <- abstractAll [((node, "head"), ty)] x
+    venv' <- abstractAll [((node, "tail"), tailTy)] xs
     pure (venv ++ venv', inputs)
   checkPat (_, List _) PNil = pure ([], inputs)
   checkPat (src, List ty) (PCons x xs) = do
     node <- next "PCons (List)" Hypo [("head", ty), ("tail", List ty)] []
-    (venv, []) <- abstract [((node, "head"), ty)] x
-    (venv', []) <- abstract [((node, "tail"), List ty)] xs
+    venv <- abstractAll [((node, "head"), ty)] x
+    venv' <- abstractAll [((node, "tail"), List ty)] xs
     pure (venv ++ venv', inputs)
   checkPat (src, Option ty) (PSome x) = abstract ((src, ty):inputs) x
   checkPat (_, Option _) PNone = pure ([], inputs)
@@ -613,6 +642,14 @@ abstract (input:inputs) (Pat pat) = checkPat input pat
     let msg = "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty
     req $ Throw $ Err (Just fc) Nothing $ PattErr msg
 abstract _ x = err $ "Can't abstract " ++ show x
+
+kabstractAll :: [(Src, SType Term)]
+             -> Abstractor
+             -> Checking KEnv
+kabstractAll stuff binder = do
+  (venv, unders) <- kabstract stuff binder
+  ensureEmpty "unders after kabstract" unders
+  pure venv
 
 kabstract :: [(Src, SType Term)]
           -> Abstractor
@@ -641,9 +678,8 @@ kabstract ((_, Of ty n):inputs) (VecLit xs) = do
   venvs <- mapM (aux node) xs
   pure $ (concat venvs, inputs)
    where
-    aux node elem = do
-      (venv, []) <- kabstract [((node, "type"), ty)] elem
-      pure venv
+    aux node elem = kabstractAll [((node, "type"), ty)] elem
+
 kabstract (input:inputs) (Pat pat) = checkPat input pat
  where
   checkPat :: (Src, SType Term) -> Pattern Abstractor -> Checking (KEnv, [(Src, SType Term)])
@@ -657,8 +693,8 @@ kabstract (input:inputs) (Pat pat) = checkPat input pat
     n <- evalNat n
     let tailTy = Of ty (Simple (Num (n - 1)))
     node <- knext "PCons" Hypo [("head", ty), ("tail", tailTy)] []
-    (venv, []) <- kabstract [((node, "head"), ty)] x
-    (venv', []) <- kabstract [((node, "tail"), tailTy)] xs
+    venv <- kabstractAll [((node, "head"), ty)] x
+    venv' <- kabstractAll [((node, "tail"), tailTy)] xs
     pure (venv ++ venv', inputs)
   checkPat (_, ty) pat = do
     fc <- req AskFC
@@ -715,7 +751,8 @@ kcheck' (s :|: t) tys = do
   pure (outs, tys)
 kcheck' (s :-: t) (overs, unders) = do
   (overs, (rightovers, ())) <- kcheck s (overs, ())
-  (outs,  ([], rightunders)) <- kcheck t (overs, unders)
+  (outs,  (emptyOvers, rightunders)) <- kcheck t (overs, unders)
+  ensureEmpty "overs" emptyOvers
   pure (outs, (rightovers, rightunders))
 kcheck' (binder :\: body) (overs, unders) = do
   (ext, overs) <- kabstract overs (unWC binder)
@@ -787,27 +824,26 @@ kcheck' (fun :$: arg) ((), ())
                      ((src, K (R ss) (R ts)):_) -> pure (src, ss, ts)
                      _ -> err "BRAT function called from kernel"
   evalNode <- knext "eval" (Eval src) ss ts
-  ((), ((), [])) <- kcheck arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
+  ((), ((), emptyUnders)) <- kcheck arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
+  ensureEmpty "unders" emptyUnders
   pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
    where
      function src f ss ts = do
       funNode  <- next ("eval_" ++ show f) (Eval src) ss ts
-      argResult <- check arg ((), [ ((funNode, port), ty) | (port, ty) <- ss ])
-      let ((), ((), [])) = argResult
+      ((), ()) <- noUnders $ check arg ((), [ ((funNode, port), ty) | (port, ty) <- ss ])
       let tys = [ ((funNode, port), ty) | (port, ty) <- ts ]
       (src, ss, ts) <- case tys of
                          [(src, K (R ss) (R ts)), (_, K (R us) (R vs))] -> pure (src, (ss <> us), (ts <> vs))
                          ((src, K (R ss) (R ts)):_) -> pure (src, ss, ts)
                          _ -> err "BRAT function called from kernel"
       evalNode <- knext "eval" (Eval src) ss ts
-      ((), ((), [])) <- kcheck arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
+      ((), ()) <- noUnders $ kcheck arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
       pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
 
 
      kernel src ss ts = do
        evalNode <- knext "eval" (Eval src) ss ts
-       argResult <- kcheck arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
-       let ((), ((), [])) = argResult
+       ((), ()) <- noUnders $ kcheck arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
        pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
 
 
@@ -838,8 +874,11 @@ kcheck' (Vec elems) ((), (_, Of ty n):unders) = do
                                                    ]
     Right v -> fail $ unwords ["Trying to reduce", show n, "but got", show v]
  where
-  aux ty tm = do ((), ((), [])) <- kcheck tm ((), ty)
-                 pure ()
+  aux :: [(Src, SType Term)] -> WC (Term Chk Noun) -> Checking ()
+  aux ty tm = do
+    ((), ()) <- noUnders (kcheck tm ((), ty))
+    pure ()
+
 kcheck' (Simple (Bool _)) ((), ((_, Bit):unders)) = pure ((), ((), unders))
 kcheck' t _ = fail $ "Won't kcheck " ++ show t
 
