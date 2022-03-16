@@ -77,8 +77,8 @@ rxGraph = ([BratNode "id" (Prim "Rx")
 int = SimpleTy IntTy
 
 twoGraph :: Graph' Term
-twoGraph = ([BratNode "add" (Prim "add") [("a", int), ("b", int)] [("c", int)]
---            ,BratNode "add2" (Prim "add") [("a", int), ("b", int)] [("c", int)]
+twoGraph = ([BratNode "add" (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))]
+            ,BratNode "add" (Eval ("add", "thunk")) [("a", int), ("b", int)] [("c", int)]
             ,BratNode "1a" (Const (Num 1)) [] [("value", int)]
             ,BratNode "1b" (Const (Num 1)) [] [("value", int)]
             ,BratNode "one" Id [("n", int)] [("n", int)]
@@ -100,6 +100,26 @@ oneGraph = ([BratNode "1" (Const (Num 1)) [] [("value", int)]
 
 addNGraph :: Graph' Term
 addNGraph
+  = ([BratNode "add" (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))]
+     ,BratNode "add_eval" (Eval ("add", "thunk")) [("a", int), ("b", int)] [("c", int)]
+     ,BratNode "N" (Prim "N") [] [("value", int)]
+     ,BratNode "addN_box" ("addN_src" :>>: "addN_tgt") [] [("value", addN_ty)]
+     ,BratNode "addN_src" Source [("in", int)] [("in", int)]
+     ,BratNode "addN_tgt" Target [("out", int)] [("out", int)]
+     ,BratNode "addN_eval" (Eval ("addN_box", "value")) [("value", addN_ty), ("in", int)] [("out", int)]
+     ,BratNode "addN" Id [("thunk", addN_ty)] [("thunk", addN_ty)]
+     ]
+    ,[(("addN_src", "in"), Right int, ("add_eval", "a"))
+     ,(("N", "value"), Right int, ("add_eval", "b"))
+     ,(("add", "c"), Right int, ("addN_tgt", "out"))
+     ,(("addN_box", "value"), Right addN_ty, ("addN_eval", "value"))
+     ]
+    )
+ where
+  addN_ty = C ([("in", int)] :-> [("out", int)])
+
+addN2Graph :: Graph' Term
+addN2Graph
   = ([BratNode "add" (Prim "add") [("a", int), ("b", int)] [("c", int)]
      ,BratNode "N" (Prim "N") [] [("value", int)]
      ,BratNode "addN_box" ("addN_src" :>>: "addN_tgt") [] [("value", addN_ty)]
@@ -107,6 +127,7 @@ addNGraph
      ,BratNode "addN_tgt" Target [("out", int)] [("out", int)]
      ,BratNode "addN_eval" (Eval ("addN_box", "value")) [("value", addN_ty), ("in", int)] [("out", int)]
      ,BratNode "addN" (Prim "addN") [("in", int)] [("out", int)]
+     ,BratNode "1" (Const (Num 1)) [] [("value", int)]
      ]
     ,[(("addN_src", "in"), Right int, ("add", "a"))
      ,(("N", "value"), Right int, ("add", "b"))
@@ -119,7 +140,7 @@ addNGraph
 
 extGraph :: Graph' Term
 extGraph
- = ([BratNode "add" (Prim "add") [("a", int), ("b", int)] [("c", int)]]
+ = ([BratNode "add" (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))]]
    ,[]
    )
 

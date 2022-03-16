@@ -5,7 +5,6 @@ import Brat.Error
 import Brat.Graph
 import Brat.Load
 import Brat.Syntax.Core (Term)
-import Brat.Syntax.Common (Decl(..))
 import Test.Circuit.Common
 
 import Control.Monad.Except
@@ -20,7 +19,7 @@ graphTest name contents gExp = testCase name $ do
   env <- runExceptT $ loadFile Lib "" name contents
   case env of
     Left err -> assertFailure (show err)
-    Right (_, _, _, _, _, gAct) -> gAct =? gExp
+    Right (_, _, _, gAct) -> gAct =? gExp
 
 idFile =
   "main :: { a :: Qubit -o b :: Qubit }\
@@ -63,11 +62,21 @@ one =
   \one = 1"
 
 addN =
-  "ext \"n\" N :: (value :: Int)\
+  "ext \"N\" N :: (value :: Int)\
   \ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)\
   \\
   \addN :: (in :: Int) -> (out :: Int)\
   \addN n = add(n, N)"
+
+addN2 =
+  "ext \"N\" N :: (value :: Int)\
+  \ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)\
+  \\
+  \addN :: (in :: Int) -> (out :: Int)\
+  \addN n = add(n, N)\
+  \\
+  \main :: Int\
+  \main = addN(1)"
 
 ext =
   "ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)"
@@ -78,6 +87,7 @@ graphTests = testGroup "Graph" [graphTest "id" idFile idGraph
                                ,expectFail $ graphTest "Rx" rxFile rxGraph
                                ,graphTest "two" two   twoGraph
                                ,graphTest "one" one   oneGraph
-                               ,expectFail $ graphTest "addN" addN addNGraph
+                               ,graphTest "addN" addN addNGraph
+                               ,expectFail $ graphTest "addN2" addN2 addN2Graph
                                ,graphTest "ext"  ext  extGraph
                                ]

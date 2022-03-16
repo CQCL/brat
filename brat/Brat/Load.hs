@@ -38,85 +38,74 @@ import Debug.Trace
 
 -- A Module is a node in the dependency graph
 type RawMod = (RawEnv, UserName, [UserName])
-type Mod = (CEnv, VEnv, [NDecl], [VDecl], [TypedHole], Graph)
+type Mod = (VEnv, [Decl], [TypedHole], Graph)
 data LoadType = Lib | Exe deriving (Eq, Show)
 
 emptyMod :: Mod
-emptyMod = ([], [], [], [], [], ([], []))
+emptyMod = ([], [], [], ([], []))
 
-addNounsToEnv :: Prefix -> [NDecl] -> VEnv
+addNounsToEnv :: Prefix -> [Decl] -> VEnv
 addNounsToEnv pre = aux root
  where
-  aux :: Namespace -> [NDecl] -> VEnv
+  aux :: Namespace -> [Decl] -> VEnv
   aux _ [] = []
-  aux (MkName ns, _) (Decl{..}:decls) =
-    let freshName = MkName ((fnName, 0) : ns)
-        venv = [ (PrefixName pre fnName, ((freshName, port), ty)) | (port, ty) <- fnSig]
-    in  venv <> aux (freshName, 0) decls
+  aux namespace (Decl{..}:decls) =
+    let (freshName, newNamespace) = fresh fnName namespace
+        new = [ (PrefixName pre fnName, ((freshName, port), ty)) | (port, ty) <- fnSig]
+    in  new <> aux newNamespace decls
 
-addVerbsToEnv :: Prefix -> [VDecl] -> CEnv
-addVerbsToEnv pre = foldr (\d cenv -> (PrefixName pre (fnName d), fnSig d):cenv) []
-
-checkVerb :: Prefix -> VDecl -> Checking ((), Connectors Brat Chk Verb)
-checkVerb pre Decl{..}
-  = withPrefix fnName $
-    case fnLocality of
-      Local -> do
-        let (ss :-> ts) = fnSig
-        src <- next (name <> "/in") Source ss ss
-        tgt <- next (name <> "/out") Target ts ts
-        let thunkTy = ("value", C (ss :-> ts))
-        thunk <- next (name ++ "_thunk") (src :>>: tgt) [] [thunkTy]
-        eval  <- next ("Eval(" ++ name ++ ")") (Eval (thunk, "value")) (thunkTy:ss) ts
-        wire ((thunk, "value"), Right (snd thunkTy), (eval, "value"))
-        wrapError (addSrc name) $
-          checkClauses fnBody ([((src, port), ty) | (port, ty) <- ss]
-                              ,[((tgt, port), ty) | (port, ty) <- ts])
-      Extern sym -> do
-        let (ss :-> ts) = fnSig
-        next name (Prim sym) ss ts
-        pure ((), ([], []))
- where
-  name = show $ PrefixName pre fnName
-checkNoun :: Prefix -> NDecl -> Checking ()
-checkNoun pre Decl{..}
+checkDecl :: Prefix -> Decl -> Checking ()
+checkDecl pre Decl{..}
   | Local <- fnLocality = do
   tgt <- next fnName Id fnSig fnSig
-  let NounBody body = fnBody
-  wrapError (addSrc fnName) $
-    (check body ((), [((tgt, port), ty) | (port, ty) <- fnSig]))
-  pure ()
-  | Extern sym <- fnLocality = () <$ next (show $ PrefixName pre fnName) (Prim sym) [] fnSig
+  case fnBody of
+    NoLhs body -> do
+      ((), ((), [])) <- wrapError (addSrc fnName) $
+                        (check body ((), [((tgt, port), ty) | (port, ty) <- fnSig]))
+      pure ()
+    ThunkOf verb -> do
+      let ((_, C (ss :-> ts)):_) = merge fnSig
+      src <- next (name <> "/in") Source ss ss
+      tgt <- next (name <> "/out") Target ts ts
+      let thunkTy = ("value", C (ss :-> ts))
+      thunk <- next (name ++ "_thunk") (src :>>: tgt) [] [thunkTy]
+      eval  <- next ("Eval(" ++ name ++ ")") (Eval (thunk, "value")) (thunkTy:ss) ts
+      wire ((thunk, "value"), Right (snd thunkTy), (eval, "value"))
+      ((), ([], [])) <- wrapError (addSrc name) $
+                        checkClauses (unWC verb) ([((src, port), ty) | (port, ty) <- ss]
+                                                 ,[((tgt, port), ty) | (port, ty) <- ts])
+      pure ()
 
-typeGraph :: (CEnv, VEnv) -> NDecl -> Either Error Graph
-typeGraph (cenv, venv) fn = do
-  (_, (_, g)) <- run (cenv, venv, [], [], fnLoc fn) (checkNoun [] fn)
+    Undefined -> error "No body in `checkDecl`"
+
+  | Extern sym <- fnLocality = () <$ next (show $ PrefixName pre fnName) (Prim sym) [] fnSig
+ where
+  name = show $ PrefixName pre fnName
+
+typeGraph :: VEnv -> Decl -> Either Error Graph
+typeGraph venv fn = do
+  (_, (_, g)) <- run (venv, [], fnLoc fn) (checkDecl [] fn)
   pure g
 
 loadStmtsWithEnv :: Mod -> Prefix -> LoadType -> RawEnv -> Either Error Mod
-loadStmtsWithEnv e@(cenv, venv, nouns, verbs, holes, graph) pre loadType stmts = do
-  (fnouns, fverbs) <- desugarEnv stmts
-  nouns <- pure (fnouns ++ nouns)
-  verbs <- pure (fverbs ++ verbs)
+loadStmtsWithEnv e@(venv, decls, holes, graph) pre loadType stmts = do
+  newDecls <- desugarEnv stmts
+  decls <- pure (decls ++ newDecls)
   -- hacky mess - cleanup!
-  unless (null (duplicates nouns)) $
-    Left . Err Nothing Nothing . NameClash $ show (duplicates nouns)
-  unless (null (duplicates verbs)) $
-    Left . Err Nothing Nothing . NameClash $ show (duplicates verbs)
-  cenv <- pure $ cenv <> addVerbsToEnv pre verbs
-  venv <- pure $ venv <> addNounsToEnv pre nouns
+  unless (null (duplicates decls)) $
+    Left . Err Nothing Nothing . NameClash $ show (duplicates decls)
+  venv <- pure $ venv <> addNounsToEnv pre decls
   -- giving a dummy file context - not ideal
-  let env = (cenv, venv, nouns, verbs, FC (Pos 0 0) (Pos 0 0))
-  (_, (holes, graph))   <- run env (mapM (\d -> localFC (fnLoc d) $ checkNoun pre d) nouns)
-  (_, (holes', graph')) <- run env (mapM (\d -> localFC (fnLoc d) $ checkVerb pre d) verbs)
+  let env = (venv, decls, FC (Pos 0 0) (Pos 0 0))
+  (_, (holes, graph))   <- run env (mapM (\d -> localFC (fnLoc d) $ checkDecl pre d) decls)
 
   -- all good? Let's just get the graph for `main` (and assume it's a noun)
   when (loadType == Exe) $ do
-    main <- maybeToRight (Err Nothing Nothing MainNotFound) $ lookupBy ((=="main") . fnName) id nouns
-    (_, (_, mgraph)) <- run env (checkNoun [] main)
+    main <- maybeToRight (Err Nothing Nothing MainNotFound) $ lookupBy ((=="main") . fnName) id decls
+    (_, (_, mgraph)) <- run env (checkDecl [] main)
     pure ()
 
-  pure (cenv, venv, nouns, verbs, holes ++ holes', graph <> graph')
+  pure (venv, decls, holes, graph)
 
 loadFile :: LoadType -> FilePath -> String -> String
          -> ExceptT Error IO Mod

@@ -36,7 +36,7 @@ fg = ?fg
 
 
 id' :: (f :: {A -> A}), A -> A
-id' = {f}, a -> f(a)
+id' = f, a -> f(a)
 
 id'' :: A -> A
 id'' x = id((id)(x))
@@ -55,7 +55,7 @@ double x = add(copyNat(x))
 # test = id;?help
 
 compTest :: { A -> B }, { B -> C} -> { A -> C }
-compTest {f}, {g} = { x -> g(f(x)) }
+compTest f, g = { x -> g(f(x)) }
 
 # phasedBell :: (th :: Double), (c :: Qubit), (d :: Qubit) -> (c :: Bit), (d :: Bit)
 # phasedBell = th -> (H ; id , id) ; (measure, measure)

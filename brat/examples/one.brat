@@ -34,7 +34,11 @@ window nil = nil
 
 fold :: (f :: {Nat, Nat -> Nat}), (acc :: Nat), List Nat -> (acc :: Nat)
 fold f, x, nil = x
-fold {f}, x, (cons y ys) = fold({ x -> f(x)}, f(x,y), ys)
+fold f, x, (cons y ys) = fold({ w,z -> f(w,z)}, f(x,y), ys)
 
-fold1 :: (f :: {Nat, Nat -> Nat}), Vec Nat (1+ n) -> Nat
-fold1 = ?unn
+fold_hole :: (f :: {Nat, Nat -> Nat}), Vec Nat (1+ n) -> Nat
+fold_hole = ?unn
+
+fold2 :: (f :: {Nat, Nat -> Nat}), (acc :: Nat), List Nat -> (acc :: Nat)
+fold2 f, x, nil = x
+fold2 f, x, (cons y ys) = fold2(f, f(x,y), ys)

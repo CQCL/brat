@@ -21,13 +21,23 @@ type Output = Output' Term
 
 type InOut = (Port, VType)
 
+merge :: [InOut] -> [InOut]
+merge ((_, C (ss :-> ts))
+      :(_, C (us :-> vs))
+      :xs) = merge $ ("thunk", C $ (ss <> us) :-> (ts <> vs)):xs
+merge ((_, K (R ss) (R ts))
+      :(_, K (R us) (R vs))
+      :xs) = merge $ ("thunk", K (R (ss <> us)) (R (ts <> vs))):xs
+merge (x:xs) = x : merge xs
+merge [] = []
+
+
 type CType = CType' InOut
 
 -- instance Eq VType => Eq CType where
 --   xs == ys = (snd <$> xs) == (snd <$> ys)
 
-type NDecl = NDecl' InOut Term
-type VDecl = VDecl' InOut Term
+type Decl = Decl' InOut Term
 
 data Term :: Dir -> Kind -> Type where
   Simple   :: SimpleTerm -> Term Chk Noun
@@ -83,8 +93,8 @@ instance Show (Term d k) where
   show (Select vec th) = show vec ++ "{" ++ show th ++ "}"
   show (Pattern p) = show p
 
-expandDecls :: ([NDecl], [VDecl]) -> Term d k -> Term d k
-expandDecls (nouns, verbs) tm = expand tm
+expandDecls :: [Decl] -> Term d k -> Term d k
+expandDecls env tm = expand tm
  where
   expand :: Term d k -> Term d k
   expand (Simple tm) = Simple tm
@@ -95,15 +105,7 @@ expandDecls (nouns, verbs) tm = expand tm
   expand (Th v) = Th (expand <$> v)
   expand (Emb syn) = Emb (expand <$> syn)
   expand (Pull ps t) = Pull ps (expand <$> t)
-  expand (Var x) = Var x
-{-
-  -- TODO: Do Var needs a special case to lookup from computation env
-
-  expand (Var x) = maybe
-                   (Var x)
-                   (\(ty, body) -> body ::: ty)
-                   (lookupBy (\d -> fnName d == x && isJust(fnBody d)) (fnSig &&& fromJust.fnBody) nouns)
--}
+--  expand (Var x) = lookupBy ((==x) . fnName) fnBody
   expand (fun :$: arg) = (expand <$> fun) :$: (expand <$> arg)
   expand (tm ::: ty) = (expand <$> tm) ::: ty
   expand (Do f) = Do (expand <$> f)

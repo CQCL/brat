@@ -101,29 +101,25 @@ deriving instance Eq (VType' tm) => Eq (CType' (Port, VType' tm))
 instance Semigroup (CType' a) where
   (ss :-> ts) <> (us :-> vs) = (ss ++ us) :-> (ts ++ vs)
 
-type family TypeForKind (k :: Kind) (io :: Type) where
-  TypeForKind Noun io = [io]
-  TypeForKind Verb io = CType' io
-
 data Locality = Extern String | Local deriving (Eq, Show)
 
-data Decl (k :: Kind) (io :: Type) (raw :: Dir -> Kind -> Type)
+data Decl' (io :: Type) (raw :: Dir -> Kind -> Type)
   = Decl { fnName :: String
-         , fnSig  :: TypeForKind k io
-         , fnBody :: Clause raw k
+         , fnSig  :: [io]
+         , fnBody :: Clause raw Noun
          , fnLoc  :: FC
          , fnRT   :: Runtime
          , fnLocality :: Locality
          }
 
-deriving instance (Eq (TypeForKind k io), Eq (Clause raw k)) => Eq (Decl k io raw)
+deriving instance
+  forall raw io.
+  (forall d k. Eq (raw d k), Eq io, Eq (Clause raw Noun)) => Eq (Decl' io raw)
+--deriving instance (Eq (raw d k), Eq io, Eq (Clause raw k)) => Eq (Decl io raw)
 
-instance (Show (TypeForKind k io), Show (Clause raw k)) => Show (Decl k io raw) where
+instance (Show io, Show (Clause raw Noun)) => Show (Decl' io raw) where
   show Decl{..} = unlines [fnName ++ " :: " ++ show fnSig
                           ,fnName ++ " = " ++ show fnBody]
-
-type NDecl' io raw = Decl Noun io raw
-type VDecl' io raw = Decl Verb io raw
 
 -- The extra int is the size of the big end of the thinning
 data Slice t = These [t] | From t deriving (Eq, Foldable, Functor, Traversable)
@@ -160,7 +156,6 @@ data Abstractor
  | Pat (Pattern Abstractor)
  | Lit SimpleTerm
  | VecLit [Abstractor]
- | AThunk String
  deriving Eq
 
 instance Show (Abstractor) where
@@ -170,13 +165,12 @@ instance Show (Abstractor) where
   show (Pat p) = show p
   show (Lit tm) = show tm
   show (VecLit abst) = show abst
-  show (AThunk tm) = '{':tm ++ "}"
 
 data Clause (tm :: Dir -> Kind -> Type) (k :: Kind) where
   -- lhs and rhs
+  ThunkOf   :: WC (Clause tm Verb) -> Clause tm Noun
   Clauses   :: NonEmpty (WC Abstractor, WC (tm Chk Noun)) -> Clause tm Verb
-  NoLhs     :: (WC (tm Chk Verb)) -> Clause tm Verb
-  NounBody  :: (WC (tm Chk Noun)) -> Clause tm Noun
+  NoLhs     :: (WC (tm Chk k)) -> Clause tm k
   Undefined :: Clause tm k
 
 deriving instance (forall d k. Show (tm d k)) => Show (Clause tm k)

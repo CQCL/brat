@@ -102,13 +102,13 @@ loadVFile state method msg = do
       cwd <- pure "" -- what should *actually* go here?
       env <- liftIO . runExceptT $ loadFile Lib cwd (show fileName) file
       case env of
-        Right (_,_,newNouns,newVerbs,holes,_) -> do
-          old@(PS oldNouns oldVerbs _ oldHoles) <- liftIO $ takeMVar state
-          if (oldNouns, oldVerbs, oldHoles) == (newNouns,newVerbs,holes)
+        Right (_,newDecls,holes,_) -> do
+          old@(PS oldDecls _ oldHoles) <- liftIO $ takeMVar state
+          if (oldDecls, oldHoles) == (newDecls, holes)
             then liftIO (putMVar state old) >> allGood fileName
             else do
               liftIO $ debugM "loadVFile" $ "Updated ProgramState"
-              liftIO $ putMVar state (ps (newNouns, newVerbs, holes))
+              liftIO $ putMVar state (ps (newDecls, holes))
               allGood fileName
               logHoles holes fileName
         Left err -> allGood fileName *> sendError fileName (fixParseError err)

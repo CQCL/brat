@@ -21,16 +21,14 @@ data Context
 
 getInfo :: ProgramState -> Pos -> Maybe Context
 getInfo ps pos
-  = case filter pred (ndecls ps) of
-      [] -> case filter pred (vdecls ps) of
-              [] -> Nothing -- should move on to trying for alias info or smth
-              (x:_) -> buildContext pos x
+  = case filter pred (decls ps) of
+      [] -> Nothing
       (x:_) -> buildContext pos x
  where
-  pred :: Decl k io raw -> Bool
+  pred :: Decl' io raw -> Bool
   pred Decl{..} = pos `inside` fnLoc
 
-  buildContext :: Pos -> Decl k io Term -> Maybe Context
+  buildContext :: Pos -> Decl' io Term -> Maybe Context
   buildContext pos Decl{..} = do
     body <- findInClause pos fnBody
     subject <- getThing pos body
@@ -40,9 +38,7 @@ getInfo ps pos
                    , runtime = fnRT
                    }
 
-  findInClause :: Pos -> Clause Term k -> Maybe (WC Skel)
-  findInClause pos (NounBody (WC fc body))
-    | pos `inside` fc = Just (WC fc (stripInfo body))
+  findInClause :: Juxt k => Pos -> Clause Term k -> Maybe (WC Skel)
   findInClause pos (NoLhs (WC fc rhs))
     | pos `inside` fc = Just (WC fc (stripInfo rhs))
   -- TODO: Doesn't search in LHS

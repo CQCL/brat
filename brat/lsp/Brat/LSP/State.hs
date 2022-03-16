@@ -5,14 +5,13 @@ import Brat.Syntax.Core
 import Brat.Syntax.Raw
 
 data ProgramState
-  = PS { ndecls :: [NDecl]
-       , vdecls :: [VDecl]
+  = PS { decls :: [Decl]
        , aliases :: [(String, TypeAlias)]
        , holes :: [TypedHole]
        } deriving Show
 
 emptyPS :: ProgramState
-emptyPS = PS [] [] [] []
+emptyPS = PS [] [] []
 
-ps :: ([NDecl], [VDecl], [TypedHole]) -> ProgramState
-ps (nouns, verbs, holes) = PS nouns verbs [] holes
+ps :: ([Decl], [TypedHole]) -> ProgramState
+ps (decls, holes) = PS decls [] holes

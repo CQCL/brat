@@ -4,7 +4,6 @@ module Brat.Checker (check
                     ,pp
                     ,run
                     ,VEnv
-                    ,CEnv
                     ,Checking
                     ,Connectors
                     ,Graph
@@ -82,7 +81,6 @@ type family ValueType (m :: Mode) where
   ValueType Brat = VType
   ValueType Kernel = SType Term
 
-type CEnv = [(UserName, CType)]
 type VEnv = [(UserName, (Src, VType))]
 type KEnv = [(UserName, (Quantity, (Src, SType Term)))]
 
@@ -107,10 +105,8 @@ err msg = do
 instance MonadFail Barf where
   fail s = Barf . Left . Err Nothing Nothing $ TypeErr s
 
-data Context = Ctx { cenv :: CEnv
-                   , venv :: VEnv
-                   , ndecls :: [NDecl]
-                   , vdecls :: [VDecl]
+data Context = Ctx { venv :: VEnv
+                   , decls :: [Decl]
                    , typeFC :: FC
                    , stack :: [Term Syn Noun]
                    } deriving Show
@@ -122,11 +118,10 @@ data CheckingSig ty where
   LogHole :: TypedHole -> CheckingSig ()
   AskFC   :: CheckingSig FC
   VLup    :: UserName -> CheckingSig (Maybe (Src, VType))
-  CLup    :: UserName -> CheckingSig (Maybe CType)
   KLup    :: UserName -> CheckingSig (Src, SType Term)
   Node    :: Node -> CheckingSig ()
   Wire    :: Wire -> CheckingSig ()
-  Decls   :: CheckingSig ([NDecl], [VDecl])
+  Decls   :: CheckingSig [Decl]
   KDone   :: CheckingSig ()
   AskVEnv :: CheckingSig VEnv
 
@@ -149,11 +144,6 @@ localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
                                    localVEnv ext (k (ext ++ env))
 localVEnv ext (Req r k) = Req r (localVEnv ext . k)
 
-localCEnv :: CEnv -> Checking v -> Checking v
-localCEnv _   (Ret v) = Ret v
-localCEnv ext (Req (CLup x) k) | Just x <- lookup x ext = localCEnv ext (k (Just x))
-localCEnv ext (Req r k) = Req r (localCEnv ext . k)
-
 wrapError :: (Error -> Error) -> Checking v -> Checking v
 wrapError f (Ret v) = Ret v
 wrapError f (Req (Throw e) k) = Req (Throw (f e)) k
@@ -164,14 +154,10 @@ vlup s = do
   fc <- req AskFC
   req (VLup s) >>= \case
     Just vty -> pure vty
-    Nothing -> err $ (show s) ++ " not in (value) environment"
-
-clup :: UserName -> Checking CType
-clup s = do
-  fc <- req AskFC
-  req (CLup s) >>= \case
-    Just cty -> pure cty
-    Nothing -> err $ (show s) ++ " not in (computation) environment"
+    Nothing -> do
+      venv <- req AskVEnv
+      traceShowM venv
+      err $ (show s) ++ " not in (value) environment"
 
 lookupAndUse :: UserName -> KEnv -> Either Error (Maybe ((Src, SType Term), KEnv))
 lookupAndUse _ [] = Right Nothing
@@ -228,12 +214,11 @@ handler (Req s k) ctx ns
                          return (v,(hole:holes,g),ns)
       AskFC -> handler (k (typeFC ctx)) ctx ns
       VLup s -> handler (k $ lookup s (venv ctx)) ctx ns
-      CLup s -> handler (k $ lookup s (cenv ctx)) ctx ns
       Node n -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
                    return (v,(holes,([n],[]) <> g),ns)
       Wire w -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
                    return (v,(holes,([],[w]) <> g),ns)
-      Decls ->  handler (k (ndecls ctx, vdecls ctx)) ctx ns
+      Decls ->  handler (k (decls ctx)) ctx ns
       KLup x -> fail (show x ++ " not found in kernel context")
       -- Receiving KDone may become possible when merging the two check functions
       KDone -> error "KDone in handler - this shouldn't happen"
@@ -323,8 +308,8 @@ check' (s :-: t) (overs, unders) = do
   (outs,  ([], rightunders)) <- check t (overs, unders)
   pure (outs, (rightovers, rightunders))
 check' (binder :\: body) (overs, unders) = do
-  (vext, cext, overs) <- abstract overs (unWC binder)
-  (outs, ((), unders)) <- localVEnv vext $ localCEnv cext $ check body ((), unders)
+  (vext, overs) <- abstract overs (unWC binder)
+  (outs, ((), unders)) <- localVEnv vext $ check body ((), unders)
   pure (outs, (overs, unders))
 check' (Pull ports t) (overs, unders) = do
   unders <- pullPorts ports unders
@@ -380,84 +365,16 @@ check' (Th t) (overs, (tgt, ty@(K (R ss) (R ts))):unders) = do
 check' (Var x) ((), ()) = do
   output <- vlup x
   pure ([output], ((), ()))
-check' (Do t) (overs, ())
-  | Var s <- unWC t = do
-      (ss :-> ts) <- clup s
-      this <- next ("Prim_" ++ (show s)) (Prim (show s)) ss ts
-      overs <- solder this overs ss
-      pure ([((this, port), ty) | (port, ty) <- ts], (overs, ()))
-  | (n :|: n') <- unWC t = do
-      let lfc = fcOf n
-      let rfc = fcOf n'
-      check' ((WC lfc (Do n)) :|: (WC rfc (Do n'))) (overs, ())
-  | otherwise = do
-      ([(src, C (ss :-> ts))], ((), ())) <- check t ((), ())
-      this <- next "eval" (Eval src) ss ts
-      overs <- solder this overs ss
-      pure ([ ((this, port), ty) | (port, ty) <- ts], (overs, ()))
-check' (fun :$: arg) ((), ())
-  | Var f <- unWC fun = do
-      (node, ss, ts) <- lookupThunk f
-      argResult <- check arg ((), ss)
-      let ((), ((), [])) = argResult
-      pure (ts, ((), ()))
-
-  | (f :|: g) <- unWC fun, Var f <- unWC f, Var g <- unWC g = do
-      (lnode, lins, louts) <- lookupThunk f
-      (rnode, rins, routs) <- lookupThunk g
-      argResult <- check arg ((), lins <> rins)
-      let ((), ((), [])) = argResult
-      pure (louts <> routs, ((), ()))
-
-  | (f :|: g) <- unWC fun, Var f <- unWC f = do
-      (lnode, lins, louts) <- lookupThunk f
-      ([((src, _), C (us :-> vs))], ((), ())) <- check g ((), ())
-      let rins  = [ ((src, port), ty) | (port, ty) <- us]
-      let routs = [ ((src, port), ty) | (port, ty) <- vs]
-      argResult <- check arg ((), lins ++ rins)
-      let ((), ((), [])) = argResult
-      pure (louts ++ routs, ((), ()))
-
-  | (f :|: g) <- unWC fun, Var g <- unWC g = do
-      ([((src, _), C (ss :-> ts))], ((), ())) <- check f ((), ())
-      let lins  = [((src, port), ty) | (port, ty) <- ss]
-      let louts = [((src, port), ty) | (port, ty) <- ts]
-      (rnode, rins, routs) <- lookupThunk g
-      argResult <- check arg ((), lins ++ rins)
-      let ((), ((), [])) = argResult
-      pure (louts ++ routs, ((), ()))
-
-{-
-  | (f :|: g) <- unWC fun = do
---      let f' = (maybe Uhh WC (fcOf f)) (Do f)
-      ([((fSrc, _), C (ss :-> ts))], ((), ())) <- check f ((), ())
-      ([((gSrc, _), C (us :-> vs))], ((), ())) <- check g ((), ())
-      ((), ((), [])) <- check arg (()
-                                  ,[ ((fSrc, port), ty) | (port, ty) <- ss ] ++
-                                   [ ((gSrc, port), ty) | (port, ty) <- us ]
-                                  )
-      let outs = [ ((fSrc, port), ty) | (port, ty) <- ts ] ++
-                 [ ((gSrc, port), ty) | (port, ty) <- vs ]
-
-      pure (outs, ((), ()))
--}
-
-  | otherwise = do
-      traceShowM fun
-      ([(src, C (ss :-> ts))], ((), ())) <- check fun ((), ())
-      evalNode <- next "eval" (Eval src) ss ts
-      ((), ((), [])) <- check arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
-      pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
- where
-  lookupThunk :: UserName -> Checking (Name, [(Src, VType)], [(Src, VType)])
-  lookupThunk f = do
-      (ss :-> ts) <- clup f
-      resultNode  <- next ("prim" ++ (show f)) (Prim (show f)) ss ts
-      pure (resultNode
-           ,([ ((resultNode, port), ty) | (port, ty) <- ss])
-           ,([ ((resultNode, port), ty) | (port, ty) <- ts])
-           )
-
+check' (Do t) (overs, ()) = do
+  ([(src, C (ss :-> ts))], ((), ())) <- check t ((), ())
+  this <- next "eval" (Eval src) ss ts
+  overs <- solder this overs ss
+  pure ([ ((this, port), ty) | (port, ty) <- ts], (overs, ()))
+check' (fun :$: arg) ((), ()) = do
+  ([(src, C (ss :-> ts))], ((), ())) <- check fun ((), ())
+  evalNode <- next "eval" (Eval src) ss ts
+  ((), ((), [])) <- check arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
+  pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
 check' (Simple tm) ((), ((src, p), SimpleTy ty):unders) = do
   simpleCheck ty tm
   this <- next (show tm) (Const tm) [] [("value", SimpleTy ty)]
@@ -629,70 +546,68 @@ evalNat tm = evalNatSoft tm >>= \case
 abstract :: [(Src, VType)]
          -> Abstractor
          -> Checking (VEnv -- Local env for checking body of lambda
-                     ,CEnv
                      ,[(Src, VType)] -- rightovers
                      )
 abstract [] (Bind x) = fail $ "abstractor: no wires available to bind to " ++ show x
-abstract (vty@(_, C cty):inputs) (AThunk x) = pure ([(plain x, vty)], [(plain x, cty)], inputs)
-abstract (input:inputs) (Bind x) = pure ([(plain x, input)], [], inputs)
+abstract (input:inputs) (Bind x) = pure ([(plain x, input)], inputs)
 abstract inputs (x :||: y) = do
-  (venv, cenv, inputs)  <- abstract inputs x
-  (venv', cenv', inputs) <- abstract inputs y
-  pure (venv ++ venv', cenv ++ cenv', inputs)
+  (venv, inputs)  <- abstract inputs x
+  (venv', inputs) <- abstract inputs y
+  pure (venv ++ venv', inputs)
 abstract inputs (APull ports abst) = do
   inputs <- pullPorts ports inputs
   abstract inputs abst
-abstract ((_, SimpleTy ty):inputs) (Lit tm) = simpleCheck ty tm $> ([], [], inputs)
+abstract ((_, SimpleTy ty):inputs) (Lit tm) = simpleCheck ty tm $> ([], inputs)
 abstract ((_, Vector ty n):inputs) (VecLit xs) = do
   node <- next "natHypo" Hypo [] [("value", SimpleTy Natural)]
   check' n ((), [((node, "value"), SimpleTy Natural)])
   n <- evalNat n
   unless (n == length xs)
     (fail $ "length mismatch in vector pattern")
-  (venvs, cenvs) <- unzip <$> mapM (aux node) xs
-  pure $ (concat venvs, concat cenvs, inputs)
+  venvs <- mapM (aux node) xs
+  pure $ (concat venvs, inputs)
    where
     aux node elem = do
-      (venv, cenv, []) <- abstract [((node, "type"), ty)] elem
-      pure (venv, cenv)
+      (venv, []) <- abstract [((node, "type"), ty)] elem
+      pure venv
 abstract ((_, List ty):inputs) (VecLit xs) = do
     node <- next "List literal pattern" Hypo [("type", ty)] []
-    (venvs, cenvs) <- unzip <$> mapM (aux node) xs
-    pure $ (concat venvs, concat cenvs, inputs)
+    venvs <- mapM (aux node) xs
+    pure $ (concat venvs, inputs)
    where
     aux node elem = do
-      (venv, cenv, []) <- abstract [((node, "type"), ty)] elem
-      pure (venv, cenv)
+      (venv, []) <- abstract [((node, "type"), ty)] elem
+      pure venv
 abstract ((src, Product l r):inputs) (VecLit [a,b]) = do
-  (venv, cenv, []) <- abstract [(src, l)] a
-  (venv', cenv', []) <- abstract [(src, r)] b
-  pure (venv ++ venv', cenv ++ cenv', inputs)
+  (venv,  []) <- abstract [(src, l)] a
+  (venv', []) <- abstract [(src, r)] b
+  pure (venv ++ venv', inputs)
 abstract (input:inputs) (Pat pat) = checkPat input pat
  where
-  checkPat :: (Src, VType) -> Pattern Abstractor -> Checking (VEnv, CEnv, [(Src, VType)])
+  checkPat :: (Src, VType) -> Pattern Abstractor -> Checking (VEnv, [(Src, VType)])
   checkPat (_, SimpleTy Natural) (POnePlus (Bind x)) = abstract (input:inputs) (Bind x)
   checkPat (_, SimpleTy Natural) (PTwoTimes (Bind x)) = abstract (input:inputs) (Bind x)
   checkPat (_, Vector _ n) PNil = evalNatSoft n >>= \case
     Right n -> if n == 0
-               then pure ([], [], inputs)
+               then pure ([], inputs)
                else err "Vector length isn't 0 for pattern `Nil`"
     -- If we can't work out what the size is, it might be 0
-    Left _  -> pure ([], [], inputs)
+    Left _  -> pure ([], inputs)
   checkPat (_, Vector ty n) (PCons x xs) = do
     n <- evalNat n
     let tailTy = Vector ty (Simple (Num (n - 1)))
     node <- next "PCons (Vec)" Hypo [("head", ty), ("tail", tailTy)] []
-    (venv, cenv, []) <- abstract [((node, "head"), ty)] x
-    (venv', cenv', []) <- abstract [((node, "tail"), tailTy)] xs
-    pure (venv ++ venv', cenv ++ cenv', inputs)
-  checkPat (_, List _) PNil = pure ([], [], inputs)
+    (venv, []) <- abstract [((node, "head"), ty)] x
+    (venv', []) <- abstract [((node, "tail"), tailTy)] xs
+    pure (venv ++ venv', inputs)
+  checkPat (_, List _) PNil = pure ([], inputs)
   checkPat (src, List ty) (PCons x xs) = do
     node <- next "PCons (List)" Hypo [("head", ty), ("tail", List ty)] []
-    (venv, cenv, []) <- abstract [((node, "head"), ty)] x
-    (venv', cenv', []) <- abstract [((node, "tail"), List ty)] xs
-    pure (venv ++ venv', cenv ++ cenv', inputs)
+    (venv, []) <- abstract [((node, "head"), ty)] x
+    (venv', []) <- abstract [((node, "tail"), List ty)] xs
+    pure (venv ++ venv', inputs)
   checkPat (src, Option ty) (PSome x) = abstract ((src, ty):inputs) x
-  checkPat (_, Option _) PNone = pure ([], [], inputs)
+  checkPat (_, Option _) PNone = pure ([], inputs)
   checkPat (_, ty) pat = do
     fc <- req AskFC
     let msg = "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty
@@ -705,7 +620,6 @@ kabstract :: [(Src, SType Term)]
                       ,[(Src, SType Term)] -- rightovers
                       )
 kabstract [] (Bind x) = fail $ "abstractor: no wires available to bind to " ++ show x
-kabstract _ (AThunk _) = fail $ "Can't match kernel thunks"
 kabstract (input@(_, ty):inputs) (Bind x)
   = let q = if copyable ty then Tons else One
     in  pure ([(plain x, (q, input))], inputs)
@@ -771,17 +685,15 @@ pp (outputs, (nodes, wires))
                      ,"outputs:":[show outputs]
                      ]
 
-run :: (CEnv, VEnv, [NDecl], [VDecl], FC)
+run :: (VEnv, [Decl], FC)
     -> Checking a
     -> Either Error (a, ([TypedHole], Graph))
-run (ce, ve, nd, vd, fc) m = let ctx = Ctx { cenv = ce
-                                           , venv = ve
-                                           , ndecls = nd
-                                           , vdecls = vd
-                                           , typeFC = fc
-                                           , stack = []
-                                           } in
-                               runBarf $ (\(a,b,_) -> (a,b)) <$> handler m ctx root
+run (ve, ds, fc) m = let ctx = Ctx { venv = ve
+                                   , decls = ds
+                                   , typeFC = fc
+                                   , stack = []
+                                   } in
+                       runBarf $ (\(a,b,_) -> (a,b)) <$> handler m ctx root
 
 
 kcheck :: Combine (Outputs Kernel d)
@@ -857,8 +769,8 @@ kcheck' (fun :$: arg) ((), ())
       mv <- req $ VLup f
       case mv of
         Just (src, (K (R ss) (R ts))) -> trace "kernel" $ kernel src ss ts
-        Nothing -> trace "function" $ req (CLup f) >>= \case
-          Just (ss :-> ts) -> function f ss ts
+        Nothing -> req (VLup f) >>= \case
+          Just (src, (C (ss :-> ts))) -> function src f ss ts
           Nothing -> req AskFC >>= \fc -> req $ Throw $ Err (Just fc) Nothing $ VarNotFound (show f)
 
 -- Check applications of kernels
@@ -878,8 +790,8 @@ kcheck' (fun :$: arg) ((), ())
   ((), ((), [])) <- kcheck arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
   pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
    where
-     function f ss ts = do
-      funNode  <- next ("prim_" ++ show f) (Prim (show f)) ss ts
+     function src f ss ts = do
+      funNode  <- next ("eval_" ++ show f) (Eval src) ss ts
       argResult <- check arg ((), [ ((funNode, port), ty) | (port, ty) <- ss ])
       let ((), ((), [])) = argResult
       let tys = [ ((funNode, port), ty) | (port, ty) <- ts ]

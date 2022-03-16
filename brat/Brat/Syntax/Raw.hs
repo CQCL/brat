@@ -52,9 +52,8 @@ deriving instance Eq RawCType
 
 data TypeAlias = Alias FC String [UserName] RawVType deriving (Eq, Show)
 
-type RawNDecl = NDecl' RawIO Raw
-type RawVDecl = VDecl' RawIO Raw
-type RawEnv = ([RawNDecl], [RawVDecl], [(UserName, TypeAlias)])
+type RawDecl = Decl' RawIO Raw
+type RawEnv = ([RawDecl], [(UserName, TypeAlias)])
 
 type RawSlice = Slice (WC (Raw Chk Noun))
 
@@ -160,7 +159,7 @@ desugarVTy (RSimpleTy simp) = pure $ SimpleTy simp
 desugarVTy (RList raw) = List <$> desugarVTy raw
 desugarVTy (RProduct raw raw') = Product <$> desugarVTy raw <*> desugarVTy raw'
 desugarVTy (RAlias s args) = do
-  (_, _, aliases) <- ask
+  (_, aliases) <- ask
   case lookup s aliases of
     Nothing -> let msg = DesugarErr $ "Couldn't find an alias for type "
                          ++ unwords (show s:fmap show args)
@@ -265,7 +264,8 @@ vsynth (_ ::\:: body) = do [C cty] <- nsynth (unWC body)
 -}
 
 desugarNClause :: Clause Raw Noun -> Desugar (Clause Term Noun)
-desugarNClause (NounBody body) = NounBody <$> desugar body
+desugarNClause (ThunkOf clause) = ThunkOf <$> traverse desugarVClause clause
+desugarNClause (NoLhs body) = NoLhs <$> desugar body
 desugarNClause Undefined = pure Undefined
 
 desugarVClause :: Clause Raw Verb -> Desugar (Clause Term Verb)
@@ -276,32 +276,21 @@ desugarVClause (Clauses cs) = Clauses <$> mapM branch cs
 desugarVClause (NoLhs rhs) = NoLhs <$> desugar rhs
 desugarVClause Undefined = pure Undefined
 
-desugarNDecl :: RawNDecl -> Desugar NDecl
-desugarNDecl d@Decl{..} = do
+desugarDecl :: RawDecl -> Desugar Decl
+desugarDecl d@Decl{..} = do
   tys  <- desugarIO fnSig
   noun <- {- fmap bindTerm <$> -} desugarNClause fnBody
   pure $ d { fnBody = noun
            , fnSig  = tys
            }
 
-desugarVDecl :: RawVDecl -> Desugar VDecl
-desugarVDecl d@Decl{..} = do
-  cty <- desugarCTy fnSig
-  verb <- {- fmap bindTerm <$> -} desugarVClause fnBody
-  pure $ d { fnBody = verb
-           , fnSig  = cty
-           }
-
-desugarEnv :: RawEnv -> Either Error ([NDecl], [VDecl])
-desugarEnv env@(ndecls, vdecls, _)
+desugarEnv :: RawEnv -> Either Error [Decl]
+desugarEnv env@(decls, _)
   = fmap fst
     . runExcept
     . flip runReaderT env
     . flip runStateT root
-    $ do --findDuplicates env
-         ndecls <- mapM desugarNDecl ndecls
-         vdecls <- mapM desugarVDecl vdecls
-         pure (ndecls, vdecls)
+    $ mapM desugarDecl decls
 
 abstractVType :: UserName -> Int -> RawVType -> RawVType
 abstractVType x n (RC ctype) = RC (fmap (abstractVType x n) <$> ctype)

@@ -1,5 +1,5 @@
 import Brat.Compile.Circuit
-import Brat.Syntax.Common (Decl(..), VType'(..))
+import Brat.Syntax.Common (Decl'(..), VType'(..))
 import Brat.Error
 import Brat.Load
 import Util
@@ -27,22 +27,19 @@ main = do
   (cwd, file) <- pure $ splitFileName $ dropExtension file
   if not compile
     then do env <- runExceptT $ loadFile Lib cwd file contents
-            (cenv, venv, nouns, verbs, holes, _) <- eitherIO env
-            putStrLn "Nouns:"
-            print nouns
-            putStrLn ""
-            putStrLn "Verbs:"
-            print verbs
+            (_, decls, holes, _) <- eitherIO env
+            putStrLn "Decls:"
+            print decls
             putStrLn ""
             putStrLn "Holes:"
             mapM_ print holes
 
     else do env <- runExceptT $ loadFile Exe cwd file contents
-            (cenv, venv, nouns, verbs, holes, _) <- eitherIO env
+            (venv, decls, holes, _) <- eitherIO env  --ALAN _ => graph?
             mn <- eitherIO $
                   maybeToRight (Err Nothing Nothing MainNotFound) $
-                  lookupBy ((== "main") . fnName) id nouns
-            graph <- eitherIO $ typeGraph (cenv, venv) mn
+                  lookupBy ((== "main") . fnName) id decls
+            graph <- eitherIO $ typeGraph venv mn
             let outFile = (dropExtension file) <> ".tk"
             let [(_, K ss ts)] = fnSig mn
             let bin = wrapCircuit (compileCircuit graph (ss, ts))

@@ -8,8 +8,8 @@ which true, a, b = a
 which false, a, b = b
 
 if :: Bool, { Unit -> Nat }, { Unit -> Nat } -> Nat
-if true, {then}, else = then(<>)
-if false, then, {else} = else(<>)
+if true,  then, else = then(<>)
+if false, then, else = else(<>)
 
 vec :: Vec Nat 4
 vec = [0,1,2,3]

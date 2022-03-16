@@ -141,5 +141,5 @@ evalSlice bigEnd (From n) = VTh (fromNatFrom bigEnd n)
 evalSlice bigEnd (These []) = VTh (zeros bigEnd)
 evalSlice bigEnd (These xs) = VTh $ foldr1 union (fromNat bigEnd <$> xs)
 
-evalTerm :: Valuable (Term d k) => ([NDecl], [VDecl]) -> WC (Term d k) -> Either Error Value
+evalTerm :: Valuable (Term d k) => [Decl] -> WC (Term d k) -> Either Error Value
 evalTerm env = runExcept . eval [] . fmap (expandDecls env)

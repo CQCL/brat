@@ -137,8 +137,7 @@ juxtaposition p = p `chainl1` (try comma)
 
 binding :: Parser Abstractor
 binding = do ps <- many (try $ portPull <* space)
-             xs <- (thunk
-                    <|> try (Pat <$> pat binding)
+             xs <- (try (Pat <$> pat binding)
                     <|> try vecLit
                     <|> try (Lit <$> simpleTerm)
                     <|> (Bind <$> simpleName)
@@ -147,9 +146,6 @@ binding = do ps <- many (try $ portPull <* space)
                then pure xs
                else pure $ APull ps xs
  where
-  thunk :: Parser Abstractor
-  thunk = AThunk <$> curly simpleName
-
   vecLit = VecLit <$> square (binding `sepBy` (spaced (match VecComma)))
 
   portPull = simpleName <* match PortColon
@@ -493,7 +489,7 @@ runtime = try (char '@' *> aux <* newline) <|> pure RtLocal
         <|> string "tk" $> RtTierkreis
 -}
 
-ndecl :: Parser RawNDecl
+ndecl :: Parser RawDecl
 ndecl = do (WC fc (nm, ty, body, rt)) <- withFC $ do
              rt <- pure RtLocal -- runtime
              nm <- simpleName
@@ -507,24 +503,24 @@ ndecl = do (WC fc (nm, ty, body, rt)) <- withFC $ do
            pure $ Decl { fnName = nm
                        , fnLoc  = fc
                        , fnSig  = ty
-                       , fnBody = NounBody body
+                       , fnBody = NoLhs body
                        , fnRT   = rt
                        , fnLocality = Local
                        }
 
-vdecl :: Parser RawVDecl
+vdecl :: Parser RawDecl
 vdecl = do (WC fc (nm, ty, body, rt)) <- withFC $ do
              rt   <- pure RtLocal -- runtime
              nm <- simpleName
              spaced $ match TypeColon
              ty   <- ctype
              vspace
-             body <- clauses nm
+             body <- withFC $ clauses nm
              pure (nm, ty, body, rt)
            pure $ Decl { fnName = nm
                        , fnLoc  = fc
-                       , fnSig  = ty
-                       , fnBody = body
+                       , fnSig  = [Named "thunk" (RC ty)]
+                       , fnBody = ThunkOf body
                        , fnRT   = rt
                        , fnLocality = Local
                        }
@@ -586,12 +582,12 @@ pimport :: Parser UserName
 pimport = kmatch KImport *> space *> userName
 
 pstmt :: Parser RawEnv
-pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , [] , []))
-        <|> try ((alias <?> "type alias")        <&> \x -> ([] , [] ,[x]))
-        <|> try (extVDecl                        <&> \x -> ([] , [x], []))
-        <|> try (extNDecl                        <&> \x -> ([x], [] , []))
-        <|> try ((vdecl <?> "verb declaration")  <&> \x -> ([] , [x], []))
-        <|> ((ndecl <?> "noun declaration")      <&> \x -> ([x], [] , []))
+pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
+        <|> try ((alias <?> "type alias")        <&> \x -> ([] , [x]))
+        <|> try (extVDecl                        <&> \x -> ([x], []))
+        <|> try (extNDecl                        <&> \x -> ([x], []))
+        <|> try ((vdecl <?> "verb declaration")  <&> \x -> ([x], []))
+        <|> ((ndecl <?> "noun declaration")      <&> \x -> ([x], []))
  where
   alias :: Parser (UserName, TypeAlias)
   alias = withFC aliasContents <&>
@@ -617,7 +613,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , [] , []))
     guard (name == str)
     pure $ RTypeFree name
 
-  extNDecl :: Parser RawNDecl
+  extNDecl :: Parser RawDecl
   extNDecl = do (WC fc (fnName, ty, symbol)) <- withFC $ do
                   match (K KExt)
                   space
@@ -637,7 +633,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , [] , []))
                           , fnLocality = Extern symbol
                           }
 
-  extVDecl :: Parser RawVDecl
+  extVDecl :: Parser RawDecl
   extVDecl = do (WC fc (fnName, ty, symbol)) <- withFC $ do
                   match (K KExt)
                   space
@@ -650,7 +646,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , [] , []))
                   vspace
                   pure (fnName, ty, symbol)
                 pure Decl { fnName = fnName
-                          , fnSig = ty
+                          , fnSig = [Named "thunk" (RC ty)]
                           , fnBody = Undefined
                           , fnLoc = fc
                           , fnRT = RtLocal
@@ -660,5 +656,5 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , [] , []))
 pfile :: Parser ([UserName], RawEnv)
 pfile = do
   imports <- many (pimport <* vspace)
-  env     <- foldr (<>) ([], [], []) <$> ((pstmt <* vspace) `manyTill` eof)
+  env     <- foldr (<>) ([], []) <$> ((pstmt <* vspace) `manyTill` eof)
   pure (imports, env)
