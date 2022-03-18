@@ -47,5 +47,3 @@ jobs:
       run: stack test --no-run-tests --no-run-benchmarks
     - name: Run stack tests
       run: stack test
-    - name: Run test.sh
-      run: bash ./test.sh

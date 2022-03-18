@@ -144,6 +144,8 @@ extGraph
    ,[]
    )
 
+emptyGraph = ([], [])
+
 -- Test the "close-enough" "equality" of two graphs
 (=?) :: Graph' Term -> Graph' Term -> Assertion
 (ns, ws) =? (ns', ws') = nodeEq >> wireEq

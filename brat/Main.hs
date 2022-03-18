@@ -8,7 +8,7 @@ import Control.Monad.Except
 import qualified Data.ByteString as BS
 import Options.Applicative
 import Data.ProtoLens (encodeMessage)
-import System.FilePath (dropExtension, splitFileName)
+import System.FilePath (dropExtension, splitFileName, takeExtension)
 
 data Options = Opt {
   compile :: Bool,
@@ -23,10 +23,10 @@ opts = Opt <$> compileFlag <*> (strArgument (metavar "FILE"))
 
 main = do
   Opt{..} <- execParser (info opts (progDesc "Compile a BRAT program"))
-  contents <- readFile file
+  unless (takeExtension file == ".brat") $ fail $ "Filename " ++ file ++ " must end in .brat"
   (cwd, file) <- pure $ splitFileName $ dropExtension file
   if not compile
-    then do env <- runExceptT $ loadFile Lib cwd file contents
+    then do env <- runExceptT $ loadFile Lib cwd file
             (_, decls, holes, _) <- eitherIO env
             putStrLn "Decls:"
             print decls
@@ -34,8 +34,8 @@ main = do
             putStrLn "Holes:"
             mapM_ print holes
 
-    else do env <- runExceptT $ loadFile Exe cwd file contents
-            (venv, decls, holes, _) <- eitherIO env  --ALAN _ => graph?
+    else do env <- runExceptT $ loadFile Exe cwd file
+            (venv, decls, holes, _) <- eitherIO env
             mn <- eitherIO $
                   maybeToRight (Err Nothing Nothing MainNotFound) $
                   lookupBy ((== "main") . fnName) id decls

@@ -1,5 +1,6 @@
 module Brat.Load (emptyMod
                  ,loadFile
+                 ,loadFiles
                  ,LoadType(..)
                  ,typeGraph
                  ) where
@@ -107,14 +108,17 @@ loadStmtsWithEnv e@(venv, decls, holes, graph) pre loadType stmts = do
 
   pure (venv, decls, holes, graph)
 
-loadFile :: LoadType -> FilePath -> String -> String
+loadFile :: LoadType -> FilePath -> String -> ExceptT Error IO Mod
+loadFile lt path fname = do
+  contents <- lift $ readFile (path </> (dropExtension fname) ++ ".brat")
+  loadFiles lt path fname contents
+
+-- Does not read the main file, but does read any imported files
+loadFiles :: LoadType -> FilePath -> String -> String
          -> ExceptT Error IO Mod
-loadFile lt path fname contents = do
+loadFiles lt path fname contents = do
   let fn = plain fname
-  cts <- if contents == ""
-         then lift $ readFile (nameToFile fn)
-         else return contents
-  edges <- depGraph [] fn cts
+  edges <- depGraph [] fn contents
 
   let (g, f, _) = G.graphFromEdges edges
   let files = G.topSort (G.transposeG g)
@@ -139,8 +143,8 @@ loadFile lt path fname contents = do
           exists <- lift $ doesFileExist file
           unless exists $
             throwError (Err Nothing (Just (nameToFile name)) (FileNotFound file))
-          cts <- lift $ readFile (nameToFile name')
-          depGraph (name:chain) name' cts
+          cts' <- lift $ readFile (nameToFile name')
+          depGraph (name:chain) name' cts'
         pure ((env, name, imports):(concat es))
 
     nameToFile :: UserName -> String

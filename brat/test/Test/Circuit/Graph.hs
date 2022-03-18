@@ -14,9 +14,9 @@ import Test.Tasty.ExpectedFailure
 
 type Graph = Graph' Term
 
-graphTest :: String -> String -> Graph' Term -> TestTree
+graphTest :: String -> String -> Graph -> TestTree
 graphTest name contents gExp = testCase name $ do
-  env <- runExceptT $ loadFile Lib "" name contents
+  env <- runExceptT $ loadFiles Lib "" name contents
   case env of
     Left err -> assertFailure (show err)
     Right (_, _, _, gAct) -> gAct =? gExp
@@ -81,6 +81,12 @@ addN2 =
 ext =
   "ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)"
 
+comment =
+  "# This is a test\
+  \\
+  \# This too\
+  \"
+
 graphTests = testGroup "Graph" [graphTest "id" idFile idGraph
                                ,graphTest "swap" swapFile swapGraph
                                ,graphTest "X"  xFile  xGraph
@@ -90,4 +96,6 @@ graphTests = testGroup "Graph" [graphTest "id" idFile idGraph
                                ,graphTest "addN" addN addNGraph
                                ,expectFail $ graphTest "addN2" addN2 addN2Graph
                                ,graphTest "ext"  ext  extGraph
+                               ,graphTest "empty" "" emptyGraph
+                               ,graphTest "comment" comment emptyGraph
                                ]

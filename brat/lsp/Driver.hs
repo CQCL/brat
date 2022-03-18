@@ -100,7 +100,7 @@ loadVFile state method msg = do
       let file = toString rope
       liftIO $ debugM "loadVFile" $ "Found file: " ++ show str
       cwd <- pure "" -- what should *actually* go here?
-      env <- liftIO . runExceptT $ loadFile Lib cwd (show fileName) file
+      env <- liftIO . runExceptT $ loadFiles Lib cwd (show fileName) file
       case env of
         Right (_,newDecls,holes,_) -> do
           old@(PS oldDecls _ oldHoles) <- liftIO $ takeMVar state

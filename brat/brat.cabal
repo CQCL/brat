@@ -157,6 +157,7 @@ test-suite tests
   other-modules:       Test.Circuit.Common,
                        Test.Circuit.Gen,
                        Test.Circuit.Graph,
-                       Test.Import.Cycle
+                       Test.Import.Cycle,
+                       Test.Checking
 
   build-depends:       base <5, brat, tasty, tasty-hunit, tasty-expected-failure, tasty-silver, mtl, containers, filepath
