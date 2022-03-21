@@ -655,6 +655,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
 
 pfile :: Parser ([UserName], RawEnv)
 pfile = do
+  vspace
   imports <- many (pimport <* vspace)
   env     <- foldr (<>) ([], []) <$> ((pstmt <* vspace) `manyTill` eof)
   pure (imports, env)
