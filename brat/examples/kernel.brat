@@ -1,10 +1,4 @@
-# This shows a basic bell circuit
-
-# Expectation:
-#  - It should type check
-
-# Reality:
-#  - pba fails to parse (see juxt.brat)
+import lib.kernel
 
 zero :: Nat
 zero = 9
@@ -16,7 +10,7 @@ Rz :: (th :: Float) -> {a::Qubit -o b::Qubit}
 Rz = ?rz
 
 pba :: Float -> {c :: Qubit,d::Qubit -o c::Qubit,d::Qubit}
-pba = th -> { x, y -> (H, id)(x, y) }
+pba = th -> { x, y -> (lib.kernel.H, lib.kernel.qid)(x, y) }
 
 th :: {Bool -> Bool}
 th = ?th
