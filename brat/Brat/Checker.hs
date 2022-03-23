@@ -523,8 +523,8 @@ check' t _ = fail $ "Won't check " ++ show t
 
 -- Check a pattern used as a constructor (on the Rhs of a definition)
 checkRPat :: (Tgt, VType) -> Pattern (WC (Term Chk Noun)) -> Checking ()
-checkRPat tgt@(_, SimpleTy Natural) (POnePlus x) = check1 tgt x
-checkRPat tgt@(_, SimpleTy Natural) (PTwoTimes x) = check1 tgt x
+checkRPat tgt (POnePlus x) = check1 tgt x
+checkRPat tgt (PTwoTimes x) = check1 tgt x
 checkRPat (_, List _) PNil = pure ()
 checkRPat (tgt, List ty) (PCons x xs) = check1 (tgt,ty) x *> check1 (tgt, List ty) xs $> ()
 checkRPat (_, Vector _ n) PNil = do
@@ -540,6 +540,7 @@ checkRPat (tgt, Vector ty n) (PCons x xs) = do
   check1 (tgt,  Vector ty (Simple (Num (n - 1)))) xs
 checkRPat (_, Option ty) PNone = pure ()
 checkRPat (tgt, Option ty) (PSome x) = check1 (tgt, ty) x
+checkRPat unders pat = err $ show pat ++ " not of type " ++ show unders
 
 check1 :: (Tgt, VType) -> WC (Term Chk Noun) -> Checking ()
 check1 tgt tm = do
