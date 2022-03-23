@@ -44,17 +44,18 @@ tokenFuncs fc (ss :-> ts)
       [] -> []
       _  -> do
         let n = length ss
-        let lhs = binders (length ss) 0
+        let lhs = binders ss
         outs <- outputs ts
         [WC fc lhs :\: WC fc outs]
  where
-  binders :: Int -> Int -> Abstractor
-  binders 1 n = Bind ((:[]) ['a'..]!!n)
-  binders m n = Bind ((:[]) ['a'..]!!n) :||: binders (m - 1) (n + 1)
-
   outputs :: [InOut] -> [Term Chk Noun]
   outputs ts = do outs <- transpose $ tokenValues fc . snd <$> ts
                   [(foldr1 (\ a b -> (WC fc a :|: WC fc b)) outs)]
+
+  binders :: [a] -> Abstractor
+  binders xs = foldr1 (:||:) $ zipWith const (binder <$> ['a'..]) xs
+
+  binder = Bind . (:[])
 
 vsearch :: FC -> VType -> [Term Chk Noun]
 vsearch fc = take 5 . tokenValues fc
