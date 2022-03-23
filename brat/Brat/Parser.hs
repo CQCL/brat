@@ -234,8 +234,8 @@ cverb = withFC $
 var :: Parser (Raw Syn Noun)
 var = RVar <$> userName
 
-snoun :: Parser (WC (Raw Syn Noun))
-snoun = (try application <|> simpleNoun) `chainl1` (try comma)
+snoun' :: Parser (WC (Raw Syn Noun))
+snoun' = try application <|> simpleNoun
  where
 --  thin :: Parser (WC (Raw Syn Noun))
 --  thin = withFC $ RThin <$> (char '~' *> cnoun)
@@ -262,6 +262,9 @@ snoun = (try application <|> simpleNoun) `chainl1` (try comma)
     spaced $ match TypeColon
     ty <- outputs
     pure (tm ::::: ty)
+
+snoun :: Parser (WC (Raw Syn Noun))
+snoun = snoun' `chainl1` (try comma)
 
 compose :: Parser (WC (Raw Syn k)) -> Parser (WC (Raw d Verb)) -> Parser (Raw d k)
 compose p1 p2 = do
@@ -321,7 +324,7 @@ cnoun' = withFC $
     right <- cnoun'
     pure $ RPair left right
 
-  emb = REmb <$> snoun
+  emb = REmb <$> snoun'
 
   thunk :: Parser (Raw Chk Noun)
   thunk = RTh <$> curly cverb
