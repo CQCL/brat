@@ -21,71 +21,79 @@ graphTest name contents gExp = testCase name $ do
     Left err -> assertFailure (show err)
     Right (_, _, _, gAct) -> gAct =? gExp
 
-idFile =
-  "main :: { a :: Qubit -o b :: Qubit }\
-  \main = { q -> q }"
+idFile = unlines
+  ["main :: { a :: Qubit -o b :: Qubit }"
+  ,"main = { q -> q }"
+  ]
 
-swapFile =
-  "main :: { a :: Qubit, b :: Qubit -o b :: Qubit, a :: Qubit}\
-  \main = { q0, q1 -> q1, q0 }"
+swapFile = unlines
+  ["main :: { a :: Qubit, b :: Qubit -o b :: Qubit, a :: Qubit}"
+  ,"main = { q0, q1 -> q1, q0 }"
+  ]
 
-xFile =
-  "ext \"tket.X\" X :: { xa :: Qubit -o xb :: Qubit }\
-  \\
-  \main :: { a :: Qubit -o b :: Qubit }\
-  \main = { q -> X(q) }"
+xFile = unlines
+  ["ext \"tket.X\" X :: { xa :: Qubit -o xb :: Qubit }"
+  ,""
+  ,"main :: { a :: Qubit -o b :: Qubit }"
+  ,"main = { q -> X(q) }"
+  ]
 
-rxFile =
-  "ext \"Rx\" Rx :: (th :: Float) -> { rxa :: Qubit -o rxb :: Qubit }\
-  \\
-  \nums :: (x :: Int), (y :: Int), (z :: Int)\
-  \nums = 1, 2 ,3\
-  \\
-  \xish :: { rxa :: Qubit -o rxb :: Qubit }\
-  \xish = Rx(30.0)\
-  \\
-  \main :: { a :: Qubit -o b :: Qubit }\
-  \main = { q -> xish(q) }"
+rxFile = unlines
+  ["ext \"Rx\" Rx :: (th :: Float) -> { rxa :: Qubit -o rxb :: Qubit }"
+  ,""
+  ,"nums :: (x :: Int), (y :: Int), (z :: Int)"
+  ,"nums = 1, 2 ,3"
+  ,""
+  ,"xish :: { rxa :: Qubit -o rxb :: Qubit }"
+  ,"xish = Rx(30.0)"
+  ,""
+  ,"main :: { a :: Qubit -o b :: Qubit }"
+  ,"main = { q -> xish(q) }"
+  ]
 
--- TODO:
-two =
-  "ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)\
-  \\
-  \one :: (n :: Int)\
-  \one = 1\
-  \\
-  \two :: Int\
-  \two = add(1, one)"
+two = unlines
+  ["ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)"
+  ,""
+  ,"one :: (n :: Int)"
+  ,"one = 1"
+  ,""
+  ,"two :: Int"
+  ,"two = add(1, one)"
+  ]
 
-one =
-  "one :: (n :: Int)\
-  \one = 1"
+one = unlines
+  ["one :: (n :: Int)"
+  ,"one = 1"
+  ]
 
-addN =
-  "ext \"N\" N :: (value :: Int)\
-  \ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)\
-  \\
-  \addN :: (in :: Int) -> (out :: Int)\
-  \addN n = add(n, N)"
+addN = unlines
+  ["ext \"N\" N :: (value :: Int)"
+  ,"ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)"
+  ,""
+  ,"addN :: (in :: Int) -> (out :: Int)"
+  ,"addN n = add(n, N)"
+  ]
 
-addN2 =
-  "ext \"N\" N :: (value :: Int)\
-  \ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)\
-  \\
-  \addN :: (in :: Int) -> (out :: Int)\
-  \addN n = add(n, N)\
-  \\
-  \main :: Int\
-  \main = addN(1)"
+addN2 = unlines
+  ["ext \"N\" N :: (value :: Int)"
+  ,"ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)"
+  ,""
+  ,"addN :: (in :: Int) -> (out :: Int)"
+  ,"addN n = add(n, N)"
+  ,""
+  ,"main :: Int"
+  ,"main = addN(1)"
+  ]
 
 ext =
   "ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)"
 
-comment =
-  "# This is a test\
-  \\
-  \# This too\
-  \"
+comment = unlines
+  ["# This is a test"
+  ,""
+  ,"# This too"
+  ,""
+  ]
 
 graphTests = testGroup "Graph" [graphTest "id" idFile idGraph
                                ,graphTest "swap" swapFile swapGraph
