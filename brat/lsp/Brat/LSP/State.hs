@@ -1,4 +1,4 @@
-module Brat.LSP.State (ProgramState(..), emptyPS, ps) where
+module Brat.LSP.State (ProgramState(..), emptyPS, updateState) where
 
 import Brat.Checker (TypedHole)
 import Brat.Syntax.Core
@@ -13,5 +13,5 @@ data ProgramState
 emptyPS :: ProgramState
 emptyPS = PS [] [] []
 
-ps :: ([Decl], [TypedHole]) -> ProgramState
-ps (decls, holes) = PS decls [] holes
+updateState :: ([Decl], [TypedHole]) -> ProgramState -> ProgramState
+updateState (decls, holes) st = st { decls = decls, holes = holes }

@@ -5,6 +5,7 @@
 import Control.Concurrent.MVar
 import Control.Lens hiding (Iso)
 import Control.Monad.Except
+import Data.Maybe (fromMaybe)
 import Data.Rope.UTF16 (toString)
 import Data.Text (pack)
 import Language.LSP.Server
@@ -12,6 +13,7 @@ import Language.LSP.Diagnostics
 import Language.LSP.Types
 import Language.LSP.Types.Lens hiding (publishDiagnostics, textDocumentSync)
 import Language.LSP.VFS
+import System.FilePath (dropFileName)
 import System.Log.Logger
 
 import Brat.Checker (TypedHole)
@@ -89,17 +91,16 @@ logHoles hs fileUri = publishDiagnostics (length hs) fileUri Nothing (partitionB
                   Nothing
 
 loadVFile state method msg = do
-  let fileName  = msg ^. params
-                  . textDocument
-                  . uri
-                  . to toNormalizedUri
-  liftIO $ debugM "handlers" $ "Handling " ++ method ++ ": " ++ show fileName
+  let fileUri = msg ^. params
+                . textDocument
+                . uri
+  let fileName = fileUri ^. to toNormalizedUri
   file <- getVirtualFile fileName
+  let cwd = fromMaybe "" $ dropFileName <$> (uriToFilePath fileUri)
   case file of
     Just (VirtualFile _version str rope) -> do
       let file = toString rope
       liftIO $ debugM "loadVFile" $ "Found file: " ++ show str
-      cwd <- pure "" -- what should *actually* go here?
       env <- liftIO . runExceptT $ loadFiles Lib cwd (show fileName) file
       case env of
         Right (_,newDecls,holes,_) -> do
@@ -108,7 +109,7 @@ loadVFile state method msg = do
             then liftIO (putMVar state old) >> allGood fileName
             else do
               liftIO $ debugM "loadVFile" $ "Updated ProgramState"
-              liftIO $ putMVar state (ps (newDecls, holes))
+              liftIO $ putMVar state (updateState (newDecls, holes) old)
               allGood fileName
               logHoles holes fileName
         Left err -> allGood fileName *> sendError fileName (fixParseError err)
