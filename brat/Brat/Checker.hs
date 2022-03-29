@@ -806,14 +806,13 @@ kcheck' (Do t) (overs, ()) = do
 -- TODO: find a way to make check perceive this as a function
 -- Check brat functions and arguments assuming they'll produce a kernel
 kcheck' (fun :$: arg) ((), ())
-   | Var f <- unWC fun = do
-      -- traceM $ "Looking for " ++ show f
-      mv <- req $ VLup f
-      case mv of
-        Just (src, (K (R ss) (R ts))) -> trace "kernel" $ kernel src ss ts
-        Nothing -> req (VLup f) >>= \case
-          Just (src, (C (ss :-> ts))) -> function src f ss ts
-          Nothing -> req AskFC >>= \fc -> req $ Throw $ Err (Just fc) Nothing $ VarNotFound (show f)
+  | Var f <- unWC fun = do
+     -- traceM $ "Looking for " ++ show f
+     req (VLup f) >>= \case
+       Just (src, (K (R ss) (R ts))) -> trace "kernel" $ kernel src ss ts
+       -- The following pattern avoids crashing and produces better error messages for ill-typed programs (only)
+       Just (src, (C (ss :-> ts))) -> function src f ss ts
+       Nothing -> req AskFC >>= \fc -> req $ Throw $ Err (Just fc) Nothing $ VarNotFound (show f)
 
 -- Check applications of kernels
   | otherwise = do
