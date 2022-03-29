@@ -19,6 +19,7 @@ data ErrorMsg
  | EvalErr String
  | NameClash String
  | VarNotFound String
+ | KVarNotFound String
  | MainNotFound
  | PatFail String
  -- function, [argument]
@@ -35,7 +36,8 @@ instance Show ErrorMsg where
   show (DesugarErr x) = "Desugar error " ++ x
   show (EvalErr x) = "Eval error " ++ x
   show (NameClash x) = "Name clash: " ++ x
-  show (VarNotFound x) = x ++ " not found"
+  show (VarNotFound x) = x ++ " not found in (value) environment"
+  show (KVarNotFound x) = x ++ " not found in kernel context"
   show MainNotFound = "No function found called \"main\""
   show (PatFail x) = "Sorry: " ++ x
   show (Unimplemented f args) = unwords ("Unimplemented, sorry! --":f:args)

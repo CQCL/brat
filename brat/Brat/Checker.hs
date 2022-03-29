@@ -118,7 +118,7 @@ data CheckingSig ty where
   LogHole :: TypedHole -> CheckingSig ()
   AskFC   :: CheckingSig FC
   VLup    :: UserName -> CheckingSig (Maybe (Src, VType))
-  KLup    :: UserName -> CheckingSig (Src, SType Term)
+  KLup    :: UserName -> CheckingSig (Maybe (Src, SType Term))
   Node    :: Node -> CheckingSig ()
   Wire    :: Wire -> CheckingSig ()
   Decls   :: CheckingSig [Decl]
@@ -163,13 +163,12 @@ wrapError f (Req r k) = Req r (wrapError f . k)
 
 vlup :: UserName -> Checking (Src, VType)
 vlup s = do
-  fc <- req AskFC
   req (VLup s) >>= \case
     Just vty -> pure vty
     Nothing -> do
-      venv <- req AskVEnv
-      traceShowM venv
-      err $ (show s) ++ " not in (value) environment"
+      req AskVEnv >>= traceShowM
+      fc <- req AskFC
+      req $ Throw $ Err (Just fc) Nothing $ VarNotFound (show s)
 
 lookupAndUse :: UserName -> KEnv -> Either Error (Maybe ((Src, SType Term), KEnv))
 lookupAndUse _ [] = Right Nothing
@@ -189,7 +188,7 @@ localKVar env (Req (KLup x) k) = case lookupAndUse x env of
                                    Left (Err Nothing src msg) -> do
                                      fc <- req AskFC
                                      req $ Throw (Err (Just fc) src msg)
-                                   Right (Just (th, env)) -> localKVar env (k th)
+                                   Right (Just (th, env)) -> localKVar env (k (Just th))
                                    Right Nothing -> Req (KLup x) (localKVar env . k)
 localKVar env (Req KDone k) = case [ x | (x,(One,_)) <- env ] of
                                 [] -> (localKVar env . k) ()
@@ -231,7 +230,8 @@ handler (Req s k) ctx ns
       Wire w -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
                    return (v,(holes,([],[w]) <> g),ns)
       Decls ->  handler (k (decls ctx)) ctx ns
-      KLup x -> fail (show x ++ " not found in kernel context")
+      -- We only get a KLup here if the variable has not been found in the kernel context
+      KLup x -> handler (k Nothing) ctx ns
       -- Receiving KDone may become possible when merging the two check functions
       KDone -> error "KDone in handler - this shouldn't happen"
       AskVEnv -> handler (k (venv ctx)) ctx ns
@@ -791,9 +791,9 @@ kcheck' (Emb t) (overs, unders) = do
    | ty == ty' = wire (src, Left ty, tgt) *> kcheckOutputs tys outs
   kcheckOutputs _ _ = fail "check (kernel): checkOutputs failed"
 kcheck' (Th _) _ = fail "no higher order signals! (Th)"
-kcheck' (Var x) ((), ()) = do
-  output <- req $ KLup x
-  pure ([output], ((), ()))
+kcheck' (Var x) ((), ()) = req (KLup x) >>= \case
+  Just output -> pure ([output], ((), ()))
+  Nothing -> req AskFC >>= \fc -> req $ Throw $ Err (Just fc) Nothing $ KVarNotFound (show x)
 kcheck' (Do x) (overs, ()) | (n :|: n') <- unWC x = do
   let lfc = fcOf n
   let rfc = fcOf n'
