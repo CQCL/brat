@@ -22,6 +22,7 @@ data ErrorMsg
  | KVarNotFound String
  | MainNotFound
  | PatFail String
+ | BadCons String
  -- function, [argument]
  | Unimplemented String [String]
  | ImportCycle String String
@@ -40,6 +41,7 @@ instance Show ErrorMsg where
   show (KVarNotFound x) = x ++ " not found in kernel context"
   show MainNotFound = "No function found called \"main\""
   show (PatFail x) = "Sorry: " ++ x
+  show (BadCons x) = "Expected two arguments to `cons` but got: " ++ x
   show (Unimplemented f args) = unwords ("Unimplemented, sorry! --":f:args)
   show (ImportCycle a b) = unwords ["Cycle detected in imports:", a, "is reachable from", b]
   show (FileNotFound f) = "File not found: " ++ show f

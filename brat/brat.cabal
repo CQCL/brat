@@ -159,6 +159,7 @@ test-suite tests
                        Test.Circuit.Gen,
                        Test.Circuit.Graph,
                        Test.Failure,
+                       Test.Failure.Binding,
                        Test.Failure.Kernel,
                        Test.Failure.Import.Cycle,
                        Test.Checking,

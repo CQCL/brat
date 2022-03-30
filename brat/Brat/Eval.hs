@@ -111,12 +111,15 @@ evalPat' :: [Value] -> Pattern (WC (Term Chk Noun)) -> Eval Value
 evalPat' g (POnePlus tm) = eval g tm >>= flip apply [EPlus (VNat 1)]
 evalPat' g (PTwoTimes tm) = eval g tm >>= flip apply [ETimes (VNat 2)]
 evalPat' g PNil = pure $ VVec []
-evalPat' g (PCons x xs) = do
+evalPat' g (PCons tm)
+  -- Only work if `tm` is the simplest version
+  | (x :|: xs) <- unWC tm = do
   x <- eval g x
   xs <- eval g xs
   case xs of
     VVec xs -> pure $ VVec (x:xs)
     _ -> pure $ VCons x xs
+  | otherwise = throwError $ Err Nothing Nothing (BadCons (show tm))
 evalPat' g (PSome x) = VSome <$> eval g x
 evalPat' g PNone = pure VNone
 

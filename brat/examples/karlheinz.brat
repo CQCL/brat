@@ -17,11 +17,11 @@
 # K-circ, O-circ
 # P-circ, M-circ
 
-type Dist = List Bool
-type KCirc q b = { Vec Qubit q -o Vec Bool b }
-type OCirc q b = Circ q b
-type PCirc q = { Vec Qubit q -o Vec Bool q }
-type MCirc q b = { Vec Qubit q -o Vec Bool b }
+type Dist = List(Bool)
+type KCirc(q,b) = { Vec(Qubit, q) -o Vec(Bool, b) }
+type OCirc(q,b) = Circ(q, b)
+type PCirc(q) = { Vec(Qubit, q) -o Vec(Bool, q) }
+type MCirc(q,b) = { Vec(Qubit,q) -o Vec(Bool, b) }
 
 type Real = Float
 
@@ -30,22 +30,22 @@ type Real = Float
 
 # We should be able to define D(X)
 # promote :: List X -> D(X)
-promote :: List X -> Dist
+promote :: List(X) -> Dist
 promote = ?promote
 
-execute :: KCirc 2 2 -> Dist
+execute :: KCirc(2, 2) -> Dist
 execute = ?execute
 
 # shoot : K-circ -> B^q
-shoot :: KCirc -> (result :: List Bool)
+shoot :: KCirc -> (result :: List(Bool))
 shoot = ?shoot
 
-get_shots :: (nshots :: Nat), KCirc -> (shots :: List Bool)
+get_shots :: (nshots :: Nat), KCirc -> (shots :: List(Bool))
 get_shots = ?get_shots
 
 # This thunk isn't getting parsed for some reason
 # execute_n :: (n :: Nat) -> (f :: { KCirc -> Dist })
-# execute_n = n -> {c -> promote(get_shots((n, c)))} # partial application would be good
+# execute_n = n -> {c -> promote(get_shots(n, c))} # partial application would be good
 
 # P-circ, M-circ -> K-circ
 # This should work, but it failing should be its own test case
@@ -65,23 +65,23 @@ get_shots = ?get_shots
 
 # compile :: Circ -> Pulses
 
-ansatz :: (params :: List Real) -> PCirc
+ansatz :: (params :: List(Real)) -> PCirc
 ansatz = ?ans
 
 # [R * M-circ]
-observable :: List (Pair Real Circ)
+observable :: List (Pair(Real, Circ))
 observable = ?obs
 
-quant :: List (List Bool) -> Real
+quant :: List (List(Bool)) -> Real
 quant = ?q
 
 circuits_to_run :: List KCirc
 circuits_to_run = ?todo # (a p) o (map snd H) 
 
-results :: List Dist
+results :: List(Dist)
 results = map(execute, circuits_to_run)
 
-energy :: List Dist -> Float
+energy :: List(Dist) -> Float
 energy = ?e
 
 answer :: Float
@@ -94,16 +94,16 @@ evaluate :: (obs :: Observable),
          -> Real
 evaluate = ?eval
 
-my_eval :: List Real -> Real
+my_eval :: List(Real) -> Real
 my_eval = rs -> evaluate(my_obs,my_quant,a,rs)
 #my_eval = evaluate (my_obs,my_quant) a
 
 update :: (obs :: Observable),
           (q :: Quantity),
           (a :: Ansatz),
-          (rs :: List R),
+          (rs :: List(R)),
           (init :: Real)
-       -> (result :: List R)
+       -> (result :: List(R))
 update = ?update
 
 my_obs :: Observable
@@ -112,11 +112,11 @@ my_obs = ?afe
 my_quant :: Quantity
 my_quant = ?qa
 
-my_update :: List Float, Float -> List Float
+my_update :: List(Float), Float -> List(Float)
 my_update = rs, r -> update(my_obs, my_quant, a, rs, r)
-# This would be better: my_update = update((my_obs, my_quant, a))
+# This would be better: my_update = update(my_obs, my_quant, a)
 
-var_loop :: {List Float -> Float}, {List Float, Float -> List Float}, List Float, Float -> Float
+var_loop :: {List(Float) -> Float}, {List(Float), Float -> List(Float)}, List(Float), Float -> Float
 var_loop = ?todo #eval, update, params, prev_guess ->
 #   new_guess = eval params
 #   if (good_enough(prev_guess, new_guess)) 

@@ -1,4 +1,4 @@
-test_input :: List Int
+test_input :: List(Int)
 test_input = 
  [199
  ,200
@@ -13,32 +13,32 @@ test_input =
  ]
 
 gt :: (this :: Nat), (that :: Nat) -> Bool
-gt 0, n = false
-gt (1+ n), 0 = true
-gt (1+ n), (1+ m) = gt(n, m)
+gt(0, n) = false
+gt(succ(n), 0) = true
+gt(succ(n), succ(m)) = gt(n, m)
 
 aux :: Bool, Nat -> Nat
-aux true, n = (1+ n)
-aux false, n = n
+aux(true, n) = succ(n)
+aux(false, n) = n
 
-mkList :: Nat, List Nat -> List Nat
-mkList x, xs = (cons x xs)
+mkList :: Nat, List(Nat) -> List(Nat)
+mkList(x, xs) = cons(x, xs)
 
-increments :: Nat, List Nat -> Nat, List Nat
-increments n, (cons x (cons y xs)) = increments(aux(gt(y,x), n), mkList(y, xs))
-# increments n, xs = n, (nil)
+increments :: Nat, List(Nat) -> Nat, List(Nat)
+increments(n, cons(x, cons(y, xs))) = increments(aux(gt(y,x), n), mkList(y, xs))
+# increments(n, xs) = n, (nil)
 
-window :: List Nat -> List (Vec Nat 3)
-window (cons x (cons y (cons z xs))) = (cons [x,y,z] window((cons y (cons z xs))))
-window nil = nil
+window :: List(Nat) -> List (Vec(Nat, 3))
+window(cons(x, cons(y, cons(z, xs)))) = cons([x,y,z], window(cons(y, cons(z, xs))))
+window(nil) = nil
 
-fold :: (f :: {Nat, Nat -> Nat}), (acc :: Nat), List Nat -> (acc :: Nat)
-fold f, x, nil = x
-fold f, x, (cons y ys) = fold({ w,z -> f(w,z)}, f(x,y), ys)
+fold :: (f :: {Nat, Nat -> Nat}), (acc :: Nat), List(Nat) -> (acc :: Nat)
+fold(f, x, nil) = x
+fold(f, x, cons(y, ys)) = fold({ w,z -> f(w,z)}, f(x,y), ys)
 
-fold_hole :: (f :: {Nat, Nat -> Nat}), Vec Nat (1+ n) -> Nat
+fold_hole :: (f :: {Nat, Nat -> Nat}), Vec(Nat, succ(n)) -> Nat
 fold_hole = ?unn
 
-fold2 :: (f :: {Nat, Nat -> Nat}), (acc :: Nat), List Nat -> (acc :: Nat)
-fold2 f, x, nil = x
-fold2 f, x, (cons y ys) = fold2(f, f(x,y), ys)
+fold2 :: (f :: {Nat, Nat -> Nat}), (acc :: Nat), List(Nat) -> (acc :: Nat)
+fold2(f, x, nil) = x
+fold2(f, x, cons(y, ys)) = fold2(f, f(x,y), ys)

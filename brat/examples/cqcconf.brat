@@ -4,22 +4,22 @@ M :: {Qubit -o Bit }
 M = lib.kernel.measure
 
 which :: Bool, Type, Type -> Type
-which true, a, b = a
-which false, a, b = b
+which(true, a, b) = a
+which(false, a, b) = b
 
 if :: Bool, { Unit -> Nat }, { Unit -> Nat } -> Nat
-if true,  then, else = then(<>)
-if false, then, else = else(<>)
+if(true,  then, else) = then(<>)
+if(false, then, else) = else(<>)
 
-vec :: Vec Nat 4
+vec :: Vec(Nat, 4)
 vec = [0,1,2,3]
 
-unpack_vec :: Vec Nat 4 -> Nat, Nat, Nat, Nat
-unpack_vec [a,b,c,d] = a,b,c,d
+unpack_vec :: Vec(Nat, 4) -> Nat, Nat, Nat, Nat
+unpack_vec([a,b,c,d]) = a,b,c,d
 
 add :: (x :: Nat), (y :: Nat) -> (z :: Nat)
-add 0, y = y
-add (1+ x), y = (1+ add(x,y))
+add(0, y) = y
+add(succ(x), y) = succ(add(x,y))
 
 main :: (value :: Nat)
 main = add((add,add)(unpack_vec(vec)))

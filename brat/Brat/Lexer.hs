@@ -135,8 +135,8 @@ instance Show Keyword where
   show KFalse = "false"
   show KExt = "ext"
   show KString = "String"
-  show KOnePlus = "1+"
-  show KTwoTimes = "2*"
+  show KOnePlus = "succ"
+  show KTwoTimes = "doub"
   show KFloat = "Float"
   show KNil = "nil"
   show KCons = "cons"
@@ -169,7 +169,10 @@ keyword
      <|> string "some"  $> KSome
      <|> string "none"  $> KNone
      <|> string "Unit"  $> KUnit
-     <|> string "import" $> KImport) <* notFollowedBy identChar
+     <|> string "import" $> KImport
+     <|> string "succ" $> KOnePlus
+     <|> string "doub" $> KTwoTimes
+    ) <* notFollowedBy identChar
 
 identChar :: Lexer Char
 identChar = alphaNumChar <|> oneOf "_'"

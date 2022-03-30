@@ -11,7 +11,7 @@ import Control.Monad (guard, void)
 import Data.Bifunctor
 import Data.List.NonEmpty (toList, NonEmpty(..), nonEmpty)
 import Data.Functor (($>), (<&>))
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Set (empty)
 import Data.Void
 import Prelude hiding (lex, round)
@@ -159,40 +159,33 @@ binding = do ps <- many (try $ portPull <* space)
     Token _ Comma -> Just (:||:)
     _ -> Nothing
 
-pat :: Parser a -> Parser (Pattern a)
-pat p = try (round onePlus)
-      <|> try (round twoTimes)
+pat :: Show a => Parser a -> Parser (Pattern a)
+pat p = try onePlus
+      <|> try twoTimes
       <|> try (kmatch KNil $> PNil)
-      <|> try (round cons)
+      <|> try cons
       <|> try (kmatch KNone $> PNone)
-      <|> try (round psome)
+      <|> try psome
  where
   psome = do
     kmatch KSome
     space
-    PSome <$> p
+    PSome <$> round p
 
   cons = do
     kmatch KCons
     space
-    x <- p
-    space
-    xs <- p
-    pure (PCons x xs)
+    PCons <$> round p
 
   onePlus = do
-    n <- number
-    guard (n == 1)
-    match Plus
+    kmatch KOnePlus
     space
-    POnePlus <$> p
+    POnePlus <$> round p
 
   twoTimes = do
-    n <- number
-    guard (n == 2)
-    match Times
+    kmatch KTwoTimes
     space
-    PTwoTimes <$> p
+    PTwoTimes <$> round p
 
 sverb :: Parser (WC (Raw Syn Verb))
 sverb = verbAndJuxt `chainl1` semicolon
@@ -393,39 +386,19 @@ vtype' ps = try (round vty) <|> vty
 
   aliasWithArgs = do
     alias <- userName
-    optional hspace
-    args  <- (vtype' ps <* optional hspace)
-             `manyTill`
-             lookAhead (try (match Comma) <|> try (match Arrow) <|> try newline <|> eof)
+    space
+    args <- round $ vtype' ps `sepBy` comma
     pure $ RAlias alias args
 
   comp = curly $ RC <$> ctype
 
-  pair = do
-    kmatch KPair
-    hspace
-    a <- vtype' ps
-    hspace
-    b <- vtype' ps
-    pure $ RProduct a b
+  pair = kmatch KPair *> space *> round (RProduct <$> vtype' ps <* spaced comma <*> vtype' ps)
 
-  vec = do
-    kmatch KVec
-    hspace
-    ty <- vtype' ps
-    hspace
-    n <- cnoun
-    pure $ RVector ty n
+  vec = kmatch KVec *> space *> round (RVector <$> vtype' ps <* spaced comma <*> cnoun)
 
-  list = do
-    kmatch KList
-    hspace
-    RList <$> vtype' ps
+  list = kmatch KList *> space *> round (RList <$> vtype' ps)
 
-  option = do
-    kmatch KOption
-    hspace
-    ROption <$> vtype' ps
+  option = kmatch KOption *> space *> round (ROption <$> vtype' ps)
 
   simple = (kmatch KTypeType   $> RSimpleTy Star)
            <|> (kmatch KNat    $> RSimpleTy Natural)
@@ -583,17 +556,20 @@ go p fname contents = do
 clauses :: String -> Parser (Clause Raw Verb)
 clauses declName = try noLhs <|> branches
  where
-  branches = label "clauses" $ fmap (Clauses . fromJust . nonEmpty) $ some $ do
-    label declName $
+  branches = label "clauses" $
+             fmap (Clauses . fromJust . nonEmpty) $
+             some (try (vspace *> branch))
+
+  branch = do
+    label (declName ++ "(...) = ...") $
       ident $ \x -> if x == declName then Just () else Nothing
     space
-    lhs <- (withFC binding) <?> "binding"
-    spaced (match Equal)
+    lhs <- withFC $ round (binding <?> "binder")
+    spaced $ match Equal
     rhs <- cnoun
-    vspace
     pure (lhs,rhs)
 
-  noLhs = label "noLhs" $ do
+  noLhs = label (declName ++ " = ...") $ do
     label declName $
       ident $ \x -> if x == declName then Just () else Nothing
     spaced (match Equal)
@@ -621,7 +597,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
     hspace
     alias <- simpleName
     optional hspace
-    args  <- (userName <* space) `manyTill` lookAhead (match Equal)
+    args  <- fromMaybe [] <$> (optional . round $ (userName <* space) `sepBy` comma)
     spaced (match Equal)
     ty <- vtype' (mkParser <$> args)
     vspace

@@ -516,18 +516,24 @@ checkRPat :: (Tgt, VType) -> Pattern (WC (Term Chk Noun)) -> Checking ()
 checkRPat tgt (POnePlus x) = check1 tgt x
 checkRPat tgt (PTwoTimes x) = check1 tgt x
 checkRPat (_, List _) PNil = pure ()
-checkRPat (tgt, List ty) (PCons x xs) = check1 (tgt,ty) x *> check1 (tgt, List ty) xs $> ()
+-- A `cons` on the RHS contain a single variable or application that produces
+-- two outputs (head and tail), so typecheck it as such with as normal
+checkRPat (tgt, List ty) (PCons b)
+  = () <$ noUnders (check b ((), [(tgt, ty), (tgt, List ty)]))
 checkRPat (_, Vector _ n) PNil = do
   n <- evalNat n
   if n == 0
     then pure ()
     else err "Vector length should be 0"
-checkRPat (tgt, Vector ty n) (PCons x xs) = do
+checkRPat (tgt, Vector ty n) (PCons b) = do
   n <- evalNat n
-  check1 (tgt,ty) x
   when (n <= 0)
     (err $ "Vector is of length " ++ show n)
-  check1 (tgt,  Vector ty (Simple (Num (n - 1)))) xs
+  noUnders $
+    check b ((), [(tgt, ty)
+                 ,(tgt, Vector ty (Simple (Num (n - 1))))])
+  pure ()
+
 checkRPat (_, Option ty) PNone = pure ()
 checkRPat (tgt, Option ty) (PSome x) = check1 (tgt, ty) x
 checkRPat unders pat = err $ show pat ++ " not of type " ++ show unders
@@ -613,7 +619,8 @@ abstract (input:inputs) (Pat pat) = checkPat input pat
                else err "Vector length isn't 0 for pattern `Nil`"
     -- If we can't work out what the size is, it might be 0
     Left _  -> pure ([], inputs)
-  checkPat (_, Vector ty n) (PCons x xs) = do
+  -- A `cons` pattern on the LHS needs to have exactly two binders
+  checkPat (_, Vector ty n) (PCons (x :||: xs)) = do
     n <- evalNat n
     let tailTy = Vector ty (Simple (Num (n - 1)))
     node <- next "PCons (Vec)" Hypo [("head", ty), ("tail", tailTy)] []
@@ -621,7 +628,7 @@ abstract (input:inputs) (Pat pat) = checkPat input pat
     venv' <- abstractAll [((node, "tail"), tailTy)] xs
     pure (venv ++ venv', inputs)
   checkPat (_, List _) PNil = pure ([], inputs)
-  checkPat (src, List ty) (PCons x xs) = do
+  checkPat (src, List ty) (PCons (x :||: xs)) = do
     node <- next "PCons (List)" Hypo [("head", ty), ("tail", List ty)] []
     venv <- abstractAll [((node, "head"), ty)] x
     venv' <- abstractAll [((node, "tail"), List ty)] xs
@@ -680,7 +687,7 @@ kabstract (input:inputs) (Pat pat) = checkPat input pat
                else err "Vector length isn't 0 for pattern `Nil`"
     -- If we can't work out what the size is, it might be 0
     Left _  -> pure ([], inputs)
-  checkPat (_, Of ty n) (PCons x xs) = do
+  checkPat (_, Of ty n) (PCons (x :||: xs)) = do
     n <- evalNat n
     let tailTy = Of ty (Simple (Num (n - 1)))
     node <- knext "PCons" Hypo [("head", ty), ("tail", tailTy)] []

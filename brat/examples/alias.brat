@@ -1,9 +1,9 @@
-type Pos n = Pair n n
+type Pos(n) = Pair(n, n)
 
-origin :: Pos Nat
+origin :: Pos(Nat)
 origin = [0, 0]
 
-type Position = Pos Nat
+type Position = Pos(Nat)
 
 origin' :: Position
 origin' = [0, 0]
@@ -11,17 +11,17 @@ origin' = [0, 0]
 add :: Nat, Nat -> Nat
 add = x, y -> x
 
-type SwapPair a b = Pair b a
+type SwapPair(a, b) = Pair(b, a)
 
 g :: Nat
 g = 4
 
-type IdPair a b = SwapPair b a
+type IdPair(a,b) = SwapPair(b, a)
 
-alias1 :: SwapPair Bool Nat
+alias1 :: SwapPair(Bool, Nat)
 alias1 = [1, true]
 
-alias2 :: IdPair Nat Bool
+alias2 :: IdPair(Nat,Bool)
 alias2 = [1, true]
 
 # test :: Nat, Nat -> Nat
@@ -42,10 +42,10 @@ number = zero
 fun :: (adder :: { Nat, Nat -> Nat })
 fun = { x, y -> add(x, y) }
 
-type Deep a b = Pair a b
-type X a b = Deep (SwapPair a b) (IdPair a b)
+type Deep(a,b) = Pair(a, b)
+type X(a,b) = Deep(SwapPair(a, b), IdPair(a, b))
 
-deep :: X Nat Bool
+deep :: X(Nat, Bool)
 deep = [[true, 1], [0, false]]
 
 no42 :: Nat

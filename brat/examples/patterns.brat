@@ -2,28 +2,28 @@ id :: Bool -> Bool
 id = x -> x
 
 not :: Bool -> Bool
-not true = false
-not false = true
+not(true) = false
+not(false) = true
 
 pred :: Nat -> Nat
-pred 0 = 0
-pred (1+ n) = pred(n)
+pred(0) = 0
+pred(succ(n)) = n
 
 # ahjh
 halfDown :: Nat -> Nat
-halfDown 0 = 0
-halfDown (2* n) = n
-halfDown (1+ n) = halfDown(n)
+halfDown(0) = 0
+halfDown(doub(n)) = n
+halfDown(succ(n)) = halfDown(n)
 
 is_cool :: String -> Bool
-is_cool "cool" = true
-is_cool x = false
+is_cool("cool") = true
+is_cool(x) = false
 
-left :: Pair Nat Bool -> Nat
-left [nat , bool] = nat
+left :: Pair(Nat, Bool) -> Nat
+left([nat , bool]) = nat
 
-unpair :: Pair Nat Bool -> Nat, Bool
-unpair [l, r] = l, r
+unpair :: Pair(Nat, Bool) -> Nat, Bool
+unpair([l, r]) = l, r
 
-unVec3 :: Vec Nat 3 -> Nat, Nat, Nat
-unVec3 [a, b, c] = a, b, c
+unVec3 :: Vec(Nat,3) -> Nat, Nat, Nat
+unVec3([a, b, c]) = a, b, c

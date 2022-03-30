@@ -11,10 +11,10 @@ type C = Unit
 
 # A workaround for not having the ; operator
 compose :: { A -> B }, { B -> C } -> {A -> C}
-compose f, g = { x -> g(f(x)) }
+compose(f, g) = { x -> g(f(x)) }
 
 compose1 :: { A -> B }, { B -> C } -> {A -> C}
-compose1 f, g = { x -> (f;g)(x) }
+compose1(f, g) = { x -> (f;g)(x) }
 
 compose2 :: { A -> B }, { B -> C } -> {A -> C}
-compose2 f, g = f; g
+compose2(f, g) = f; g

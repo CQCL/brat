@@ -11,7 +11,7 @@ nat :: Nat
 nat = 0
 
 # comp :: Nat, Nat -> Nat
-# comp = x, y -> fst(swap((x, y)))
+# comp = x, y -> fst(swap(x, y))
 
 # te :: Vec Bool 2
 # te = [true, true]
@@ -24,10 +24,10 @@ ha = ?idk
 
 type A = Nat
 
-isNil :: Vec A 0 -> Bool
-isNil nil = true # obvs
-isNil (cons x xs) = false
+isNil :: Vec(A, 0) -> Bool
+isNil(nil) = true # obvs
+isNil(cons(x, xs)) = false
 
-head :: Vec A (1+ 0) -> A
-# head nil = ?head
-head (cons x xs) = ?cnos
+head :: List(A) -> A
+# head(nil) = ?head
+head(cons(x, xs)) = ?cnos

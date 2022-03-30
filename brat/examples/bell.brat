@@ -5,7 +5,7 @@ type B = Nat
 type C = Bool
 
 Rx :: Float -> { Qubit -o Qubit }
-Rx th = lib.kernel.Rx(th)
+Rx(th) = lib.kernel.Rx(th)
 
 H :: { Qubit -o Qubit }
 H = lib.kernel.H
@@ -39,23 +39,23 @@ id' :: (f :: {A -> A}), A -> A
 id' = f, a -> f(a)
 
 id'' :: A -> A
-id'' x = id((id)(x))
+id''(x) = id((id)(x))
 
 copyNat :: Nat -> Nat, Nat
-copyNat x = x, x
+copyNat(x) = x, x
 
 add :: Nat, Nat -> Nat
-add 0, y = y
-add (1+ x), y = add(1, add(x, y))
+add(0, y) = y
+add(succ(x), y) = add(1, add(x, y))
 
 double :: Nat -> Nat
-double x = add(copyNat(x))
+double(x) = add(copyNat(x))
 
 # test :: {A -> A}
 # test = id;?help
 
 compTest :: { A -> B }, { B -> C} -> { A -> C }
-compTest f, g = { x -> g(f(x)) }
+compTest(f, g) = { x -> g(f(x)) }
 
 # phasedBell :: (th :: Double), (c :: Qubit), (d :: Qubit) -> (c :: Bit), (d :: Bit)
 # phasedBell = th -> (H ; id , id) ; (measure, measure)
@@ -67,4 +67,4 @@ idq :: { Qubit -o Qubit }
 idq = { q -> q }
 
 phasedBell :: Float -> { c :: Qubit, d :: Qubit -o c :: Bit, d :: Bit }
-phasedBell th = { c, d -> (M,M)((Rz(th),idq)((H,idq)(c,d))) }
+phasedBell(th) = { c, d -> (M,M)((Rz(th),idq)((H,idq)(c,d))) }

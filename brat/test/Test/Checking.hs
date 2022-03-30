@@ -23,7 +23,6 @@ expectedFails = map ("examples" </>) ["composition.brat",
     "juxt.brat",
     "karlheinz.brat",
     "karlheinz_alias.brat",
-    "listpair.brat",
     "thin.brat",
     "hea.brat"]
 

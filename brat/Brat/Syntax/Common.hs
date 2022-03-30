@@ -136,17 +136,17 @@ data Pattern tm
  = POnePlus tm
  | PTwoTimes tm
  | PNil
- | PCons tm tm
+ | PCons tm
  | PSome tm
  | PNone
  deriving (Eq, Foldable, Functor, Traversable)
 
 instance Show tm => Show (Pattern tm) where
-  show (POnePlus x) = "(1+ " ++ show x ++ ")"
-  show (PTwoTimes x) = "(2* " ++ show x ++ ")"
+  show (POnePlus x) = "succ(" ++ show x ++ ")"
+  show (PTwoTimes x) = "doub(" ++ show x ++ ")"
   show PNil = "nil"
-  show (PCons x xs) = "(cons " ++ show x ++ " " ++ show xs ++ ")"
-  show (PSome x) = "(some " ++ show x ++ ")"
+  show (PCons x) = "cons(" ++ show x ++ ")"
+  show (PSome x) = "some(" ++ show x ++ ")"
   show PNone = "none"
 
 data Abstractor

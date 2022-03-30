@@ -1,14 +1,14 @@
-type A b = Nat
+type A(b) = Nat
 type B = Bool
 
-head :: List (A B) -> A B
-head nil = ?help
-head (cons x xs) = ?cons
+head :: List(A(B)) -> A(B)
+head(nil) = ?help
+head(cons(x, xs)) = ?cons
 
-isSome :: Option (A B) -> Bool
-isSome (some x) = true
-isSome x = false
+isSome :: Option(A(B)) -> Bool
+isSome(some(x)) = true
+isSome(x) = false
 
-isNone :: Option (A B) -> Bool
-isNone none = true
-isNone x = false
+isNone :: Option(A(B)) -> Bool
+isNone(none) = true
+isNone(x) = false
