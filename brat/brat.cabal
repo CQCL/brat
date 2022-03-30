@@ -157,7 +157,9 @@ test-suite tests
   other-modules:       Test.Circuit.Common,
                        Test.Circuit.Gen,
                        Test.Circuit.Graph,
-                       Test.Import.Cycle,
+                       Test.Failure,
+                       Test.Failure.Kernel,
+                       Test.Failure.Import.Cycle,
                        Test.Checking,
                        Test.Syntax.Let
 

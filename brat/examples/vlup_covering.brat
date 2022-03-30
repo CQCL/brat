@@ -5,7 +5,6 @@
 #
 # Reality:
 # - [X] The type checker crashes because of a missing pattern match (fixed by #31)
-# - [ ] The error message is very confusing
 
 import lib.kernel
 
@@ -15,7 +14,3 @@ maybeRotate false = qid
 
 rotate :: { Qubit -o Qubit }
 rotate = { q -> (maybeRotate(true))(q) }
-
-bad_rotate :: { Qubit -o Qubit }
-# The line below drops linear qubit "q" and returns the kernel rather than the declared type
-bad_rotate = { q -> maybeRotate(true) }

@@ -1,0 +1,5 @@
+ret > ExitFailure 1
+err > Error in rotate@FC {start = Pos {line = 13, col = 29}, end = Pos {line = 13, col = 29}}:
+err >   Type error: Won't kcheck true
+err >
+err >

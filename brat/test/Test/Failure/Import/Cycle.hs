@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Test.Import.Cycle (getCycleTests) where
+module Test.Failure.Import.Cycle (getCycleTests) where
 
 import Test.Tasty
 import Test.Tasty.Silver

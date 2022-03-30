@@ -4,14 +4,14 @@ import Test.Tasty.Silver.Interactive (defaultMain)
 import Test.Checking
 import Test.Circuit.Gen
 import Test.Circuit.Graph
-import Test.Import.Cycle
+import Test.Failure
 import Test.Syntax.Let
 
 main = do
-  cycleTests <- getCycleTests
+  failureTests  <- getFailureTests
   checkingTests <- getCheckingTests
   defaultMain $ testGroup "All" [graphTests
-                                ,cycleTests
+                                ,failureTests
                                 ,checkingTests
                                 ,letTests
                                  -- ,circuitTests
