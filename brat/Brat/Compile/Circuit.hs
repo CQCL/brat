@@ -8,27 +8,22 @@ module Brat.Compile.Circuit (Circuit(..)
                             ,wrapCircuit
                             ) where
 
-import Control.Arrow ((***), (&&&))
 import Control.Monad (unless)
 import Data.Array ((!))
 import Data.Graph as Graph
 import Data.Maybe (fromJust)
 import Lens.Micro hiding (_Just, _Nothing)
-import Lens.Micro.Type (ASetter)
 import Data.ProtoLens (defMessage)
 import Data.ProtoLens.Prism
 import qualified Data.Map as Map
 import Data.Text (Text, pack)
 
 import Brat.Graph
-import Brat.FC
 import Brat.Naming
-import Brat.Syntax.Core (VType, Term(..))
+import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Common
-import Brat.Syntax.Raw (desugarEnv)
 import Proto.Graph as G
 import Proto.Graph_Fields as G
-import Util
 
 import Debug.Trace
 

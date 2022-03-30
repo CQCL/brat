@@ -7,12 +7,9 @@ import Brat.Graph
 import Brat.Naming
 import Brat.Syntax.Common
 import Brat.UserName
-import Util
 
-import Control.Arrow ((&&&))
 import Data.Kind (Type)
 import Data.List (intercalate)
-import Data.Maybe (fromJust, isJust)
 
 type VType = VType' Term
 

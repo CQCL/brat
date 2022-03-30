@@ -5,7 +5,6 @@ import Data.List (intercalate)
 import Brat.Checker (TypedHole(..))
 import Brat.FC
 import Brat.Naming
-import Brat.Syntax.Core
 
 holeInfo :: TypedHole -> (FC, String)
 holeInfo (NBHole x fc sugg ((), outs))

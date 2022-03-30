@@ -46,6 +46,7 @@ common warning-flags
     -Wno-unticked-promoted-constructors
     -Wno-unused-do-bind
     -Wno-missing-signatures
+    -Werror=unused-imports
 
 library
   import:              haskell, warning-flags

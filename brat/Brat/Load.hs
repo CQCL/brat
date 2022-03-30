@@ -6,8 +6,6 @@ module Brat.Load (emptyMod
                  ) where
 
 import Brat.Checker
-import Brat.Compile.Circuit
-import Brat.Dot
 import Brat.Error
 import Brat.FC
 import Brat.Graph (Thing(..))
@@ -17,25 +15,14 @@ import Brat.Syntax.Common
 import Brat.Syntax.Core
 import Brat.Syntax.Raw
 import Brat.UserName
-import Control.Monad.Freer (req)
 import Util
 
-import Control.Monad (foldM, unless, when)
 import Control.Monad.Except
-import Data.Array ((!))
-import Data.Bifunctor
-import Data.Either (isLeft)
-import Data.Functor  (($>), (<&>))
-import Data.List (init, isSuffixOf, elemIndex, take)
-import Data.List.NonEmpty (NonEmpty(..))
+import Data.List (elemIndex)
 import Data.List.HT (viewR)
 import qualified Data.Graph as G
-import Data.Maybe (fromJust)
-import Data.List.NonEmpty (nonEmpty)
 import System.Directory (doesFileExist)
 import System.FilePath
-
-import Debug.Trace
 
 -- A Module is a node in the dependency graph
 type RawMod = (RawEnv, UserName, [UserName])

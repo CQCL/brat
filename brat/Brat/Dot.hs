@@ -3,20 +3,6 @@ module Brat.Dot where
 import Brat.Graph
 import Brat.Syntax.Common
 
-import qualified Data.Graph as Graph
-
-{-
-instance Graph (BGraph' tm) where
-  empty = BG ([], [])
-  isEmpty (BG (ns, _)) = null ns
-  match n (BG (ns, es)) = Just ([ src | (src, ty, tgt) <- es, tgt == n ]
-                               ,n
-                               ,[ tgt | (src, ty, tgt) <- es, src == n ])
-  mkGraph lns ens = BG (fst <$> lns) (fst <$> ens)
-  labNodes (BG (ns, _)) = (\n@(BratNode nm _ _ _) -> (n, show nm)) <$> ns
-
--}
-
 nodeLabel :: Node' tm -> String
 nodeLabel (BratNode nm _ _ _) = show $ show nm
 nodeLabel (KernelNode nm _ _ _) = show $ show nm

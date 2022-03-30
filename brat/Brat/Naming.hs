@@ -1,7 +1,6 @@
 module Brat.Naming where
 
 import Data.List (intercalate)
-import Data.Kind (Type)
 
 type Namespace = (Name, Int)
 

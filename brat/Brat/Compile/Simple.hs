@@ -5,8 +5,6 @@ module Brat.Compile.Simple (simplify) where
 
 import Brat.Graph
 import Brat.Naming
-import Brat.Syntax.Common
-import Brat.Syntax.Core
 import Brat.Checker
 
 import Debug.Trace

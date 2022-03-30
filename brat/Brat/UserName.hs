@@ -1,7 +1,6 @@
 module Brat.UserName where
 
 import Data.List (intercalate)
-import Data.List.NonEmpty (NonEmpty(..))
 
 type Prefix = [String]
 

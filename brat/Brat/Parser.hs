@@ -9,9 +9,8 @@ import Brat.UserName
 
 import Control.Monad (guard, void)
 import Data.Bifunctor
-import Data.List.NonEmpty (toList, NonEmpty(..))
+import Data.List.NonEmpty (toList, NonEmpty(..), nonEmpty)
 import Data.Functor (($>), (<&>))
-import Data.List.NonEmpty (nonEmpty, NonEmpty)
 import Data.Maybe (fromJust)
 import Data.Set (empty)
 import Data.Void
