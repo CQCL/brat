@@ -81,7 +81,7 @@ type family ValueType (m :: Mode) where
   ValueType Brat = VType
   ValueType Kernel = SType Term
 
-type VEnv = [(UserName, (Src, VType))]
+type VEnv = [(UserName, [(Src, VType)])]
 type KEnv = [(UserName, (Quantity, (Src, SType Term)))]
 
 data TypedHole
@@ -117,7 +117,7 @@ data CheckingSig ty where
   Throw   :: Error  -> CheckingSig a
   LogHole :: TypedHole -> CheckingSig ()
   AskFC   :: CheckingSig FC
-  VLup    :: UserName -> CheckingSig (Maybe (Src, VType))
+  VLup    :: UserName -> CheckingSig (Maybe [(Src, VType)])
   KLup    :: UserName -> CheckingSig (Maybe (Src, SType Term))
   Node    :: Node -> CheckingSig ()
   Wire    :: Wire -> CheckingSig ()
@@ -161,7 +161,7 @@ wrapError f (Ret v) = Ret v
 wrapError f (Req (Throw e) k) = Req (Throw (f e)) k
 wrapError f (Req r k) = Req r (wrapError f . k)
 
-vlup :: UserName -> Checking (Src, VType)
+vlup :: UserName -> Checking [(Src, VType)]
 vlup s = do
   req (VLup s) >>= \case
     Just vty -> pure vty
@@ -181,7 +181,7 @@ lookupAndUse x (curr@(y, (q, rest)):kenv)
                   Right (Just (thing, kenv)) -> Right $ Just (thing, curr:kenv)
                   Right Nothing -> Right Nothing
 
-localKVar :: [(UserName, (Quantity, (Src, SType Term)))] -> Free CheckingSig v -> Free CheckingSig v
+localKVar :: KEnv -> Free CheckingSig v -> Free CheckingSig v
 localKVar _   (Ret v) = Ret v
 localKVar env (Req (KLup x) k) = case lookupAndUse x env of
                                    Left err@(Err (Just _) _ _) -> req $ Throw err
@@ -380,7 +380,7 @@ check' (Th t) (overs, (tgt, ty@(K (R ss) (R ts))):unders) = do
   pure ((), (overs, unders))
 check' (Var x) ((), ()) = do
   output <- vlup x
-  pure ([output], ((), ()))
+  pure (output, ((), ()))
 check' (Do t) (overs, ()) = do
   ([(src, C (ss :-> ts))], ((), ())) <- check t ((), ())
   this <- next "eval" (Eval src) ss ts
@@ -455,8 +455,9 @@ check' (NHole name) ((), unders) = do
     let tys = snd <$> unders
     env <- req $ AskVEnv
     let matches = transpose $
-          [ [ (nm, src) | (nm, (src, vty)) <- env, vty == ty ]
-          | ty <- tys
+          [ [ (nm, src) | (src, ty) <- stuff ]
+          | (nm, stuff) <- env
+          , and (zipWith (==) tys (snd <$> stuff))
           ]
     pure $ fmap fst <$> matches
 
@@ -585,7 +586,7 @@ abstract :: [(Src, VType)]
                      ,[(Src, VType)] -- rightovers
                      )
 abstract [] (Bind x) = fail $ "abstractor: no wires available to bind to " ++ show x
-abstract (input:inputs) (Bind x) = pure ([(plain x, input)], inputs)
+abstract (input:inputs) (Bind x) = pure ([(plain x, [input])], inputs)
 abstract inputs (x :||: y) = do
   (venv, inputs)  <- abstract inputs x
   (venv', inputs) <- abstract inputs y
@@ -809,9 +810,9 @@ kcheck' (fun :$: arg) ((), ())
   | Var f <- unWC fun = do
      -- traceM $ "Looking for " ++ show f
      req (VLup f) >>= \case
-       Just (src, (K (R ss) (R ts))) -> trace "kernel" $ kernel src ss ts
+       Just [(src, (K (R ss) (R ts)))] -> trace "kernel" $ kernel src ss ts
        -- The following pattern avoids crashing and produces better error messages for ill-typed programs (only)
-       Just (src, (C (ss :-> ts))) -> function src f ss ts
+       Just [(src, (C (ss :-> ts)))] -> function src f ss ts
        Nothing -> req AskFC >>= \fc -> req $ Throw $ Err (Just fc) Nothing $ VarNotFound (show f)
 
 -- Check applications of kernels

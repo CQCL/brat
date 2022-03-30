@@ -52,8 +52,8 @@ addNounsToEnv pre = aux root
   aux _ [] = []
   aux namespace (Decl{..}:decls) =
     let (freshName, newNamespace) = fresh fnName namespace
-        new = [ (PrefixName pre fnName, ((freshName, port), ty)) | (port, ty) <- fnSig]
-    in  new <> aux newNamespace decls
+        new = (PrefixName pre fnName, [ ((freshName, port), ty) | (port, ty) <- fnSig ])
+    in  new : aux newNamespace decls
 
 checkDecl :: Prefix -> Decl -> Checking ()
 checkDecl pre Decl{..}
