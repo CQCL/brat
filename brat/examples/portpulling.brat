@@ -1,0 +1,31 @@
+# `cons` but as a function
+mkList :: (head :: Int), (tail :: List(Int)) -> List(Int)
+mkList(x,xs) = cons(x,xs)
+
+wrongOrder :: (end :: List(Int)), (start :: Int)
+wrongOrder = [2,3,4], 1
+
+# mkList(wrongOrder) yields a type error
+
+# But we can swap it's arguments by *pulling* start to the first position:
+myList :: List(Int)
+myList = let start:x, xs = wrongOrder in mkList(x, xs)
+
+# We can also do this in function definitions
+lam :: (bad :: Bool), (good :: Int) -> (c :: Int)
+lam(good:x, y) = x
+
+# We can also swap the order in which we specify our outputs,
+# by *pulling* one of their ports to the start
+rightOrder :: (start :: Int), (end :: List(Int))
+rightOrder = end:[2,3,4], 1
+
+# We can also pull multiple ports!
+nums :: (III :: Int), (I :: Int), (IV :: Int), (II :: Int)
+nums = 3, 1, 4, 2
+
+ordered :: Int, Int, Int, Int
+ordered = let I:II:III:a,b,c,d = nums in a,b,c,d
+
+ordered2 :: (I :: Int), (II :: Int), (III :: Int), (IV :: Int)
+ordered2 = III:3, 1, IV:4, 2
