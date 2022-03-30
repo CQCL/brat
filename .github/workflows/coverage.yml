@@ -1,0 +1,48 @@
+name: Brat Test Coverage
+
+on:
+  push:
+    branches:
+    - "main"
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: src/
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: haskell/actions/setup@v1
+      with:
+        ghc-version: '8.10.6'
+        cabal-version: '3.4'
+        enable-stack: true
+
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+
+    # from: https://raehik.github.io/2021/03/01/caching-stack-and-cabal-haskell-builds-on-github-actions.html
+    - uses: actions/cache@v2
+      with:
+        path: |
+          ~/.stack
+          .stack-work
+        # best effort for cache: tie it to Stack resolver and package config
+        key: ${{ runner.os }}-stack-${{ hashFiles('stack.yaml.lock', 'package.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-stack
+
+    - name: Run tests with coverage
+      run: |
+        stack test --coverage --no-run-benchmarks
+        echo "artifactPath=$(stack path --local-hpc-root)" >> $GITHUB_ENV
+    - uses: actions/upload-artifact@v2
+      with:
+        name: coverage
+        path: ${{ env.artifactPath }}
+        if-no-files-found: error
