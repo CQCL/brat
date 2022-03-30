@@ -323,7 +323,7 @@ cnoun' = try (letin cnoun) <|> withFC
   nhole = RNHole <$> hole
 
   pull = do
-    ports <- some ((port <* match PortColon) <* match Comma)
+    ports <- some (try (port <* match PortColon))
     RPull ports <$> cnoun
 
   pair :: Parser (Raw Chk Noun)
