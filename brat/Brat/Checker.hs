@@ -17,7 +17,6 @@ module Brat.Checker (check
                     ,wrapError
                     ,next, knext
                     ,localFC
-                    ,withPrefix
                     ) where
 
 import Control.Arrow ((***))
@@ -93,9 +92,6 @@ data TypedHole
 
 newtype Barf a = Barf { runBarf :: Either Error a }
  deriving (Applicative, Functor, Monad, Show)
-
-dumbErr :: String -> Error
-dumbErr = Err Nothing Nothing . TypeErr
 
 err :: String -> Checking a
 err msg = do
@@ -197,17 +193,6 @@ localKVar env (Req KDone k) = case [ x | (x,(One,_)) <- env ] of
                                                     ,"haven't been used"
                                                     ]
 localKVar env (Req r k) = Req r (localKVar env . k)
-
-withPrefix :: String -> Checking v -> Checking v
-withPrefix str m = do
-  ns <- req $ Split str
-  prefixHandler ns m
- where
-  prefixHandler :: Namespace -> Checking v -> Checking v
-  prefixHandler _ (Ret x) = Ret x
-  prefixHandler pre (Req (Fresh str) k) = let (nm, ns) = fresh str pre in
-                                            (prefixHandler ns $ k nm)
-  prefixHandler pre (Req r k) = Req r (prefixHandler pre . k)
 
 handler :: Free CheckingSig v
         -> Context
