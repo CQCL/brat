@@ -1,5 +1,3 @@
-ret > ExitFailure 1
-err > Error in badUncons@FC {start = Pos {line = 7, col = 10}, end = Pos {line = 7, col = 31}}:
-err >   Type error in pattern: Couldn't resolve pattern cons(stuff) with type List Int
-err >
-err >
+Error in badUncons@FC {start = Pos {line = 7, col = 10}, end = Pos {line = 7, col = 31}}:
+  Type error in pattern: Couldn't resolve pattern cons(stuff) with type List Int
+

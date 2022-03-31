@@ -1,5 +1,3 @@
-ret > ExitFailure 1
-err > Error in c:
-err >   Cycle detected in imports: c is reachable from a
-err >
-err >
+Error in c:
+  Cycle detected in imports: c is reachable from a
+

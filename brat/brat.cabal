@@ -62,6 +62,7 @@ library
                        Util
 
   exposed-modules:     Brat.Checker,
+                       Brat.Compiler,
                        Brat.Compile.Circuit,
                        Brat.Error,
                        Brat.FC,
@@ -80,6 +81,7 @@ library
                        Proto.Signature, Proto.Signature_Fields
 
   build-depends:       base < 5,
+                       bytestring,
                        megaparsec >= 9.0.0,
                        mtl,
                        HUnit,
@@ -116,6 +118,7 @@ executable brat
                        utility-ht
 
   other-modules:       Brat.Checker,
+                       Brat.Compiler,
                        Brat.Compile.Circuit,
                        Brat.Compile.Simple,
                        Brat.Dot,
@@ -159,10 +162,17 @@ test-suite tests
                        Test.Circuit.Gen,
                        Test.Circuit.Graph,
                        Test.Failure,
-                       Test.Failure.Binding,
-                       Test.Failure.Kernel,
-                       Test.Failure.Import.Cycle,
                        Test.Checking,
                        Test.Syntax.Let
 
-  build-depends:       base <5, brat, tasty, tasty-hunit, tasty-expected-failure, tasty-silver, mtl, containers, filepath
+  build-depends:       base <5,
+                       brat,
+                       tasty,
+                       tasty-hunit,
+                       tasty-expected-failure,
+                       tasty-silver,
+                       mtl,
+                       containers,
+                       filepath,
+                       silently,
+                       text

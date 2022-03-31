@@ -1,6 +1,4 @@
-ret > ExitFailure 1
-err > Error in badBinding@FC {start = Pos {line = 7, col = 14}, end = Pos {line = 7, col = 36}}:
-err >   Internal error: Expected empty unders after abstract, got:
-err >   [((twoThings,"_1"),Int)]
-err >
-err >
+Error in badBinding@FC {start = Pos {line = 7, col = 14}, end = Pos {line = 7, col = 36}}:
+  Internal error: Expected empty unders after abstract, got:
+  [((twoThings,"_1"),Int)]
+

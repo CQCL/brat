@@ -1,11 +1,9 @@
-ret > ExitFailure 1
-err > Error in test/golden/kernel/classical_return.brat@FC {start = Pos {line = 4, col = 4}, end = Pos {line = 4, col = 6}}:
-err >   Parse error test/golden/kernel/classical_return.brat:5:6:
-err >   |
-err > 5 | f :: { Qubit -o Qubit, Int }
-err >   |      ^^^^^^^^^^^^^^^^^^^^^^^
-err > unexpected { Qubit -o Qubit, Int }
-err > expecting (...), Bit, Bool, Comment, Float, Horizontal space, Int, List, Nat, Option, Pair, String, Type, Unit, Vec, \n, name, wee end, or {...}
-err >
-err >
-err >
+Error in test/golden/kernel/classical_return.brat@FC {start = Pos {line = 4, col = 4}, end = Pos {line = 4, col = 6}}:
+  Parse error test/golden/kernel/classical_return.brat:5:6:
+  |
+5 | f :: { Qubit -o Qubit, Int }
+  |      ^^^^^^^^^^^^^^^^^^^^^^^
+unexpected { Qubit -o Qubit, Int }
+expecting (...), Bit, Bool, Comment, Float, Horizontal space, Int, List, Nat, Option, Pair, String, Type, Unit, Vec, \n, name, wee end, or {...}
+
+

@@ -1,5 +1,3 @@
-ret > ExitFailure 1
-err > Error in a:
-err >   Cycle detected in imports: a is reachable from b
-err >
-err >
+Error in a:
+  Cycle detected in imports: a is reachable from b
+

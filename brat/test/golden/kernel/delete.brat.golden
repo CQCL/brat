@@ -1,5 +1,3 @@
-ret > ExitFailure 1
-err > Error in deleteFst@FC {start = Pos {line = 2, col = 15}, end = Pos {line = 2, col = 27}}:
-err >   Type error: Variable(s) q0 haven't been used
-err >
-err >
+Error in deleteFst@FC {start = Pos {line = 2, col = 15}, end = Pos {line = 2, col = 27}}:
+  Type error: Variable(s) q0 haven't been used
+

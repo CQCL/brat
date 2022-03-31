@@ -1,5 +1,3 @@
-ret > ExitFailure 1
-err > Error in cycle_aux:
-err >   Cycle detected in imports: cycle_aux is reachable from cycle
-err >
-err >
+Error in cycle_aux:
+  Cycle detected in imports: cycle_aux is reachable from cycle
+
