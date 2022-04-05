@@ -23,6 +23,9 @@ getCycleTests = testGroup "cycle" . fmap goldenTest <$> findByExtension [".brat"
 getBindingTests :: IO TestTree
 getBindingTests = testGroup "binding" . fmap goldenTest <$> findByExtension [".brat"] "test/golden/binding"
 
+getTypeErrorTests :: IO TestTree
+getTypeErrorTests = testGroup "type_error" . fmap goldenTest <$> findByExtension [".brat"] "test/golden/type_error"
+
 runGetStderr :: String -> IO () -> IO String
 runGetStderr name action = do
     (output, ()) <- hCapture [stderr] $
@@ -34,4 +37,5 @@ getFailureTests = do
   bindingTests <- getBindingTests
   cycleTests <- getCycleTests
   kernelTests <- getKernelTests
-  pure $ testGroup "Failure" [bindingTests, cycleTests, kernelTests]
+  typeErrTests <- getTypeErrorTests
+  pure $ testGroup "Failure" [bindingTests, cycleTests, kernelTests, typeErrTests]

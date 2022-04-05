@@ -12,6 +12,7 @@ instance Show ParseError where
 
 data ErrorMsg
  = TypeErr String
+ | TypeMismatch String String String
  | PattErr String
  | ParseErr ParseError
  | LexErr ParseError
@@ -31,6 +32,11 @@ data ErrorMsg
 
 instance Show ErrorMsg where
   show (TypeErr x) = "Type error: " ++ x
+  show (TypeMismatch tm exp act)
+    = unlines ["Type mismatch when checking " ++ tm
+              ,"Expected: " ++ exp
+              ,"But got:  " ++ act
+              ]
   show (PattErr x) = "Type error in pattern: " ++ x
   show (ParseErr x) = "Parse error " ++ show x
   show (LexErr x) = "Lex error " ++ show x

@@ -98,6 +98,12 @@ err msg = do
   fc <- req AskFC
   req $ Throw $ Err (Just fc) Nothing $ TypeErr msg
 
+showRow :: Show ty => [(Src, ty)] -> String
+showRow xs = intercalate ", " [ '(':p ++ " :: " ++ show ty ++ ")"
+                              | ((_, p), ty) <- xs]
+
+
+
 instance MonadFail Barf where
   fail s = Barf . Left . Err Nothing Nothing $ TypeErr s
 
@@ -128,11 +134,11 @@ qpred None = Nothing
 qpred One  = Just None
 qpred Tons = Just Tons
 
-ensureEmpty :: Show a => String -> [a] -> Checking ()
+ensureEmpty :: Show ty => String -> [(Src, ty)] -> Checking ()
 ensureEmpty _ [] = pure ()
 ensureEmpty str xs = do
   fc <- req AskFC
-  let msg = InternalError $ "Expected empty " ++ str ++ ", got:\n  " ++ show xs
+  let msg = InternalError $ "Expected empty " ++ str ++ ", got:\n  " ++ showRow xs
   req $ Throw (Err (Just fc) Nothing msg)
 
 noUnders m = do
@@ -337,10 +343,11 @@ check' (Emb t) (overs, unders) = do
     checkOutputs top (((src, "fun"), K (R (ss <> us)) (R (ts <> vs))):outs)
   checkOutputs ((tgt, ty):tys) ((src, ty'):outs)
    | ty == ty' = wire (src, Right ty, tgt) *> checkOutputs tys outs
-  checkOutputs tgt src = err $ unlines ["check (brat): checkOutputs failed"
-                                       ,"top: " ++ show tgt
-                                       ,"bot: " ++ show src
-                                       ]
+  checkOutputs tgt src = req AskFC >>= \fc ->
+       let exp = showRow tgt
+           act = showRow src
+       in  req $ Throw $ Err (Just fc) Nothing $ TypeMismatch (show t) exp act
+
 check' (Th t) (overs, (tgt, ty@(C (ss :-> ts))):unders) = do
   srcNode <- next "thunk_source" Source [] ss
   tgtNode <- next "thunk_target" Target ts []

@@ -1,4 +1,4 @@
 Error in badBinding@FC {start = Pos {line = 7, col = 14}, end = Pos {line = 7, col = 36}}:
   Internal error: Expected empty unders after abstract, got:
-  [((twoThings,"_1"),Int)]
+  (b1 :: Int)
 

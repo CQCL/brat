@@ -17,6 +17,7 @@ import Brat.Naming
 import Brat.Syntax.Common
 import Brat.Syntax.Core
 import Brat.UserName
+import Util (names)
 
 type family TypeOf (k :: Kind) :: Type where
   TypeOf Noun = [InOut]
@@ -185,11 +186,11 @@ desugarCTy :: CType' RawIO -> Desugar (CType' InOut)
 desugarCTy (ss :-> ts) = (:->) <$> desugarIO ss <*> desugarIO ts
 
 desugarIO :: [RawIO] -> Desugar [InOut]
-desugarIO = zipWithM aux [0..]
+desugarIO = zipWithM aux names
  where
-  aux :: Int -> RawIO -> Desugar InOut
+  aux :: String -> RawIO -> Desugar InOut
   aux _ (Named port ty) = (port,) <$> desugarVTy ty
-  aux i (Anon ty) = ('_':show i,) <$> desugarVTy ty
+  aux port (Anon ty)    = (port,) <$> desugarVTy ty
 
 desugar :: WC (Raw d k)
         -> Desugar (WC (Term d k))

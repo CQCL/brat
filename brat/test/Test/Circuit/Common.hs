@@ -16,12 +16,12 @@ instance IsString Name where
 
 idGraph :: Graph' Term
 idGraph = ([BratNode "main_box" ("src" :>>: "tgt") [] [("fun", kty)]
-           ,BratNode "main" Id [("_0", kty)] [("_0", kty)]
+           ,BratNode "main" Id [("a1", kty)] [("a1", kty)]
            ,KernelNode "src" Source [] [("a", Q Qubit)]
            ,KernelNode "tgt" Target [("b", Q Qubit)] []
            ]
           ,[(("src", "a"), Left (Q Qubit), ("tgt", "b"))
-           ,(("main_box", "fun"), Right kty, ("main", "_0"))
+           ,(("main_box", "fun"), Right kty, ("main", "a1"))
            ]
           )
  where
@@ -29,13 +29,13 @@ idGraph = ([BratNode "main_box" ("src" :>>: "tgt") [] [("fun", kty)]
 
 swapGraph :: Graph' Term
 swapGraph = ([BratNode "main_box" ("src" :>>: "tgt") [] [("fun", kty)]
-             ,BratNode "main" Id [("_0", kty)] [("_0", kty)]
+             ,BratNode "main" Id [("a1", kty)] [("a1", kty)]
              ,KernelNode "src" Source [] [("a", Q Qubit), ("b", Q Qubit)]
              ,KernelNode "tgt" Target [("b", Q Qubit), ("a", Q Qubit)] []
              ]
             ,[(("src", "a"), Left (Q Qubit), ("tgt", "a"))
              ,(("src", "b"), Left (Q Qubit), ("tgt", "b"))
-             ,(("main_box", "fun"), Right kty, ("main", "_0"))
+             ,(("main_box", "fun"), Right kty, ("main", "a1"))
              ]
             )
  where
@@ -44,16 +44,16 @@ swapGraph = ([BratNode "main_box" ("src" :>>: "tgt") [] [("fun", kty)]
         (R [("b", Q Qubit), ("a", Q Qubit)])
 
 xGraph :: Graph' Term
-xGraph = ([BratNode "tket.X" (Prim "tket.X") [] [("_0", xTy)]
-          ,KernelNode "X" (Eval ("tket.X", "_0")) [("xa", Q Qubit)] [("xb", Q Qubit)]
+xGraph = ([BratNode "tket.X" (Prim "tket.X") [] [("a1", xTy)]
+          ,KernelNode "X" (Eval ("tket.X", "a")) [("xa", Q Qubit)] [("xb", Q Qubit)]
           ,BratNode "main_box" ("src" :>>: "tgt") [] [("fun", mainTy)]
-          ,BratNode "main" Id [("_0", mainTy)] [("_0", mainTy)]
+          ,BratNode "main" Id [("a1", mainTy)] [("a1", mainTy)]
           ,KernelNode "src" Source [] [("a", Q Qubit)]
           ,KernelNode "tgt" Target [("b", Q Qubit)] []
           ]
          ,[(("src", "a"), Left (Q Qubit), ("X", "xa"))
           ,(("X", "xb"), Left (Q Qubit), ("tgt", "b"))
-          ,(("main_box", "fun"), Right mainTy, ("main", "_0"))
+          ,(("main_box", "fun"), Right mainTy, ("main", "a1"))
           ]
          )
  where
@@ -82,12 +82,12 @@ twoGraph = ([BratNode "add" (Prim "add") [] [("thunk", C ([("a", int), ("b", int
             ,BratNode "1a" (Const (Num 1)) [] [("value", int)]
             ,BratNode "1b" (Const (Num 1)) [] [("value", int)]
             ,BratNode "one" Id [("n", int)] [("n", int)]
-            ,BratNode "two" Id [("_0", int)] [("_0", int)]
+            ,BratNode "two" Id [("a1", int)] [("a1", int)]
             ]
            ,[(("1a", "value"), Right int, ("one", "n"))
             ,(("1b", "value"), Right int, ("add", "a"))
             ,(("one", "n"), Right int, ("add", "b"))
-            ,(("add", "c"), Right int, ("two", "_0"))
+            ,(("add", "c"), Right int, ("two", "a1"))
             ]
            )
 

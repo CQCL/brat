@@ -51,11 +51,11 @@ deriving instance Eq (tm Chk Noun) => Eq (VType' tm)
 instance Show (tm Chk Noun) => Show (VType' tm) where
   show (C cty) = '{' : show cty ++ "}"
   show (SimpleTy ty) = show ty
-  show (List ty) = "List " ++ show ty
-  show (Product s t) = unwords ["Pair",show s, show t]
-  show (Vector ty n) = unwords ["Vec",show ty,show n]
+  show (List ty) = "List(" ++ show ty ++ ")"
+  show (Product s t) = "Pair(" ++ show s ++ ", " ++ show t ++ ")"
+  show (Vector ty n) = "Vec(" ++ show ty ++ ", " ++ show n ++ ")"
   show (K ins outs) = '{' : show ins ++ " -o " ++ show outs ++ "}"
-  show (Option ty) = "Option " ++ show ty
+  show (Option ty) = "Option(" ++ show ty ++ ")"
 
 data SimpleType
   = Natural
@@ -94,7 +94,10 @@ instance Show SimpleTerm where
   show (Float f) = show f
   show Unit = "<>"
 
-data CType' io = [io] :-> [io] deriving (Functor, Show)
+data CType' io = [io] :-> [io] deriving Functor
+
+instance Show io => Show (CType' io) where
+  show (ss :-> ts) = unwords [show ss, "->", show ts]
 
 deriving instance Eq (VType' tm) => Eq (CType' (Port, VType' tm))
 

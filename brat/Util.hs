@@ -16,3 +16,12 @@ duplicates xs = let (_, dups, []) = aux ([], [], xs) in dups
   aux (visited, dups, []) = (visited, dups, [])
   aux (visited, dups, (x:xs)) | x `elem` visited = aux (visited, x:dups, xs)
                               | otherwise = aux (x:visited, dups, xs)
+
+-- An infinite list of strings for names:
+-- a,b,c,...,a2,b2,c2,...,aN,bN,cN
+names :: [String]
+names = do
+  number <- [1..]
+  letter <- ['a'..'z']
+  return (letter:show number)
+
