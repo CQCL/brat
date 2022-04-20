@@ -27,6 +27,7 @@ import Data.Functor (($>))
 import Data.Kind (Type)
 import Data.List (intercalate, transpose)
 import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.Map as M
 import Prelude
 
 import Brat.Error
@@ -81,7 +82,7 @@ type family ValueType (m :: Mode) where
   ValueType Kernel = SType Term
 
 type VEnv = [(UserName, [(Src, VType)])]
-type KEnv = [(UserName, (Quantity, (Src, SType Term)))]
+type KEnv = M.Map UserName (Quantity, (Src, SType Term))
 
 data TypedHole
   = NBHole Name FC [String] (Connectors Brat Chk Noun)
@@ -173,15 +174,11 @@ vlup s = do
       req $ Throw $ Err (Just fc) Nothing $ VarNotFound (show s)
 
 lookupAndUse :: UserName -> KEnv -> Either Error (Maybe ((Src, SType Term), KEnv))
-lookupAndUse _ [] = Right Nothing
-lookupAndUse x (curr@(y, (q, rest)):kenv)
-  | x == y = case qpred q of
-               Nothing -> Left $ Err Nothing Nothing $ TypeErr $ (show x) ++ " has already been used"
-               Just q -> Right $ Just (rest, (x, (q, rest)):kenv)
-  | otherwise = case lookupAndUse x kenv of
-                  Left err -> Left err
-                  Right (Just (thing, kenv)) -> Right $ Just (thing, curr:kenv)
-                  Right Nothing -> Right Nothing
+lookupAndUse x kenv = case M.lookup x kenv of
+   Nothing -> Right Nothing
+   Just (q, rest) -> case qpred q of
+                      Nothing -> Left $ Err Nothing Nothing $ TypeErr $ (show x) ++ " has already been used"
+                      Just q -> Right $ Just (rest, M.insert x (q, rest) kenv)
 
 localKVar :: KEnv -> Free CheckingSig v -> Free CheckingSig v
 localKVar _   (Ret v) = Ret v
@@ -192,7 +189,7 @@ localKVar env (Req (KLup x) k) = case lookupAndUse x env of
                                      req $ Throw (Err (Just fc) src msg)
                                    Right (Just (th, env)) -> localKVar env (k (Just th))
                                    Right Nothing -> Req (KLup x) (localKVar env . k)
-localKVar env (Req KDone k) = case [ x | (x,(One,_)) <- env ] of
+localKVar env (Req KDone k) = case [ x | (x,(One,_)) <- M.assocs env ] of
                                 [] -> (localKVar env . k) ()
                                 xs -> err $ unwords ["Variable(s)"
                                                     ,intercalate ", " (fmap show xs)
@@ -664,15 +661,15 @@ kabstract :: [(Src, SType Term)]
 kabstract [] (Bind x) = fail $ "abstractor: no wires available to bind to " ++ show x
 kabstract (input@(_, ty):inputs) (Bind x)
   = let q = if copyable ty then Tons else One
-    in  pure ([(plain x, (q, input))], inputs)
+    in  pure (M.singleton (plain x) (q, input), inputs)
 kabstract inputs (x :||: y) = do
   (kenv, inputs)  <- kabstract inputs x
   (kenv', inputs) <- kabstract inputs y
-  pure (kenv ++ kenv', inputs)
+  pure (M.union kenv kenv', inputs)
 kabstract inputs (APull ports abst) = do
   inputs <- pullPorts ports inputs
   kabstract inputs abst
-kabstract ((_, Bit):inputs) (Lit (Bool b)) = simpleCheck Boolean (Bool b) $> ([], inputs)
+kabstract ((_, Bit):inputs) (Lit (Bool b)) = simpleCheck Boolean (Bool b) $> (M.empty, inputs)
 kabstract _ (Lit lit) = err $ "Can't match literal " ++ show lit ++ " in a kernel"
 kabstract ((_, Of ty n):inputs) (VecLit xs) = do
   node <- next "natHypo" Hypo [] [("value", SimpleTy Natural)]
@@ -680,27 +677,25 @@ kabstract ((_, Of ty n):inputs) (VecLit xs) = do
   n <- evalNat n
   unless (n == length xs)
     (fail $ "length mismatch in vector pattern")
-  venvs <- mapM (aux node) xs
-  pure $ (concat venvs, inputs)
-   where
-    aux node elem = kabstractAll [((node, "type"), ty)] elem
+  kenvs <- mapM (kabstractAll [((node, "type"), ty)]) xs
+  pure $ (M.unions kenvs, inputs)
 
 kabstract (input:inputs) (Pat pat) = checkPat input pat
  where
   checkPat :: (Src, SType Term) -> Pattern Abstractor -> Checking (KEnv, [(Src, SType Term)])
   checkPat (_, Of _ n) PNil = evalNatSoft n >>= \case
-    Right n -> if n == 0
-               then pure ([], inputs)
-               else err "Vector length isn't 0 for pattern `Nil`"
+    Right 0 -> pure (M.empty, inputs)
     -- If we can't work out what the size is, it might be 0
-    Left _  -> pure ([], inputs)
+    Left _  -> pure (M.empty, inputs)
+    Right _ -> err "Vector length isn't 0 for pattern `Nil`"
+
   checkPat (_, Of ty n) (PCons (x :||: xs)) = do
     n <- evalNat n
     let tailTy = Of ty (Simple (Num (n - 1)))
     node <- knext "PCons" Hypo [("head", ty), ("tail", tailTy)] []
-    venv <- kabstractAll [((node, "head"), ty)] x
-    venv' <- kabstractAll [((node, "tail"), tailTy)] xs
-    pure (venv ++ venv', inputs)
+    kenv <- kabstractAll [((node, "head"), ty)] x
+    kenv' <- kabstractAll [((node, "tail"), tailTy)] xs
+    pure (M.union kenv kenv', inputs)
   checkPat (_, ty) pat = do
     fc <- req AskFC
     let msg = "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty
