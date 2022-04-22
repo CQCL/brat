@@ -24,7 +24,8 @@ expectedFails = map ("examples" </>) ["composition.brat",
     "karlheinz.brat",
     "karlheinz_alias.brat",
     "thin.brat",
-    "hea.brat"]
+    "hea.brat",
+    "merge.brat"]
 
 
 parseAndCheckXF :: FilePath -> TestTree

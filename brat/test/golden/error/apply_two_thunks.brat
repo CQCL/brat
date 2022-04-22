@@ -1,0 +1,9 @@
+inc :: Int -> Int
+inc(n) = succ(n)
+
+thunks :: { Int -> Int }, {Int -> Int}
+thunks = inc,{ x -> inc(inc(x)) }
+
+# This obviously shouldn't work, but the error message could be much better!
+go :: Int -> Int
+go(n) = thunks(n)

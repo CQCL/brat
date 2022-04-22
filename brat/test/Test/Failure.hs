@@ -23,8 +23,8 @@ getCycleTests = testGroup "cycle" . fmap goldenTest <$> findByExtension [".brat"
 getBindingTests :: IO TestTree
 getBindingTests = testGroup "binding" . fmap goldenTest <$> findByExtension [".brat"] "test/golden/binding"
 
-getTypeErrorTests :: IO TestTree
-getTypeErrorTests = testGroup "type_error" . fmap goldenTest <$> findByExtension [".brat"] "test/golden/type_error"
+getErrorTests :: IO TestTree
+getErrorTests = testGroup "error" . fmap goldenTest <$> findByExtension [".brat"] "test/golden/error"
 
 runGetStderr :: String -> IO () -> IO String
 runGetStderr name action = do
@@ -35,7 +35,7 @@ runGetStderr name action = do
 
 getFailureTests = do
   bindingTests <- getBindingTests
-  cycleTests <- getCycleTests
-  kernelTests <- getKernelTests
-  typeErrTests <- getTypeErrorTests
-  pure $ testGroup "Failure" [bindingTests, cycleTests, kernelTests, typeErrTests]
+  cycleTests   <- getCycleTests
+  kernelTests  <- getKernelTests
+  errTests     <- getErrorTests
+  pure $ testGroup "Failure" [bindingTests, cycleTests, kernelTests, errTests]

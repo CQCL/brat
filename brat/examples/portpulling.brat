@@ -29,3 +29,10 @@ ordered = let I:II:III:a,b,c,d = nums in a,b,c,d
 
 ordered2 :: (I :: Int), (II :: Int), (III :: Int), (IV :: Int)
 ordered2 = III:3, 1, IV:4, 2
+
+# And this also applies to kernels!
+test :: { qin :: Qubit -o b :: Bool, qout :: Qubit }
+test = { q -> qout:q, true }
+
+test2 :: { qin :: Qubit, bin :: Bool -o b :: Bool, qout :: Qubit }
+test2 = { bin:b,q -> b,q }

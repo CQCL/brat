@@ -170,7 +170,6 @@ vlup s = do
   req (VLup s) >>= \case
     Just vty -> pure vty
     Nothing -> do
-      req AskVEnv >>= traceShowM
       fc <- req AskFC
       req $ Throw $ Err (Just fc) Nothing $ VarNotFound (show s)
 

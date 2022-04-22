@@ -27,3 +27,17 @@ unpair([l, r]) = l, r
 
 unVec3 :: Vec(Nat,3) -> Nat, Nat, Nat
 unVec3([a, b, c]) = a, b, c
+
+fromSingleton :: List(Int) -> Option(Int)
+fromSingleton([x]) = some(x)
+fromSingleton(x) = none
+
+vfromSingleton :: Vec(Int, 1) -> Int
+vfromSingleton([x]) = x
+
+vfromSingleton' :: Vec(Int, 1) -> Int
+vfromSingleton'(cons(x, nil)) = x
+
+mapOption :: {Int -> Int}, Option(Int) -> Option(Int)
+mapOption(f, none) = none
+mapOption(f, some(x)) = some(f(x))

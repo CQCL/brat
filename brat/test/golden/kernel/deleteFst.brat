@@ -1,0 +1,2 @@
+deleteFst :: { Qubit, Qubit -o Qubit }
+deleteFst = { q0, q1 -> q1 }
