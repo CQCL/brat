@@ -20,7 +20,7 @@ module Brat.Checker (check
                     ) where
 
 import Control.Arrow ((***))
-import Control.Monad (unless, when)
+import Control.Monad (unless, when, foldM)
 import Control.Monad.Freer
 import qualified Control.Monad.Fail as Fail
 import Data.Functor (($>))
@@ -28,6 +28,7 @@ import Data.Kind (Type)
 import Data.List (intercalate, transpose)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Prelude
 
 import Brat.Error
@@ -645,6 +646,16 @@ abstract (input:inputs) (Pat pat) = checkPat input pat
     req $ Throw $ Err (Just fc) Nothing $ PattErr msg
 abstract _ x = err $ "Can't abstract " ++ show x
 
+combineDisjointKEnvs :: KEnv -> KEnv -> Checking KEnv
+combineDisjointKEnvs l r =
+  let commonKeys = S.intersection (M.keysSet l) (M.keysSet r)
+  in if S.null commonKeys
+    then Ret $ M.union l r
+    else do
+      fc <- req AskFC
+      let e = TypeErr $ "Variable(s) defined twice: " ++ (intercalate "," $ map show $ S.toList commonKeys)
+      req $ Throw $ Err (Just fc) Nothing e
+
 kabstractAll :: [(Src, SType Term)]
              -> Abstractor
              -> Checking KEnv
@@ -665,7 +676,8 @@ kabstract (input@(_, ty):inputs) (Bind x)
 kabstract inputs (x :||: y) = do
   (kenv, inputs)  <- kabstract inputs x
   (kenv', inputs) <- kabstract inputs y
-  pure (M.union kenv kenv', inputs)
+  combEnv <- combineDisjointKEnvs kenv kenv'
+  pure (combEnv, inputs)
 kabstract inputs (APull ports abst) = do
   inputs <- pullPorts ports inputs
   kabstract inputs abst
@@ -678,7 +690,8 @@ kabstract ((_, Of ty n):inputs) (VecLit xs) = do
   unless (n == length xs)
     (fail $ "length mismatch in vector pattern")
   kenvs <- mapM (kabstractAll [((node, "type"), ty)]) xs
-  pure $ (M.unions kenvs, inputs)
+  combEnv <- foldM combineDisjointKEnvs M.empty kenvs
+  pure $ (combEnv, inputs)
 
 kabstract (input:inputs) (Pat pat) = checkPat input pat
  where
@@ -695,7 +708,8 @@ kabstract (input:inputs) (Pat pat) = checkPat input pat
     node <- knext "PCons" Hypo [("head", ty), ("tail", tailTy)] []
     kenv <- kabstractAll [((node, "head"), ty)] x
     kenv' <- kabstractAll [((node, "tail"), tailTy)] xs
-    pure (M.union kenv kenv', inputs)
+    combEnv <- combineDisjointKEnvs kenv kenv'
+    pure (combEnv, inputs)
   checkPat (_, ty) pat = do
     fc <- req AskFC
     let msg = "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty
