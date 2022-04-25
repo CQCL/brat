@@ -12,7 +12,7 @@ import Data.Maybe (fromJust)
 
 data Node' tm
   = BratNode Name Thing [Input' tm] [Output' tm]
-  | KernelNode Name Thing [(Port, SType tm)] [(Port, SType tm)]
+  | KernelNode Name Thing [(Port, SType' tm)] [(Port, SType' tm)]
 
 nodeName :: Node' tm -> Name
 nodeName (BratNode nm _ _ _) = nm
@@ -48,7 +48,7 @@ deriving instance Show (tm Chk Noun) => Show (BGraph tm)
 instance {-# OVERLAPPING #-} Show (tm Chk Noun) => Show (Graph' tm) where
   show (ns, ws) = unlines (("Nodes:":(show <$> ns)) ++ ("":"Wires:":(show <$> ws)))
 
-type Wire' tm = (Src, Either (SType tm) (VType' tm), Tgt)
+type Wire' tm = (Src, Either (SType' tm) (VType' tm), Tgt)
 
 type Src = (Name, Port)
 type Tgt = (Name, Port)

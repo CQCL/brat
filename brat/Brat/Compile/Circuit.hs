@@ -20,7 +20,7 @@ import Data.Text (Text, pack)
 
 import Brat.Graph
 import Brat.Naming
-import Brat.Syntax.Core (Term(..))
+import Brat.Syntax.Core (SType, Term(..))
 import Brat.Syntax.Common
 import Proto.Graph as G
 import Proto.Graph_Fields as G
@@ -86,10 +86,10 @@ process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
                                      , commands = trace ("graph: " ++show tm) (fromJust (smth tm))
                                      }
  where
-  count :: (SType Term -> Int) -> Row Term -> Int
+  count :: (SType -> Int) -> Row Term -> Int
   count f (R r) = sum $ fmap (f . snd) r
 
-  countQ :: SType Term -> Int
+  countQ :: SType -> Int
   countQ (Q _) = 1
   countQ Bit = 0
   -- Absolute hack
@@ -97,7 +97,7 @@ process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
                                    | otherwise = n
   countQ (Rho r) = count countQ r
 
-  countB :: SType Term -> Int
+  countB :: SType -> Int
   countB (Q _) = 0
   countB Bit = 1
   -- Absolute hack

@@ -9,8 +9,8 @@ module Brat.Syntax.Common (Port,
                            pattern Qubit, pattern Money,
                            -- constructor for Row (do not export Row'):
                            pattern R,
-                           SType,
-                           -- constructors for SType (do not export SType'):
+                           SType',
+                           -- constructors for SType' (do not export SType''):
                            pattern Q, pattern Bit, pattern Of, pattern Rho,
                            copyable,
                            VType'(..),
@@ -36,27 +36,27 @@ import Data.Kind (Type)
 type Port = String
 
 data Quantum = Qubit | Money deriving (Eq, Show)
-newtype Row' tm q = R [(Port, SType' tm q)] deriving (Functor, Foldable, Traversable)
+newtype Row' tm q = R [(Port, SType'' tm q)] deriving (Functor, Foldable, Traversable)
 type Row tm = Row' tm Quantum
 
-deriving instance Show (SType' tm q) => Show (Row' tm q)
+deriving instance Show (SType'' tm q) => Show (Row' tm q)
 
-instance Eq (SType' tm q) => Eq (Row' tm q) where
+instance Eq (SType'' tm q) => Eq (Row' tm q) where
   (R r) == (R r') = (snd <$> r) == (snd <$> r')
 
-type SType tm = SType' tm Quantum
+type SType' tm = SType'' tm Quantum
 
-data SType' tm q
+data SType'' tm q
  = Q q
  | Bit
- | Of (SType' tm q) (tm Chk Noun)
+ | Of (SType'' tm q) (tm Chk Noun)
  | Rho (Row' tm q)
  deriving (Functor, Foldable, Traversable)
 
-deriving instance Eq (tm Chk Noun) => Eq (SType tm)
-deriving instance Show (tm Chk Noun) => Show (SType tm)
+deriving instance Eq (tm Chk Noun) => Eq (SType' tm)
+deriving instance Show (tm Chk Noun) => Show (SType' tm)
 
-copyable :: SType' tm q -> Bool
+copyable :: SType'' tm q -> Bool
 copyable = null
 
 data VType' tm

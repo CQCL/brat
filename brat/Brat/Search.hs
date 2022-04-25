@@ -24,7 +24,7 @@ tokenValues fc (Vector ty (Simple (Num n))) = Vec <$> (replicate n . WC fc <$> t
 tokenValues fc (Vector _ _) = [] -- not enough info
 tokenValues fc (K ss ts) = []
  where
-  aux :: SType Term -> [Term Chk Noun]
+  aux :: SType -> [Term Chk Noun]
   aux (Q q) = []
   aux Bit = tokenValues fc (SimpleTy Boolean)
   aux (Of (Q q) n) = []

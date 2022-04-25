@@ -68,7 +68,7 @@ instance Combine [(Src, VType)] where
     pure [((node, "fun"), C ((ss <> us) :-> (ts <> vs)))]
   combine a b = pure $ a <> b
 
-instance Combine [(Src, SType Term)] where
+instance Combine [(Src, SType)] where
   combine a b = pure $ a <> b
 
 instance Combine () where
@@ -80,10 +80,10 @@ data Mode = Brat | Kernel deriving (Eq, Show)
 
 type family ValueType (m :: Mode) where
   ValueType Brat = VType
-  ValueType Kernel = SType Term
+  ValueType Kernel = SType
 
 type VEnv = [(UserName, [(Src, VType)])]
-type KEnv = M.Map UserName (Quantity, (Src, SType Term))
+type KEnv = M.Map UserName (Quantity, (Src, SType))
 
 data TypedHole
   = NBHole Name FC [String] (Connectors Brat Chk Noun)
@@ -122,7 +122,7 @@ data CheckingSig ty where
   LogHole :: TypedHole -> CheckingSig ()
   AskFC   :: CheckingSig FC
   VLup    :: UserName -> CheckingSig (Maybe [(Src, VType)])
-  KLup    :: UserName -> CheckingSig (Maybe (Src, SType Term))
+  KLup    :: UserName -> CheckingSig (Maybe (Src, SType))
   Node    :: Node -> CheckingSig ()
   Wire    :: Wire -> CheckingSig ()
   Decls   :: CheckingSig [Decl]
@@ -173,7 +173,7 @@ vlup s = do
       fc <- req AskFC
       req $ Throw $ Err (Just fc) Nothing $ VarNotFound (show s)
 
-lookupAndUse :: UserName -> KEnv -> Either Error (Maybe ((Src, SType Term), KEnv))
+lookupAndUse :: UserName -> KEnv -> Either Error (Maybe ((Src, SType), KEnv))
 lookupAndUse x kenv = case M.lookup x kenv of
    Nothing -> Right Nothing
    Just (q, rest) -> case qpred q of
@@ -236,7 +236,7 @@ next str th ins outs = do
   () <- req (Node (BratNode this th ins outs))
   pure this
 
-knext :: String -> Thing -> [(Port, SType Term)] -> [(Port, SType Term)] -> Checking Name
+knext :: String -> Thing -> [(Port, SType)] -> [(Port, SType)] -> Checking Name
 knext str th ins outs = do
   this <- req (Fresh str)
   () <- req (Node (KernelNode this th ins outs))
@@ -253,7 +253,7 @@ solder this ((src, ty):srcs) ((port, ty'):ins) = do
   solder this srcs ins
 solder _ _ _ = fail "Not enough inputs"
 
-ksolder :: Name -> [(Src, SType Term)] -> [(Port, SType Term)] -> Checking [(Src, SType Term)]
+ksolder :: Name -> [(Src, SType)] -> [(Port, SType)] -> Checking [(Src, SType)]
 ksolder _ tys [] = pure tys
 ksolder this ((src, ty):srcs) ((port, ty'):ins) = do
   unless (ty == ty') (fail $ "soldering unequal types: " ++ show ty ++ " and " ++ show ty')
@@ -655,7 +655,7 @@ combineDisjointKEnvs l r =
       let e = TypeErr $ "Variable(s) defined twice: " ++ (intercalate "," $ map show $ S.toList commonKeys)
       req $ Throw $ Err (Just fc) Nothing e
 
-kabstractAll :: [(Src, SType Term)]
+kabstractAll :: [(Src, SType)]
              -> Abstractor
              -> Checking KEnv
 kabstractAll stuff binder = do
@@ -663,10 +663,10 @@ kabstractAll stuff binder = do
   ensureEmpty "unders after kabstract" unders
   pure venv
 
-kabstract :: [(Src, SType Term)]
+kabstract :: [(Src, SType)]
           -> Abstractor
           -> Checking (KEnv -- Local env for checking body of lambda
-                      ,[(Src, SType Term)] -- rightovers
+                      ,[(Src, SType)] -- rightovers
                       )
 kabstract [] (Bind x) = fail $ "abstractor: no wires available to bind to " ++ show x
 kabstract (input@(_, ty):inputs) (Bind x)
@@ -694,7 +694,7 @@ kabstract ((_, Of ty n):inputs) (VecLit xs) = do
 
 kabstract (input:inputs) (Pat pat) = checkPat input pat
  where
-  checkPat :: (Src, SType Term) -> Pattern Abstractor -> Checking (KEnv, [(Src, SType Term)])
+  checkPat :: (Src, SType) -> Pattern Abstractor -> Checking (KEnv, [(Src, SType)])
   checkPat (_, Of _ n) PNil = evalNatSoft n >>= \case
     Right 0 -> pure (M.empty, inputs)
     -- If we can't work out what the size is, it might be 0
@@ -774,26 +774,12 @@ kcheck' (binder :\: body) (overs, unders) = do
 kcheck' (Pull ports t) (overs, unders) = do
   unders <- pullPorts ports unders
   kcheck t (overs, unders)
-{-
-kcheck'  (t ::: outs) (overs, ())= do
-  (unders, dangling) <- mkIds outs
-  ((), (overs, [])) <- kcheck t (overs, unders)
-  pure (dangling, (overs, ()))
- where
-  mkIds :: [Output] -> Checking ([(Tgt, SType)] -- Hungry wires
-                                ,[(Src, SType)]) -- Dangling wires
-  mkIds [] = pure ([], [])
-  mkIds ((port, ty):outs) = do
-    node <- next "id" Id [(port, ty)] [(port, ty)]
-    (hungry, dangling) <- mkIds outs
-    pure (((node, port), ty):hungry, ((node, port), ty):dangling)
--}
 kcheck' (Emb t) (overs, unders) = do
   (outs, (overs, ())) <- kcheck t (overs, ())
   unders <- kcheckOutputs unders outs
   pure ((), (overs, unders))
  where
-  kcheckOutputs :: [(Tgt, SType Term)] -> [(Src, SType Term)] -> Checking [(Tgt, SType Term)]
+  kcheckOutputs :: [(Tgt, SType)] -> [(Src, SType)] -> Checking [(Tgt, SType)]
   kcheckOutputs tys [] = pure tys
   kcheckOutputs ((tgt, ty):tys) ((src, ty'):outs)
    | ty == ty' = wire (src, Left ty, tgt) *> kcheckOutputs tys outs
@@ -886,7 +872,7 @@ kcheck' (Vec elems) ((), (_, Of ty n):unders) = do
                                                    ]
     Right v -> fail $ unwords ["Trying to reduce", show n, "but got", show v]
  where
-  aux :: [(Src, SType Term)] -> WC (Term Chk Noun) -> Checking ()
+  aux :: [(Src, SType)] -> WC (Term Chk Noun) -> Checking ()
   aux ty tm = do
     ((), ()) <- noUnders (kcheck tm ((), ty))
     pure ()

@@ -12,6 +12,7 @@ import Data.Kind (Type)
 import Data.List (intercalate)
 
 type VType = VType' Term
+type SType = SType' Term
 
 type Input = Input' Term
 type Output = Output' Term

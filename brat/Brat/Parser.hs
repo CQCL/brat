@@ -421,7 +421,7 @@ vtype' ps = try (round vty) <|> vty
 row :: Parser (Row Raw)
 row = R <$> (nameAnon [0..] <$> rowElem `sepBy` void (try $ spaced comma))
  where
-  nameAnon :: [Int] -> [(Maybe Port, SType Raw)] -> [(Port, SType Raw)]
+  nameAnon :: [Int] -> [(Maybe Port, SType' Raw)] -> [(Port, SType' Raw)]
   nameAnon _ [] = []
   nameAnon is ((Just p, ty):row) = (p, ty) : nameAnon is row
   nameAnon (i:is) ((Nothing, ty):row) = ('_':show i, ty) : nameAnon is row
@@ -433,14 +433,14 @@ row = R <$> (nameAnon [0..] <$> rowElem `sepBy` void (try $ spaced comma))
     ty <- stype
     pure $ (Just p, ty)
 
-stype :: Parser (SType Raw)
+stype :: Parser (SType' Raw)
 stype = try (Rho <$> square row)
         <|> try vec
         <|> match (K KQubit) $> Q Qubit
         <|> match (K KMoney) $> Q Money
         <|> match (K KBool)  $> Bit
  where
-  vec :: Parser (SType Raw)
+  vec :: Parser (SType' Raw)
   vec = do match (K KVec)
            (ty, n) <- round $ do
              ty <- stype

@@ -146,7 +146,7 @@ desugarErr = dumbErr . DesugarErr
 desugarVTy :: RawVType -> Desugar VType
 desugarVTy (RK ss ts) = K <$> (desugarRow ss) <*> (desugarRow ts)
  where
-  desugarSType :: SType Raw -> Desugar (SType Term)
+  desugarSType :: SType' Raw -> Desugar (SType)
   desugarSType (Q q) = pure $ Q q
   desugarSType Bit = pure Bit
   desugarSType (Of sty tm) = Of <$> desugarSType sty <*> desugar' tm
