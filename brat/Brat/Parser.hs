@@ -442,11 +442,12 @@ stype = try (Rho <$> square row)
  where
   vec :: Parser (SType Raw)
   vec = do match (K KVec)
-           space
-           ty <- stype
-           space
-           n <- cnoun
-           pure $ Of ty (unWC n)
+           (ty, n) <- round $ do
+             ty <- stype
+             spaced (match Comma)
+             n <- unWC <$> cnoun
+             pure (ty, n)
+           pure $ Of ty n
 
 
 ctype :: Parser RawCType

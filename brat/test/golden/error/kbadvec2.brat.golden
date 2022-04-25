@@ -1,0 +1,3 @@
+Error in triple@FC {start = Pos {line = 2, col = 17}, end = Pos {line = 2, col = 20}}:
+  Type error: Won't kcheck nil
+
