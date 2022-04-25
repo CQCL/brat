@@ -1,8 +1,31 @@
 {-# LANGUAGE FlexibleContexts, UndecidableInstances #-}
 {-# LANGUAGE RankNTypes, QuantifiedConstraints #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE PatternSynonyms #-}
 
-module Brat.Syntax.Common where
+module Brat.Syntax.Common (Port,
+                           Row,
+                           -- constructors for Quantum (type could be exported if required):
+                           pattern Qubit, pattern Money,
+                           -- constructor for Row (do not export Row'):
+                           pattern R,
+                           SType,
+                           -- constructors for SType (do not export SType'):
+                           pattern Q, pattern Bit, pattern Of, pattern Rho,
+                           copyable,
+                           VType'(..),
+                           Dir(..),
+                           Kind(..),
+                           SimpleTerm(..),
+                           SimpleType(..),
+                           CType'(..),
+                           pattern Extern, pattern Local, -- No reason not to export Locality if required
+                           Decl'(..),
+                           Slice(..),
+                           Runtime(RtLocal), -- No reason not to export others if required
+                           Pattern(..),
+                           Abstractor(..),
+                           Clause(..)) where
 
 import Brat.FC
 
@@ -13,11 +36,12 @@ import Data.Kind (Type)
 type Port = String
 
 data Quantum = Qubit | Money deriving (Eq, Show)
-newtype Row tm q = R [(Port, SType' tm q)] deriving (Functor, Foldable, Traversable)
+newtype Row' tm q = R [(Port, SType' tm q)] deriving (Functor, Foldable, Traversable)
+type Row tm = Row' tm Quantum
 
-deriving instance Show (SType' tm q) => Show (Row tm q)
+deriving instance Show (SType' tm q) => Show (Row' tm q)
 
-instance Eq (SType' tm q) => Eq (Row tm q) where
+instance Eq (SType' tm q) => Eq (Row' tm q) where
   (R r) == (R r') = (snd <$> r) == (snd <$> r')
 
 type SType tm = SType' tm Quantum
@@ -26,11 +50,11 @@ data SType' tm q
  = Q q
  | Bit
  | Of (SType' tm q) (tm Chk Noun)
- | Rho (Row tm q)
+ | Rho (Row' tm q)
  deriving (Functor, Foldable, Traversable)
 
-deriving instance (Eq q, Eq (tm Chk Noun)) => Eq (SType' tm q)
-deriving instance (Show q, Show (tm Chk Noun)) => Show (SType' tm q)
+deriving instance Eq (tm Chk Noun) => Eq (SType tm)
+deriving instance Show (tm Chk Noun) => Show (SType tm)
 
 copyable :: SType' tm q -> Bool
 copyable = null
@@ -43,7 +67,7 @@ data VType' tm
   | Vector (VType' tm) (tm Chk Noun)
   -- Thinning from wee end to big end
   | tm Chk Noun :<<<: tm Chk Noun
-  | K (Row tm Quantum) (Row tm Quantum)
+  | K (Row tm) (Row tm)
   | Option (VType' tm)
 
 deriving instance Eq (tm Chk Noun) => Eq (VType' tm)

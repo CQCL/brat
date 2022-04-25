@@ -418,7 +418,7 @@ vtype' ps = try (round vty) <|> vty
     big <- cnoun <?> "big end"
     pure $ RThinning wee big
 
-row :: Parser (Row Raw Quantum)
+row :: Parser (Row Raw)
 row = R <$> (nameAnon [0..] <$> rowElem `sepBy` void (try $ spaced comma))
  where
   nameAnon :: [Int] -> [(Maybe Port, SType Raw)] -> [(Port, SType Raw)]

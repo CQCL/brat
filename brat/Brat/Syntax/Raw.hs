@@ -33,7 +33,7 @@ data RawVType
   | RTypeVar Int
   | RVector RawVType (WC (Raw Chk Noun))
   | RThinning (WC (Raw Chk Noun)) (WC (Raw Chk Noun))
-  | RK (Row Raw Quantum) (Row Raw Quantum)
+  | RK (Row Raw) (Row Raw)
   | ROption RawVType
   deriving (Eq, Show)
 
@@ -152,7 +152,7 @@ desugarVTy (RK ss ts) = K <$> (desugarRow ss) <*> (desugarRow ts)
   desugarSType (Of sty tm) = Of <$> desugarSType sty <*> desugar' tm
   desugarSType (Rho row) = Rho <$> desugarRow row
 
-  desugarRow :: Row Raw Quantum -> Desugar (Row Term Quantum)
+  desugarRow :: Row Raw -> Desugar (Row Term)
   desugarRow (R r) = R <$> mapM (traverse desugarSType) r
 
 desugarVTy (RC raw) = C <$> desugarCTy raw

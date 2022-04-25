@@ -75,7 +75,7 @@ data Circuit
             } deriving Show
 
 process :: Graph' Term
-        -> (Row Term Quantum, Row Term Quantum)
+        -> (Row Term, Row Term)
         -> Circuit
 process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
                              bits  = max (count countB ins) (count countB outs)
@@ -86,10 +86,10 @@ process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
                                      , commands = trace ("graph: " ++show tm) (fromJust (smth tm))
                                      }
  where
-  count :: (SType' Term Quantum -> Int) -> Row Term Quantum -> Int
+  count :: (SType Term -> Int) -> Row Term -> Int
   count f (R r) = sum $ fmap (f . snd) r
 
-  countQ :: SType' Term Quantum -> Int
+  countQ :: SType Term -> Int
   countQ (Q _) = 1
   countQ Bit = 0
   -- Absolute hack
@@ -97,7 +97,7 @@ process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
                                    | otherwise = n
   countQ (Rho r) = count countQ r
 
-  countB :: SType' Term Quantum -> Int
+  countB :: SType Term -> Int
   countB (Q _) = 0
   countB Bit = 1
   -- Absolute hack
@@ -180,7 +180,7 @@ circuit2Tierkreis Circuit{..} = defMessage & G.map .~ m
                   defMessage & G.maybe'struct .- struct
 
 compileCircuit :: Graph' Term
-               -> (Row Term Quantum, Row Term Quantum)
+               -> (Row Term, Row Term)
                -> G.Value
 compileCircuit tm tys = defMessage & G.maybe'struct .- (circuit2Tierkreis $ process tm tys)
 
