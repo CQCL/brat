@@ -71,7 +71,6 @@ data Raw :: Dir -> Kind -> Type where
   RVar      :: UserName -> Raw Syn Noun
   (::$::)   :: WC (Raw Syn Noun) -> WC (Raw Chk Noun) -> Raw Syn Noun -- Eval with ChkRaw n argument
   (:::::)   :: WC (Raw Chk k) -> [RawIO] -> Raw Syn k
-  RDo       :: WC (Raw Syn Noun) -> Raw Syn Verb
   (::-::)   :: WC (Raw Syn k) -> WC (Raw d Verb) -> Raw d k -- vertical juxtaposition (diagrammatic composition)
   (::\::)   :: WC Abstractor -> WC (Raw d Noun) -> Raw d Verb
   RVec      :: [WC (Raw Chk Noun)] -> Raw Chk Noun
@@ -102,7 +101,6 @@ instance Show (Raw d k) where
   show (RVar x) = show x
   show (fun ::$:: arg) = show fun ++ ('(' : show arg ++ ")")
   show (tm ::::: ty) = show tm ++ " :: " ++ show ty
-  show (RDo f) = show f ++ "!"
   show (a ::-:: b) = show a ++ "; " ++ show b
   show (xs ::\:: bod) = show xs ++ " -> " ++ show bod
   show (RVec xs) = '[' : intercalate ", " (show <$> xs) ++ "]"
@@ -217,7 +215,6 @@ desugar' (tm ::::: outputs) = do
   tm <- desugar tm
   ty <- desugarIO outputs
   pure (tm ::: ty)
-desugar' (RDo noun) = Do <$> desugar noun
 desugar' tm@(syn ::-:: verb) = (:-:) <$> desugar syn <*> desugar verb
 {-
   tys <- nsynth (unWC syn)
@@ -235,35 +232,6 @@ desugar' (RPattern x) = Pattern <$> traverse desugarPattern x
   desugarPattern p = traverse (traverse desugar') p
 desugar' (RLet abs thing body) = Let abs <$> desugar thing <*> desugar body
 desugar' x = throwError . desugarErr $ "desugar'"  ++ show x
-{-
-nsynth :: Raw Syn Noun -> Desugar [VType]
-nsynth (RLet _ _) = undefined
-nsynth (l ::|:: r) = (++) <$> nsynth (unWC l) <*> nsynth (unWC r)
-nsynth (RVar name) = do (venv, _, _) <- ask
-                           let (Just ty) = lookupBy ((==name).fnName) fnSig venv
-                           io <- desugarIO ty
-                           pure (snd <$> io)
-nsynth (fun ::$:: _) = do [C (_ :-> ts)] <- nsynth (unWC fun)
-                          pure (snd <$> ts)
-nsynth (_ ::::: ty) = fmap snd <$> desugarIO ty
-nsynth (_ ::-:: bot) = do (_ :-> ts) <- vsynth (unWC bot)
-                          pure (snd <$> ts)
-nsynth t@(RThin _) = throwError $ Err Nothing Nothing (Unimplemented "nsynth" [show t])
-
-vsynth :: Raw Syn Verb -> Desugar CType
-vsynth t@(RLet _ _) = throwError $ Err Nothing Nothing (Unimplemented "vsynth" [show t])
-vsynth (l ::|:: r)  = do (ss :-> ts) <- vsynth (unWC l)
-                         (us :-> vs) <- vsynth (unWC r)
-                         pure $ (ss ++ us) :-> (ts ++ vs)
-vsynth (_ ::::: ty) = ([] :-> ) <$> desugarIO ty
-vsynth (RDo n) = do [C cty] <- nsynth (unWC n)
-                    pure cty
-vsynth (top ::-:: bot) = do (ss :-> _ ) <- vsynth (unWC top)
-                            (_  :-> ts) <- vsynth (unWC bot)
-                            pure (ss :-> ts)
-vsynth (_ ::\:: body) = do [C cty] <- nsynth (unWC body)
-                           pure cty
--}
 
 desugarNClause :: Clause Raw Noun -> Desugar (Clause Term Noun)
 desugarNClause (ThunkOf clause) = ThunkOf <$> traverse desugarVClause clause
@@ -309,6 +277,7 @@ abstractVType _ _ ty@(RTypeVar _) = ty
 abstractVType x n (RVector ty size) = RVector (abstractVType x n ty) size
 abstractVType _ _ (RThinning a b) = RThinning a b
 abstractVType x n (RK r r') = RK r r'
+abstractVType _ _ (ROption ty) = ROption ty
 
 instantiateVType :: Int -> RawVType -> RawVType -> RawVType
 instantiateVType n to (RC ctype) = RC (fmap (instantiateVType n to) <$> ctype)
@@ -324,6 +293,7 @@ instantiateVType n to ty@(RTypeVar m) | n == m = to
 instantiateVType n to (RVector ty m) = RVector (instantiateVType n to ty) m
 instantiateVType _ _  (RThinning a b) = RThinning a b
 instantiateVType n to (RK r r') = RK r r'
+instantiateVType n to (ROption ty) = ROption $ instantiateVType n to ty
 
 {-
 abstractTerm :: Abstractor -> Term d k -> Term d k

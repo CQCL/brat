@@ -1,14 +1,13 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 module Brat.Checker (check
-                    ,pp
                     ,run
                     ,VEnv
                     ,Checking
                     ,Connectors
                     ,Graph
                     ,Mode(..)
-                    ,Node(..)
+                    ,Node
                     ,CheckingSig(..)
                     ,checkClauses
                     ,TypedHole(..)
@@ -76,7 +75,7 @@ instance Combine () where
 
 type Connectors (m :: Mode) (d :: Dir) (k :: Kind) = (Overs m k, Unders m d)
 
-data Mode = Brat | Kernel deriving (Eq, Show)
+data Mode = Brat | Kernel
 
 type family ValueType (m :: Mode) where
   ValueType Brat = VType
@@ -92,9 +91,6 @@ data TypedHole
   | VKHole Name FC (Connectors Kernel Chk Verb)
   deriving (Eq, Show)
 
-newtype Barf a = Barf { runBarf :: Either Error a }
- deriving (Applicative, Functor, Monad, Show)
-
 err :: String -> Checking a
 err msg = do
   fc <- req AskFC
@@ -104,20 +100,13 @@ showRow :: Show ty => [(Src, ty)] -> String
 showRow xs = intercalate ", " [ '(':p ++ " :: " ++ show ty ++ ")"
                               | ((_, p), ty) <- xs]
 
-
-
-instance MonadFail Barf where
-  fail s = Barf . Left . Err Nothing Nothing $ TypeErr s
-
 data Context = Ctx { venv :: VEnv
                    , decls :: [Decl]
                    , typeFC :: FC
-                   , stack :: [Term Syn Noun]
-                   } deriving Show
+                   }
 
 data CheckingSig ty where
   Fresh   :: String -> CheckingSig Name
-  Split   :: String -> CheckingSig Namespace
   Throw   :: Error  -> CheckingSig a
   LogHole :: TypedHole -> CheckingSig ()
   AskFC   :: CheckingSig FC
@@ -129,7 +118,7 @@ data CheckingSig ty where
   KDone   :: CheckingSig ()
   AskVEnv :: CheckingSig VEnv
 
-data Quantity = None | One | Tons deriving (Eq, Show)
+data Quantity = None | One | Tons
 
 qpred :: Quantity -> Maybe Quantity
 qpred None = Nothing
@@ -142,6 +131,22 @@ ensureEmpty str xs = do
   fc <- req AskFC
   let msg = InternalError $ "Expected empty " ++ str ++ ", got:\n  " ++ showRow xs
   req $ Throw (Err (Just fc) Nothing msg)
+
+-- Run a type-checking computation, and ensure that what comes back is a classical thunk
+-- TODO: this should be able to work on kernels too
+onlyThunk :: Checking (Outputs Brat Syn, Connectors Brat Syn Noun)
+          -> Checking (Src, [Input], [Output])
+onlyThunk m = do
+  fc <- req AskFC
+  (outs, ((), ())) <- m
+  let tys = [ (p, ty) | ((_, p), ty) <- outs ]
+  src <- case outs of
+           (((src, _), _):_) -> pure src
+           [] -> req $ Throw (Err (Just fc) Nothing (InternalError "Expected a thunk, but found nothing!"))
+  case merge tys of
+    [(port, C (ss :-> ts))] -> pure ((src,port), ss, ts)
+    _ -> let msg = ExpectedThunk (showRow outs)
+         in  req $ Throw (Err (Just fc) Nothing msg)
 
 noUnders m = do
   (outs, (overs, unders)) <- m
@@ -200,15 +205,13 @@ localKVar env (Req r k) = Req r (localKVar env . k)
 handler :: Free CheckingSig v
         -> Context
         -> Namespace
-        -> Barf (v,([TypedHole],Graph),Namespace)
+        -> Either Error (v,([TypedHole],Graph),Namespace)
 handler (Ret v) _ ns = return (v, mempty, ns)
 handler (Req s k) ctx ns
   = case s of
       Fresh str -> let (name, root) = fresh str ns in
                      handler (k name) ctx root
-      Split str -> let (newRoot, oldRoot) = split str ns in
-                     handler (k newRoot) ctx oldRoot
-      Throw err -> Barf $ Left err
+      Throw err -> Left err
       LogHole hole -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
                          return (v,(hole:holes,g),ns)
       AskFC -> handler (k (typeFC ctx)) ctx ns
@@ -245,22 +248,6 @@ knext str th ins outs = do
 wire :: Wire -> Checking ()
 wire w = req $ Wire w
 
-solder :: Name -> [(Src, VType)] -> [Input] -> Checking [(Src, VType)]
-solder _ tys [] = pure tys
-solder this ((src, ty):srcs) ((port, ty'):ins) = do
-  unless (ty == ty') (fail $ "soldering unequal types: " ++ show ty ++ " and " ++ show ty')
-  wire (src, Right ty, (this, port))
-  solder this srcs ins
-solder _ _ _ = fail "Not enough inputs"
-
-ksolder :: Name -> [(Src, SType)] -> [(Port, SType)] -> Checking [(Src, SType)]
-ksolder _ tys [] = pure tys
-ksolder this ((src, ty):srcs) ((port, ty'):ins) = do
-  unless (ty == ty') (fail $ "soldering unequal types: " ++ show ty ++ " and " ++ show ty')
-  wire (src, Left ty, (this, port))
-  ksolder this srcs ins
-ksolder _ _ _ = fail "Not enough inputs"
-
 ceval :: Term Chk k -> Checking (Either Error Value)
 ceval tm = do env <- req Decls
               fc <- req AskFC
@@ -270,6 +257,9 @@ checkClauses :: Clause Term Verb
              -> Connectors Brat Chk Verb
              -> Checking (Outputs Brat Chk
                          ,Connectors Brat Chk Verb)
+checkClauses Undefined _ = do
+  fc <- req AskFC
+  req $ Throw (Err (Just fc) Nothing (InternalError "Checking undefined clause"))
 checkClauses (NoLhs verb) conn = check verb conn
 checkClauses (Clauses cs) conn = do
   (res :| results) <- mapM (\c -> checkClause c conn) cs
@@ -281,10 +271,10 @@ checkClauses (Clauses cs) conn = do
               -> Connectors Brat Chk Verb
               -> Checking (Outputs Brat Chk
                           ,Connectors Brat Chk Verb)
-  checkClause (lhs, rhs)
-   | lfc <- fcOf lhs
-   , rfc <- fcOf rhs = check (WC (FC (start lfc) (end rfc)) (lhs :\: rhs))
-   | otherwise = check' (lhs :\: rhs)
+  checkClause (lhs, rhs) =
+   let lfc = fcOf lhs
+       rfc = fcOf rhs
+   in  check (WC (FC (start lfc) (end rfc)) (lhs :\: rhs))
 
 check :: Combine (Outputs Brat d)
       => WC (Term d k)
@@ -370,13 +360,8 @@ check' (Th t) (overs, (tgt, ty@(K (R ss) (R ts))):unders) = do
 check' (Var x) ((), ()) = do
   output <- vlup x
   pure (output, ((), ()))
-check' (Do t) (overs, ()) = do
-  ([(src, C (ss :-> ts))], ((), ())) <- check t ((), ())
-  this <- next "eval" (Eval src) ss ts
-  overs <- solder this overs ss
-  pure ([ ((this, port), ty) | (port, ty) <- ts], (overs, ()))
 check' (fun :$: arg) ((), ()) = do
-  ([(src, C (ss :-> ts))], ((), ())) <- check fun ((), ())
+  (src, ss, ts) <- onlyThunk $ check fun ((), ())
   evalNode <- next "eval" (Eval src) ss ts
   ((), ()) <- noUnders $ check arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
   pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
@@ -580,7 +565,10 @@ abstract :: [(Src, VType)]
          -> Checking (VEnv -- Local env for checking body of lambda
                      ,[(Src, VType)] -- rightovers
                      )
-abstract [] (Bind x) = fail $ "abstractor: no wires available to bind to " ++ show x
+abstract [] abs = do
+  fc <- req AskFC
+  let msg = NothingToBind (show abs)
+  req $ Throw (Err (Just fc) Nothing msg)
 abstract (input:inputs) (Bind x) = pure ([(plain x, [input])], inputs)
 abstract inputs (x :||: y) = do
   (venv, inputs)  <- abstract inputs x
@@ -668,7 +656,10 @@ kabstract :: [(Src, SType)]
           -> Checking (KEnv -- Local env for checking body of lambda
                       ,[(Src, SType)] -- rightovers
                       )
-kabstract [] (Bind x) = fail $ "abstractor: no wires available to bind to " ++ show x
+kabstract [] abs = do
+  fc <- req AskFC
+  let msg = NothingToBind (show abs)
+  req $ Throw (Err (Just fc) Nothing msg)
 kabstract (input@(_, ty):inputs) (Bind x)
   = let q = if copyable ty then Tons else One
     in  pure (M.singleton (plain x) (q, input), inputs)
@@ -713,6 +704,10 @@ kabstract (input:inputs) (Pat pat) = checkPat input pat
     fc <- req AskFC
     let msg = "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty
     req $ Throw $ Err (Just fc) Nothing $ PattErr msg
+kabstract tys abs = do
+  fc <- req AskFC
+  let msg = "Couldn't bind " ++ show abs ++ " to type " ++ show tys
+  req $ Throw $ Err (Just fc) Nothing $ PattErr msg
 
 pullPorts :: [Port] -> [((Name, Port), ty)] -> Checking [((Name, Port), ty)]
 pullPorts [] types = pure types
@@ -727,22 +722,14 @@ pullPorts (p:ports) types = do
    | p == p' = pure (x, xs)
    | otherwise = (id *** (x:)) <$> pull1Port p xs
 
-pp :: Show a => (a, Graph) -> String
-pp (outputs, (nodes, wires))
-  = unlines $ concat ["nodes:":(show<$>nodes)
-                     ,"wires:":(show <$> wires)
-                     ,"outputs:":[show outputs]
-                     ]
-
 run :: (VEnv, [Decl], FC)
     -> Checking a
     -> Either Error (a, ([TypedHole], Graph))
 run (ve, ds, fc) m = let ctx = Ctx { venv = ve
                                    , decls = ds
                                    , typeFC = fc
-                                   , stack = []
                                    } in
-                       runBarf $ (\(a,b,_) -> (a,b)) <$> handler m ctx root
+                       (\(a,b,_) -> (a,b)) <$> handler m ctx root
 
 
 kcheck :: Combine (Outputs Kernel d)
@@ -788,15 +775,6 @@ kcheck' (Th _) _ = fail "no higher order signals! (Th)"
 kcheck' (Var x) ((), ()) = req (KLup x) >>= \case
   Just output -> pure ([output], ((), ()))
   Nothing -> req AskFC >>= \fc -> req $ Throw $ Err (Just fc) Nothing $ KVarNotFound (show x)
-kcheck' (Do x) (overs, ()) | (n :|: n') <- unWC x = do
-  let lfc = fcOf n
-  let rfc = fcOf n'
-  kcheck' ((WC lfc (Do n)) :|: (WC rfc (Do n'))) (overs, ())
-kcheck' (Do t) (overs, ()) = do
-  ([(src, K (R ss) (R ts))], ((), ())) <- check t ((), ())
-  this <- knext "eval" (Eval src) ss ts
-  overs <- ksolder this overs ss
-  pure ([ ((this, port), ty) | (port, ty) <- ts], (overs, ()))
 -- TODO: find a way to make check perceive this as a function
 -- Check brat functions and arguments assuming they'll produce a kernel
 kcheck' (fun :$: arg) ((), ())
@@ -806,6 +784,7 @@ kcheck' (fun :$: arg) ((), ())
        Just [(src, (K (R ss) (R ts)))] -> trace "kernel" $ kernel src ss ts
        -- The following pattern avoids crashing and produces better error messages for ill-typed programs (only)
        Just [(src, (C (ss :-> ts)))] -> function src f ss ts
+       Just _ -> err "Left of an application isn't function-like"
        Nothing -> req AskFC >>= \fc -> req $ Throw $ Err (Just fc) Nothing $ VarNotFound (show f)
 
 -- Check applications of kernels

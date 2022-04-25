@@ -52,7 +52,6 @@ data Term :: Dir -> Kind -> Type where
   (:$:)    :: WC (Term Syn Noun) -> WC (Term Chk Noun) -> Term Syn Noun
   -- TODO: Make it possible for Output to be (Port, SType) when using this in kernels
   (:::)    :: WC (Term Chk k) -> [Output] -> Term Syn k
-  Do       :: WC (Term Syn Noun) -> Term Syn Verb
   -- vertical juxtaposition (diagrammatic composition)
   (:-:)    :: WC (Term Syn k) -> WC (Term d Verb) -> Term d k
   (:\:)    :: WC Abstractor -> WC (Term d Noun) -> Term d Verb
@@ -86,13 +85,13 @@ instance Show (Term d k) where
   show (Bound i) = '^':show i
   show (fun :$: arg) = show fun ++ ('(' : show arg ++ ")")
   show (tm ::: ty) = show tm ++ " :: " ++ show ty
-  show (Do f) = show f ++ "!"
   show (a :-: b) = show a ++ "; " ++ show b
   show (xs :\: bod) = show xs ++ " -> " ++ show bod
   show (Vec xs) = '[' : intercalate ", " (show <$> xs) ++ "]"
   show (Slice _ slice) = show slice
   show (Select vec th) = show vec ++ "{" ++ show th ++ "}"
   show (Pattern p) = show p
+  show (Thin x) = '~' : show x
 
 expandDecls :: [Decl] -> Term d k -> Term d k
 expandDecls env tm = expand tm
@@ -109,7 +108,6 @@ expandDecls env tm = expand tm
 --  expand (Var x) = lookupBy ((==x) . fnName) fnBody
   expand (fun :$: arg) = (expand <$> fun) :$: (expand <$> arg)
   expand (tm ::: ty) = (expand <$> tm) ::: ty
-  expand (Do f) = Do (expand <$> f)
   expand (a :-: b) = (expand <$> a) :-: (expand <$> b)
   expand (abst :\: body) = abst :\: (expand <$> body)
   expand (Vec xs) = Vec (fmap expand <$> xs)

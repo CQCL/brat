@@ -79,7 +79,7 @@ wireStart ((x, _), _, _) = x
 wireEnd :: Wire' tm -> Name
 wireEnd (_, _, (x, _)) = x
 
-boxSubgraphs :: forall tm. (Eq (tm Chk Noun), Show (tm Chk Noun))
+boxSubgraphs :: forall tm. Eq (tm Chk Noun)
              => Graph' tm
              -> (Graph' tm, [(String, Graph' tm)])
 boxSubgraphs g@(ns,ws) = let subs = fromJust subGraphs

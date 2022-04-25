@@ -21,7 +21,6 @@ data Value
 -- | (Var    :: String -> Term Syn Noun  -- Look up in noun (value) env
 -- | ((:$:)  :: Term Syn Noun -> Term Chk Noun -> Term Syn Noun
 -- | ((:::)  :: Term Chk k -> [Output] -> Term Syn k
--- | (Do     :: Term Syn Noun -> Term Syn Verb
 -- | ((:-:)  :: Term Syn k -> Term d Verb -> Term d k
 -- | ((:\:)  :: Abstractor -> Term d Noun -> Term d Verb
  | VVec [Value]
@@ -49,9 +48,11 @@ class Valuable x where
 
 instance Valuable (Term Chk k) where
   eval = ceval
+  eval' = ceval'
 
 instance Valuable (Term Syn k) where
   eval = seval
+  eval' = seval'
 
 instance Valuable (Pattern (WC (Term Chk Noun))) where
   eval = evalPat
@@ -100,7 +101,6 @@ seval' g (fun :$: arg) = do
   fun <- seval g fun
   arg <- ceval g arg
   apply fun [EApp arg]
-seval' g (Do f) = eval g f
 seval' g (_ :\: body) = eval g body
 seval' _ tm = throwError $ Err Nothing Nothing (Unimplemented "seval" [show tm])
 

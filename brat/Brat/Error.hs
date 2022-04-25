@@ -4,25 +4,25 @@ import Brat.FC
 
 import System.Exit
 
-data ParseError = PE { ugly :: String
-                     , pretty :: String
-                     }
+newtype ParseError = PE { pretty :: String }
+
 instance Show ParseError where
   show pe = pretty pe
 
 data ErrorMsg
  = TypeErr String
  | TypeMismatch String String String
+ | ExpectedThunk String
  | PattErr String
+ | VarNotFound String
+ | KVarNotFound String
+ | NothingToBind String
  | ParseErr ParseError
  | LexErr ParseError
  | DesugarErr String
  | EvalErr String
  | NameClash String
- | VarNotFound String
- | KVarNotFound String
  | MainNotFound
- | PatFail String
  | BadCons String
  -- function, [argument]
  | Unimplemented String [String]
@@ -37,6 +37,11 @@ instance Show ErrorMsg where
               ,"Expected: " ++ exp
               ,"But got:  " ++ act
               ]
+  show (ExpectedThunk row)
+    = unlines ["Expected function to be a thunk, but found:"
+              ,"  " ++ row
+              ]
+  show (NothingToBind x) = "Nothing to bind to: " ++ x
   show (PattErr x) = "Type error in pattern: " ++ x
   show (ParseErr x) = "Parse error " ++ show x
   show (LexErr x) = "Lex error " ++ show x
@@ -46,7 +51,6 @@ instance Show ErrorMsg where
   show (VarNotFound x) = x ++ " not found in (value) environment"
   show (KVarNotFound x) = x ++ " not found in kernel context"
   show MainNotFound = "No function found called \"main\""
-  show (PatFail x) = "Sorry: " ++ x
   show (BadCons x) = "Expected two arguments to `cons` but got: " ++ x
   show (Unimplemented f args) = unwords ("Unimplemented, sorry! --":f:args)
   show (ImportCycle a b) = unwords ["Cycle detected in imports:", a, "is reachable from", b]
@@ -67,9 +71,6 @@ instance Show Error where
 
 addSrc :: String -> Error -> Error
 addSrc name (Err fc _ msg) = Err fc (Just name) msg
-
-instance MonadFail (Either Error) where
-  fail = Left . Err Nothing Nothing . PatFail
 
 eitherIO :: Either Error a -> IO a
 eitherIO (Left e) = die (show e)

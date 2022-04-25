@@ -1,3 +1,4 @@
 Error in go@FC {start = Pos {line = 9, col = 9}, end = Pos {line = 9, col = 18}}:
-  Type error: Pattern match failure in do expression at Brat/Checker.hs:379:3-36
+  Internal error: Expected empty unders, got:
+  (a1 :: Int)
 

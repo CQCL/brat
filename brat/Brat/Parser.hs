@@ -6,6 +6,7 @@ import Brat.Lexer
 import Brat.Syntax.Common hiding (K)
 import Brat.Syntax.Raw
 import Brat.UserName
+import Util (names)
 
 import Control.Monad (guard, void)
 import Data.Bifunctor
@@ -159,7 +160,7 @@ binding = do ps <- many (try $ portPull <* space)
     Token _ Comma -> Just (:||:)
     _ -> Nothing
 
-pat :: Show a => Parser a -> Parser (Pattern a)
+pat :: Parser a -> Parser (Pattern a)
 pat p = try onePlus
       <|> try twoTimes
       <|> try (kmatch KNil $> PNil)
@@ -191,7 +192,7 @@ sverb :: Parser (WC (Raw Syn Verb))
 sverb = verbAndJuxt `chainl1` semicolon
  where
   plainVerb :: Parser (Raw Syn Verb)
-  plainVerb = try func <|> try doNoun
+  plainVerb = try func
 
   verbAndJuxt = (try (letin sverb) <|> withFC plainVerb) `chainl1` (try comma)
 
@@ -201,13 +202,6 @@ sverb = verbAndJuxt `chainl1` semicolon
     spaced $ match Arrow
     body <- snoun
     pure $ xs ::\:: body
-
-doNoun :: Parser (Raw Syn Verb)
-doNoun = do
-  n <- snoun
-  space
-  match (Round [])
-  pure (RDo n)
 
 letin :: Parser (WC (Raw d k)) -> Parser (WC (Raw d k))
 letin p = withFC $ do
@@ -419,12 +413,12 @@ vtype' ps = try (round vty) <|> vty
     pure $ RThinning wee big
 
 row :: Parser (Row Raw)
-row = R <$> (nameAnon [0..] <$> rowElem `sepBy` void (try $ spaced comma))
+row = R <$> (nameAnon names <$> rowElem `sepBy` void (try $ spaced comma))
  where
-  nameAnon :: [Int] -> [(Maybe Port, SType' Raw)] -> [(Port, SType' Raw)]
+  nameAnon :: [String] -> [(Maybe Port, SType' Raw)] -> [(Port, SType' Raw)]
   nameAnon _ [] = []
-  nameAnon is ((Just p, ty):row) = (p, ty) : nameAnon is row
-  nameAnon (i:is) ((Nothing, ty):row) = ('_':show i, ty) : nameAnon is row
+  nameAnon (_:ns) ((Just p, ty):row) = (p, ty) : nameAnon ns row
+  nameAnon (name:ns) ((Nothing, ty):row) = (name, ty) : nameAnon ns row
 
   rowElem = try named <|> ((Nothing,) <$> stype)
   named = do
@@ -527,23 +521,21 @@ go p fname contents = do
   toks <- first fixLexErr (parse lex fname contents)
   first fixParseErr (parse p fname toks)
  where
-  fixLexErr :: (Show e, ShowErrorComponent e)
+  fixLexErr :: ShowErrorComponent e
             => ParseErrorBundle String e -> Error
   fixLexErr er = let prettyErr = errorBundlePretty er
                      -- TODO: return all of the errors
                      e :| _errs = bundleErrors er
                      fc = mkFC (errorOffset e) (bundlePosState er)
-                     uglyErr = unlines . toList $ show <$> bundleErrors er
-                 in  Err (Just fc) (Just fname) $ LexErr (PE uglyErr prettyErr)
+                 in  Err (Just fc) (Just fname) $ LexErr (PE prettyErr)
 
-  fixParseErr :: (Show e, ShowErrorComponent e)
+  fixParseErr :: ShowErrorComponent e
               => ParseErrorBundle [Token] e -> Error
   fixParseErr er = let prettyErr = errorBundlePretty er
                        -- TODO: return all of the errors
                        e :| _errs = bundleErrors er
                        fc = mkFC (errorOffset e) (bundlePosState er)
-                       uglyErr = unlines . toList $ show <$> bundleErrors er
-                   in  Err (Just fc) (Just fname) $ ParseErr (PE uglyErr prettyErr)
+                   in  Err (Just fc) (Just fname) $ ParseErr (PE prettyErr)
 
 
   mkFC :: TraversableStream a => Int -> PosState a -> FC

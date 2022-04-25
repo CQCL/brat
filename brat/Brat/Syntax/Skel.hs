@@ -17,7 +17,6 @@ subTerms (STh a)        = [a]
 subTerms (SPull _ x)    = [x]
 subTerms (SApp f a)     = [f, a]
 subTerms (SAnn x _)     = [x]
-subTerms (SDo f)        = [f]
 subTerms (SComp a b)    = [a, b]
 subTerms (SLam _ body)  = [body]
 subTerms (SVec xs)      = xs
@@ -52,12 +51,14 @@ stripInfo (Var x) = SVar x
 stripInfo (Bound i) = SBound i
 stripInfo (fun :$: arg) = SApp (stripInfo <$> fun) (stripInfo <$> arg)
 stripInfo (tm ::: ty) = SAnn (stripInfo <$> tm) ty
-stripInfo (Do f) = SDo (stripInfo <$> f)
 stripInfo (a :-: b) = SComp (stripInfo <$> a) (stripInfo <$> b)
 stripInfo (xs :\: bod) = SLam xs (stripInfo <$> bod)
 stripInfo (Vec xs) = SVec (fmap stripInfo <$> xs)
 stripInfo (Slice x slice) = SSlice (stripInfo <$> x) (fmap stripInfo <$> slice)
 stripInfo (Select vec th) = SSelect (stripInfo <$> vec) (stripInfo <$> th)
+stripInfo (Let abs x y) = SLet abs (stripInfo <$> x) (stripInfo <$> y)
+stripInfo (Pattern (WC fc p)) = SPattern (WC fc (fmap stripInfo <$> p))
+stripInfo (Thin th) = SThin (stripInfo <$> th)
 
 data Skel where
   SSimple   :: SimpleTerm -> Skel
@@ -71,13 +72,14 @@ data Skel where
   SBound    :: Int -> Skel
   SApp      :: WC Skel -> WC Skel -> Skel
   SAnn      :: WC Skel -> [Output] -> Skel
-  SDo       :: WC Skel -> Skel
   SComp     :: WC Skel -> WC Skel -> Skel
   SLam      :: WC Abstractor -> WC Skel -> Skel
   SVec      :: [WC Skel] -> Skel
   SSlice    :: WC Skel -> Slice (WC Skel) -> Skel
   SSelect   :: WC Skel -> WC Skel -> Skel
   SThin     :: WC Skel -> Skel
+  SLet      :: WC Abstractor -> WC Skel -> WC Skel -> Skel
+  SPattern  :: WC (Pattern (WC Skel)) -> Skel
 
 deriving instance Show Skel
 deriving instance Eq Skel
