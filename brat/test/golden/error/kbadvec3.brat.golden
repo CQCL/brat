@@ -1,3 +1,7 @@
 Error in constNil@FC {start = Pos {line = 2, col = 19}, end = Pos {line = 2, col = 31}}:
-  Type error: Vector is of length 0
+  Expected vector of length 0
+from the type:  Vec(Bool, 0)
+but got vector: cons(1, nil)
+of length (> 0)
+
 

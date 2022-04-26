@@ -1,3 +1,7 @@
 Error in triple@FC {start = Pos {line = 2, col = 17}, end = Pos {line = 2, col = 20}}:
-  Type error: Vector is length 1 but it should be length 3
+  Expected vector of length 3
+from the type:  Vec(Bool, 3)
+but got vector: [「b」]
+of length 1
+
 

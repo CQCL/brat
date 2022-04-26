@@ -54,7 +54,12 @@ data SType'' tm q
  deriving (Functor, Foldable, Traversable)
 
 deriving instance Eq (tm Chk Noun) => Eq (SType' tm)
-deriving instance Show (tm Chk Noun) => Show (SType' tm)
+
+instance (Show q, Show (tm Chk Noun)) => Show (SType'' tm q) where
+  show (Q q) = show q
+  show Bit = "Bool"
+  show (Of ty n) = "Vec(" ++ show ty ++ ", " ++ show n ++ ")"
+  show (Rho (R row)) = intercalate ", " ((\(p, tm) -> p ++ " :: " ++ show tm) <$> row)
 
 copyable :: SType'' tm q -> Bool
 copyable = null

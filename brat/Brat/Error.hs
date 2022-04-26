@@ -17,6 +17,8 @@ data ErrorMsg
  | VarNotFound String
  | KVarNotFound String
  | NothingToBind String
+ -- Expected, type, Actual, term
+ | VecLength Int String String String
  | ParseErr ParseError
  | LexErr ParseError
  | DesugarErr String
@@ -42,6 +44,11 @@ instance Show ErrorMsg where
               ,"  " ++ row
               ]
   show (NothingToBind x) = "Nothing to bind to: " ++ x
+  show (VecLength m ty n tm) = unlines ["Expected vector of length " ++ show m
+                                       ,"from the type:  " ++ ty
+                                       ,"but got vector: " ++ tm
+                                       ,"of length " ++ n
+                                       ]
   show (PattErr x) = "Type error in pattern: " ++ x
   show (ParseErr x) = "Parse error " ++ show x
   show (LexErr x) = "Lex error " ++ show x

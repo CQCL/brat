@@ -131,7 +131,7 @@ instance EnvFor VEnv VType where
     pure (venv ++ venv', inputs)
   abstractPattern ((src, Option ty):inputs) (PSome x) = Just $ abstract ((src, ty):inputs) x
   abstractPattern ((_, Option _):inputs) PNone = Just $ pure ([], inputs)
-  abstractPattern ((_, Vector ty n):inputs) abs = Just $ (,inputs) <$> abstractVecPat (ty, n) abs
+  abstractPattern ((_, vty@(Vector ty n)):inputs) abs = Just $ (,inputs) <$> abstractVecPat (ty, n) vty abs
   abstractPattern _ _ = Nothing
 
   abstractVecLit (_, Vector ty n) abss = abstractVecLitVec (ty, n) abss
@@ -146,26 +146,27 @@ instance EnvFor VEnv VType where
     venv' <- abstractAll [(src, r)] b
     pure (venv ++ venv')
 
-  abstractVecLit _ xs = err $ "Can't bind to Vector Literal " ++ (show xs)
+  abstractVecLit _ xs = err $ PattErr $ "Can't bind to Vector Literal " ++ (show xs)
 
 instance EnvFor KEnv SType where
   singletonEnv x input@(_, ty) =
     let q = if copyable ty then Tons else One
     in M.singleton (plain x) (q, input)
-  abstractPattern ((_, Of ty n):inputs) abs = Just $ (,inputs) <$> abstractVecPat (ty, n) abs
+  abstractPattern ((_, vty@(Of ty n)):inputs) abs = Just $ (,inputs) <$> abstractVecPat (ty, n) vty abs
   abstractPattern _ _ = Nothing
   abstractVecLit ((_, Of ty n)) abss = abstractVecLitVec (ty, n) abss
-  abstractVecLit _ xs = err $ "Can't bind to Vector Literal " ++ (show xs) ++ " in kernel"
+  abstractVecLit _ xs = err $ PattErr $ "Can't bind to Vector Literal " ++ (show xs) ++ " in kernel"
 
 abstractVecPat :: (EnvFor env aType) => (aType, Term Chk Noun)
+               -> aType -- for error message
                -> Pattern Abstractor
                -> Checking env
-abstractVecPat (ty, n) PNil = evalNatSoft n >>= \case
+abstractVecPat (ty, n) vty p@PNil = evalNatSoft n >>= \case
   Right 0 -> pure emptyEnv
   -- If we can't work out what the size is, it might be 0
   Left _  -> pure emptyEnv
-  Right _ -> err "Vector length isn't 0 for pattern `Nil`"
-abstractVecPat (ty, n) (PCons (x :||: xs)) = do
+  Right n -> err $ VecLength n (show vty) "0" (show p)
+abstractVecPat (ty, n) _ (PCons (x :||: xs)) = do
   -- A `cons` pattern on the LHS needs to have exactly two binders
   n <- evalNat n
   let tailTy = makeVec ty (Simple (Num (n - 1)))
@@ -193,10 +194,13 @@ data TypedHole
   | VKHole Name FC (Connectors Kernel Chk Verb)
   deriving (Eq, Show)
 
-err :: String -> Checking a
+err :: ErrorMsg -> Checking a
 err msg = do
   fc <- req AskFC
-  req $ Throw $ Err (Just fc) Nothing $ TypeErr msg
+  req $ Throw $ Err (Just fc) Nothing msg
+
+typeErr :: String -> Checking a
+typeErr = err . TypeErr
 
 showRow :: Show ty => [(Src, ty)] -> String
 showRow xs = intercalate ", " [ '(':p ++ " :: " ++ show ty ++ ")"
@@ -229,26 +233,21 @@ qpred Tons = Just Tons
 
 ensureEmpty :: Show ty => String -> [(Src, ty)] -> Checking ()
 ensureEmpty _ [] = pure ()
-ensureEmpty str xs = do
-  fc <- req AskFC
-  let msg = InternalError $ "Expected empty " ++ str ++ ", got:\n  " ++ showRow xs
-  req $ Throw (Err (Just fc) Nothing msg)
+ensureEmpty str xs = err $ InternalError $ "Expected empty " ++ str ++ ", got:\n  " ++ showRow xs
 
 -- Run a type-checking computation, and ensure that what comes back is a classical thunk
 -- TODO: this should be able to work on kernels too
 onlyThunk :: Checking (Outputs Brat Syn, Connectors Brat Syn Noun)
           -> Checking (Src, [Input], [Output])
 onlyThunk m = do
-  fc <- req AskFC
   (outs, ((), ())) <- m
   let tys = [ (p, ty) | ((_, p), ty) <- outs ]
   src <- case outs of
            (((src, _), _):_) -> pure src
-           [] -> req $ Throw (Err (Just fc) Nothing (InternalError "Expected a thunk, but found nothing!"))
+           [] -> err $ InternalError "Expected a thunk, but found nothing!"
   case merge tys of
     [(port, C (ss :-> ts))] -> pure ((src,port), ss, ts)
-    _ -> let msg = ExpectedThunk (showRow outs)
-         in  req $ Throw (Err (Just fc) Nothing msg)
+    _ -> err $ ExpectedThunk (showRow outs)
 
 noUnders m = do
   (outs, (overs, unders)) <- m
@@ -276,9 +275,7 @@ vlup :: UserName -> Checking [(Src, VType)]
 vlup s = do
   req (VLup s) >>= \case
     Just vty -> pure vty
-    Nothing -> do
-      fc <- req AskFC
-      req $ Throw $ Err (Just fc) Nothing $ VarNotFound (show s)
+    Nothing -> err $ VarNotFound (show s)
 
 lookupAndUse :: UserName -> KEnv -> Either Error (Maybe ((Src, SType), KEnv))
 lookupAndUse x kenv = case M.lookup x kenv of
@@ -291,17 +288,16 @@ localKVar :: KEnv -> Free CheckingSig v -> Free CheckingSig v
 localKVar _   (Ret v) = Ret v
 localKVar env (Req (KLup x) k) = case lookupAndUse x env of
                                    Left err@(Err (Just _) _ _) -> req $ Throw err
-                                   Left (Err Nothing src msg) -> do
-                                     fc <- req AskFC
-                                     req $ Throw (Err (Just fc) src msg)
+                                   Left (Err Nothing _ msg) -> err msg
                                    Right (Just (th, env)) -> localKVar env (k (Just th))
                                    Right Nothing -> Req (KLup x) (localKVar env . k)
 localKVar env (Req KDone k) = case [ x | (x,(One,_)) <- M.assocs env ] of
                                 [] -> (localKVar env . k) ()
-                                xs -> err $ unwords ["Variable(s)"
-                                                    ,intercalate ", " (fmap show xs)
-                                                    ,"haven't been used"
-                                                    ]
+                                xs -> typeErr $
+                                      unwords ["Variable(s)"
+                                              ,intercalate ", " (fmap show xs)
+                                              ,"haven't been used"
+                                              ]
 localKVar env (Req r k) = Req r (localKVar env . k)
 
 handler :: Free CheckingSig v
@@ -333,7 +329,7 @@ type Checking = Free CheckingSig
 
 -- This way we get file contexts when pattern matching fails
 instance {-# OVERLAPPING #-} Fail.MonadFail Checking where
-  fail = err
+  fail = typeErr
 
 next :: String -> Thing -> [Input] -> [Output] -> Checking Name
 next str th ins outs = do
@@ -359,9 +355,7 @@ checkClauses :: Clause Term Verb
              -> Connectors Brat Chk Verb
              -> Checking (Outputs Brat Chk
                          ,Connectors Brat Chk Verb)
-checkClauses Undefined _ = do
-  fc <- req AskFC
-  req $ Throw (Err (Just fc) Nothing (InternalError "Checking undefined clause"))
+checkClauses Undefined _ = err (InternalError "Checking undefined clause")
 checkClauses (NoLhs verb) conn = check verb conn
 checkClauses (Clauses cs) conn = do
   (res :| results) <- mapM (\c -> checkClause c conn) cs
@@ -432,10 +426,9 @@ check' (Emb t) (overs, unders) = do
     checkOutputs top (((src, "fun"), K (R (ss <> us)) (R (ts <> vs))):outs)
   checkOutputs ((tgt, ty):tys) ((src, ty'):outs)
    | ty == ty' = wire (src, Right ty, tgt) *> checkOutputs tys outs
-  checkOutputs tgt src = req AskFC >>= \fc ->
-       let exp = showRow tgt
-           act = showRow src
-       in  req $ Throw $ Err (Just fc) Nothing $ TypeMismatch (show t) exp act
+  checkOutputs tgt src = let exp = showRow tgt
+                             act = showRow src
+                         in  err $ TypeMismatch (show t) exp act
 
 check' (Th t) (overs, (tgt, ty@(C (ss :-> ts))):unders) = do
   srcNode <- next "thunk_source" Source [] ss
@@ -477,7 +470,7 @@ check' (Pair a b) ((), (_, Product s t):unders) = do
   check1 ((unpack, "first"), s) a
   check1 ((unpack, "second"), t) b
   pure ((), ((), unders))
-check' (Vec elems) ((), (_, Vector ty n):unders) = do
+check' (Vec elems) ((), (_, vty@(Vector ty n)):unders) = do
   hypo <- next "nat hypo" Hypo [] []
   fc <- req AskFC
   check1 ((hypo, "ty"), SimpleTy Natural) (WC fc n)
@@ -486,14 +479,10 @@ check' (Vec elems) ((), (_, Vector ty n):unders) = do
   mapM_ (aux [((hypo, "ty"), ty)]) elems
 
   ceval n >>= \case
-    Left (Err _ src msg) -> req AskFC >>= \fc -> req $ Throw $ Err (Just fc) src msg
+    Left err -> req $ Throw err
     Right (VSimple (Num n)) -> if length elems == n
                                then pure ((), ((), unders))
-                               else fail $ unwords ["Vector is length"
-                                                   ,show (length elems)
-                                                   ,"but it should be length"
-                                                   ,show n
-                                                   ]
+                               else err $ VecLength n (show vty) (show $ length elems) (show $ Vec elems)
     Right v -> fail $ unwords ["Trying to reduce", show n, "but got", show v]
  where
   aux :: [(Src, VType)] -> WC (Term Chk Noun) -> Checking ()
@@ -611,15 +600,15 @@ checkRPat (_, List _) PNil = pure ()
 -- two outputs (head and tail), so typecheck it as such with as normal
 checkRPat (tgt, List ty) (PCons b)
   = () <$ noUnders (check b ((), [(tgt, ty), (tgt, List ty)]))
-checkRPat (_, Vector _ n) PNil = do
+checkRPat (_, vty@(Vector _ n)) p@PNil = do
   n <- evalNat n
   if n == 0
     then pure ()
-    else err "Vector length should be 0"
-checkRPat (tgt, Vector ty n) (PCons b) = do
+    else err $ VecLength n (show vty) "0" (show p)
+checkRPat (tgt, vty@(Vector ty n)) (PCons b) = do
   n <- evalNat n
   when (n <= 0)
-    (err $ "Vector is of length " ++ show n)
+    (err $ VecLength n (show vty) "(> 0)" (show (PCons b)))
   noUnders $
     check b ((), [(tgt, ty)
                  ,(tgt, Vector ty (Simple (Num (n - 1))))])
@@ -627,7 +616,7 @@ checkRPat (tgt, Vector ty n) (PCons b) = do
 
 checkRPat (_, Option ty) PNone = pure ()
 checkRPat (tgt, Option ty) (PSome x) = check1 (tgt, ty) x
-checkRPat unders pat = err $ show pat ++ " not of type " ++ show unders
+checkRPat unders pat = typeErr $ show pat ++ " not of type " ++ show unders
 
 check1 :: (Tgt, VType) -> WC (Term Chk Noun) -> Checking ()
 check1 tgt tm = do
@@ -647,12 +636,12 @@ evalNatSoft :: Term Chk Noun -> Checking (Either String Int)
 evalNatSoft tm = ceval tm >>= \case
   Right (VSimple (Num n)) -> pure (Right n)
   Right v -> pure (Left $ unwords ["Trying to reduce", show tm, "but got", show v])
-  Left (Err _ src msg) -> req AskFC >>= \fc -> req $ Throw (Err (Just fc) src msg)
+  Left err -> req $ Throw err
 
 evalNat :: Term Chk Noun -> Checking Int
 evalNat tm = evalNatSoft tm >>= \case
   Right n -> pure n
-  Left er -> err er
+  Left er -> typeErr er
 
 abstractAll :: (EnvFor aEnv aType) => [(Src, aType)]
             -> Abstractor
@@ -667,10 +656,7 @@ abstract :: (EnvFor aEnv aType) => [(Src, aType)]
          -> Checking (aEnv -- Local env for checking body of lambda
                      , [(Src, aType)] -- rightovers
                      )
-abstract [] abs = do
-  fc <- req AskFC
-  let msg = NothingToBind (show abs)
-  req $ Throw (Err (Just fc) Nothing msg)
+abstract [] abs = err $ NothingToBind (show abs)
 abstract (input:inputs) (Bind x) = pure (singletonEnv x input, inputs)
 abstract inputs (x :||: y) = do
   (venv, inputs)  <- abstract inputs x
@@ -681,25 +667,21 @@ abstract inputs (APull ports abst) = do
   abstract inputs abst
 abstract inputs@((_,ty):_) pat@(Pat abs) = case abstractPattern inputs abs of
   Just res -> res
-  Nothing -> do
-    fc <- req AskFC
-    let msg = "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty
-    req $ Throw $ Err (Just fc) Nothing $ PattErr msg
+  Nothing -> err (PattErr $
+    "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty)
 abstract ((_, ty):inputs) (Lit tm) = case bindToLit ty of
-  Left desc -> err $ "Can't match literal " ++ show tm ++ desc
+  Left desc -> typeErr $ "Can't match literal " ++ show tm ++ desc
   Right ty -> simpleCheck ty tm $> (emptyEnv, inputs)
 abstract (input:inputs) (VecLit xs) = (,inputs) <$> abstractVecLit input xs
-abstract _ x = err $ "Can't abstract " ++ show x
+abstract _ x = typeErr $ "Can't abstract " ++ show x
 
 combineDisjointKEnvs :: KEnv -> KEnv -> Checking KEnv
 combineDisjointKEnvs l r =
   let commonKeys = S.intersection (M.keysSet l) (M.keysSet r)
   in if S.null commonKeys
     then Ret $ M.union l r
-    else do
-      fc <- req AskFC
-      let e = TypeErr $ "Variable(s) defined twice: " ++ (intercalate "," $ map show $ S.toList commonKeys)
-      req $ Throw $ Err (Just fc) Nothing e
+    else typeErr ("Variable(s) defined twice: " ++
+      (intercalate "," $ map show $ S.toList commonKeys))
 
 pullPorts :: [Port] -> [((Name, Port), ty)] -> Checking [((Name, Port), ty)]
 pullPorts [] types = pure types
@@ -766,7 +748,7 @@ kcheck' (Emb t) (overs, unders) = do
 kcheck' (Th _) _ = fail "no higher order signals! (Th)"
 kcheck' (Var x) ((), ()) = req (KLup x) >>= \case
   Just output -> pure ([output], ((), ()))
-  Nothing -> req AskFC >>= \fc -> req $ Throw $ Err (Just fc) Nothing $ KVarNotFound (show x)
+  Nothing -> err $ KVarNotFound (show x)
 -- TODO: find a way to make check perceive this as a function
 -- Check brat functions and arguments assuming they'll produce a kernel
 kcheck' (fun :$: arg) ((), ())
@@ -776,8 +758,8 @@ kcheck' (fun :$: arg) ((), ())
        Just [(src, (K (R ss) (R ts)))] -> trace "kernel" $ kernel src ss ts
        -- The following pattern avoids crashing and produces better error messages for ill-typed programs (only)
        Just [(src, (C (ss :-> ts)))] -> function src f ss ts
-       Just _ -> err "Left of an application isn't function-like"
-       Nothing -> req AskFC >>= \fc -> req $ Throw $ Err (Just fc) Nothing $ VarNotFound (show f)
+       Just _ -> typeErr "Left of an application isn't function-like"
+       Nothing -> err $ VarNotFound (show f)
 
 -- Check applications of kernels
   | otherwise = do
@@ -791,7 +773,7 @@ kcheck' (fun :$: arg) ((), ())
                      -}
                      [(src, K (R ss) (R ts)), (_, K (R us) (R vs))] -> pure (src, (ss <> us), (ts <> vs))
                      ((src, K (R ss) (R ts)):_) -> pure (src, ss, ts)
-                     _ -> err "BRAT function called from kernel"
+                     _ -> typeErr "BRAT function called from kernel"
   evalNode <- knext "eval" (Eval src) ss ts
   ((), ((), emptyUnders)) <- kcheck arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
   ensureEmpty "unders" emptyUnders
@@ -804,7 +786,7 @@ kcheck' (fun :$: arg) ((), ())
       (src, ss, ts) <- case tys of
                          [(src, K (R ss) (R ts)), (_, K (R us) (R vs))] -> pure (src, (ss <> us), (ts <> vs))
                          ((src, K (R ss) (R ts)):_) -> pure (src, ss, ts)
-                         _ -> err "BRAT function called from kernel"
+                         _ -> typeErr "BRAT function called from kernel"
       evalNode <- knext "eval" (Eval src) ss ts
       ((), ()) <- noUnders $ kcheck arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
       pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
@@ -824,7 +806,7 @@ kcheck' (VHole name) (overs, unders) = do
   fc <- req AskFC
   req $ LogHole $ VKHole name fc (overs, unders)
   pure ((), ([], []))
-kcheck' (Vec elems) ((), (_, Of ty n):unders) = do
+kcheck' tm@(Vec elems) ((), (_, vty@(Of ty n)):unders) = do
   hypo <- next "nat hypo" Hypo [] []
   fc   <- req AskFC
   check1 ((hypo, "ty"), SimpleTy Natural) (WC fc n)
@@ -833,21 +815,29 @@ kcheck' (Vec elems) ((), (_, Of ty n):unders) = do
   mapM_ (aux [((hypo, "ty"), ty)]) elems
 
   ceval n >>= \case
-    Left (Err _ src msg) -> req AskFC >>= \fc -> req (Throw $ Err (Just fc) src msg)
+    Left err -> req $ Throw err
     Right (VSimple (Num n)) -> if length elems == n
                                then pure ((), ((), unders))
-                               else fail $ unwords ["Vector is length"
-                                                   ,show (length elems)
-                                                   ,"but it should be length"
-                                                   ,show n
-                                                   ]
+                               else err $ VecLength n (show vty) (show $ length elems) (show tm)
     Right v -> fail $ unwords ["Trying to reduce", show n, "but got", show v]
  where
   aux :: [(Src, SType)] -> WC (Term Chk Noun) -> Checking ()
   aux ty tm = do
     ((), ()) <- noUnders (kcheck tm ((), ty))
     pure ()
-
+kcheck' (Pattern p) ((), ((tgt, vty@(Of ty n)):unders))
+ | PNil <- unWC p = do
+     n <- evalNat n
+     if n == 0
+       then pure ((), ((), unders))
+       else err $ VecLength n (show vty) "0" (show (unWC p))
+ | PCons x <- unWC p = do
+     n <- evalNat n
+     when (n <= 0)
+       (err $ VecLength n (show vty) "> 0" (show (PCons x)))
+     noUnders $
+       kcheck x ((), [(tgt, ty)
+                    ,(tgt, Of ty (Simple (Num (n - 1))))])
+     pure ((), ((), unders))
 kcheck' (Simple (Bool _)) ((), ((_, Bit):unders)) = pure ((), ((), unders))
 kcheck' t _ = fail $ "Won't kcheck " ++ show t
-
