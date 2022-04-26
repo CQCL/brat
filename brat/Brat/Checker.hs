@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module Brat.Checker (check
                     ,run
@@ -73,6 +74,23 @@ instance Combine [(Src, SType)] where
 instance Combine () where
   combine () () = pure ()
 
+class (Show t) => AType t where
+  anext :: String -> Thing -> [(Port, t)] -> [(Port, t)] -> Checking Name
+  makeVec :: t -> Term Chk Noun -> t
+  bindToLit :: t -> Either String SimpleType -- Left is error description
+
+instance AType SType where
+  anext = knext
+  makeVec = Of
+  bindToLit Bit = Right Boolean
+  bindToLit _ = Left " in a kernel"
+
+instance AType VType where
+  anext = next
+  makeVec = Vector
+  bindToLit (SimpleTy ty) = Right ty
+  bindToLit _ = Left ""
+
 type Connectors (m :: Mode) (d :: Dir) (k :: Kind) = (Overs m k, Unders m d)
 
 data Mode = Brat | Kernel
@@ -83,6 +101,90 @@ type family ValueType (m :: Mode) where
 
 type VEnv = [(UserName, [(Src, VType)])]
 type KEnv = M.Map UserName (Quantity, (Src, SType))
+
+class EnvLike env where
+  mergeEnvs :: [env] -> Checking env
+  emptyEnv :: env
+
+instance EnvLike VEnv where
+  mergeEnvs = pure . concat -- TODO make this check for disjointness like KEnv's do
+  emptyEnv = []
+
+instance EnvLike KEnv where
+  mergeEnvs = foldM combineDisjointKEnvs M.empty
+  emptyEnv = M.empty
+
+class (EnvLike env, AType ty) => EnvFor env ty where
+  singletonEnv :: String -> (Src, ty) -> env
+  abstractPattern :: [(Src, ty)] -> Pattern Abstractor -> Maybe (Checking (env, [(Src, ty)]))
+  abstractVecLit :: (Src, ty) -> [Abstractor] -> Checking env
+
+instance EnvFor VEnv VType where
+  singletonEnv x input = [(plain x, [input])]
+  abstractPattern inputs@((_, SimpleTy Natural):_) (POnePlus (Bind x)) = Just $ abstract inputs (Bind x)
+  abstractPattern inputs@((_, SimpleTy Natural):_) (PTwoTimes (Bind x)) = Just $ abstract inputs (Bind x)
+  abstractPattern ((_, List _):inputs) PNil = Just $ pure ([], inputs)
+  abstractPattern ((src, List ty):inputs) (PCons (x :||: xs)) = Just $ do
+    node <- next "PCons (List)" Hypo [("head", ty), ("tail", List ty)] []
+    venv <- abstractAll [((node, "head"), ty)] x
+    venv' <- abstractAll [((node, "tail"), List ty)] xs
+    pure (venv ++ venv', inputs)
+  abstractPattern ((src, Option ty):inputs) (PSome x) = Just $ abstract ((src, ty):inputs) x
+  abstractPattern ((_, Option _):inputs) PNone = Just $ pure ([], inputs)
+  abstractPattern ((_, Vector ty n):inputs) abs = Just $ (,inputs) <$> abstractVecPat (ty, n) abs
+  abstractPattern _ _ = Nothing
+
+  abstractVecLit (_, Vector ty n) abss = abstractVecLitVec (ty, n) abss
+
+  abstractVecLit (_, List ty) xs = do
+    node <- next "List literal pattern" Hypo [("type", ty)] []
+    venvs <- mapM (abstractAll [((node, "type"), ty)]) xs
+    pure $ concat venvs
+
+  abstractVecLit (src, Product l r) [a,b] = do
+    venv <- abstractAll [(src, l)] a
+    venv' <- abstractAll [(src, r)] b
+    pure (venv ++ venv')
+
+  abstractVecLit _ xs = err $ "Can't bind to Vector Literal " ++ (show xs)
+
+instance EnvFor KEnv SType where
+  singletonEnv x input@(_, ty) =
+    let q = if copyable ty then Tons else One
+    in M.singleton (plain x) (q, input)
+  abstractPattern ((_, Of ty n):inputs) abs = Just $ (,inputs) <$> abstractVecPat (ty, n) abs
+  abstractPattern _ _ = Nothing
+  abstractVecLit ((_, Of ty n)) abss = abstractVecLitVec (ty, n) abss
+  abstractVecLit _ xs = err $ "Can't bind to Vector Literal " ++ (show xs) ++ " in kernel"
+
+abstractVecPat :: (EnvFor env aType) => (aType, Term Chk Noun)
+               -> Pattern Abstractor
+               -> Checking env
+abstractVecPat (ty, n) PNil = evalNatSoft n >>= \case
+  Right 0 -> pure emptyEnv
+  -- If we can't work out what the size is, it might be 0
+  Left _  -> pure emptyEnv
+  Right _ -> err "Vector length isn't 0 for pattern `Nil`"
+abstractVecPat (ty, n) (PCons (x :||: xs)) = do
+  -- A `cons` pattern on the LHS needs to have exactly two binders
+  n <- evalNat n
+  let tailTy = makeVec ty (Simple (Num (n - 1)))
+  node <- anext "PCons (Vec)" Hypo [("head", ty), ("tail", tailTy)] []
+  venv <- abstractAll [((node, "head"), ty)] x
+  venv' <- abstractAll [((node, "tail"), tailTy)] xs
+  mergeEnvs [venv,venv']
+
+abstractVecLitVec :: (EnvFor env aType) => (aType, Term Chk Noun)
+                  -> [Abstractor]
+                  -> Checking env
+abstractVecLitVec (ty, n) xs = do
+    node <- next "natHypo" Hypo [] [("value", SimpleTy Natural)]
+    check' n ((), [((node, "value"), SimpleTy Natural)])
+    n <- evalNat n
+    unless (n == length xs)
+      (fail $ "length mismatch in vector pattern")
+    envs <- mapM (abstractAll [((node, "type"), ty)]) xs
+    mergeEnvs envs
 
 data TypedHole
   = NBHole Name FC [String] (Connectors Brat Chk Noun)
@@ -552,85 +654,41 @@ evalNat tm = evalNatSoft tm >>= \case
   Right n -> pure n
   Left er -> err er
 
-abstractAll :: [(Src, VType)]
+abstractAll :: (EnvFor aEnv aType) => [(Src, aType)]
             -> Abstractor
-            -> Checking VEnv
+            -> Checking aEnv
 abstractAll stuff binder = do
-  (venv, unders) <- abstract stuff binder
+  (env, unders) <- abstract stuff binder
   ensureEmpty "unders after abstract" unders
-  pure venv
+  pure env
 
-abstract :: [(Src, VType)]
+abstract :: (EnvFor aEnv aType) => [(Src, aType)]
          -> Abstractor
-         -> Checking (VEnv -- Local env for checking body of lambda
-                     ,[(Src, VType)] -- rightovers
+         -> Checking (aEnv -- Local env for checking body of lambda
+                     , [(Src, aType)] -- rightovers
                      )
 abstract [] abs = do
   fc <- req AskFC
   let msg = NothingToBind (show abs)
   req $ Throw (Err (Just fc) Nothing msg)
-abstract (input:inputs) (Bind x) = pure ([(plain x, [input])], inputs)
+abstract (input:inputs) (Bind x) = pure (singletonEnv x input, inputs)
 abstract inputs (x :||: y) = do
   (venv, inputs)  <- abstract inputs x
   (venv', inputs) <- abstract inputs y
-  pure (venv ++ venv', inputs)
+  (,inputs) <$> mergeEnvs [venv, venv']
 abstract inputs (APull ports abst) = do
   inputs <- pullPorts ports inputs
   abstract inputs abst
-abstract ((_, SimpleTy ty):inputs) (Lit tm) = simpleCheck ty tm $> ([], inputs)
-abstract ((_, Vector ty n):inputs) (VecLit xs) = do
-  node <- next "natHypo" Hypo [] [("value", SimpleTy Natural)]
-  check' n ((), [((node, "value"), SimpleTy Natural)])
-  n <- evalNat n
-  unless (n == length xs)
-    (fail $ "length mismatch in vector pattern")
-  venvs <- mapM (aux node) xs
-  pure $ (concat venvs, inputs)
-   where
-    aux node elem = abstractAll [((node, "type"), ty)] elem
-
-abstract ((_, List ty):inputs) (VecLit xs) = do
-    node <- next "List literal pattern" Hypo [("type", ty)] []
-    venvs <- mapM (aux node) xs
-    pure $ (concat venvs, inputs)
-   where
-    aux node elem = abstractAll [((node, "type"), ty)] elem
-
-abstract ((src, Product l r):inputs) (VecLit [a,b]) = do
-  venv <- abstractAll [(src, l)] a
-  venv' <- abstractAll [(src, r)] b
-  pure (venv ++ venv', inputs)
-abstract (input:inputs) (Pat pat) = checkPat input pat
- where
-  checkPat :: (Src, VType) -> Pattern Abstractor -> Checking (VEnv, [(Src, VType)])
-  checkPat (_, SimpleTy Natural) (POnePlus (Bind x)) = abstract (input:inputs) (Bind x)
-  checkPat (_, SimpleTy Natural) (PTwoTimes (Bind x)) = abstract (input:inputs) (Bind x)
-  checkPat (_, Vector _ n) PNil = evalNatSoft n >>= \case
-    Right n -> if n == 0
-               then pure ([], inputs)
-               else err "Vector length isn't 0 for pattern `Nil`"
-    -- If we can't work out what the size is, it might be 0
-    Left _  -> pure ([], inputs)
-  -- A `cons` pattern on the LHS needs to have exactly two binders
-  checkPat (_, Vector ty n) (PCons (x :||: xs)) = do
-    n <- evalNat n
-    let tailTy = Vector ty (Simple (Num (n - 1)))
-    node <- next "PCons (Vec)" Hypo [("head", ty), ("tail", tailTy)] []
-    venv <- abstractAll [((node, "head"), ty)] x
-    venv' <- abstractAll [((node, "tail"), tailTy)] xs
-    pure (venv ++ venv', inputs)
-  checkPat (_, List _) PNil = pure ([], inputs)
-  checkPat (src, List ty) (PCons (x :||: xs)) = do
-    node <- next "PCons (List)" Hypo [("head", ty), ("tail", List ty)] []
-    venv <- abstractAll [((node, "head"), ty)] x
-    venv' <- abstractAll [((node, "tail"), List ty)] xs
-    pure (venv ++ venv', inputs)
-  checkPat (src, Option ty) (PSome x) = abstract ((src, ty):inputs) x
-  checkPat (_, Option _) PNone = pure ([], inputs)
-  checkPat (_, ty) pat = do
+abstract inputs@((_,ty):_) pat@(Pat abs) = case abstractPattern inputs abs of
+  Just res -> res
+  Nothing -> do
     fc <- req AskFC
     let msg = "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty
     req $ Throw $ Err (Just fc) Nothing $ PattErr msg
+abstract ((_, ty):inputs) (Lit tm) = case bindToLit ty of
+  Left desc -> err $ "Can't match literal " ++ show tm ++ desc
+  Right ty -> simpleCheck ty tm $> (emptyEnv, inputs)
+abstract (input:inputs) (VecLit xs) = (,inputs) <$> abstractVecLit input xs
 abstract _ x = err $ "Can't abstract " ++ show x
 
 combineDisjointKEnvs :: KEnv -> KEnv -> Checking KEnv
@@ -642,72 +700,6 @@ combineDisjointKEnvs l r =
       fc <- req AskFC
       let e = TypeErr $ "Variable(s) defined twice: " ++ (intercalate "," $ map show $ S.toList commonKeys)
       req $ Throw $ Err (Just fc) Nothing e
-
-kabstractAll :: [(Src, SType)]
-             -> Abstractor
-             -> Checking KEnv
-kabstractAll stuff binder = do
-  (venv, unders) <- kabstract stuff binder
-  ensureEmpty "unders after kabstract" unders
-  pure venv
-
-kabstract :: [(Src, SType)]
-          -> Abstractor
-          -> Checking (KEnv -- Local env for checking body of lambda
-                      ,[(Src, SType)] -- rightovers
-                      )
-kabstract [] abs = do
-  fc <- req AskFC
-  let msg = NothingToBind (show abs)
-  req $ Throw (Err (Just fc) Nothing msg)
-kabstract (input@(_, ty):inputs) (Bind x)
-  = let q = if copyable ty then Tons else One
-    in  pure (M.singleton (plain x) (q, input), inputs)
-kabstract inputs (x :||: y) = do
-  (kenv, inputs)  <- kabstract inputs x
-  (kenv', inputs) <- kabstract inputs y
-  combEnv <- combineDisjointKEnvs kenv kenv'
-  pure (combEnv, inputs)
-kabstract inputs (APull ports abst) = do
-  inputs <- pullPorts ports inputs
-  kabstract inputs abst
-kabstract ((_, Bit):inputs) (Lit (Bool b)) = simpleCheck Boolean (Bool b) $> (M.empty, inputs)
-kabstract _ (Lit lit) = err $ "Can't match literal " ++ show lit ++ " in a kernel"
-kabstract ((_, Of ty n):inputs) (VecLit xs) = do
-  node <- next "natHypo" Hypo [] [("value", SimpleTy Natural)]
-  check' n ((), [((node, "value"), SimpleTy Natural)])
-  n <- evalNat n
-  unless (n == length xs)
-    (fail $ "length mismatch in vector pattern")
-  kenvs <- mapM (kabstractAll [((node, "type"), ty)]) xs
-  combEnv <- foldM combineDisjointKEnvs M.empty kenvs
-  pure $ (combEnv, inputs)
-
-kabstract (input:inputs) (Pat pat) = checkPat input pat
- where
-  checkPat :: (Src, SType) -> Pattern Abstractor -> Checking (KEnv, [(Src, SType)])
-  checkPat (_, Of _ n) PNil = evalNatSoft n >>= \case
-    Right 0 -> pure (M.empty, inputs)
-    -- If we can't work out what the size is, it might be 0
-    Left _  -> pure (M.empty, inputs)
-    Right _ -> err "Vector length isn't 0 for pattern `Nil`"
-
-  checkPat (_, Of ty n) (PCons (x :||: xs)) = do
-    n <- evalNat n
-    let tailTy = Of ty (Simple (Num (n - 1)))
-    node <- knext "PCons" Hypo [("head", ty), ("tail", tailTy)] []
-    kenv <- kabstractAll [((node, "head"), ty)] x
-    kenv' <- kabstractAll [((node, "tail"), tailTy)] xs
-    combEnv <- combineDisjointKEnvs kenv kenv'
-    pure (combEnv, inputs)
-  checkPat (_, ty) pat = do
-    fc <- req AskFC
-    let msg = "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty
-    req $ Throw $ Err (Just fc) Nothing $ PattErr msg
-kabstract tys abs = do
-  fc <- req AskFC
-  let msg = "Couldn't bind " ++ show abs ++ " to type " ++ show tys
-  req $ Throw $ Err (Just fc) Nothing $ PattErr msg
 
 pullPorts :: [Port] -> [((Name, Port), ty)] -> Checking [((Name, Port), ty)]
 pullPorts [] types = pure types
@@ -755,7 +747,7 @@ kcheck' (s :-: t) (overs, unders) = do
   ensureEmpty "overs" emptyOvers
   pure (outs, (rightovers, rightunders))
 kcheck' (binder :\: body) (overs, unders) = do
-  (ext, overs) <- kabstract overs (unWC binder)
+  (ext, overs) <- abstract overs (unWC binder)
   (outs, ((), unders)) <- localKVar ext $ kcheck body ((), unders) <* req KDone
   pure (outs, (overs, unders))
 kcheck' (Pull ports t) (overs, unders) = do
