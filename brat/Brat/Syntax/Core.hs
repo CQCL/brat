@@ -40,7 +40,6 @@ type Decl = Decl' InOut Term
 data Term :: Dir -> Kind -> Type where
   Simple   :: SimpleTerm -> Term Chk Noun
   Let      :: WC Abstractor -> WC (Term Syn Noun) -> WC (Term d k) -> Term d k
-  Pair     :: WC (Term Chk Noun) -> WC (Term Chk Noun) -> Term Chk Noun
   NHole    :: Name -> Term Chk Noun
   VHole    :: Name -> Term Chk Verb
   (:|:)    :: WC (Term d k) -> WC (Term d k) -> Term d k
@@ -67,7 +66,6 @@ instance Show (Term d k) where
   show (Let abs xs body)
     = unwords ["let", show abs, "=", show xs, "in", show body]
   show (Simple tm) = show tm
-  show (Pair a b) = '[' : show a ++ ", " ++ show b ++ "]"
   show (NHole (MkName (name:_))) = '?' : show (MkName [name])
   show (NHole (MkName [])) = "?<root>"
   show (VHole (MkName (name:_))) = '?' : show (MkName [name])
@@ -98,7 +96,6 @@ expandDecls env tm = expand tm
  where
   expand :: Term d k -> Term d k
   expand (Simple tm) = Simple tm
-  expand (Pair a b)  = Pair (expand <$> a) (expand <$> b)
   expand x@(NHole _) = x
   expand x@(VHole _) = x
   expand (a :|: b) = (expand <$> a) :|: (expand <$> b)

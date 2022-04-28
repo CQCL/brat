@@ -299,7 +299,6 @@ cnoun' = try (letin cnoun) <|> withFC
   (try (thunk <?> "thunk")
   <|> try (pull <?> "port pull")
   <|> try (nounIntoVerb <?> "composition")
-  <|> try (pair <?> "pair")
   <|> try (selection <?> "selection")
   <|> try (vec <?> "vector literal")
   <|> (emptyVec <?> "vector literal")
@@ -319,15 +318,6 @@ cnoun' = try (letin cnoun) <|> withFC
   pull = do
     ports <- some (try (port <* match PortColon))
     RPull ports <$> cnoun
-
-  pair :: Parser (Raw Chk Noun)
-  pair = square $ do
-    left <- cnoun'
-    space
-    match VecComma
-    space
-    right <- cnoun'
-    pure $ RPair left right
 
   emb = REmb <$> snoun'
 

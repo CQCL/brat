@@ -10,7 +10,6 @@ import Brat.UserName
 -- this info, when looking at `Term`s which have already been checked.
 
 subTerms :: Skel -> [WC Skel]
-subTerms (SPair a b)    = [a,b]
 subTerms (SJuxtNoun a b)    = [a,b]
 subTerms (SJuxtVerb a b)    = [a,b]
 subTerms (STh a)        = [a]
@@ -40,7 +39,6 @@ instance Juxt Verb where
 
 stripInfo :: Juxt k => Term d k -> Skel
 stripInfo (Simple tm) = SSimple tm
-stripInfo (Pair a b) = SPair (stripInfo <$> a) (stripInfo <$> b)
 stripInfo (NHole x) = SHole (show x)
 stripInfo (VHole x) = SHole (show x)
 stripInfo x@(_ :|: _) = stripJuxt x
@@ -62,7 +60,6 @@ stripInfo (Thin th) = SThin (stripInfo <$> th)
 
 data Skel where
   SSimple   :: SimpleTerm -> Skel
-  SPair     :: WC (Skel) -> WC (Skel) -> Skel
   SHole     :: String -> Skel
   SJuxtVerb :: WC Skel -> WC Skel -> Skel
   SJuxtNoun :: WC Skel -> WC Skel -> Skel

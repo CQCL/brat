@@ -13,7 +13,6 @@ import Control.Monad.Except
 
 data Value
  = VSimple SimpleTerm
- | VPair Value Value
 -- | ((:|:)  :: Term d k -> Term d k -> Term d k
 -- | (Th     :: Term Chk Verb -> Term Chk Noun
 -- | (Emb    :: Term Syn k -> Term Chk k
@@ -70,7 +69,6 @@ ceval g (WC fc tm) = addFCToError fc (ceval' g tm)
 
 ceval' :: [Value] -> Term Chk k -> Eval Value
 ceval' _ (Simple tm) = pure $ VSimple tm
-ceval' g (Pair a b) = VPair <$> ceval g a <*> ceval g b
 -- ceval g ( ((:|:)  :: Term d k -> Term d k -> Term d k
 -- ceval g ( (Th     :: Term Chk Verb -> Term Chk Noun
 -- ceval g ( (Emb    :: Term Syn k -> Term Chk k

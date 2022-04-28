@@ -465,7 +465,7 @@ check' (Simple tm) ((), ((src, p), SimpleTy ty):unders) = do
   this <- next (show tm) (Const tm) [] [("value", SimpleTy ty)]
   wire ((this, "value"), Right (SimpleTy ty), (src, p))
   pure ((), ((), unders))
-check' (Pair a b) ((), (_, Product s t):unders) = do
+check' (Vec [a,b]) ((), (_, Product s t):unders) = do
   unpack <- next "pairCheck" Hypo [] [("first", s), ("second", t)]
   check1 ((unpack, "first"), s) a
   check1 ((unpack, "second"), t) b

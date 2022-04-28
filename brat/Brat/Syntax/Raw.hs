@@ -63,7 +63,6 @@ data Raw :: Dir -> Kind -> Type where
   RNHole    :: String -> Raw Chk Noun
   RVHole    :: String -> Raw Chk Verb
   RSimple   :: SimpleTerm -> Raw Chk Noun
-  RPair     :: WC (Raw Chk Noun) -> WC (Raw Chk Noun) -> Raw Chk Noun
   (::|::)   :: WC (Raw d k) -> WC (Raw d k) -> Raw d k
   RTh       :: WC (Raw Chk Verb) -> Raw Chk Noun
   REmb      :: WC (Raw Syn k) -> Raw Chk k
@@ -87,7 +86,6 @@ instance Show (Raw d k) where
   show (RNHole name) = '?':name
   show (RVHole name) = '?':name
   show (RSimple tm) = show tm
-  show (RPair a b) = '[': show a ++ ", " ++ show b ++  "]"
   show (a ::|:: b) = show a ++ ", " ++ show b
   show (RTh comp) = '{' : show comp ++ "}"
   show (REmb x) = '「' : show x ++ "」"
@@ -203,7 +201,6 @@ desugar' :: Raw d k
 desugar' (RNHole name) = NHole <$> freshM name
 desugar' (RVHole name) = VHole <$> freshM name
 desugar' (RSimple simp) = pure $ Simple simp
-desugar' (RPair a b) = Pair <$> desugar a <*> desugar b
 desugar' (a ::|:: b) = (:|:) <$> desugar a <*> desugar b
 desugar' (RTh v) = Th <$> desugar v
 desugar' (REmb syn) = Emb <$> desugar syn
@@ -314,7 +311,6 @@ abstractTerm abst tm = let bindings = zip (aux abst) [0..]
   nameTo :: (String, Int) -> Term d k -> Term d k
   nameTo (x, n) (Var y) | x == y = Bound n
                         | otherwise = Var y
-  nameTo xn (Pair a b) = Pair (nameTo xn <$> a) (nameTo xn <$> b)
   nameTo xn (a :|: b) = (nameTo xn <$> a) :|: (nameTo xn <$> b)
   nameTo xn (Th f) = Th (nameTo xn <$> f)
   nameTo xn (Emb y) = Emb (nameTo xn <$> y)
@@ -330,7 +326,6 @@ abstractTerm abst tm = let bindings = zip (aux abst) [0..]
   nameTo _ tm = tm
 
 bindTerm :: Term d k -> Term d k
-bindTerm (Pair a b) = Pair (bindTerm <$> a) (bindTerm <$> b)
 bindTerm (a :|: b) = (bindTerm <$> a) :|: (bindTerm <$> b)
 bindTerm (Th f) = Th (bindTerm <$> f)
 bindTerm (Emb x) = Emb (bindTerm <$> x)
