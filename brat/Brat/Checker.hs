@@ -839,5 +839,9 @@ kcheck' (Pattern p) ((), ((tgt, vty@(Of ty n)):unders))
        kcheck x ((), [(tgt, ty)
                     ,(tgt, Of ty (Simple (Num (n - 1))))])
      pure ((), ((), unders))
+kcheck' (Let abs x y) conn = do
+  (dangling, ((), ())) <- kcheck x ((), ())
+  kenv <- abstractAll dangling (unWC abs)
+  localKVar kenv $ kcheck y conn
 kcheck' (Simple (Bool _)) ((), ((_, Bit):unders)) = pure ((), ((), unders))
 kcheck' t _ = fail $ "Won't kcheck " ++ show t
