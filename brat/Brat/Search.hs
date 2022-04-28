@@ -20,7 +20,7 @@ tokenValues fc (List ty) = concat $ do tm <- tokenValues fc ty
                                        [[Vec (WC fc <$> list)]]
 tokenValues fc (Product s t)
   = zipWith (\a b -> Vec [(WC fc a), (WC fc b)]) (cycle $ tokenValues fc s) (cycle $ tokenValues fc t)
-tokenValues fc (Vector ty (Simple (Num n))) = Vec <$> (replicate n . WC fc <$> tokenValues fc (SimpleTy Natural))
+tokenValues fc (Vector ty (Simple (Num n))) = Vec <$> (replicate n . WC fc <$> tokenValues fc ty)
 tokenValues fc (Vector _ _) = [] -- not enough info
 tokenValues fc (K ss ts) = []
  where
