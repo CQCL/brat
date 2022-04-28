@@ -9,25 +9,25 @@ import Brat.Syntax.Common
 -- Easiest answers
 tokenValues :: FC -> VType -> [Term Chk Noun]
 tokenValues fc (C cty) = Th . WC fc <$> tokenFuncs fc cty
-tokenValues fc (SimpleTy Natural) = Simple . Num <$> [0..]
-tokenValues fc (SimpleTy IntTy) = Simple . Num <$> [0..]
-tokenValues fc (SimpleTy Boolean) = [Simple (Bool True), Simple (Bool False)]
-tokenValues fc (SimpleTy FloatTy) = Simple . Float <$> [0.0..]
-tokenValues fc (SimpleTy TextType) = Simple . Text <$> ("":((:[])<$>['A'..]))
-tokenValues fc (SimpleTy Star) = []
+tokenValues _  (SimpleTy Natural) = Simple . Num <$> [0..]
+tokenValues _  (SimpleTy IntTy) = Simple . Num <$> [0..]
+tokenValues _  (SimpleTy Boolean) = [Simple (Bool True), Simple (Bool False)]
+tokenValues _  (SimpleTy FloatTy) = Simple . Float <$> [0.0..]
+tokenValues _  (SimpleTy TextType) = Simple . Text <$> ("":((:[])<$>['A'..]))
+tokenValues _  (SimpleTy Star) = []
 tokenValues fc (List ty) = concat $ do tm <- tokenValues fc ty
                                        list <- iterate (tm:) []
                                        [[Vec (WC fc <$> list)]]
 tokenValues fc (Product s t)
   = zipWith (\a b -> Vec [(WC fc a), (WC fc b)]) (cycle $ tokenValues fc s) (cycle $ tokenValues fc t)
 tokenValues fc (Vector ty (Simple (Num n))) = Vec <$> (replicate n . WC fc <$> tokenValues fc ty)
-tokenValues fc (Vector _ _) = [] -- not enough info
-tokenValues fc (K ss ts) = []
+tokenValues _ (Vector _ _) = [] -- not enough info
+tokenValues fc (K _ _) = []
  where
   aux :: SType -> [Term Chk Noun]
-  aux (Q q) = []
+  aux (Q _) = []
   aux Bit = tokenValues fc (SimpleTy Boolean)
-  aux (Of (Q q) n) = []
+  aux (Of (Q _) _) = []
   aux (Of sty (Simple (Num n))) = do
     sty <- aux sty
     [Vec (WC fc <$> replicate n sty)]
@@ -43,7 +43,6 @@ tokenFuncs fc (ss :-> ts)
   = case ss of
       [] -> []
       _  -> do
-        let n = length ss
         let lhs = binders ss
         outs <- outputs ts
         [WC fc lhs :\: WC fc outs]

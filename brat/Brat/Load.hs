@@ -76,7 +76,7 @@ typeGraph venv fn = do
   pure g
 
 loadStmtsWithEnv :: Mod -> Prefix -> LoadType -> RawEnv -> Either Error Mod
-loadStmtsWithEnv e@(venv, decls, holes, graph) pre loadType stmts = do
+loadStmtsWithEnv (venv, decls, _, _) pre loadType stmts = do
   newDecls <- desugarEnv stmts
   decls <- pure (decls ++ newDecls)
   -- hacky mess - cleanup!
@@ -90,7 +90,7 @@ loadStmtsWithEnv e@(venv, decls, holes, graph) pre loadType stmts = do
   -- all good? Let's just get the graph for `main` (and assume it's a noun)
   when (loadType == Exe) $ do
     main <- maybeToRight (Err Nothing Nothing MainNotFound) $ lookupBy ((=="main") . fnName) id decls
-    (_, (_, mgraph)) <- run env (checkDecl [] main)
+    run env (checkDecl [] main)
     pure ()
 
   pure (venv, decls, holes, graph)

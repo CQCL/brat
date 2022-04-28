@@ -49,7 +49,7 @@ getInfo ps pos
     findInClauses ((_, rhs):cs)
      | rfc <- fcOf rhs, pos `inside` rfc = Just (stripInfo <$> rhs)
      | otherwise = findInClauses cs
-  findInClause pos _ = Nothing
+  findInClause _ _ = Nothing
 
   getThing :: Pos -> WC Skel -> Maybe Skel
   getThing pos (WC fc x)

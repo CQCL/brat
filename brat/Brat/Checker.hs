@@ -124,7 +124,7 @@ instance EnvFor VEnv VType where
   abstractPattern inputs@((_, SimpleTy Natural):_) (POnePlus (Bind x)) = Just $ abstract inputs (Bind x)
   abstractPattern inputs@((_, SimpleTy Natural):_) (PTwoTimes (Bind x)) = Just $ abstract inputs (Bind x)
   abstractPattern ((_, List _):inputs) PNil = Just $ pure ([], inputs)
-  abstractPattern ((src, List ty):inputs) (PCons (x :||: xs)) = Just $ do
+  abstractPattern ((_, List ty):inputs) (PCons (x :||: xs)) = Just $ do
     node <- next "PCons (List)" Hypo [("head", ty), ("tail", List ty)] []
     venv <- abstractAll [((node, "head"), ty)] x
     venv' <- abstractAll [((node, "tail"), List ty)] xs
@@ -161,7 +161,7 @@ abstractVecPat :: (EnvFor env aType) => (aType, Term Chk Noun)
                -> aType -- for error message
                -> Pattern Abstractor
                -> Checking env
-abstractVecPat (ty, n) vty p@PNil = evalNatSoft n >>= \case
+abstractVecPat (_, n) vty p@PNil = evalNatSoft n >>= \case
   Right 0 -> pure emptyEnv
   -- If we can't work out what the size is, it might be 0
   Left _  -> pure emptyEnv
@@ -267,7 +267,7 @@ localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
 localVEnv ext (Req r k) = Req r (localVEnv ext . k)
 
 wrapError :: (Error -> Error) -> Checking v -> Checking v
-wrapError f (Ret v) = Ret v
+wrapError _ (Ret v) = Ret v
 wrapError f (Req (Throw e) k) = Req (Throw (f e)) k
 wrapError f (Req r k) = Req r (wrapError f . k)
 
@@ -320,7 +320,7 @@ handler (Req s k) ctx ns
                    return (v,(holes,([],[w]) <> g),ns)
       Decls ->  handler (k (decls ctx)) ctx ns
       -- We only get a KLup here if the variable has not been found in the kernel context
-      KLup x -> handler (k Nothing) ctx ns
+      KLup _ -> handler (k Nothing) ctx ns
       -- Receiving KDone may become possible when merging the two check functions
       KDone -> error "KDone in handler - this shouldn't happen"
       AskVEnv -> handler (k (venv ctx)) ctx ns
@@ -421,7 +421,7 @@ check' (Emb t) (overs, unders) = do
   checkOutputs :: [(Tgt, VType)] -> [(Src, VType)] -> Checking [(Tgt, VType)]
   checkOutputs tys [] = pure tys
   -- HACK: Try to merge kernels willy-nilly
-  checkOutputs top@((tgt, K _ _):tys) ((src, K (R ss) (R ts)):(src', K (R us) (R vs)):outs) = do
+  checkOutputs top@((_, K _ _):_) ((src, K (R ss) (R ts)):(src', K (R us) (R vs)):outs) = do
     src <- next "kcombo" (Combo src src') [] [("fun", K (R (ss <> us)) (R (ts <> vs)))]
     checkOutputs top (((src, "fun"), K (R (ss <> us)) (R (ts <> vs))):outs)
   checkOutputs ((tgt, ty):tys) ((src, ty'):outs)
@@ -520,7 +520,7 @@ check' (NHole name) ((), unders) = do
     let tys = snd <$> unders
     env <- req $ AskVEnv
     let matches = transpose $
-          [ [ (nm, src) | (src, ty) <- stuff ]
+          [ [ (nm, src) | (src, _) <- stuff ]
           | (nm, stuff) <- env
           , and (zipWith (==) tys (snd <$> stuff))
           ]
@@ -589,7 +589,7 @@ check' (Let abs x y) conn = do
   (dangling, ((), ())) <- check x ((), ())
   venv <- abstractAll dangling (unWC abs)
   localVEnv venv $ check y conn
-check' t cons = fail $ "Won't check " ++ show t
+check' t _ = fail $ "Won't check " ++ show t
 
 -- Check a pattern used as a constructor (on the Rhs of a definition)
 checkRPat :: (Tgt, VType) -> Pattern (WC (Term Chk Noun)) -> Checking ()
@@ -614,7 +614,7 @@ checkRPat (tgt, vty@(Vector ty n)) (PCons b) = do
                  ,(tgt, Vector ty (Simple (Num (n - 1))))])
   pure ()
 
-checkRPat (_, Option ty) PNone = pure ()
+checkRPat (_, Option _) PNone = pure ()
 checkRPat (tgt, Option ty) (PSome x) = check1 (tgt, ty) x
 checkRPat unders pat = typeErr $ show pat ++ " not of type " ++ show unders
 

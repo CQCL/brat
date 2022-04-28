@@ -8,7 +8,7 @@ nodeLabel (BratNode nm _ _ _) = show $ show nm
 nodeLabel (KernelNode nm _ _ _) = show $ show nm
 
 labelType :: Show (tm Chk Noun) => Either (SType' tm) (VType' tm) -> (Port, Port) -> String
-labelType (Left sty) _ = ""
+labelType (Left _) _ = ""
 labelType (Right vty) (p, q) = unwords ["[label ="
                                        ,show (unwords ["[", p, "--(" ++ show vty ++ ")->", q, "]"])
                                        ,"]"]

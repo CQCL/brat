@@ -101,7 +101,7 @@ process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
   countB (Q _) = 0
   countB Bit = 1
   -- Absolute hack
-  countB (Of sty (Simple (Num n))) | copyable sty = 1
+  countB (Of sty (Simple (Num _))) | copyable sty = 1
                                    | otherwise = 0
   countB (Rho r) = count countB r
 
@@ -123,7 +123,7 @@ process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
     pure []
 
   nodeToCmd :: (Node' Term, Name, [Name]) -> Command
-  nodeToCmd (KernelNode _ (Prim p) _ _, nm, tgts)
+  nodeToCmd (KernelNode _ (Prim p) _ _, _, _)
     = Cmd { op = Op { opType = (show p), params = [] }
           , args = [] -- hmmmmmmm!!! (TODO:)
           }

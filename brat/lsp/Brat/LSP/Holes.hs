@@ -32,4 +32,4 @@ showRow [a] = show a
 showRow as = intercalate ", " (show <$> as)
 
 showName :: Name -> String
-showName (MkName (x:xs)) = show (MkName [x])
+showName (MkName (x:_)) = show (MkName [x])

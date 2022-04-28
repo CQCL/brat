@@ -8,7 +8,7 @@ newtype Name = MkName [(String, Int)] deriving Eq
 
 instance Ord Name where
   -- I don't think it matters at all?
-  compare n@(MkName ((x, i):xs)) m@(MkName ((y, j):ys))
+  compare n@(MkName ((x, i):_)) m@(MkName ((y, j):_))
     | n == m = EQ
     | x == y = compare i j
     | otherwise = compare x y

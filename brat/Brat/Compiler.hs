@@ -30,7 +30,7 @@ compileFile :: String -> IO ()
 compileFile file = do
   (cwd, file) <- checkFilename file
   env <- runExceptT $ loadFile Exe cwd file
-  (venv, decls, holes, _) <- eitherIO env
+  (venv, decls, _, _) <- eitherIO env
   mn <- eitherIO $
       maybeToRight (Err Nothing Nothing MainNotFound) $
       lookupBy ((== "main") . fnName) id decls

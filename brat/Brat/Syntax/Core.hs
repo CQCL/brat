@@ -92,7 +92,7 @@ instance Show (Term d k) where
   show (Thin x) = '~' : show x
 
 expandDecls :: [Decl] -> Term d k -> Term d k
-expandDecls env tm = expand tm
+expandDecls _ tm = expand tm
  where
   expand :: Term d k -> Term d k
   expand (Simple tm) = Simple tm

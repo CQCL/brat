@@ -108,7 +108,7 @@ evalPat g (WC fc pat) = addFCToError fc (evalPat' g pat)
 evalPat' :: [Value] -> Pattern (WC (Term Chk Noun)) -> Eval Value
 evalPat' g (POnePlus tm) = eval g tm >>= flip apply [EPlus (VNat 1)]
 evalPat' g (PTwoTimes tm) = eval g tm >>= flip apply [ETimes (VNat 2)]
-evalPat' g PNil = pure $ VVec []
+evalPat' _ PNil = pure $ VVec []
 evalPat' g (PCons tm)
   -- Only work if `tm` is the simplest version
   | (x :|: xs) <- unWC tm = do
@@ -119,7 +119,7 @@ evalPat' g (PCons tm)
     _ -> pure $ VCons x xs
   | otherwise = throwError $ Err Nothing Nothing (BadCons (show tm))
 evalPat' g (PSome x) = VSome <$> eval g x
-evalPat' g PNone = pure VNone
+evalPat' _ PNone = pure VNone
 
 pattern VNat n = VSimple (Num n)
 

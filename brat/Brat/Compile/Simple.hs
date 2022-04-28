@@ -26,7 +26,7 @@ removeNode n (nodes, wires) = (filter (not . eq n) nodes, filter connected wires
                       
 --removeRedundant :: Eq (tm Chk Noun) => Graph' tm -> Graph' tm
 removeRedundant :: Graph -> Graph
-removeRedundant g@(nodes, wires) = foldr removeNode g (filter (redundant . nodeThing . traceShowId) nodes)
+removeRedundant g@(nodes, _) = foldr removeNode g (filter (redundant . nodeThing . traceShowId) nodes)
  where
   redundant :: Thing -> Bool
   redundant Id = True
@@ -35,7 +35,7 @@ removeRedundant g@(nodes, wires) = foldr removeNode g (filter (redundant . nodeT
 
 --uncombo :: Eq (tm Chk Noun) => Node' tm -> Graph' tm -> Graph' tm
 uncombo :: Node -> Graph -> Graph
-uncombo n g | Combo l r <- nodeThing n, nm <- nodeName n
+uncombo n g | Combo l r <- nodeThing n, _ <- nodeName n
  = removeNode n $ rewire (nodeName n) r $ rewire (nodeName n) l g
 
 --rewire :: Name -> Src -> Graph' tm -> Graph' tm

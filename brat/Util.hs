@@ -10,7 +10,7 @@ maybeToRight e Nothing = Left e
 maybeToRight _ (Just a) = Right a
 
 duplicates :: Eq a => [a] -> [a]
-duplicates xs = let (_, dups, []) = aux ([], [], xs) in dups
+duplicates xs = let (_, dups, _) = aux ([], [], xs) in dups
  where
   aux :: Eq a => ([a], [a], [a]) -> ([a], [a], [a])
   aux (visited, dups, []) = (visited, dups, [])

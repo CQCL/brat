@@ -212,7 +212,7 @@ desugar' (tm ::::: outputs) = do
   tm <- desugar tm
   ty <- desugarIO outputs
   pure (tm ::: ty)
-desugar' tm@(syn ::-:: verb) = (:-:) <$> desugar syn <*> desugar verb
+desugar' (syn ::-:: verb) = (:-:) <$> desugar syn <*> desugar verb
 {-
   tys <- nsynth (unWC syn)
   case tys of
@@ -273,7 +273,7 @@ abstractVType x n free@(RTypeFree y) | x == y = RTypeVar n
 abstractVType _ _ ty@(RTypeVar _) = ty
 abstractVType x n (RVector ty size) = RVector (abstractVType x n ty) size
 abstractVType _ _ (RThinning a b) = RThinning a b
-abstractVType x n (RK r r') = RK r r'
+abstractVType _ _ (RK r r') = RK r r'
 abstractVType _ _ (ROption ty) = ROption ty
 
 instantiateVType :: Int -> RawVType -> RawVType -> RawVType
@@ -289,7 +289,7 @@ instantiateVType n to ty@(RTypeVar m) | n == m = to
                                       | otherwise = ty
 instantiateVType n to (RVector ty m) = RVector (instantiateVType n to ty) m
 instantiateVType _ _  (RThinning a b) = RThinning a b
-instantiateVType n to (RK r r') = RK r r'
+instantiateVType _ _ (RK r r') = RK r r'
 instantiateVType n to (ROption ty) = ROption $ instantiateVType n to ty
 
 {-

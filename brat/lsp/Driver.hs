@@ -90,7 +90,7 @@ logHoles hs fileUri = publishDiagnostics (length hs) fileUri Nothing (partitionB
                   Nothing
                   Nothing
 
-loadVFile state method msg = do
+loadVFile state _ msg = do
   let fileUri = msg ^. params
                 . textDocument
                 . uri
