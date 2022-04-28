@@ -7,11 +7,14 @@ type Namespace = (Name, Int)
 newtype Name = MkName [(String, Int)] deriving Eq
 
 instance Ord Name where
-  -- I don't think it matters at all?
-  compare n@(MkName ((x, i):_)) m@(MkName ((y, j):_))
-    | n == m = EQ
-    | x == y = compare i j
-    | otherwise = compare x y
+  compare (MkName a) (MkName b) = aux a b
+   where
+    aux n m | n == m = EQ
+    aux ((x, i):xs) ((y, j):ys)
+     | x == y = compare i j <> compare xs ys
+     | otherwise = compare x y
+    aux [] _ = LT
+    aux _ [] = GT
 
 fresh :: String -> Namespace -> (Name, Namespace)
 fresh str (MkName nm, i) = (MkName ((str, i):nm), (MkName nm, i + 1))
