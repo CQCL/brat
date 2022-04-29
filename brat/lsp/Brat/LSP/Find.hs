@@ -59,7 +59,3 @@ getInfo ps pos
                           -- worth crashing the server over
                           (x:_) -> Just x
     | otherwise = Nothing
-
--- TODO
-getAliasInfo :: String -> ProgramState -> String
-getAliasInfo = undefined

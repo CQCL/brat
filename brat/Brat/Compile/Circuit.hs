@@ -27,9 +27,6 @@ import Proto.Graph_Fields as G
 
 import Debug.Trace
 
-type Classical = ()
-type Conditional = ()
-
 data Pauli = I | X | Y | Z deriving Show
 
 data Box = Box { boxType :: OpType
@@ -58,13 +55,6 @@ data Operation = Op { opType :: String --OpType
 data Command = Cmd { op   :: Operation
                    , args :: [Int]
                    } deriving (Eq, Show)
-
-type Qubit = ()
-
--- Left register, Right (qu)bit, Right (qu)bit, ...
-type UnitId = [Either String Int]
-
-type Array = [UnitId]
 
 data Circuit
   = Circuit { phase  :: String
