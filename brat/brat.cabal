@@ -49,6 +49,7 @@ common warning-flags
     -Werror=unused-matches
     -Werror=missing-methods
     -Werror=unused-top-binds
+    -Werror=unused-local-binds
 
 library
   import:              haskell, warning-flags

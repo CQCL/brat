@@ -19,7 +19,6 @@ import qualified Data.Map as Map
 import Data.Text (Text, pack)
 
 import Brat.Graph
-import Brat.Naming
 import Brat.Syntax.Core (SType, Term(..))
 import Brat.Syntax.Common
 import Proto.Graph as G
@@ -95,12 +94,6 @@ process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
                                    | otherwise = 0
   countB (Rho r) = count countB r
 
-  cmds :: [Command]
-  cmds = let (g, f, _) = toGraph tm
-             ns = Graph.topSort g
-             cmds = (nodeToCmd . f) <$> ns
-         in  cmds
-
   smth :: Graph' Term -> Maybe [Command]
   smth graph = do
     let (g, f, _) = toGraph graph
@@ -111,12 +104,6 @@ process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
     unless (length sources == length ins) $ Nothing
     traceShowM sources
     pure []
-
-  nodeToCmd :: (Node' Term, Name, [Name]) -> Command
-  nodeToCmd (KernelNode _ (Prim p) _ _, _, _)
-    = Cmd { op = Op { opType = (show p), params = [] }
-          , args = [] -- hmmmmmmm!!! (TODO:)
-          }
 
 none :: G.Value
 none = let nothing :: G.OptionValue = defMessage & G.maybe'inner .~ Nothing in

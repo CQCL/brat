@@ -257,15 +257,6 @@ snoun' = try application <|> simpleNoun
     arg <- round cnoun
     pure (fun ::$:: arg)
 
-  nounIntoVerb :: Parser (WC (Raw Syn Noun))
-  nounIntoVerb = withFC $ compose snoun sverb
-
-  annotation = withFC $ do
-    tm <- cnoun
-    spaced $ match TypeColon
-    ty <- outputs
-    pure (tm ::::: ty)
-
 snoun :: Parser (WC (Raw Syn Noun))
 snoun = snoun' `chainl1` (try comma)
 
