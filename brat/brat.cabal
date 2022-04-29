@@ -36,7 +36,6 @@ common warning-flags
     -Wcompat
     -Widentities
     -Wredundant-constraints
-    -Wmissing-export-lists
     -Wpartial-fields
     -Wincomplete-patterns
     -Wmonomorphism-restriction
