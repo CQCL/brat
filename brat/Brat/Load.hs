@@ -15,6 +15,7 @@ import Brat.Syntax.Common
 import Brat.Syntax.Core
 import Brat.Syntax.Raw
 import Brat.UserName
+import Control.Monad.Freer (req)
 import Util
 
 import Control.Monad.Except
@@ -51,18 +52,19 @@ checkDecl pre Decl{..}
       ((), ((), [])) <- wrapError (addSrc fnName) $
                         (check body ((), [((tgt, port), ty) | (port, ty) <- fnSig]))
       pure ()
-    ThunkOf verb -> do
-      let ((_, C (ss :-> ts)):_) = merge fnSig
-      src <- next (name <> "/in") Source ss ss
-      tgt <- next (name <> "/out") Target ts ts
-      let thunkTy = ("value", C (ss :-> ts))
-      thunk <- next (name ++ "_thunk") (src :>>: tgt) [] [thunkTy]
-      eval  <- next ("Eval(" ++ name ++ ")") (Eval (thunk, "value")) (thunkTy:ss) ts
-      wire ((thunk, "value"), Right (snd thunkTy), (eval, "value"))
-      ((), ([], [])) <- wrapError (addSrc name) $
-                        checkClauses (unWC verb) ([((src, port), ty) | (port, ty) <- ss]
-                                                 ,[((tgt, port), ty) | (port, ty) <- ts])
-      pure ()
+    ThunkOf verb -> case merge fnSig of
+      ((_, C (ss :-> ts)):_) -> do
+        src <- next (name <> "/in") Source ss ss
+        tgt <- next (name <> "/out") Target ts ts
+        let thunkTy = ("value", C (ss :-> ts))
+        thunk <- next (name ++ "_thunk") (src :>>: tgt) [] [thunkTy]
+        eval  <- next ("Eval(" ++ name ++ ")") (Eval (thunk, "value")) (thunkTy:ss) ts
+        wire ((thunk, "value"), Right (snd thunkTy), (eval, "value"))
+        ((), ([], [])) <- wrapError (addSrc name) $
+                          checkClauses (unWC verb) ([((src, port), ty) | (port, ty) <- ss]
+                                                   ,[((tgt, port), ty) | (port, ty) <- ts])
+        pure ()
+      _ -> req $ Throw (dumbErr (InternalError "Thunk type isn't a computation"))
 
     Undefined -> error "No body in `checkDecl`"
 
@@ -112,13 +114,15 @@ loadFiles lt path fname contents = do
   let getStmts v = let (stmts, (PrefixName ps name), _) = (f v) in ((ps ++ [name]), stmts)
   let allStmts = (map getStmts files) :: [(Prefix, RawEnv)]
   -- the original file should be at the end of the allStmts list:
-  let (Just (rest, (prf, mainStmts))) = viewR allStmts
-  unless (prf == [fname]) $
-    throwError (dumbErr (InternalError "Top of dependency graph wasn't main file"))
-  env <- liftEither $ foldM
-         (\e (prefix,stmts) -> loadStmtsWithEnv e prefix Lib stmts) emptyMod
-         rest
-  liftEither $ loadStmtsWithEnv env [] lt mainStmts
+  case viewR allStmts of
+    Just (rest, (prf, mainStmts)) -> do
+      unless (prf == [fname]) $
+        throwError (dumbErr (InternalError "Top of dependency graph wasn't main file"))
+      env <- liftEither $ foldM
+             (\e (prefix,stmts) -> loadStmtsWithEnv e prefix Lib stmts) emptyMod
+             rest
+      liftEither $ loadStmtsWithEnv env [] lt mainStmts
+    Nothing -> throwError (dumbErr (InternalError "Empty dependency graph"))
   where
     depGraph :: [UserName] -> UserName -> String -> ExceptT Error IO [RawMod]
     depGraph chain name cts = case elemIndex name chain of

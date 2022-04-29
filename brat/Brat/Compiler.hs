@@ -36,8 +36,10 @@ compileFile file = do
       lookupBy ((== "main") . fnName) id decls
   graph <- eitherIO $ typeGraph venv mn
   let outFile = (dropExtension file) <> ".tk"
-  let [(_, K ss ts)] = fnSig mn
-  let bin = wrapCircuit (compileCircuit graph (ss, ts))
-  BS.writeFile outFile (encodeMessage bin)
-  putStrLn $ "Wrote to file " ++ outFile
-
+  case fnSig mn of
+    [(_, K ss ts)] -> do
+      let bin = wrapCircuit (compileCircuit graph (ss, ts))
+      BS.writeFile outFile (encodeMessage bin)
+      putStrLn $ "Wrote to file " ++ outFile
+    -- Placeholder while tierkreis output is under development
+    _ -> error "main function must be a kernel"
