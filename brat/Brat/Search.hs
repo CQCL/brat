@@ -22,17 +22,34 @@ tokenValues fc (Product s t)
   = zipWith (\a b -> Vec [(WC fc a), (WC fc b)]) (cycle $ tokenValues fc s) (cycle $ tokenValues fc t)
 tokenValues fc (Vector ty (Simple (Num n))) = Vec <$> (replicate n . WC fc <$> tokenValues fc ty)
 tokenValues _ (Vector _ _) = [] -- not enough info
-tokenValues fc (K _ _) = []
+tokenValues fc (K (R ss) (R ts)) =
+  let lhs = WC fc (binders ss)
+      rhss = tokenRow ts
+  in [ Th (WC fc (lhs :\: (WC fc rhs))) | rhs <- rhss ]
  where
-  aux :: SType -> [Term Chk Noun]
-  aux (Q _) = []
-  aux Bit = tokenValues fc (SimpleTy Boolean)
-  aux (Of (Q _) _) = []
-  aux (Of sty (Simple (Num n))) = do
-    sty <- aux sty
+  tokenRow :: [(p, SType)] -> [Term Chk Noun]
+  tokenRow r = foldr1 comma <$> tokenRows r
+
+  tokenRows :: [(p, SType)] -> [[Term Chk Noun]]
+  tokenRows [] = [[]]
+  tokenRows ((_, sty):tys) = do
+    tm <- tokenSType sty
+    rest <- tokenRows tys
+    [(tm:rest)]
+
+  tokenSType :: SType -> [Term Chk Noun]
+  tokenSType (Q _) = []
+  tokenSType Bit = tokenValues fc (SimpleTy Boolean)
+  tokenSType (Of (Q _) _) = []
+  tokenSType (Of sty (Simple (Num n))) = do
+    sty <- tokenSType sty
     [Vec (WC fc <$> replicate n sty)]
-  aux (Of _ _) = []
-  aux (Rho _) = undefined
+  tokenSType (Of _ _) = []
+  tokenSType (Rho (R row)) = tokenRow row
+
+  comma :: Term Chk Noun -> Term Chk Noun -> Term Chk Noun
+  comma a b = WC fc a :|: WC fc b
+
 tokenValues fc (Option ty) = (:) (Pattern (WC fc PNone)) $ do
   val <- tokenValues fc ty
   [Pattern (WC fc (PSome (WC fc val)))]
@@ -51,9 +68,9 @@ tokenFuncs fc (ss :-> ts)
   outputs ts = do outs <- transpose $ tokenValues fc . snd <$> ts
                   [(foldr1 (\ a b -> (WC fc a :|: WC fc b)) outs)]
 
-  binders :: [a] -> Abstractor
-  binders xs = foldr1 (:||:) $ zipWith const (binder <$> ['a'..]) xs
-
+binders :: [a] -> Abstractor
+binders xs = foldr1 (:||:) $ zipWith const (binder <$> ['a'..]) xs
+ where
   binder = Bind . (:[])
 
 vsearch :: FC -> VType -> [Term Chk Noun]

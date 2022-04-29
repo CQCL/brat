@@ -59,10 +59,8 @@ library
                        Brat.Eval,
                        Brat.Lexer,
                        Brat.Parser,
-                       Brat.Search,
                        Brat.Thin,
-                       Control.Monad.Freer,
-                       Util
+                       Control.Monad.Freer
 
   exposed-modules:     Brat.Checker,
                        Brat.Compiler,
@@ -72,13 +70,15 @@ library
                        Brat.Graph,
                        Brat.Load,
                        Brat.Naming,
+                       Brat.Search,
                        Brat.Syntax.Common,
                        Brat.Syntax.Core,
                        Brat.Syntax.Raw,
                        Brat.Syntax.Skel,
                        Brat.UserName,
                        Proto.Graph, Proto.Graph_Fields,
-                       Proto.Signature, Proto.Signature_Fields
+                       Proto.Signature, Proto.Signature_Fields,
+                       Util
 
   autogen-modules:     Proto.Graph, Proto.Graph_Fields,
                        Proto.Signature, Proto.Signature_Fields
@@ -166,6 +166,7 @@ test-suite tests
                        Test.Circuit.Graph,
                        Test.Failure,
                        Test.Checking,
+                       Test.Search,
                        Test.Syntax.Let
 
   build-depends:       base <5,
@@ -173,9 +174,11 @@ test-suite tests
                        tasty,
                        tasty-hunit,
                        tasty-expected-failure,
+                       tasty-quickcheck,
                        tasty-silver,
                        mtl,
                        containers,
                        filepath,
                        silently,
-                       text
+                       text,
+                       QuickCheck

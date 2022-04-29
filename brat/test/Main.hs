@@ -5,6 +5,7 @@ import Test.Checking
 import Test.Circuit.Gen
 import Test.Circuit.Graph
 import Test.Failure
+import Test.Search
 import Test.Syntax.Let
 
 main = do
@@ -15,4 +16,5 @@ main = do
                                 ,checkingTests
                                 ,letTests
                                  -- ,circuitTests
+                                ,searchTests
                                 ]
