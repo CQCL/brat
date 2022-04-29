@@ -85,6 +85,7 @@ instance Show (tm Chk Noun) => Show (VType' tm) where
   show (Vector ty n) = "Vec(" ++ show ty ++ ", " ++ show n ++ ")"
   show (K ins outs) = '{' : show ins ++ " -o " ++ show outs ++ "}"
   show (Option ty) = "Option(" ++ show ty ++ ")"
+  show (s :<<<: t) = "(" ++ show s ++ " <<< " ++ show t ++ ")"
 
 data SimpleType
   = Natural
