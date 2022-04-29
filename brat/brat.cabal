@@ -48,6 +48,7 @@ common warning-flags
     -Wno-missing-signatures
     -Werror=unused-imports
     -Werror=unused-matches
+    -Werror=missing-methods
 
 library
   import:              haskell, warning-flags

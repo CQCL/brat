@@ -55,6 +55,7 @@ instance Valuable (Term Syn k) where
 
 instance Valuable (Pattern (WC (Term Chk Noun))) where
   eval = evalPat
+  eval' = evalPat'
 
 err :: String -> Except Error a
 err msg = throwError (Err Nothing Nothing (EvalErr msg))
