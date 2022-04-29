@@ -230,6 +230,7 @@ tok = comment
   whiteSpace :: Lexer [Token]
   whiteSpace = some (try (en hspace') <|> en newline')
 
+  newline' :: Lexer Tok
   newline' = newline $> Newline
 
   hspace' :: Lexer Tok

@@ -126,9 +126,9 @@ loadVFile state _ msg = do
 handlers :: MVar ProgramState -> Handlers (LspM ())
 handlers state = mconcat
   [ notificationHandler SInitialized $ const (pure ())
-  , notificationHandler STextDocumentDidOpen (loadVFile state "TextDocumentDidOpen")
-  , notificationHandler STextDocumentDidChange (loadVFile state "TextDocumentDidChange")
-  , notificationHandler STextDocumentDidSave (loadVFile state "TextDocumentDidSave")
+  , notificationHandler STextDocumentDidOpen (loadVFile state ("TextDocumentDidOpen" :: String))
+  , notificationHandler STextDocumentDidChange (loadVFile state ("TextDocumentDidChange" :: String))
+  , notificationHandler STextDocumentDidSave (loadVFile state ("TextDocumentDidSave" :: String))
   -- Do nothing, never cancel!
   , notificationHandler SCancelRequest (const (pure ()))
   -- TODO: on hover, give some info

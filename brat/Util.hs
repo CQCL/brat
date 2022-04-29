@@ -21,7 +21,9 @@ duplicates xs = let (_, dups, _) = aux ([], [], xs) in dups
 -- a,b,c,...,a2,b2,c2,...,aN,bN,cN
 names :: [String]
 names = do
-  number <- [1..]
+  number <- nums
   letter <- ['a'..'z']
   return (letter:show number)
-
+ where
+  nums :: [Int]
+  nums = [1..]
