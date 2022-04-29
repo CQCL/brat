@@ -30,8 +30,10 @@ removeRedundant g@(nodes, _) = foldr removeNode g (filter (redundant . nodeThing
   redundant _ = False
 
 uncombo :: Node -> Graph -> Graph
-uncombo n g | Combo l r <- nodeThing n, _ <- nodeName n
- = removeNode n $ rewire (nodeName n) r $ rewire (nodeName n) l g
+uncombo n g
+  | Combo l r <- nodeThing n, nm <- nodeName n
+  = removeNode n $ rewire nm r $ rewire nm l g
+  | otherwise = g
 
 rewire :: Name -> Src -> Graph -> Graph
 rewire old new (nodes, wires) = (nodes, newWires wires)
