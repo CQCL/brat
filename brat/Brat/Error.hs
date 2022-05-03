@@ -19,6 +19,11 @@ data ErrorMsg
  | NothingToBind String
  -- Expected, type, Actual, term
  | VecLength Int String String String
+ -- Binder, Type
+ | VecPatLength String String
+ -- Term, Type
+ | NotVecPat String String
+
  | VecEval String
  | ParseErr ParseError
  | LexErr ParseError
@@ -50,6 +55,12 @@ instance Show ErrorMsg where
                                        ,"but got vector: " ++ tm
                                        ,"of length " ++ n
                                        ]
+  show (VecPatLength abs ty) = unlines ["Pattern: " ++ abs
+                                       ,"doesn't match type " ++ ty
+                                       ,"(because it's the wrong length)"
+                                       ]
+  show (NotVecPat tm ty)= unwords ["Expected", tm
+                                  ,"to be a vector pattern when binding type", ty]
   show (VecEval n) = "Couldn't determine that " ++ n ++ " is a Nat"
   show (PattErr x) = "Type error in pattern: " ++ x
   show (ParseErr x) = "Parse error " ++ show x

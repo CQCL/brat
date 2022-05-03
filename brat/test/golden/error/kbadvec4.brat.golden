@@ -1,3 +1,6 @@
 Error in f@FC {start = Pos {line = 2, col = 7}, end = Pos {line = 2, col = 20}}:
-  Type error: length mismatch in vector pattern
+  Pattern: [1,2]
+doesn't match type Vec(Bool, 3)
+(because it's the wrong length)
+
 

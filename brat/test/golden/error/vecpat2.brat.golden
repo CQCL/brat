@@ -1,0 +1,3 @@
+Error in fst3@FC {start = Pos {line = 3, col = 5}, end = Pos {line = 3, col = 21}}:
+  Expected some(x) to be a vector pattern when binding type Vec(Int, 3)
+

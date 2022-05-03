@@ -103,7 +103,9 @@ instance EnvFor VEnv VType where
     pure (venv ++ venv', inputs)
   abstractPattern ((src, Option ty):inputs) (PSome x) = Just $ abstract ((src, ty):inputs) x
   abstractPattern ((_, Option _):inputs) PNone = Just $ pure ([], inputs)
-  abstractPattern ((_, vty@(Vector ty n)):inputs) abs = Just $ (,inputs) <$> abstractVecPat (ty, n) vty abs
+  abstractPattern ((_, vty@(Vector ty n)):inputs) abs = Just $ do
+    n <- evalNat n
+    (,inputs) <$> abstractVecPat (ty, n) vty abs
   abstractPattern _ _ = Nothing
 
   abstractVecLit (_, Vector ty n) abss = abstractVecLitVec (ty, n) abss
@@ -124,28 +126,33 @@ instance EnvFor KEnv SType where
   singletonEnv x input@(_, ty) =
     let q = if copyable ty then Tons else One
     in M.singleton (plain x) (q, input)
-  abstractPattern ((_, vty@(Of ty n)):inputs) abs = Just $ (,inputs) <$> abstractVecPat (ty, n) vty abs
+  abstractPattern ((_, vty@(Of ty n)):inputs) abs = Just $ do
+    n <- evalNat n
+    (,inputs) <$> abstractVecPat (ty, n) vty abs
+
   abstractPattern _ _ = Nothing
   abstractVecLit ((_, Of ty n)) abss = abstractVecLitVec (ty, n) abss
   abstractVecLit _ xs = err $ PattErr $ "Can't bind to Vector Literal " ++ (show xs) ++ " in kernel"
 
-abstractVecPat :: (EnvFor env aType) => (aType, Term Chk Noun)
+abstractVecPat :: (EnvFor env aType)
+               => (aType, Int)
                -> aType -- for error message
                -> Pattern Abstractor
                -> Checking env
-abstractVecPat (_, n) vty p@PNil = do
-  n <- evalNat n
-  if n == 0
-    then pure emptyEnv
-    else err $ VecLength n (show vty) "0" (show p)
-abstractVecPat (ty, n) _ (PCons (x :||: xs)) = do
-  -- A `cons` pattern on the LHS needs to have exactly two binders
-  n <- evalNat n
-  let tailTy = makeVec ty (Simple (Num (n - 1)))
-  node <- anext "PCons (Vec)" Hypo [("head", ty), ("tail", tailTy)] []
-  venv <- abstractAll [((node, "head"), ty)] x
-  venv' <- abstractAll [((node, "tail"), tailTy)] xs
-  mergeEnvs [venv,venv']
+abstractVecPat (ty, n) vty p =
+  case p of
+    PNil -> do
+      if n == 0
+        then pure emptyEnv
+        else err $ VecLength n (show vty) "0" (show p)
+    PCons (x :||: xs) -> do
+      -- A `cons` pattern on the LHS needs to have exactly two binders
+      let tailTy = makeVec ty (Simple (Num (n - 1)))
+      node <- anext "PCons (Vec)" Hypo [("head", ty), ("tail", tailTy)] []
+      venv <- abstractAll [((node, "head"), ty)] x
+      venv' <- abstractAll [((node, "tail"), tailTy)] xs
+      mergeEnvs [venv,venv']
+    _ -> err $ NotVecPat (show p) (show (makeVec ty (Simple (Num n))))
 
 abstractVecLitVec :: (EnvFor env aType) => (aType, Term Chk Noun)
                   -> [Abstractor]
@@ -155,7 +162,7 @@ abstractVecLitVec (ty, n) xs = do
     check' n ((), [((node, "value"), SimpleTy Natural)])
     n <- evalNat n
     unless (n == length xs)
-      (fail $ "length mismatch in vector pattern")
+      (err $ VecPatLength (show xs) (show (makeVec ty (Simple (Num n)))))
     envs <- mapM (abstractAll [((node, "type"), ty)]) xs
     mergeEnvs envs
 

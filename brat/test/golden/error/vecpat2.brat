@@ -1,0 +1,3 @@
+fst3 :: Vec(Int, 3) -> Option(Int)
+fst3(cons(x,xs)) = some(x)
+fst3(some(x)) = none
