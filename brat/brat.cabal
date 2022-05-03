@@ -128,6 +128,7 @@ executable brat
                        Brat.Checker.Helpers,
                        Brat.Checker.Quantity,
                        Brat.Checker.Monad,
+                       Brat.Checker.Types,
                        Brat.Compiler,
                        Brat.Compile.Circuit,
                        Brat.Compile.Simple,
