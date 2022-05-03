@@ -25,7 +25,8 @@ module Brat.Syntax.Common (Port,
                            Runtime(RtLocal), -- No reason not to export others if required
                            Pattern(..),
                            Abstractor(..),
-                           Clause(..)) where
+                           Clause(..),
+                           showRow) where
 
 import Brat.FC
 
@@ -208,3 +209,7 @@ data Clause (tm :: Dir -> Kind -> Type) (k :: Kind) where
 
 deriving instance (forall d k. Show (tm d k)) => Show (Clause tm k)
 deriving instance (forall d k. Eq (tm d k)) => Eq (Clause tm k)
+
+showRow :: Show ty => [((a, String), ty)] -> String
+showRow xs = intercalate ", " [ '(':p ++ " :: " ++ show ty ++ ")"
+                              | ((_, p), ty) <- xs]

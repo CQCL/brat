@@ -19,20 +19,19 @@ module Brat.Checker (check
                     ,localFC
                     ) where
 
-import Control.Arrow ((***))
 import Control.Monad (unless, when, foldM)
 import Control.Monad.Freer
-import qualified Control.Monad.Fail as Fail
 import Data.Functor (($>))
-import Data.Kind (Type)
 import Data.List (intercalate, transpose)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as M
-import qualified Data.Set as S
 import Prelude
 
+import Brat.Checker.Helpers
+import Brat.Checker.Monad
+import Brat.Checker.Quantity
+import Brat.Checker.Types
 import Brat.Error
-import Brat.Eval
 import Brat.FC
 import Brat.Graph
 import Brat.Naming
@@ -42,22 +41,6 @@ import Brat.Syntax.Core
 import Brat.UserName
 
 import Debug.Trace
-
-type Graph = Graph' Term
-type Node = Node' Term
-type Wire = Wire' Term
-
-type family Overs (m :: Mode) (k :: Kind) :: Type where
-  Overs m Noun = ()
-  Overs m Verb = [(Src, ValueType m)]
-
-type family Unders (m :: Mode) (d :: Dir) :: Type where
-  Unders m Syn = ()
-  Unders m Chk = [(Tgt, ValueType m)]
-
-type family Outputs (m :: Mode) (d :: Dir) :: Type where
-  Outputs m Syn = [(Src, ValueType m)]
-  Outputs m Chk = ()
 
 class Combine a where
   combine :: a -> a -> Checking a
@@ -90,17 +73,6 @@ instance AType VType where
   makeVec = Vector
   bindToLit (SimpleTy ty) = Right ty
   bindToLit _ = Left ""
-
-type Connectors (m :: Mode) (d :: Dir) (k :: Kind) = (Overs m k, Unders m d)
-
-data Mode = Brat | Kernel
-
-type family ValueType (m :: Mode) where
-  ValueType Brat = VType
-  ValueType Kernel = SType
-
-type VEnv = [(UserName, [(Src, VType)])]
-type KEnv = M.Map UserName (Quantity, (Src, SType))
 
 class EnvLike env where
   mergeEnvs :: [env] -> Checking env
@@ -161,11 +133,11 @@ abstractVecPat :: (EnvFor env aType) => (aType, Term Chk Noun)
                -> aType -- for error message
                -> Pattern Abstractor
                -> Checking env
-abstractVecPat (_, n) vty p@PNil = evalNatSoft n >>= \case
-  Right 0 -> pure emptyEnv
-  -- If we can't work out what the size is, it might be 0
-  Left _  -> pure emptyEnv
-  Right n -> err $ VecLength n (show vty) "0" (show p)
+abstractVecPat (_, n) vty p@PNil = do
+  n <- evalNat n
+  if n == 0
+    then pure emptyEnv
+    else err $ VecLength n (show vty) "0" (show p)
 abstractVecPat (ty, n) _ (PCons (x :||: xs)) = do
   -- A `cons` pattern on the LHS needs to have exactly two binders
   n <- evalNat n
@@ -186,170 +158,6 @@ abstractVecLitVec (ty, n) xs = do
       (fail $ "length mismatch in vector pattern")
     envs <- mapM (abstractAll [((node, "type"), ty)]) xs
     mergeEnvs envs
-
-data TypedHole
-  = NBHole Name FC [String] (Connectors Brat Chk Noun)
-  | VBHole Name FC (Connectors Brat Chk Verb)
-  | NKHole Name FC (Connectors Kernel Chk Noun)
-  | VKHole Name FC (Connectors Kernel Chk Verb)
-  deriving (Eq, Show)
-
-err :: ErrorMsg -> Checking a
-err msg = do
-  fc <- req AskFC
-  req $ Throw $ Err (Just fc) Nothing msg
-
-typeErr :: String -> Checking a
-typeErr = err . TypeErr
-
-showRow :: Show ty => [(Src, ty)] -> String
-showRow xs = intercalate ", " [ '(':p ++ " :: " ++ show ty ++ ")"
-                              | ((_, p), ty) <- xs]
-
-data Context = Ctx { venv :: VEnv
-                   , decls :: [Decl]
-                   , typeFC :: FC
-                   }
-
-data CheckingSig ty where
-  Fresh   :: String -> CheckingSig Name
-  Throw   :: Error  -> CheckingSig a
-  LogHole :: TypedHole -> CheckingSig ()
-  AskFC   :: CheckingSig FC
-  VLup    :: UserName -> CheckingSig (Maybe [(Src, VType)])
-  KLup    :: UserName -> CheckingSig (Maybe (Src, SType))
-  Node    :: Node -> CheckingSig ()
-  Wire    :: Wire -> CheckingSig ()
-  Decls   :: CheckingSig [Decl]
-  KDone   :: CheckingSig ()
-  AskVEnv :: CheckingSig VEnv
-
-data Quantity = None | One | Tons
-
-qpred :: Quantity -> Maybe Quantity
-qpred None = Nothing
-qpred One  = Just None
-qpred Tons = Just Tons
-
-ensureEmpty :: Show ty => String -> [(Src, ty)] -> Checking ()
-ensureEmpty _ [] = pure ()
-ensureEmpty str xs = err $ InternalError $ "Expected empty " ++ str ++ ", got:\n  " ++ showRow xs
-
--- Run a type-checking computation, and ensure that what comes back is a classical thunk
--- TODO: this should be able to work on kernels too
-onlyThunk :: Checking (Outputs Brat Syn, Connectors Brat Syn Noun)
-          -> Checking (Src, [Input], [Output])
-onlyThunk m = do
-  (outs, ((), ())) <- m
-  let tys = [ (p, ty) | ((_, p), ty) <- outs ]
-  src <- case outs of
-           (((src, _), _):_) -> pure src
-           [] -> err $ InternalError "Expected a thunk, but found nothing!"
-  case merge tys of
-    [(port, C (ss :-> ts))] -> pure ((src,port), ss, ts)
-    _ -> err $ ExpectedThunk (showRow outs)
-
-noUnders m = do
-  (outs, (overs, unders)) <- m
-  ensureEmpty "unders" unders
-  pure (outs, overs)
-
-localFC :: FC -> Checking v -> Checking v
-localFC _ (Ret v) = Ret v
-localFC f (Req AskFC k) = localFC f (k f)
-localFC f (Req r k) = Req r (localFC f . k)
-
-localVEnv :: VEnv -> Checking v -> Checking v
-localVEnv _   (Ret v) = Ret v
-localVEnv ext (Req (VLup x) k) | Just x <- lookup x ext = localVEnv ext (k (Just x))
-localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
-                                   localVEnv ext (k (ext ++ env))
-localVEnv ext (Req r k) = Req r (localVEnv ext . k)
-
-wrapError :: (Error -> Error) -> Checking v -> Checking v
-wrapError _ (Ret v) = Ret v
-wrapError f (Req (Throw e) k) = Req (Throw (f e)) k
-wrapError f (Req r k) = Req r (wrapError f . k)
-
-vlup :: UserName -> Checking [(Src, VType)]
-vlup s = do
-  req (VLup s) >>= \case
-    Just vty -> pure vty
-    Nothing -> err $ VarNotFound (show s)
-
-lookupAndUse :: UserName -> KEnv -> Either Error (Maybe ((Src, SType), KEnv))
-lookupAndUse x kenv = case M.lookup x kenv of
-   Nothing -> Right Nothing
-   Just (q, rest) -> case qpred q of
-                      Nothing -> Left $ Err Nothing Nothing $ TypeErr $ (show x) ++ " has already been used"
-                      Just q -> Right $ Just (rest, M.insert x (q, rest) kenv)
-
-localKVar :: KEnv -> Free CheckingSig v -> Free CheckingSig v
-localKVar _   (Ret v) = Ret v
-localKVar env (Req (KLup x) k) = case lookupAndUse x env of
-                                   Left err@(Err (Just _) _ _) -> req $ Throw err
-                                   Left (Err Nothing _ msg) -> err msg
-                                   Right (Just (th, env)) -> localKVar env (k (Just th))
-                                   Right Nothing -> Req (KLup x) (localKVar env . k)
-localKVar env (Req KDone k) = case [ x | (x,(One,_)) <- M.assocs env ] of
-                                [] -> (localKVar env . k) ()
-                                xs -> typeErr $
-                                      unwords ["Variable(s)"
-                                              ,intercalate ", " (fmap show xs)
-                                              ,"haven't been used"
-                                              ]
-localKVar env (Req r k) = Req r (localKVar env . k)
-
-handler :: Free CheckingSig v
-        -> Context
-        -> Namespace
-        -> Either Error (v,([TypedHole],Graph),Namespace)
-handler (Ret v) _ ns = return (v, mempty, ns)
-handler (Req s k) ctx ns
-  = case s of
-      Fresh str -> let (name, root) = fresh str ns in
-                     handler (k name) ctx root
-      Throw err -> Left err
-      LogHole hole -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
-                         return (v,(hole:holes,g),ns)
-      AskFC -> handler (k (typeFC ctx)) ctx ns
-      VLup s -> handler (k $ lookup s (venv ctx)) ctx ns
-      Node n -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
-                   return (v,(holes,([n],[]) <> g),ns)
-      Wire w -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
-                   return (v,(holes,([],[w]) <> g),ns)
-      Decls ->  handler (k (decls ctx)) ctx ns
-      -- We only get a KLup here if the variable has not been found in the kernel context
-      KLup _ -> handler (k Nothing) ctx ns
-      -- Receiving KDone may become possible when merging the two check functions
-      KDone -> error "KDone in handler - this shouldn't happen"
-      AskVEnv -> handler (k (venv ctx)) ctx ns
-
-type Checking = Free CheckingSig
-
--- This way we get file contexts when pattern matching fails
-instance {-# OVERLAPPING #-} Fail.MonadFail Checking where
-  fail = typeErr
-
-next :: String -> Thing -> [Input] -> [Output] -> Checking Name
-next str th ins outs = do
-  this <- req (Fresh str)
-  () <- req (Node (BratNode this th ins outs))
-  pure this
-
-knext :: String -> Thing -> [(Port, SType)] -> [(Port, SType)] -> Checking Name
-knext str th ins outs = do
-  this <- req (Fresh str)
-  () <- req (Node (KernelNode this th ins outs))
-  pure this
-
-wire :: Wire -> Checking ()
-wire w = req $ Wire w
-
-ceval :: Term Chk k -> Checking (Either Error Value)
-ceval tm = do env <- req Decls
-              fc <- req AskFC
-              pure $ evalTerm env (WC fc tm)
 
 checkClauses :: Clause Term Verb
              -> Connectors Brat Chk Verb
@@ -478,12 +286,10 @@ check' (Vec elems) ((), (_, vty@(Vector ty n)):unders) = do
   hypo <- next "vec type hypo" Hypo [] []
   mapM_ (aux [((hypo, "ty"), ty)]) elems
 
-  ceval n >>= \case
-    Left err -> req $ Throw err
-    Right (VSimple (Num n)) -> if length elems == n
-                               then pure ((), ((), unders))
-                               else err $ VecLength n (show vty) (show $ length elems) (show $ Vec elems)
-    Right v -> fail $ unwords ["Trying to reduce", show n, "but got", show v]
+  n <- evalNat n
+  if length elems == n
+    then pure ((), ((), unders))
+    else err $ VecLength n (show vty) (show $ length elems) (show $ Vec elems)
  where
   aux :: [(Src, VType)] -> WC (Term Chk Noun) -> Checking ()
   aux ty tm = do
@@ -623,26 +429,6 @@ check1 tgt tm = do
   ((), ()) <- noUnders (check tm ((), [tgt]))
   pure ()
 
-simpleCheck :: SimpleType -> SimpleTerm -> Checking ()
-simpleCheck Natural (Num n) | n >= 0 = pure ()
-simpleCheck IntTy (Num _) = pure ()
-simpleCheck Boolean (Bool _) = pure ()
-simpleCheck FloatTy (Float _) = pure ()
-simpleCheck TextType (Text _) = pure ()
-simpleCheck UnitTy Unit = pure ()
-simpleCheck ty tm = fail (unwords [show tm, "is not of type", show ty])
-
-evalNatSoft :: Term Chk Noun -> Checking (Either String Int)
-evalNatSoft tm = ceval tm >>= \case
-  Right (VSimple (Num n)) -> pure (Right n)
-  Right v -> pure (Left $ unwords ["Trying to reduce", show tm, "but got", show v])
-  Left err -> req $ Throw err
-
-evalNat :: Term Chk Noun -> Checking Int
-evalNat tm = evalNatSoft tm >>= \case
-  Right n -> pure n
-  Left er -> typeErr er
-
 abstractAll :: (EnvFor aEnv aType) => [(Src, aType)]
             -> Abstractor
             -> Checking aEnv
@@ -674,27 +460,6 @@ abstract ((_, ty):inputs) (Lit tm) = case bindToLit ty of
   Right ty -> simpleCheck ty tm $> (emptyEnv, inputs)
 abstract (input:inputs) (VecLit xs) = (,inputs) <$> abstractVecLit input xs
 abstract _ x = typeErr $ "Can't abstract " ++ show x
-
-combineDisjointKEnvs :: KEnv -> KEnv -> Checking KEnv
-combineDisjointKEnvs l r =
-  let commonKeys = S.intersection (M.keysSet l) (M.keysSet r)
-  in if S.null commonKeys
-    then Ret $ M.union l r
-    else typeErr ("Variable(s) defined twice: " ++
-      (intercalate "," $ map show $ S.toList commonKeys))
-
-pullPorts :: [Port] -> [((Name, Port), ty)] -> Checking [((Name, Port), ty)]
-pullPorts [] types = pure types
-pullPorts (p:ports) types = do
-  (x, types) <- pull1Port p types
-  (x:) <$> pullPorts ports types
- where
-  pull1Port :: Port -> [((Name, Port), ty)]
-            -> Checking (((Name, Port), ty), [((Name, Port), ty)])
-  pull1Port p [] = fail $ "Port not found: " ++ p
-  pull1Port p (x@((_, p'), _):xs)
-   | p == p' = pure (x, xs)
-   | otherwise = (id *** (x:)) <$> pull1Port p xs
 
 run :: (VEnv, [Decl], FC)
     -> Checking a
@@ -814,12 +579,10 @@ kcheck' tm@(Vec elems) ((), (_, vty@(Of ty n)):unders) = do
   hypo <- next "vec type hypo" Hypo [] []
   mapM_ (aux [((hypo, "ty"), ty)]) elems
 
-  ceval n >>= \case
-    Left err -> req $ Throw err
-    Right (VSimple (Num n)) -> if length elems == n
-                               then pure ((), ((), unders))
-                               else err $ VecLength n (show vty) (show $ length elems) (show tm)
-    Right v -> fail $ unwords ["Trying to reduce", show n, "but got", show v]
+  n <- evalNat n
+  if length elems == n
+    then pure ((), ((), unders))
+    else err $ VecLength n (show vty) (show $ length elems) (show tm)
  where
   aux :: [(Src, SType)] -> WC (Term Chk Noun) -> Checking ()
   aux ty tm = do

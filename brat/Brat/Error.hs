@@ -19,6 +19,7 @@ data ErrorMsg
  | NothingToBind String
  -- Expected, type, Actual, term
  | VecLength Int String String String
+ | VecEval String
  | ParseErr ParseError
  | LexErr ParseError
  | DesugarErr String
@@ -49,6 +50,7 @@ instance Show ErrorMsg where
                                        ,"but got vector: " ++ tm
                                        ,"of length " ++ n
                                        ]
+  show (VecEval n) = "Couldn't determine that " ++ n ++ " is a Nat"
   show (PattErr x) = "Type error in pattern: " ++ x
   show (ParseErr x) = "Parse error " ++ show x
   show (LexErr x) = "Lex error " ++ show x
