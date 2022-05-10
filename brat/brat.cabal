@@ -67,7 +67,8 @@ library
                        Brat.Thin,
                        Control.Monad.Freer
 
-  exposed-modules:     Brat.Checker,
+  exposed-modules:     Brat.Checker.Combine,
+                       Brat.Checker,
                        Brat.Compiler,
                        Brat.Compile.Circuit,
                        Brat.Error,
@@ -126,6 +127,7 @@ executable brat
                        utility-ht
 
   other-modules:       Brat.Checker,
+                       Brat.Checker.Combine,
                        Brat.Checker.Helpers,
                        Brat.Checker.Quantity,
                        Brat.Checker.Monad,
@@ -170,9 +172,11 @@ test-suite tests
   default-language:    Haskell2010
   hs-source-dirs:      test
   main-is:             Main.hs
-  other-modules:       Test.Circuit.Common,
+  other-modules:       Test.Checking,
+                       Test.Circuit.Common,
                        Test.Circuit.Gen,
                        Test.Circuit.Graph,
+                       Test.Combine,
                        Test.Failure,
                        Test.Checking,
                        Test.Naming,

@@ -25,7 +25,6 @@ import Data.Functor (($>))
 import Data.List (intercalate, transpose)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as M
-import Prelude
 
 import Brat.Checker.Helpers
 import Brat.Checker.Monad
@@ -41,21 +40,6 @@ import Brat.Syntax.Core
 import Brat.UserName
 
 import Debug.Trace
-
-class Combine a where
-  combine :: a -> a -> Checking a
-
-instance Combine [(Src, VType)] where
-  combine [(src, C (ss :-> ts))] [(src', C (us :-> vs))] = do
-    node <- next (show src ++ ", " ++ show src') (Combo src src') (ss <> us) (ts <> vs)
-    pure [((node, "fun"), C ((ss <> us) :-> (ts <> vs)))]
-  combine a b = pure $ a <> b
-
-instance Combine [(Src, SType)] where
-  combine a b = pure $ a <> b
-
-instance Combine () where
-  combine () () = pure ()
 
 class (Show t) => AType t where
   anext :: String -> Thing -> [(Port, t)] -> [(Port, t)] -> Checking Name
@@ -166,6 +150,21 @@ abstractVecLitVec (ty, n) xs = do
     envs <- mapM (abstractAll [((node, "type"), ty)]) xs
     mergeEnvs envs
 
+-- Allows joining the outputs of two nodes together into a `Combo` node
+class TensorOutputs d where
+  tensor :: d -> d -> Checking d
+
+instance TensorOutputs () where
+  tensor () () = pure ()
+
+instance AType ty => TensorOutputs [(Src, ty)] where
+  tensor ss@((ssrc,_):_) ts@((tsrc,_):_) = do
+    let sig = mergeSigs (rowToSig ss) (rowToSig ts)
+    tensorNode <- anext "tensor" (Combo ssrc tsrc) [] sig
+    pure $ sigToRow tensorNode sig
+  tensor ss [] = pure ss
+  tensor [] ts = pure ts
+
 checkClauses :: Clause Term Verb
              -> Connectors Brat Chk Verb
              -> Checking (Outputs Brat Chk
@@ -187,22 +186,22 @@ checkClauses (Clauses cs) conn = do
        rfc = fcOf rhs
    in  check (WC (FC (start lfc) (end rfc)) (lhs :\: rhs))
 
-check :: Combine (Outputs Brat d)
+check :: TensorOutputs (Outputs Brat d)
       => WC (Term d k)
       -> Connectors Brat d k
       -> Checking (Outputs Brat d
                   ,Connectors Brat d k)
 check (WC fc tm) conn = localFC fc (check' tm conn)
 
-check' :: Combine (Outputs Brat d)
-      => Term d k
-      -> Connectors Brat d k
-      -> Checking (Outputs Brat d
-                  ,Connectors Brat d k) -- rightovers
+check' :: TensorOutputs (Outputs Brat d)
+       => Term d k
+       -> Connectors Brat d k
+       -> Checking (Outputs Brat d
+                   ,Connectors Brat d k) -- rightovers
 check' (s :|: t) tys = do
   (outs, tys)  <- check s tys
   (outs', tys) <- check t tys
-  outs <- combine outs outs'
+  outs <- tensor outs outs'
   pure (outs, tys)
 check' (s :-: t) (overs, unders) = do
   (overs, (rightovers, ())) <- check s (overs, ())
@@ -241,9 +240,10 @@ check' (Emb t) (overs, unders) = do
     checkOutputs top (((src, "fun"), K (R (ss <> us)) (R (ts <> vs))):outs)
   checkOutputs ((tgt, ty):tys) ((src, ty'):outs)
    | ty == ty' = wire (src, Right ty, tgt) *> checkOutputs tys outs
-  checkOutputs tgt src = let exp = showRow tgt
-                             act = showRow src
-                         in  err $ TypeMismatch (show t) exp act
+  checkOutputs (tgt:tgts) (src:srcs) =
+    let exp = showRow (tgt :| tgts)
+        act = showRow (src :| srcs)
+    in  err $ TypeMismatch (show t) exp act
 
 check' (Th t) (overs, (tgt, ty@(C (ss :-> ts))):unders) = do
   srcNode <- next "thunk_source" Source [] ss
@@ -478,14 +478,14 @@ run (ve, ds, fc) m = let ctx = Ctx { venv = ve
                        (\(a,b,_) -> (a,b)) <$> handler m ctx root
 
 
-kcheck :: Combine (Outputs Kernel d)
+kcheck :: TensorOutputs (Outputs Kernel d)
       => WC (Term d k)
       -> Connectors Kernel d k
       -> Checking (Outputs Kernel d
                   ,Connectors Kernel d k)
 kcheck (WC fc tm) conn = localFC fc $ kcheck' tm conn
 
-kcheck' :: Combine (Outputs Kernel d)
+kcheck' :: TensorOutputs (Outputs Kernel d)
        => Term d k
        -> Connectors Kernel d k
        -> Checking (Outputs Kernel d
@@ -493,7 +493,7 @@ kcheck' :: Combine (Outputs Kernel d)
 kcheck' (s :|: t) tys = do
   (outs, tys)  <- kcheck s tys
   (outs', tys) <- kcheck t tys
-  outs <- combine outs outs'
+  outs <- tensor outs outs'
   pure (outs, tys)
 kcheck' (s :-: t) (overs, unders) = do
   (overs, (rightovers, ())) <- kcheck s (overs, ())

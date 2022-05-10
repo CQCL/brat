@@ -26,13 +26,17 @@ module Brat.Syntax.Common (Port,
                            Pattern(..),
                            Abstractor(..),
                            Clause(..),
-                           showRow) where
+                           mergeSigs, showRow
+                          ) where
 
 import Brat.FC
 
+import Data.Char (isDigit)
 import Data.List (intercalate)
-import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.Reverse.StrictSpine as Rev (span)
 import Data.Kind (Type)
+import qualified Data.Set as Set
 
 type Port = String
 
@@ -132,8 +136,34 @@ instance Show io => Show (CType' io) where
 
 deriving instance Eq (VType' tm) => Eq (CType' (Port, VType' tm))
 
-instance Semigroup (CType' a) where
-  (ss :-> ts) <> (us :-> vs) = (ss ++ us) :-> (ts ++ vs)
+instance Semigroup (CType' (Port, ty)) where
+  (ss :-> ts) <> (us :-> vs) = (mergeSigs ss us) :-> (mergeSigs ts vs)
+
+instance Semigroup (Row' tm q) where
+  R ss <> R ts = R (mergeSigs ss ts)
+
+-- For use in semigroup instances of `CType` and `Row`
+mergeSigs :: [(Port, a)] -> [(Port, a)] -> [(Port, a)]
+mergeSigs xs ys = aux Set.empty (xs ++ ys)
+ where
+  aux :: Set.Set Port -> [(Port, a)] -> [(Port, a)]
+  aux _ [] = []
+  aux seen ((p,ty):rest)
+   | Set.member p seen
+   = let p' = head $ filter (\x -> Set.notMember x seen) (names p) in
+       (p', ty) : aux (Set.insert p' seen) rest
+   | otherwise = (p, ty) : aux (Set.insert p seen) rest
+
+  names :: Port -> [String]
+  names port
+    = let (prefix, xs) = Rev.span isDigit port
+          ixs = case xs of
+                  [] -> [(1 :: Int)..]
+                  n  -> [(read n :: Int) + 1..]
+      in addIndex prefix <$> ixs
+
+  addIndex :: String -> Int -> String
+  addIndex s n = s ++ show n
 
 data Locality = Extern String | Local deriving (Eq, Show)
 
@@ -210,6 +240,6 @@ data Clause (tm :: Dir -> Kind -> Type) (k :: Kind) where
 deriving instance (forall d k. Show (tm d k)) => Show (Clause tm k)
 deriving instance (forall d k. Eq (tm d k)) => Eq (Clause tm k)
 
-showRow :: Show ty => [((a, String), ty)] -> String
-showRow xs = intercalate ", " [ '(':p ++ " :: " ++ show ty ++ ")"
-                              | ((_, p), ty) <- xs]
+showRow :: Show ty => NonEmpty ((a, String), ty) -> String
+showRow (x :| xs) = intercalate ", " [ '(':p ++ " :: " ++ show ty ++ ")"
+                                     | ((_, p), ty) <- x:xs ]

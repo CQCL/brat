@@ -5,6 +5,8 @@ module Brat.Load (emptyMod
                  ,typeGraph
                  ) where
 
+import Brat.Checker.Combine
+import Brat.Checker.Helpers (sigToRow)
 import Brat.Checker
 import Brat.Error
 import Brat.FC
@@ -21,9 +23,12 @@ import Util
 import Control.Monad.Except
 import Data.List (elemIndex)
 import Data.List.HT (viewR)
+import Data.List.NonEmpty (NonEmpty(..), last, toList)
 import qualified Data.Graph as G
 import System.Directory (doesFileExist)
 import System.FilePath
+
+import Prelude hiding (last)
 
 -- A Module is a node in the dependency graph
 type RawMod = (RawEnv, UserName, [UserName])
@@ -46,25 +51,31 @@ addNounsToEnv pre = aux root
 checkDecl :: Prefix -> Decl -> Checking ()
 checkDecl pre Decl{..}
   | Local <- fnLocality = do
-  tgt <- next fnName Id fnSig fnSig
+  fnSig <- case fnSig of
+    [] -> req $ Throw (Err (Just fnLoc) Nothing (EmptyRow fnName))
+    (x:xs) -> pure (x :| xs)
+  tgt <- next fnName Id (toList fnSig) (toList fnSig)
   case fnBody of
     NoLhs body -> do
       ((), ((), [])) <- wrapError (addSrc fnName) $
-                        (check body ((), [((tgt, port), ty) | (port, ty) <- fnSig]))
+                        check body ((), toList (sigToRow tgt fnSig))
       pure ()
-    ThunkOf verb -> case merge fnSig of
-      ((_, C (ss :-> ts)):_) -> do
-        src <- next (name <> "/in") Source ss ss
-        tgt <- next (name <> "/out") Target ts ts
-        let thunkTy = ("value", C (ss :-> ts))
-        thunk <- next (name ++ "_thunk") (src :>>: tgt) [] [thunkTy]
-        eval  <- next ("Eval(" ++ name ++ ")") (Eval (thunk, "value")) (thunkTy:ss) ts
-        wire ((thunk, "value"), Right (snd thunkTy), (eval, "value"))
-        ((), ([], [])) <- wrapError (addSrc name) $
-                          checkClauses (unWC verb) ([((src, port), ty) | (port, ty) <- ss]
-                                                   ,[((tgt, port), ty) | (port, ty) <- ts])
-        pure ()
-      _ -> req $ Throw (dumbErr (InternalError "Thunk type isn't a computation"))
+    ThunkOf verb -> do
+      let outputs = sigToRow (MkName []) fnSig
+      rows <- combinationsWithLeftovers outputs
+      case last rows of
+        ((_, C (ss :-> ts)), []) -> do
+          src <- next (name <> "/in") Source ss ss
+          tgt <- next (name <> "/out") Target ts ts
+          let thunkTy = ("value", C (ss :-> ts))
+          thunk <- next (name ++ "_thunk") (src :>>: tgt) [] [thunkTy]
+          eval  <- next ("Eval(" ++ name ++ ")") (Eval (thunk, "value")) (thunkTy:ss) ts
+          wire ((thunk, "value"), Right (snd thunkTy), (eval, "value"))
+          ((), ([], [])) <- wrapError (addSrc name) $
+                            checkClauses (unWC verb) ([((src, port), ty) | (port, ty) <- ss]
+                                                     ,[((tgt, port), ty) | (port, ty) <- ts])
+          pure ()
+        _ -> req $ Throw (dumbErr (InternalError "Thunk type isn't (just) a computation"))
 
     Undefined -> error "No body in `checkDecl`"
 

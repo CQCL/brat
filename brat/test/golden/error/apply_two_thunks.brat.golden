@@ -1,4 +1,4 @@
 Error in go@FC {start = Pos {line = 9, col = 9}, end = Pos {line = 9, col = 18}}:
   Internal error: Expected empty unders, got:
-  (a1 :: Int)
+  (a2 :: Int)
 

@@ -1,10 +1,13 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module Brat.Checker.Helpers (evalNat
                             ,pullPorts, simpleCheck
                             ,combineDisjointKEnvs
-                            ,showRow
                             ,ensureEmpty, noUnders, onlyThunk
+                            ,rowToSig, sigToRow
                             ) where
 
+import Brat.Checker.Combine (combinationsWithLeftovers)
 import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr)
 import Brat.Checker.Types (Connectors, KEnv, Mode(..), Outputs)
 import Brat.Error (ErrorMsg(..))
@@ -13,13 +16,15 @@ import Brat.FC (WC(..))
 import Brat.Naming (Name)
 import Brat.Graph (Src)
 import Brat.Syntax.Common
-import Brat.Syntax.Core (Input, Output, Term, merge)
+import Brat.Syntax.Core (Input, Output, Term)
 import Control.Monad.Freer (req, Free(Ret))
 
 import Control.Arrow ((***))
 import Data.List (intercalate)
+import Data.List.NonEmpty (NonEmpty(..), last)
 import qualified Data.Map as M
 import qualified Data.Set as S
+import Prelude hiding (last)
 
 simpleCheck :: SimpleType -> SimpleTerm -> Checking ()
 simpleCheck Natural (Num n) | n >= 0 = pure ()
@@ -62,7 +67,7 @@ combineDisjointKEnvs l r =
 
 ensureEmpty :: Show ty => String -> [(Src, ty)] -> Checking ()
 ensureEmpty _ [] = pure ()
-ensureEmpty str xs = err $ InternalError $ "Expected empty " ++ str ++ ", got:\n  " ++ showRow xs
+ensureEmpty str (x:xs) = err $ InternalError $ "Expected empty " ++ str ++ ", got:\n  " ++ showRow (x :| xs)
 
 -- Run a type-checking computation, and ensure that what comes back is a classical thunk
 -- TODO: this should be able to work on kernels too
@@ -70,16 +75,22 @@ onlyThunk :: Checking (Outputs Brat Syn, Connectors Brat Syn Noun)
           -> Checking (Src, [Input], [Output])
 onlyThunk m = do
   (outs, ((), ())) <- m
-  let tys = [ (p, ty) | ((_, p), ty) <- outs ]
-  src <- case outs of
-           (((src, _), _):_) -> pure src
-           [] -> err $ InternalError "Expected a thunk, but found nothing!"
-  case merge tys of
-    [(port, C (ss :-> ts))] -> pure ((src,port), ss, ts)
-    _ -> err $ ExpectedThunk (showRow outs)
+  outs1 <- case outs of
+    [] -> err $ ExpectedThunk "empty row"
+    x:xs -> pure (x :| xs)
+  rows <- combinationsWithLeftovers outs1
+  case last rows of
+    ((src, C (ss :-> ts)), []) -> pure (src, ss, ts)
+    ((_, C _), (u:us)) -> typeErr $ "Expected empty unders, got: " ++ showRow (u :| us)
+    (x, xs) -> err $ ExpectedThunk (showRow (x :| xs))
 
 noUnders m = do
   (outs, (overs, unders)) <- m
   ensureEmpty "unders" unders
   pure (outs, overs)
 
+sigToRow :: Traversable t => Name -> t (Port, ty) -> t (Src, ty)
+sigToRow src = fmap $ \(p,ty) -> ((src, p), ty)
+
+rowToSig :: Traversable t => t (Src, ty) -> t (Port, ty)
+rowToSig = fmap $ \((_, p),ty) -> (p, ty)
