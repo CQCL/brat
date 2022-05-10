@@ -50,6 +50,7 @@ common warning-flags
     -Werror=missing-methods
     -Werror=unused-top-binds
     -Werror=unused-local-binds
+    -Werror=redundant-constraints
 
 library
   import:              haskell, warning-flags
