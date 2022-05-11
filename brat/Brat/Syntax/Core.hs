@@ -19,17 +19,6 @@ type Output = Output' Term
 
 type InOut = (Port, VType)
 
-merge :: [InOut] -> [InOut]
-merge ((_, C (ss :-> ts))
-      :(_, C (us :-> vs))
-      :xs) = merge $ ("thunk", C $ (ss <> us) :-> (ts <> vs)):xs
-merge ((_, K (R ss) (R ts))
-      :(_, K (R us) (R vs))
-      :xs) = merge $ ("thunk", K (R (ss <> us)) (R (ts <> vs))):xs
-merge (x:xs) = x : merge xs
-merge [] = []
-
-
 type CType = CType' InOut
 
 -- instance Eq VType => Eq CType where

@@ -23,9 +23,11 @@ import Control.Monad (unless, when, foldM)
 import Control.Monad.Freer
 import Data.Functor (($>))
 import Data.List (intercalate, transpose)
-import Data.List.NonEmpty (NonEmpty(..))
+import Data.List.NonEmpty (NonEmpty(..), filter)
 import qualified Data.Map as M
+import Prelude hiding (filter)
 
+import Brat.Checker.Combine
 import Brat.Checker.Helpers
 import Brat.Checker.Monad
 import Brat.Checker.Quantity
@@ -45,18 +47,21 @@ class (Show t) => AType t where
   anext :: String -> Thing -> [(Port, t)] -> [(Port, t)] -> Checking Name
   makeVec :: t -> Term Chk Noun -> t
   bindToLit :: t -> Either String SimpleType -- Left is error description
+  awire :: (Src, t, Tgt) -> Checking ()
 
 instance AType SType where
   anext = knext
   makeVec = Of
   bindToLit Bit = Right Boolean
   bindToLit _ = Left " in a kernel"
+  awire (src, ty, tgt) = req $ Wire (src, Left ty, tgt)
 
 instance AType VType where
   anext = next
   makeVec = Vector
   bindToLit (SimpleTy ty) = Right ty
   bindToLit _ = Left ""
+  awire (src, ty, tgt) = req $ Wire (src, Right ty, tgt)
 
 class EnvLike env where
   mergeEnvs :: [env] -> Checking env
@@ -165,6 +170,25 @@ instance AType ty => TensorOutputs [(Src, ty)] where
   tensor ss [] = pure ss
   tensor [] ts = pure ts
 
+checkOutputs :: (Eq t, CombineThunks (Src, t), AType t)
+             => WC (Term Syn k)
+             -> [(Tgt, t)]
+             -> [(Src, t)]
+             -> Checking [(Tgt, t)]
+checkOutputs _ tys [] = pure tys
+checkOutputs tm ((tgt, ty):tys) ((src, ty'):outs)
+ | ty == ty' = awire (src, ty, tgt) *> checkOutputs tm tys outs
+ | otherwise = do
+     opts <- combinationsWithLeftovers ((src, ty') :| outs)
+     case filter ((ty==).snd.fst) opts of
+       [((src,_),outs)] -> awire (src, ty, tgt) *> checkOutputs tm tys outs
+       [] -> let exp = showRow ((tgt, ty) :| tys)
+                 act = showRow ((src, ty') :| outs)
+             in  req $ Throw $
+                 Err (Just $ fcOf tm) Nothing $
+                 TypeMismatch (show tm) exp act
+       _ -> err $ InternalError "Multiple options in checkOutputs"
+
 checkClauses :: Clause Term Verb
              -> Connectors Brat Chk Verb
              -> Checking (Outputs Brat Chk
@@ -229,21 +253,8 @@ check'  (t ::: outs) (overs, ()) = do
     pure (((node, port), ty):hungry, ((node, port), ty):dangling)
 check' (Emb t) (overs, unders) = do
   (outs, (overs, ())) <- check t (overs, ())
-  unders <- checkOutputs unders outs
+  unders <- checkOutputs t unders outs
   pure ((), (overs, unders))
- where
-  checkOutputs :: [(Tgt, VType)] -> [(Src, VType)] -> Checking [(Tgt, VType)]
-  checkOutputs tys [] = pure tys
-  -- HACK: Try to merge kernels willy-nilly
-  checkOutputs top@((_, K _ _):_) ((src, K (R ss) (R ts)):(src', K (R us) (R vs)):outs) = do
-    src <- next "kcombo" (Combo src src') [] [("fun", K (R (ss <> us)) (R (ts <> vs)))]
-    checkOutputs top (((src, "fun"), K (R (ss <> us)) (R (ts <> vs))):outs)
-  checkOutputs ((tgt, ty):tys) ((src, ty'):outs)
-   | ty == ty' = wire (src, Right ty, tgt) *> checkOutputs tys outs
-  checkOutputs (tgt:tgts) (src:srcs) =
-    let exp = showRow (tgt :| tgts)
-        act = showRow (src :| srcs)
-    in  err $ TypeMismatch (show t) exp act
 
 check' (Th t) (overs, (tgt, ty@(C (ss :-> ts))):unders) = do
   srcNode <- next "thunk_source" Source [] ss
@@ -509,14 +520,8 @@ kcheck' (Pull ports t) (overs, unders) = do
   kcheck t (overs, unders)
 kcheck' (Emb t) (overs, unders) = do
   (outs, (overs, ())) <- kcheck t (overs, ())
-  unders <- kcheckOutputs unders outs
+  unders <- checkOutputs t unders outs
   pure ((), (overs, unders))
- where
-  kcheckOutputs :: [(Tgt, SType)] -> [(Src, SType)] -> Checking [(Tgt, SType)]
-  kcheckOutputs tys [] = pure tys
-  kcheckOutputs ((tgt, ty):tys) ((src, ty'):outs)
-   | ty == ty' = wire (src, Left ty, tgt) *> kcheckOutputs tys outs
-  kcheckOutputs _ _ = fail "check (kernel): checkOutputs failed"
 kcheck' (Th _) _ = fail "no higher order signals! (Th)"
 kcheck' (Var x) ((), ()) = req (KLup x) >>= \case
   Just output -> pure ([output], ((), ()))
