@@ -12,14 +12,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.ExpectedFailure
 
-type Graph = Graph' Term
-
-graphTest :: String -> String -> Graph -> TestTree
-graphTest name contents gExp = testCase name $ do
-  env <- runExceptT $ loadFiles Lib "" name contents
-  case env of
-    Left err -> assertFailure (show err)
-    Right (_, _, _, gAct) -> gAct =? gExp
+graphTest name file graph = testCase name (runProg name file graph)
 
 idFile = unlines
   ["main :: { a :: Qubit -o b :: Qubit }"

@@ -5,6 +5,7 @@ import Test.Checking
 import Test.Circuit.Gen
 import Test.Circuit.Graph
 import Test.Combine
+import Test.Constructors
 import Test.Failure
 import Test.Naming
 import Test.Search
@@ -21,4 +22,5 @@ main = do
                                 ,nameTests
                                 ,searchTests
                                 ,combineTests
+                                ,constructorTests
                                 ]

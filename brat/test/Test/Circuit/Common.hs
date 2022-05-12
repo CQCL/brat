@@ -2,19 +2,22 @@
 
 module Test.Circuit.Common where
 
+import Control.Monad.Except (runExceptT)
 import qualified Data.Map as Map
 import Data.String (IsString(..))
 import Test.Tasty.HUnit
 
+import Brat.Checker.Types (Graph, Node, Wire)
 import Brat.Graph
+import Brat.Load (LoadType(..), loadFiles)
 import Brat.Naming
-import Brat.Syntax.Core (Term(..))
+import Brat.Syntax.Core
 import Brat.Syntax.Common
 
 instance IsString Name where
   fromString s = MkName [(s, 0)]
 
-idGraph :: Graph' Term
+idGraph :: Graph
 idGraph = ([BratNode "main_box" ("src" :>>: "tgt") [] [("fun", kty)]
            ,BratNode "main" Id [("a1", kty)] [("a1", kty)]
            ,KernelNode "src" Source [] [("a", Q Qubit)]
@@ -27,7 +30,7 @@ idGraph = ([BratNode "main_box" ("src" :>>: "tgt") [] [("fun", kty)]
  where
   kty = K (R [("a", Q Qubit)]) (R [("b", Q Qubit)])
 
-swapGraph :: Graph' Term
+swapGraph :: Graph
 swapGraph = ([BratNode "main_box" ("src" :>>: "tgt") [] [("fun", kty)]
              ,BratNode "main" Id [("a1", kty)] [("a1", kty)]
              ,KernelNode "src" Source [] [("a", Q Qubit), ("b", Q Qubit)]
@@ -43,7 +46,7 @@ swapGraph = ([BratNode "main_box" ("src" :>>: "tgt") [] [("fun", kty)]
         (R [("a", Q Qubit),  ("b", Q Qubit)])
         (R [("b", Q Qubit), ("a", Q Qubit)])
 
-xGraph :: Graph' Term
+xGraph :: Graph
 xGraph = ([BratNode "tket.X" (Prim "tket.X") [] [("a1", xTy)]
           ,KernelNode "X" (Eval ("tket.X", "a")) [("xa", Q Qubit)] [("xb", Q Qubit)]
           ,BratNode "main_box" ("src" :>>: "tgt") [] [("fun", mainTy)]
@@ -61,7 +64,7 @@ xGraph = ([BratNode "tket.X" (Prim "tket.X") [] [("a1", xTy)]
   mainTy = K (R [("a", Q Qubit)]) (R [("b", Q Qubit)])
 
 -- TODO:
-rxGraph :: Graph' Term
+rxGraph :: Graph
 rxGraph = ([BratNode "id" (Prim "Rx")
             [("th", SimpleTy FloatTy)]
             [("kernel", K (R [("a", Q Qubit)]) (R [("b", Q Qubit)]))]
@@ -76,7 +79,7 @@ rxGraph = ([BratNode "id" (Prim "Rx")
 
 int = SimpleTy IntTy
 
-twoGraph :: Graph' Term
+twoGraph :: Graph
 twoGraph = ([BratNode "add" (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))]
             ,BratNode "add" (Eval ("add", "thunk")) [("a", int), ("b", int)] [("c", int)]
             ,BratNode "1a" (Const (Num 1)) [] [("value", int)]
@@ -91,14 +94,14 @@ twoGraph = ([BratNode "add" (Prim "add") [] [("thunk", C ([("a", int), ("b", int
             ]
            )
 
-oneGraph :: Graph' Term
+oneGraph :: Graph
 oneGraph = ([BratNode "1" (Const (Num 1)) [] [("value", int)]
             ,BratNode "one" Id [("n", int)] [("n", int)]
             ]
            ,[(("1", "value"), Right int, ("one", "n"))]
            )
 
-addNGraph :: Graph' Term
+addNGraph :: Graph
 addNGraph
   = ([BratNode "add" (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))]
      ,BratNode "add_eval" (Eval ("add", "thunk")) [("a", int), ("b", int)] [("c", int)]
@@ -118,7 +121,7 @@ addNGraph
  where
   addN_ty = C ([("in", int)] :-> [("out", int)])
 
-addN2Graph :: Graph' Term
+addN2Graph :: Graph
 addN2Graph
   = ([BratNode "add" (Prim "add") [("a", int), ("b", int)] [("c", int)]
      ,BratNode "N" (Prim "N") [] [("value", int)]
@@ -138,7 +141,7 @@ addN2Graph
  where
   addN_ty = C ([("in", int)] :-> [("out", int)])
 
-extGraph :: Graph' Term
+extGraph :: Graph
 extGraph
  = ([BratNode "add" (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))]]
    ,[]
@@ -147,17 +150,17 @@ extGraph
 emptyGraph = ([], [])
 
 -- Test the "close-enough" "equality" of two graphs
-(=?) :: Graph' Term -> Graph' Term -> Assertion
+(=?) :: Graph -> Graph -> Assertion
 (ns, ws) =? (ns', ws') = nodeEq >> wireEq
  where
   wireEq :: Assertion
   wireEq = let (s1, s2) = (wireSet ws, wireSet ws')
            in assertEqual (unlines [show s1, show s2]) (Map.empty) (Map.difference s1 s2)
 
-  wireSet :: [Wire' Term] -> Map.Map String Int
+  wireSet :: [Wire] -> Map.Map String Int
   wireSet ws = foldr (Map.alter inc) Map.empty (wireKey <$> ws)
 
-  wireKey :: Wire' Term -> String
+  wireKey :: Wire -> String
   wireKey ((_, p), ty, (_, q)) = unwords [p, "--", show ty, "->", q]
 
   nodeEq :: Assertion
@@ -179,12 +182,19 @@ emptyGraph = ([], [])
     Id         -> "id"
     Hypo       -> "hypo"
     Combo _ _  -> "combo"
+    Constructor c -> "ctor_" ++ show c
 
-  nodeKey :: Node' Term -> String
+  nodeKey :: Node -> String
   nodeKey (BratNode _ thing ins outs)
     = thingKey False thing ++ (unlines [show ins, show outs])
   nodeKey (KernelNode _ thing ins outs)
     = thingKey True thing ++ (unlines [show ins, show outs])
 
-  nodeSet :: [Node' Term] -> Map.Map String Int
+  nodeSet :: [Node] -> Map.Map String Int
   nodeSet ns = foldr (Map.alter inc) Map.empty (nodeKey <$> ns)
+
+runProg :: String -> String -> Graph -> Assertion
+runProg name contents expected = do
+  runExceptT (loadFiles Lib "" name contents) >>= \case
+    Right (_, _, _, g) -> g =? expected
+    Left err -> assertFailure (show err)

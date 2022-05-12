@@ -147,7 +147,7 @@ abstractVecLitVec :: (EnvFor env aType) => (aType, Term Chk Noun)
                   -> [Abstractor]
                   -> Checking env
 abstractVecLitVec (ty, n) xs = do
-    node <- next "natHypo" Hypo [] [("value", SimpleTy Natural)]
+    node <- next "natHypo" Hypo [("value", SimpleTy Natural)] []
     check' n ((), [((node, "value"), SimpleTy Natural)])
     n <- evalNat n
     unless (n == length xs)
@@ -291,38 +291,31 @@ check' (Simple tm) ((), ((src, p), SimpleTy ty):unders) = do
   this <- next (show tm) (Const tm) [] [("value", SimpleTy ty)]
   wire ((this, "value"), Right (SimpleTy ty), (src, p))
   pure ((), ((), unders))
-check' (Vec [a,b]) ((), (_, Product s t):unders) = do
-  unpack <- next "pairCheck" Hypo [] [("first", s), ("second", t)]
-  check1 ((unpack, "first"), s) a
-  check1 ((unpack, "second"), t) b
+check' (Vec [a,b]) ((), (tgt, Product s t):unders) = do
+  mkpair <- next "mkpair" (Constructor CPair) [("first", s), ("second", t)] [("value", Product s t)]
+  check1 ((mkpair, "first"), s) a
+  check1 ((mkpair, "second"), t) b
+  wire ((mkpair, "value"), Right (Product s t), tgt)
   pure ((), ((), unders))
-check' (Vec elems) ((), (_, vty@(Vector ty n)):unders) = do
-  hypo <- next "nat hypo" Hypo [] []
+check' (Vec elems) ((), (tgt, vty@(Vector ty n)):unders) = do
+  hypo <- next "nat hypo" Hypo [("ty", SimpleTy Natural)] []
   fc <- req AskFC
   check1 ((hypo, "ty"), SimpleTy Natural) (WC fc n)
-
-  hypo <- next "vec type hypo" Hypo [] []
-  mapM_ (aux [((hypo, "ty"), ty)]) elems
-
-  n <- evalNat n
-  if length elems == n
-    then pure ((), ((), unders))
-    else err $ VecLength n (show vty) (show $ length elems) (show $ Vec elems)
- where
-  aux :: [(Src, VType)] -> WC (Term Chk Noun) -> Checking ()
-  aux ty tm = do
-    ((), ()) <- noUnders (check tm ((), ty))
-    pure ()
-
-check' (Vec elems) ((), (_, List ty):unders) = do
-  hypo <- next "list type hypo" Hypo [] [("type", ty)]
-  mapM_ (aux hypo . unWC) elems
+  len <- evalNat n
+  unless (length elems == len)
+    (err $ VecLength len (show vty) (show (length elems)) (show elems))
+  let inputs = [('e':show i,ty) | i <- [0..(len-1)]]
+  mkvec <- next "mkvec" (Constructor CVec) inputs [("value", Vector ty n)]
+  sequence_ [noUnders $ check x ((), [((mkvec, p), ty)]) | (x, (p, ty)) <- zip elems inputs]
+  wire ((mkvec,"value"), Right (Vector ty n), tgt)
   pure ((), ((), unders))
- where
-  aux :: Name -> Term Chk Noun -> Checking ()
-  aux hypo e = do
-    ((), ()) <- noUnders (check' e ((), [((hypo, "type"), ty)]))
-    pure ()
+
+check' (Vec elems) ((), (tgt, List ty):unders) = do
+  let inputs = [('e':show i, ty) | (i,_) <- zip [0..] elems]
+  mklist <- next "mklist" (Constructor CList) inputs [("value", List ty)]
+  sequence_ [noUnders $ check x ((), [((mklist, p), ty)]) | (x, (p, ty)) <- zip elems inputs]
+  wire ((mklist,"value"), Right (List ty), tgt)
+  pure ((), ((), unders))
 
 check' (NHole name) ((), unders) = do
   fc <- req AskFC
@@ -417,29 +410,60 @@ check' t _ = fail $ "Won't check " ++ show t
 
 -- Check a pattern used as a constructor (on the Rhs of a definition)
 checkRPat :: (Tgt, VType) -> Pattern (WC (Term Chk Noun)) -> Checking ()
-checkRPat tgt (POnePlus x) = check1 tgt x
-checkRPat tgt (PTwoTimes x) = check1 tgt x
+-- POnePlus and PTwoTimes don't change the type of their arguments, so the
+-- arguments should be able to typecheck against the type of the whole
+-- expression, which may be either Nat or Int
+checkRPat (tgt, ty) (POnePlus x) = do
+  succ <- next (show ty ++ ".succ") (Constructor CSucc) [("value", ty)] [("value", ty)]
+  noUnders $ check x ((), [((succ, "value"), ty)])
+  wire ((succ, "value"), Right ty, tgt)
+  pure ()
+checkRPat (tgt, ty) (PTwoTimes x) = do
+  doub <- next (show ty ++ ".doub") (Constructor CDoub) [("value", ty)] [("value", ty)]
+  noUnders $ check x ((), [((doub, "value"), ty)])
+  wire ((doub, "value"), Right ty, tgt)
+  pure ()
 checkRPat (_, List _) PNil = pure ()
 -- A `cons` on the RHS contain a single variable or application that produces
 -- two outputs (head and tail), so typecheck it as such with as normal
-checkRPat (tgt, List ty) (PCons b)
-  = () <$ noUnders (check b ((), [(tgt, ty), (tgt, List ty)]))
+checkRPat (tgt, List ty) (PCons b) = do
+  cons <- next "List.cons" (Constructor CCons) [("head", ty), ("tail", List ty)] [("value", List ty)]
+  noUnders $ check b ((), [((cons, "head"), ty), ((cons, "tail"), List ty)])
+  wire ((cons, "value"), Right (List ty), tgt)
+  pure ()
 checkRPat (_, vty@(Vector _ n)) p@PNil = do
-  n <- evalNat n
-  if n == 0
+  hypo <- next "Vec.size" Hypo [("ty", SimpleTy Natural)] []
+  check' n ((), [((hypo, "ty"), SimpleTy Natural)])
+
+  len <- evalNat n
+  if len == 0
     then pure ()
-    else err $ VecLength n (show vty) "0" (show p)
+    else err $ VecLength len (show vty) "0" (show p)
 checkRPat (tgt, vty@(Vector ty n)) (PCons b) = do
-  n <- evalNat n
-  when (n <= 0)
-    (err $ VecLength n (show vty) "(> 0)" (show (PCons b)))
+  hypo <- next "Vec.size" Hypo [("ty", SimpleTy Natural)] []
+  check' n ((), [((hypo, "ty"), SimpleTy Natural)])
+
+  len <- evalNat n
+  when (len <= 0)
+    (err $ VecLength len (show vty) "(> 0)" (show (PCons b)))
+
+  let tailTy = Vector ty (Simple (Num (len - 1)))
+  cons <- next "Vec.cons" (Constructor CCons)
+          [("head", ty), ("tail", tailTy)]
+          [("value", Vector ty n)]
   noUnders $
-    check b ((), [(tgt, ty)
-                 ,(tgt, Vector ty (Simple (Num (n - 1))))])
+    check b ((), [((cons, "head"), ty)
+                 ,((cons, "tail"), tailTy)])
+  wire ((cons, "value"), Right (Vector ty n), tgt)
   pure ()
 
 checkRPat (_, Option _) PNone = pure ()
 checkRPat (tgt, Option ty) (PSome x) = check1 (tgt, ty) x
+checkRPat (tgt, Option ty) (PSome x) = do
+  some <- next "Option.some" (Constructor CSome) [("value", ty)] [("value", Option ty)]
+  noUnders $ check x ((), [((some, "value"), ty)])
+  wire ((some, "value"), Right (Option ty), tgt)
+  pure ()
 checkRPat unders pat = typeErr $ show pat ++ " not of type " ++ show unders
 
 check1 :: (Tgt, VType) -> WC (Term Chk Noun) -> Checking ()
@@ -478,6 +502,7 @@ abstract ((_, ty):inputs) (Lit tm) = case bindToLit ty of
   Right ty -> simpleCheck ty tm $> (emptyEnv, inputs)
 abstract (input:inputs) (VecLit xs) = (,inputs) <$> abstractVecLit input xs
 abstract _ x = typeErr $ "Can't abstract " ++ show x
+
 
 run :: (VEnv, [Decl], FC)
     -> Checking a
@@ -583,36 +608,44 @@ kcheck' (VHole name) (overs, unders) = do
   fc <- req AskFC
   req $ LogHole $ VKHole name fc (overs, unders)
   pure ((), ([], []))
-kcheck' tm@(Vec elems) ((), (_, vty@(Of ty n)):unders) = do
-  hypo <- next "nat hypo" Hypo [] []
+kcheck' tm@(Vec elems) ((), (tgt, vty@(Of ty n)):unders) = do
+  hypo <- next "Vec.size" Hypo [("ty", SimpleTy Natural)] []
   fc   <- req AskFC
   check1 ((hypo, "ty"), SimpleTy Natural) (WC fc n)
 
-  hypo <- next "vec type hypo" Hypo [] []
-  mapM_ (aux [((hypo, "ty"), ty)]) elems
+  len <- evalNat n
+  unless (length elems == len)
+    (err $ VecLength len (show vty) (show $ length elems) (show tm))
+  let inputs = [('e':show i, ty) | i <- [0..(len-1)]]
+  mkvec <- knext "mkvec" (Constructor CVec) inputs [("value", Of ty n)]
+  sequence_ [noUnders $ kcheck x ((), [((mkvec, p), ty)])
+            | (x, (p,ty)) <- zip elems inputs]
+  wire ((mkvec, "value"), Left (Of ty n), tgt)
+  pure ((), ((), unders))
 
-  n <- evalNat n
-  if length elems == n
-    then pure ((), ((), unders))
-    else err $ VecLength n (show vty) (show $ length elems) (show tm)
- where
-  aux :: [(Src, SType)] -> WC (Term Chk Noun) -> Checking ()
-  aux ty tm = do
-    ((), ()) <- noUnders (kcheck tm ((), ty))
-    pure ()
 kcheck' (Pattern p) ((), ((tgt, vty@(Of ty n)):unders))
  | PNil <- unWC p = do
+     hypo <- next "Vec.size" Hypo [("ty", SimpleTy Natural)] []
+     noUnders $ check' n ((), [((hypo, "ty"), SimpleTy Natural)])
      n <- evalNat n
      if n == 0
        then pure ((), ((), unders))
        else err $ VecLength n (show vty) "0" (show (unWC p))
  | PCons x <- unWC p = do
+     hypo <- next "Vec.size" Hypo [("ty", SimpleTy Natural)] []
+     noUnders $ check' n ((), [((hypo, "ty"), SimpleTy Natural)])
      n <- evalNat n
      when (n <= 0)
        (err $ VecLength n (show vty) "> 0" (show (PCons x)))
+
+     cons <- knext "Vec.cons" (Constructor CCons)
+             [("head", ty), ("tail", Of ty (Simple (Num (n - 1))))]
+             [("value", Of ty (Simple (Num n)))]
+
      noUnders $
-       kcheck x ((), [(tgt, ty)
-                    ,(tgt, Of ty (Simple (Num (n - 1))))])
+       kcheck x ((), [((cons,"head"), ty)
+                     ,((cons,"tail"), Of ty (Simple (Num (n - 1))))])
+     wire ((cons,"value"), Left (Of ty (Simple (Num n))), tgt)
      pure ((), ((), unders))
 kcheck' (Let abs x y) conn = do
   (dangling, ((), ())) <- kcheck x ((), ())

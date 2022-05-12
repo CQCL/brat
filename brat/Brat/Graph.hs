@@ -35,7 +35,11 @@ data Thing
   | Id           -- Identity node for convenient wiring
   | Hypo         -- Hypothesis for type checking
   | Combo Src Src
+  | Constructor ConsType
   deriving (Eq, Show)
+
+data ConsType = CCons | CSome | CVec | CList | CPair | CDoub | CSucc
+ deriving (Eq, Show)
 
 type Graph' tm = ([Node' tm], [Wire' tm])
 {-

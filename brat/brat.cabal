@@ -62,7 +62,6 @@ library
   other-modules:       Brat.Checker.Helpers,
                        Brat.Checker.Monad,
                        Brat.Checker.Quantity,
-                       Brat.Checker.Types,
                        Brat.Compile.Simple,
                        Brat.Dot,
                        Brat.Eval,
@@ -71,8 +70,9 @@ library
                        Brat.Thin,
                        Control.Monad.Freer
 
-  exposed-modules:     Brat.Checker.Combine,
-                       Brat.Checker,
+  exposed-modules:     Brat.Checker,
+                       Brat.Checker.Combine,
+                       Brat.Checker.Types,
                        Brat.Compiler,
                        Brat.Compile.Circuit,
                        Brat.Error,
@@ -181,6 +181,7 @@ test-suite tests
                        Test.Circuit.Gen,
                        Test.Circuit.Graph,
                        Test.Combine,
+                       Test.Constructors,
                        Test.Failure,
                        Test.Checking,
                        Test.Naming,
