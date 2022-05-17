@@ -15,7 +15,7 @@ import Data.Maybe (fromJust)
 import Lens.Micro hiding (_Just, _Nothing)
 import Data.ProtoLens (defMessage)
 import Data.ProtoLens.Prism
-import qualified Data.Map as Map
+import qualified Data.Map as M
 import Data.Text (Text, pack)
 
 import Brat.Graph
@@ -116,8 +116,8 @@ k .- v = k .~ (_Just # v)
 circuit2Tierkreis :: Circuit -> G.StructValue
 circuit2Tierkreis Circuit{..} = defMessage & G.map .~ m
  where
-  m :: Map.Map Text G.Value
-  m = Map.fromList
+  m :: M.Map Text G.Value
+  m = M.fromList
       [("implicitPermutation", emptyStruct)
       ,("bits",     toReg "c" bits)
       ,("commands", defMessage & G.maybe'vec .- cmds)
@@ -130,10 +130,11 @@ circuit2Tierkreis Circuit{..} = defMessage & G.map .~ m
   mkCmd Cmd{..} = let qs = defMessage
                            & G.maybe'vec .- (defMessage
                                              & G.vec .~ (toReg "q" <$> args))
-                      m :: Map.Map Text G.Value
-                        = Map.fromList [("op"
-                                        ,defMessage & G.maybe'str .- pack (opType op))
-                                       ,("args", qs)]
+                      m :: M.Map Text G.Value
+                        = M.fromList
+                          [("op"
+                           ,defMessage & G.maybe'str .- pack (opType op))
+                          ,("args", qs)]
                       struct :: G.StructValue = defMessage & G.map .~ m
                   in  defMessage & G.maybe'struct .- struct
 
@@ -142,7 +143,7 @@ circuit2Tierkreis Circuit{..} = defMessage & G.map .~ m
 
   toReg :: Text -> Int -> G.Value
   toReg reg n = let structs :: [G.StructValue]
-                      = (\bit -> defMessage & G.map .~ Map.fromList [("reg_name", mkStr reg)
+                      = (\bit -> defMessage & G.map .~ M.fromList [("reg_name", mkStr reg)
                                                                   ,("index", mkStr . pack $ show bit)])
                         <$> [0..n-1]
                     vecVal = defMessage & G.vec .~ ((\x -> defMessage & G.maybe'struct .- x)
@@ -153,7 +154,7 @@ circuit2Tierkreis Circuit{..} = defMessage & G.map .~ m
   mkStr txt = defMessage & G.maybe'str .- txt
 
   emptyStruct :: G.Value
-  emptyStruct = let struct :: G.StructValue = (defMessage & G.map .~ Map.empty) in
+  emptyStruct = let struct :: G.StructValue = (defMessage & G.map .~ M.empty) in
                   defMessage & G.maybe'struct .- struct
 
 compileCircuit :: Graph' Term
@@ -167,10 +168,11 @@ empty = defMessage
 wrapCircuit :: G.Value -> G.Graph
 wrapCircuit v = let node :: G.Node = defMessage & G.maybe'const .~ (_Just # v) in
                    defMessage
-                   & G.nodes .~ (Map.fromList [("circuit", node)
-                                              ,("output", defMessage
-                                                          & G.maybe'output .~ (_Just # empty))
-                                              ])
+                   & G.nodes .~ (M.fromList
+                                 [("circuit", node)
+                                 ,("output", defMessage
+                                             & G.maybe'output .~ (_Just # empty))
+                                 ])
                    & G.edges .~ [defMessage
                                  & G.portFrom .~ "value"
                                  & G.portTo   .~ "value"

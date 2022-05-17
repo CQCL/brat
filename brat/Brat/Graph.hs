@@ -5,22 +5,18 @@ module Brat.Graph where
 import Brat.Naming
 import Brat.Syntax.Common
 
-import Data.Functor
 import Data.List ((\\))
 import qualified Data.Graph as G
+import qualified Data.Map as M
 import Data.Maybe (fromJust)
 
 data Node' tm
-  = BratNode Name Thing [Input' tm] [Output' tm]
-  | KernelNode Name Thing [(Port, SType' tm)] [(Port, SType' tm)]
-
-nodeName :: Node' tm -> Name
-nodeName (BratNode nm _ _ _) = nm
-nodeName (KernelNode nm _ _ _) = nm
+  = BratNode Thing [Input' tm] [Output' tm]
+  | KernelNode Thing [(Port, SType' tm)] [(Port, SType' tm)]
 
 nodeThing :: Node' tm -> Thing
-nodeThing (BratNode _ t _ _) = t
-nodeThing (KernelNode _ t _ _) = t
+nodeThing (BratNode t _ _) = t
+nodeThing (KernelNode t _ _) = t
 
 deriving instance Show (tm Chk Noun) => Show (Node' tm)
 deriving instance Eq (tm Chk Noun) => Eq (Node' tm)
@@ -41,7 +37,7 @@ data Thing
 data ConsType = CCons | CSome | CVec | CList | CPair | CDoub | CSucc
  deriving (Eq, Show)
 
-type Graph' tm = ([Node' tm], [Wire' tm])
+type Graph' tm = (M.Map Name (Node' tm), [Wire' tm])
 {-
 newtype BGraph' tm nl el = BG ([Node tm], [Wire tm])
 type BGraph tm = BGraph' tm String String
@@ -50,7 +46,7 @@ deriving instance Eq (tm Chk Noun) => Eq (BGraph tm)
 deriving instance Show (tm Chk Noun) => Show (BGraph tm)
 -}
 instance {-# OVERLAPPING #-} Show (tm Chk Noun) => Show (Graph' tm) where
-  show (ns, ws) = unlines (("Nodes:":(show <$> ns)) ++ ("":"Wires:":(show <$> ws)))
+  show (ns, ws) = unlines (("Nodes:":(show <$> M.toList ns)) ++ ("":"Wires:":(show <$> ws)))
 
 type Wire' tm = (Src, Either (SType' tm) (VType' tm), Tgt)
 
@@ -63,19 +59,18 @@ type Output' tm = (Port, VType' tm)
 toGraph :: Graph' tm -> (G.Graph, G.Vertex -> (Node' tm, Name, [Name]), Name -> Maybe G.Vertex)
 toGraph (ns, ws) = G.graphFromEdges adj
  where
-  adj = [ (n
-          ,nodeName n
-          ,[ tgt | ((src,_), _, (tgt, _)) <- ws, src == nodeName n ]
+  -- TODO: Reduce the complexity (O(n^2)) of this function
+  adj = [ (node
+          ,name
+          ,[ tgt | ((src,_), _, (tgt, _)) <- ws, src == name ]
           )
-        | n <- ns]
+        | (name, node) <- M.toList ns]
 
 wiresFrom :: Name -> Graph' tm -> [Wire' tm]
 wiresFrom src (_, ws) = [ w | w@((a, _), _, (_, _)) <- ws, a == src ]
 
 lookupNode :: Name -> Graph' tm -> Maybe (Node' tm)
-lookupNode name (ns, _) = case [ node | node <- ns, nodeName node == name ] of
-                            [x] -> Just x
-                            _ -> Nothing
+lookupNode name (ns, _) = M.lookup name ns
 
 wireStart :: Wire' tm -> Name
 wireStart ((x, _), _, _) = x
@@ -88,21 +83,23 @@ boxSubgraphs :: forall tm. Eq (tm Chk Noun)
              -> (Graph' tm, [(String, Graph' tm)])
 boxSubgraphs g@(ns,ws) = let subs = fromJust subGraphs
                              (subNodes, subWires) = mconcat $ snd <$> subs
-                         in  ((ns \\ subNodes, ws \\ subWires), subs)
+                         in  ((ns M.\\ subNodes, ws \\ subWires), subs)
  where
-  boxes :: [Node' tm] -> [(String, (Name, Name))]
-  boxes [] = []
-  boxes (n:ns) | (src :>>: tgt) <- nodeThing n = (show (nodeName n), (src,tgt)) : boxes ns
-               | otherwise = boxes ns
+  box :: (Name, Node' tm) -> [(String, (Name, Name))]
+  box (nm,n)
+    | src :>>: tgt <- nodeThing n = [(show nm, (src,tgt))]
+    | otherwise = []
 
   subGraphs :: Maybe [(String, Graph' tm)]
-  subGraphs = traverse (\(lbl, x) -> (lbl,) <$> boxInsides x) (boxes ns)
+  subGraphs = traverse (\(lbl, x) -> (lbl,) <$> boxInsides x) (M.toList ns >>= box)
 
   boxInsides :: (Name, Name) -> Maybe (Graph' tm)
   boxInsides (srcId, tgtId) = do
-    node  <- lookupNode srcId g
     let wires = wiresFrom srcId g
     case wires of
-      [w] | wireEnd w == tgtId -> lookupNode tgtId g <&> \n -> ([n,node], wires)
+      [w] | wireEnd w == tgtId -> do
+              src <- lookupNode srcId g
+              tgt <- lookupNode tgtId g
+              pure (M.fromList [(srcId, src),(tgtId, tgt)], wires)
       _ -> mconcat <$> traverse boxInsides ((\w -> (wireEnd w, tgtId)) <$> wires)
 

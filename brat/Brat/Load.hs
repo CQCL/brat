@@ -37,7 +37,7 @@ type Mod = (VEnv, [Decl], [TypedHole], Graph)
 data LoadType = Lib | Exe deriving (Eq, Show)
 
 emptyMod :: Mod
-emptyMod = (M.empty, [], [], ([], []))
+emptyMod = (M.empty, [], [], (M.empty, []))
 
 addNounsToEnv :: Prefix -> [Decl] -> VEnv
 addNounsToEnv pre = aux root

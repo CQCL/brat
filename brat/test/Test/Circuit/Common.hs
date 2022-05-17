@@ -3,7 +3,7 @@
 module Test.Circuit.Common where
 
 import Control.Monad.Except (runExceptT)
-import qualified Data.Map as Map
+import qualified Data.Map as M
 import Data.String (IsString(..))
 import Test.Tasty.HUnit
 
@@ -17,11 +17,12 @@ import Brat.Syntax.Common
 instance IsString Name where
   fromString s = MkName [(s, 0)]
 
-idGraph :: Graph
-idGraph = ([BratNode "main_box" ("src" :>>: "tgt") [] [("fun", kty)]
-           ,BratNode "main" Id [("a1", kty)] [("a1", kty)]
-           ,KernelNode "src" Source [] [("a", Q Qubit)]
-           ,KernelNode "tgt" Target [("b", Q Qubit)] []
+idGraph :: Graph' Term
+idGraph = (M.fromList
+           [("main_box", BratNode ("src" :>>: "tgt") [] [("fun", kty)])
+           ,("main", BratNode Id [("a1", kty)] [("a1", kty)])
+           ,("src", KernelNode Source [] [("a", Q Qubit)])
+           ,("tgt", KernelNode Target [("b", Q Qubit)] [])
            ]
           ,[(("src", "a"), Left (Q Qubit), ("tgt", "b"))
            ,(("main_box", "fun"), Right kty, ("main", "a1"))
@@ -30,11 +31,12 @@ idGraph = ([BratNode "main_box" ("src" :>>: "tgt") [] [("fun", kty)]
  where
   kty = K (R [("a", Q Qubit)]) (R [("b", Q Qubit)])
 
-swapGraph :: Graph
-swapGraph = ([BratNode "main_box" ("src" :>>: "tgt") [] [("fun", kty)]
-             ,BratNode "main" Id [("a1", kty)] [("a1", kty)]
-             ,KernelNode "src" Source [] [("a", Q Qubit), ("b", Q Qubit)]
-             ,KernelNode "tgt" Target [("b", Q Qubit), ("a", Q Qubit)] []
+swapGraph :: Graph' Term
+swapGraph = (M.fromList
+             [("main_box", BratNode ("src" :>>: "tgt") [] [("fun", kty)])
+             ,("main", BratNode Id [("a1", kty)] [("a1", kty)])
+             ,("src", KernelNode Source [] [("a", Q Qubit), ("b", Q Qubit)])
+             ,("tgt", KernelNode Target [("b", Q Qubit), ("a", Q Qubit)] [])
              ]
             ,[(("src", "a"), Left (Q Qubit), ("tgt", "a"))
              ,(("src", "b"), Left (Q Qubit), ("tgt", "b"))
@@ -46,13 +48,14 @@ swapGraph = ([BratNode "main_box" ("src" :>>: "tgt") [] [("fun", kty)]
         (R [("a", Q Qubit),  ("b", Q Qubit)])
         (R [("b", Q Qubit), ("a", Q Qubit)])
 
-xGraph :: Graph
-xGraph = ([BratNode "tket.X" (Prim "tket.X") [] [("a1", xTy)]
-          ,KernelNode "X" (Eval ("tket.X", "a")) [("xa", Q Qubit)] [("xb", Q Qubit)]
-          ,BratNode "main_box" ("src" :>>: "tgt") [] [("fun", mainTy)]
-          ,BratNode "main" Id [("a1", mainTy)] [("a1", mainTy)]
-          ,KernelNode "src" Source [] [("a", Q Qubit)]
-          ,KernelNode "tgt" Target [("b", Q Qubit)] []
+xGraph :: Graph' Term
+xGraph = (M.fromList
+          [("tket.X", BratNode (Prim "tket.X") [] [("a1", xTy)])
+          ,("X", KernelNode (Eval ("tket.X", "_0")) [("xa", Q Qubit)] [("xb", Q Qubit)])
+          ,("main_box", BratNode ("src" :>>: "tgt") [] [("fun", mainTy)])
+          ,("main", BratNode Id [("a1", mainTy)] [("a1", mainTy)])
+          ,("src", KernelNode Source [] [("a", Q Qubit)])
+          ,("tgt", KernelNode Target [("b", Q Qubit)] [])
           ]
          ,[(("src", "a"), Left (Q Qubit), ("X", "xa"))
           ,(("X", "xb"), Left (Q Qubit), ("tgt", "b"))
@@ -64,53 +67,57 @@ xGraph = ([BratNode "tket.X" (Prim "tket.X") [] [("a1", xTy)]
   mainTy = K (R [("a", Q Qubit)]) (R [("b", Q Qubit)])
 
 -- TODO:
-rxGraph :: Graph
-rxGraph = ([BratNode "id" (Prim "Rx")
+rxGraph :: Graph' Term
+rxGraph = (M.fromList
+           [("id", BratNode (Prim "Rx")
             [("th", SimpleTy FloatTy)]
-            [("kernel", K (R [("a", Q Qubit)]) (R [("b", Q Qubit)]))]
-           ,BratNode "angle" (Const (Float 30.0)) [("th", SimpleTy FloatTy)] []
-           --,KernelNode "eval" (Eval "") testProcess
-           ,BratNode "main" ("src" :>>: "tgt") [] [("fun", K (R [("a", Q Qubit)]) (R [("b", Q Qubit)]))]
-           ,KernelNode "src" Source [] [("a", Q Qubit)]
-           ,KernelNode "tgt" Target [("b", Q Qubit)] []
+            [("kernel", K (R [("a", Q Qubit)]) (R [("b", Q Qubit)]))])
+           ,("angle", BratNode (Const (Float 30.0)) [("th", SimpleTy FloatTy)] [])
+           --,KernelNode (Eval "") testProcess
+           ,("main", BratNode ("src" :>>: "tgt") [] [("fun", K (R [("a", Q Qubit)]) (R [("b", Q Qubit)]))])
+           ,("src", KernelNode Source [] [("a", Q Qubit)])
+           ,("tgt", KernelNode Target [("b", Q Qubit)] [])
            ]
           ,[]
           )
 
 int = SimpleTy IntTy
 
-twoGraph :: Graph
-twoGraph = ([BratNode "add" (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))]
-            ,BratNode "add" (Eval ("add", "thunk")) [("a", int), ("b", int)] [("c", int)]
-            ,BratNode "1a" (Const (Num 1)) [] [("value", int)]
-            ,BratNode "1b" (Const (Num 1)) [] [("value", int)]
-            ,BratNode "one" Id [("n", int)] [("n", int)]
-            ,BratNode "two" Id [("a1", int)] [("a1", int)]
+twoGraph :: Graph' Term
+twoGraph = (M.fromList
+            [("add", BratNode (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))])
+            ,("add_eval", BratNode (Eval ("add", "thunk")) [("a", int), ("b", int)] [("c", int)])
+            ,("1a", BratNode (Const (Num 1)) [] [("value", int)])
+            ,("1b", BratNode (Const (Num 1)) [] [("value", int)])
+            ,("one", BratNode Id [("n", int)] [("n", int)])
+            ,("two", BratNode Id [("a1", int)] [("a1", int)])
             ]
            ,[(("1a", "value"), Right int, ("one", "n"))
-            ,(("1b", "value"), Right int, ("add", "a"))
-            ,(("one", "n"), Right int, ("add", "b"))
-            ,(("add", "c"), Right int, ("two", "a1"))
+            ,(("1b", "value"), Right int, ("add_eval", "a"))
+            ,(("one", "n"), Right int, ("add_eval", "b"))
+            ,(("add_eval", "c"), Right int, ("two", "a1"))
             ]
            )
 
-oneGraph :: Graph
-oneGraph = ([BratNode "1" (Const (Num 1)) [] [("value", int)]
-            ,BratNode "one" Id [("n", int)] [("n", int)]
+oneGraph :: Graph' Term
+oneGraph = (M.fromList
+            [("1", BratNode (Const (Num 1)) [] [("value", int)])
+            ,("one", BratNode Id [("n", int)] [("n", int)])
             ]
            ,[(("1", "value"), Right int, ("one", "n"))]
            )
 
 addNGraph :: Graph
 addNGraph
-  = ([BratNode "add" (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))]
-     ,BratNode "add_eval" (Eval ("add", "thunk")) [("a", int), ("b", int)] [("c", int)]
-     ,BratNode "N" (Prim "N") [] [("value", int)]
-     ,BratNode "addN_box" ("addN_src" :>>: "addN_tgt") [] [("value", addN_ty)]
-     ,BratNode "addN_src" Source [("in", int)] [("in", int)]
-     ,BratNode "addN_tgt" Target [("out", int)] [("out", int)]
-     ,BratNode "addN_eval" (Eval ("addN_box", "value")) [("value", addN_ty), ("in", int)] [("out", int)]
-     ,BratNode "addN" Id [("thunk", addN_ty)] [("thunk", addN_ty)]
+  = (M.fromList
+     [("add", BratNode (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))])
+     ,("add_eval", BratNode (Eval ("add", "thunk")) [("a", int), ("b", int)] [("c", int)])
+     ,("N", BratNode (Prim "N") [] [("value", int)])
+     ,("addN_box", BratNode ("addN_src" :>>: "addN_tgt") [] [("value", addN_ty)])
+     ,("addN_src", BratNode Source [("in", int)] [("in", int)])
+     ,("addN_tgt", BratNode Target [("out", int)] [("out", int)])
+     ,("addN_eval", BratNode (Eval ("addN_box", "value")) [("value", addN_ty), ("in", int)] [("out", int)])
+     ,("addN", BratNode Id [("thunk", addN_ty)] [("thunk", addN_ty)])
      ]
     ,[(("addN_src", "in"), Right int, ("add_eval", "a"))
      ,(("N", "value"), Right int, ("add_eval", "b"))
@@ -123,14 +130,15 @@ addNGraph
 
 addN2Graph :: Graph
 addN2Graph
-  = ([BratNode "add" (Prim "add") [("a", int), ("b", int)] [("c", int)]
-     ,BratNode "N" (Prim "N") [] [("value", int)]
-     ,BratNode "addN_box" ("addN_src" :>>: "addN_tgt") [] [("value", addN_ty)]
-     ,BratNode "addN_src" Source [("in", int)] [("in", int)]
-     ,BratNode "addN_tgt" Target [("out", int)] [("out", int)]
-     ,BratNode "addN_eval" (Eval ("addN_box", "value")) [("value", addN_ty), ("in", int)] [("out", int)]
-     ,BratNode "addN" (Prim "addN") [("in", int)] [("out", int)]
-     ,BratNode "1" (Const (Num 1)) [] [("value", int)]
+  = (M.fromList
+     [("add", BratNode (Prim "add") [("a", int), ("b", int)] [("c", int)])
+     ,("N", BratNode (Prim "N") [] [("value", int)])
+     ,("addN_box", BratNode ("addN_src" :>>: "addN_tgt") [] [("value", addN_ty)])
+     ,("addN_src", BratNode Source [("in", int)] [("in", int)])
+     ,("addN_tgt", BratNode Target [("out", int)] [("out", int)])
+     ,("addN_eval", BratNode (Eval ("addN_box", "value")) [("value", addN_ty), ("in", int)] [("out", int)])
+     ,("addN", BratNode (Prim "addN") [("in", int)] [("out", int)])
+     ,("1", BratNode (Const (Num 1)) [] [("value", int)])
      ]
     ,[(("addN_src", "in"), Right int, ("add", "a"))
      ,(("N", "value"), Right int, ("add", "b"))
@@ -143,30 +151,32 @@ addN2Graph
 
 extGraph :: Graph
 extGraph
- = ([BratNode "add" (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))]]
+ = (M.fromList [("add", BratNode (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))])]
    ,[]
    )
 
-emptyGraph = ([], [])
+emptyGraph = (M.empty, [])
 
 -- Test the "close-enough" "equality" of two graphs
-(=?) :: Graph -> Graph -> Assertion
+(=?) :: Graph -- Actual
+     -> Graph -- Expected
+     -> Assertion
 (ns, ws) =? (ns', ws') = nodeEq >> wireEq
  where
   wireEq :: Assertion
   wireEq = let (s1, s2) = (wireSet ws, wireSet ws')
-           in assertEqual (unlines [show s1, show s2]) (Map.empty) (Map.difference s1 s2)
+           in assertEqual (unlines [show s1, show s2]) (M.empty) (M.difference s1 s2)
 
-  wireSet :: [Wire] -> Map.Map String Int
-  wireSet ws = foldr (Map.alter inc) Map.empty (wireKey <$> ws)
+  wireSet :: [Wire] -> M.Map String Int
+  wireSet ws = foldr (M.alter inc) M.empty (wireKey <$> ws)
 
   wireKey :: Wire -> String
   wireKey ((_, p), ty, (_, q)) = unwords [p, "--", show ty, "->", q]
 
   nodeEq :: Assertion
-  nodeEq = let (s1, s2) = (nodeSet ns, nodeSet ns')
-               pp = unlines . fmap show . Map.toList
-           in  assertEqual (unlines ["Actual:", pp s1, "Expected:", pp s2]) Map.empty (Map.difference s1 s2)
+  nodeEq = let (s1, s2) = (nodeSet (snd <$> M.toList ns), nodeSet (snd <$> M.toList ns'))
+               pp = unlines . fmap show . M.toList
+           in  assertEqual (unlines ["Actual:", pp s1, "Expected:", pp s2]) M.empty (M.difference s1 s2)
 
   inc :: Maybe Int -> Maybe Int
   inc = Just . maybe 1 (1+)
@@ -185,13 +195,13 @@ emptyGraph = ([], [])
     Constructor c -> "ctor_" ++ show c
 
   nodeKey :: Node -> String
-  nodeKey (BratNode _ thing ins outs)
+  nodeKey (BratNode thing ins outs)
     = thingKey False thing ++ (unlines [show ins, show outs])
-  nodeKey (KernelNode _ thing ins outs)
+  nodeKey (KernelNode thing ins outs)
     = thingKey True thing ++ (unlines [show ins, show outs])
 
-  nodeSet :: [Node] -> Map.Map String Int
-  nodeSet ns = foldr (Map.alter inc) Map.empty (nodeKey <$> ns)
+  nodeSet :: [Node] -> M.Map String Int
+  nodeSet ns = foldr (M.alter inc) M.empty (nodeKey <$> ns)
 
 runProg :: String -> String -> Graph -> Assertion
 runProg name contents expected = do

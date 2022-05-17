@@ -29,7 +29,7 @@ data CheckingSig ty where
   AskFC   :: CheckingSig FC
   VLup    :: UserName -> CheckingSig (Maybe [(Src, VType)])
   KLup    :: UserName -> CheckingSig (Maybe (Src, SType))
-  Node    :: Node -> CheckingSig ()
+  Node    :: Name -> Node -> CheckingSig ()
   Wire    :: Wire -> CheckingSig ()
   Decls   :: CheckingSig [Decl]
   KDone   :: CheckingSig ()
@@ -95,10 +95,11 @@ handler (Req s k) ctx ns
                          return (v,(hole:holes,g),ns)
       AskFC -> handler (k (typeFC ctx)) ctx ns
       VLup s -> handler (k $ M.lookup s (venv ctx)) ctx ns
-      Node n -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
-                   return (v,(holes,([n],[]) <> g),ns)
+      Node name node -> do
+        (v,(holes,g),ns) <- handler (k ()) ctx ns
+        return (v,(holes,(M.singleton name node, []) <> g),ns)
       Wire w -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
-                   return (v,(holes,([],[w]) <> g),ns)
+                   return (v,(holes,(M.empty,[w]) <> g),ns)
       Decls ->  handler (k (decls ctx)) ctx ns
       -- We only get a KLup here if the variable has not been found in the kernel context
       KLup _ -> handler (k Nothing) ctx ns
@@ -123,13 +124,13 @@ instance MonadFail Checking where
 next :: String -> Thing -> [Input] -> [Output] -> Checking Name
 next str th ins outs = do
   this <- req (Fresh str)
-  () <- req (Node (BratNode this th ins outs))
+  () <- req (Node this (BratNode th ins outs))
   pure this
 
 knext :: String -> Thing -> [(Port, SType)] -> [(Port, SType)] -> Checking Name
 knext str th ins outs = do
   this <- req (Fresh str)
-  () <- req (Node (KernelNode this th ins outs))
+  () <- req (Node this (KernelNode th ins outs))
   pure this
 
 wire :: Wire -> Checking ()

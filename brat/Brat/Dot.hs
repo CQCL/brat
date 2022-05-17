@@ -3,9 +3,7 @@ module Brat.Dot where
 import Brat.Graph
 import Brat.Syntax.Common
 
-nodeLabel :: Node' tm -> String
-nodeLabel (BratNode nm _ _ _) = show $ show nm
-nodeLabel (KernelNode nm _ _ _) = show $ show nm
+import qualified Data.Map as M
 
 labelType :: Show (tm Chk Noun) => Either (SType' tm) (VType' tm) -> (Port, Port) -> String
 labelType (Left _) _ = ""
@@ -20,8 +18,11 @@ dot :: (Eq (tm Chk Noun), Show (tm Chk Noun)) => Graph' tm -> String
 dot g
   = let ((ns, es), subs) = boxSubgraphs g
         subs' = (\(lbl, s) -> ("subgraph cluster_" ++ lbl) ++ subGraph lbl s) <$> subs
-    in  unlines ("digraph {":subs' ++ (nodeLabel <$> ns) ++ (mkEdge <$> es) ++ ["}"])
+        -- Note: `show . show` adds an extra set of quotes so
+        -- that Dot will parse the name as a single string
+        -- even if it contains spaces
+    in  unlines ("digraph {":subs' ++ (show . show <$> M.keys ns) ++ (mkEdge <$> es) ++ ["}"])
  where
   subGraph :: Show (tm Chk Noun) => String -> Graph' tm -> String
-  subGraph lbl (ns, es) = unlines ("{":("label="++lbl):(nodeLabel <$> ns) ++ (mkEdge <$> es) ++ ["}"])
+  subGraph lbl (ns, es) = unlines ("{":("label="++lbl):(show . show <$> M.keys ns) ++ (mkEdge <$> es) ++ ["}"])
 
