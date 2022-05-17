@@ -25,7 +25,7 @@ checkingIsEqual :: (Eq a, Show a)
          -> a          -- Expected
          -> Assertion
 checkingIsEqual m exp =
-  case run ([],[],fc) m of
+  case run (emptyEnv,[],fc) m of
     Right (x, _) -> x @?= exp
     Left err -> assertFailure (show err)
 

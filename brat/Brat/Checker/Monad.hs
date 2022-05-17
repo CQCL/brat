@@ -42,9 +42,9 @@ localFC f (Req r k) = Req r (localFC f . k)
 
 localVEnv :: VEnv -> Checking v -> Checking v
 localVEnv _   (Ret v) = Ret v
-localVEnv ext (Req (VLup x) k) | Just x <- lookup x ext = localVEnv ext (k (Just x))
+localVEnv ext (Req (VLup x) k) | Just x <- M.lookup x ext = localVEnv ext (k (Just x))
 localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
-                                   localVEnv ext (k (ext ++ env))
+                                   localVEnv ext (k (M.union ext env)) -- ext shadows env
 localVEnv ext (Req r k) = Req r (localVEnv ext . k)
 
 wrapError :: (Error -> Error) -> Checking v -> Checking v
@@ -94,7 +94,7 @@ handler (Req s k) ctx ns
       LogHole hole -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
                          return (v,(hole:holes,g),ns)
       AskFC -> handler (k (typeFC ctx)) ctx ns
-      VLup s -> handler (k $ lookup s (venv ctx)) ctx ns
+      VLup s -> handler (k $ M.lookup s (venv ctx)) ctx ns
       Node n -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
                    return (v,(holes,([n],[]) <> g),ns)
       Wire w -> do (v,(holes,g),ns) <- handler (k ()) ctx ns

@@ -25,6 +25,7 @@ import Data.List (elemIndex)
 import Data.List.HT (viewR)
 import Data.List.NonEmpty (NonEmpty(..), last, toList)
 import qualified Data.Graph as G
+import qualified Data.Map as M
 import System.Directory (doesFileExist)
 import System.FilePath
 
@@ -36,17 +37,18 @@ type Mod = (VEnv, [Decl], [TypedHole], Graph)
 data LoadType = Lib | Exe deriving (Eq, Show)
 
 emptyMod :: Mod
-emptyMod = ([], [], [], ([], []))
+emptyMod = (M.empty, [], [], ([], []))
 
 addNounsToEnv :: Prefix -> [Decl] -> VEnv
 addNounsToEnv pre = aux root
  where
   aux :: Namespace -> [Decl] -> VEnv
-  aux _ [] = []
+  aux _ [] = M.empty
   aux namespace (Decl{..}:decls) =
     let (freshName, newNamespace) = fresh fnName namespace
-        new = (PrefixName pre fnName, [ ((freshName, port), ty) | (port, ty) <- fnSig ])
-    in  new : aux newNamespace decls
+        newKey = PrefixName pre fnName
+        newValue = [ ((freshName, port), ty) | (port, ty) <- fnSig ]
+    in  M.insert newKey newValue $ aux newNamespace decls
 
 checkDecl :: Prefix -> Decl -> Checking ()
 checkDecl pre Decl{..}

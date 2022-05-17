@@ -2,14 +2,14 @@
 
 module Brat.Checker.Helpers (evalNat
                             ,pullPorts, simpleCheck
-                            ,combineDisjointKEnvs
+                            ,combineDisjointEnvs
                             ,ensureEmpty, noUnders, onlyThunk
                             ,rowToSig, sigToRow
                             ) where
 
 import Brat.Checker.Combine (combinationsWithLeftovers)
 import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr)
-import Brat.Checker.Types (Connectors, KEnv, Mode(..), Outputs)
+import Brat.Checker.Types (Connectors, Mode(..), Outputs)
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (Value(..), evalTerm)
 import Brat.FC (WC(..))
@@ -17,6 +17,7 @@ import Brat.Naming (Name)
 import Brat.Graph (Src)
 import Brat.Syntax.Common
 import Brat.Syntax.Core (Input, Output, Term)
+import Brat.UserName (UserName)
 import Control.Monad.Freer (req, Free(Ret))
 
 import Control.Arrow ((***))
@@ -57,8 +58,8 @@ evalNat tm = do
     Right v -> err $ VecEval (show v)
     Left er -> req $ Throw er
 
-combineDisjointKEnvs :: KEnv -> KEnv -> Checking KEnv
-combineDisjointKEnvs l r =
+combineDisjointEnvs :: M.Map UserName v -> M.Map UserName v -> Checking (M.Map UserName v)
+combineDisjointEnvs l r =
   let commonKeys = S.intersection (M.keysSet l) (M.keysSet r)
   in if S.null commonKeys
     then Ret $ M.union l r

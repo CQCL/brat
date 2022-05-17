@@ -1,7 +1,7 @@
 module Brat.Checker.Types (Overs, Unders, Outputs, Connectors
                           ,Mode(..)
                           ,Graph, Node, Wire
-                          ,VEnv, KEnv
+                          ,Env, VEnv, KEnv
                           ,TypedHole(..)
                           ) where
 
@@ -40,8 +40,9 @@ type family ValueType (m :: Mode) where
   ValueType Brat = VType
   ValueType Kernel = SType
 
-type VEnv = [(UserName, [(Src, VType)])]
-type KEnv = M.Map UserName (Quantity, (Src, SType))
+type Env e = M.Map UserName e
+type VEnv = Env [(Src, VType)]
+type KEnv = Env (Quantity, (Src, SType))
 
 data TypedHole
   = NBHole Name FC [String] (Connectors Brat Chk Noun)

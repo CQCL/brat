@@ -28,7 +28,7 @@ test = testCase "let" $
                                      ::: [("a", SimpleTy IntTy), ("b", SimpleTy IntTy)]))
            (wfc (Var "x"))
       conn = ((), ())
-      nil = ([], [], fc)
+      nil = (emptyEnv, [], fc)
   in case fst <$> run nil (check (wfc tm) conn) of
        Right ([(_, SimpleTy IntTy)], ((), ())) -> pure ()
        Right (outs, ((), ())) -> assertFailure (show outs)

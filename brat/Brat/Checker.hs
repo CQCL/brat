@@ -17,6 +17,7 @@ module Brat.Checker (check
                     ,wrapError
                     ,next, knext
                     ,localFC
+                    ,emptyEnv
                     ) where
 
 import Control.Monad (unless, when, foldM)
@@ -63,35 +64,29 @@ instance AType VType where
   bindToLit _ = Left ""
   awire (src, ty, tgt) = req $ Wire (src, Right ty, tgt)
 
-class EnvLike env where
-  mergeEnvs :: [env] -> Checking env
-  emptyEnv :: env
+mergeEnvs :: [Env a] -> Checking (Env a)
+mergeEnvs = foldM combineDisjointEnvs M.empty
 
-instance EnvLike VEnv where
-  mergeEnvs = pure . concat -- TODO make this check for disjointness like KEnv's do
-  emptyEnv = []
+emptyEnv :: Env a
+emptyEnv = M.empty
 
-instance EnvLike KEnv where
-  mergeEnvs = foldM combineDisjointKEnvs M.empty
-  emptyEnv = M.empty
+class (AType ty) => EnvFor e ty where
+  singletonEnv :: String -> (Src, ty) -> Env e
+  abstractPattern :: [(Src, ty)] -> Pattern Abstractor -> Maybe (Checking (Env e, [(Src, ty)]))
+  abstractVecLit :: (Src, ty) -> [Abstractor] -> Checking (Env e)
 
-class (EnvLike env, AType ty) => EnvFor env ty where
-  singletonEnv :: String -> (Src, ty) -> env
-  abstractPattern :: [(Src, ty)] -> Pattern Abstractor -> Maybe (Checking (env, [(Src, ty)]))
-  abstractVecLit :: (Src, ty) -> [Abstractor] -> Checking env
-
-instance EnvFor VEnv VType where
-  singletonEnv x input = [(plain x, [input])]
+instance EnvFor [(Src, VType)] VType where
+  singletonEnv x input = M.singleton (plain x) [input]
   abstractPattern inputs@((_, SimpleTy Natural):_) (POnePlus (Bind x)) = Just $ abstract inputs (Bind x)
   abstractPattern inputs@((_, SimpleTy Natural):_) (PTwoTimes (Bind x)) = Just $ abstract inputs (Bind x)
-  abstractPattern ((_, List _):inputs) PNil = Just $ pure ([], inputs)
+  abstractPattern ((_, List _):inputs) PNil = Just $ pure (emptyEnv, inputs)
   abstractPattern ((_, List ty):inputs) (PCons (x :||: xs)) = Just $ do
     node <- next "PCons (List)" Hypo [("head", ty), ("tail", List ty)] []
     venv <- abstractAll [((node, "head"), ty)] x
     venv' <- abstractAll [((node, "tail"), List ty)] xs
-    pure (venv ++ venv', inputs)
+    (,inputs) <$> combineDisjointEnvs venv venv'
   abstractPattern ((src, Option ty):inputs) (PSome x) = Just $ abstract ((src, ty):inputs) x
-  abstractPattern ((_, Option _):inputs) PNone = Just $ pure ([], inputs)
+  abstractPattern ((_, Option _):inputs) PNone = Just $ pure (emptyEnv, inputs)
   abstractPattern ((_, vty@(Vector ty n)):inputs) abs = Just $ do
     n <- evalNat n
     (,inputs) <$> abstractVecPat (ty, n) vty abs
@@ -102,16 +97,16 @@ instance EnvFor VEnv VType where
   abstractVecLit (_, List ty) xs = do
     node <- next "List literal pattern" Hypo [("type", ty)] []
     venvs <- mapM (abstractAll [((node, "type"), ty)]) xs
-    pure $ concat venvs
+    mergeEnvs venvs
 
   abstractVecLit (src, Product l r) [a,b] = do
     venv <- abstractAll [(src, l)] a
     venv' <- abstractAll [(src, r)] b
-    pure (venv ++ venv')
+    combineDisjointEnvs venv venv'
 
   abstractVecLit _ xs = err $ PattErr $ "Can't bind to Vector Literal " ++ (show xs)
 
-instance EnvFor KEnv SType where
+instance EnvFor (Quantity, (Src, SType)) SType where
   singletonEnv x input@(_, ty) =
     let q = if copyable ty then Tons else One
     in M.singleton (plain x) (q, input)
@@ -123,11 +118,11 @@ instance EnvFor KEnv SType where
   abstractVecLit ((_, Of ty n)) abss = abstractVecLitVec (ty, n) abss
   abstractVecLit _ xs = err $ PattErr $ "Can't bind to Vector Literal " ++ (show xs) ++ " in kernel"
 
-abstractVecPat :: (EnvFor env aType)
+abstractVecPat :: (EnvFor e aType)
                => (aType, Int)
                -> aType -- for error message
                -> Pattern Abstractor
-               -> Checking env
+               -> Checking (Env e)
 abstractVecPat (ty, n) vty p =
   case p of
     PNil -> do
@@ -143,9 +138,9 @@ abstractVecPat (ty, n) vty p =
       mergeEnvs [venv,venv']
     _ -> err $ NotVecPat (show p) (show (makeVec ty (Simple (Num n))))
 
-abstractVecLitVec :: (EnvFor env aType) => (aType, Term Chk Noun)
+abstractVecLitVec :: (EnvFor e aType) => (aType, Term Chk Noun)
                   -> [Abstractor]
-                  -> Checking env
+                  -> Checking (Env e)
 abstractVecLitVec (ty, n) xs = do
     node <- next "natHypo" Hypo [("value", SimpleTy Natural)] []
     check' n ((), [((node, "value"), SimpleTy Natural)])
@@ -338,7 +333,7 @@ check' (NHole name) ((), unders) = do
     env <- req $ AskVEnv
     let matches = transpose $
           [ [ (nm, src) | (src, _) <- stuff ]
-          | (nm, stuff) <- env
+          | (nm, stuff) <- M.assocs env
           , and (zipWith (==) tys (snd <$> stuff))
           ]
     pure $ fmap fst <$> matches
@@ -471,17 +466,17 @@ check1 tgt tm = do
   ((), ()) <- noUnders (check tm ((), [tgt]))
   pure ()
 
-abstractAll :: (EnvFor aEnv aType) => [(Src, aType)]
+abstractAll :: (EnvFor e aType) => [(Src, aType)]
             -> Abstractor
-            -> Checking aEnv
+            -> Checking (Env e)
 abstractAll stuff binder = do
   (env, unders) <- abstract stuff binder
   ensureEmpty "unders after abstract" unders
   pure env
 
-abstract :: (EnvFor aEnv aType) => [(Src, aType)]
+abstract :: (EnvFor e aType) => [(Src, aType)]
          -> Abstractor
-         -> Checking (aEnv -- Local env for checking body of lambda
+         -> Checking (Env e -- Local env for checking body of lambda
                      , [(Src, aType)] -- rightovers
                      )
 abstract [] abs = err $ NothingToBind (show abs)
