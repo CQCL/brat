@@ -459,41 +459,36 @@ runtime = try (char '@' *> aux <* newline) <|> pure RtLocal
         <|> string "tk" $> RtTierkreis
 -}
 
-ndecl :: Parser RawDecl
-ndecl = do (WC fc (nm, ty, body, rt)) <- withFC $ do
-             rt <- pure RtLocal -- runtime
-             nm <- simpleName
-             spaced $ match TypeColon
-             ty   <- outputs
-             vspace
-             ident $ \x -> if x == nm then Just () else Nothing
-             spaced $ match Equal
-             body <- cnoun
-             pure (nm, ty, body, rt)
-           pure $ Decl { fnName = nm
-                       , fnLoc  = fc
-                       , fnSig  = ty
-                       , fnBody = NoLhs body
-                       , fnRT   = rt
-                       , fnLocality = Local
-                       }
+nbody :: String -> Parser (Clause Raw Noun)
+nbody nm = do
+  ident $ \x -> if x == nm then Just () else Nothing
+  spaced $ match Equal
+  body <- cnoun
+  return $ NoLhs body
 
-vdecl :: Parser RawDecl
-vdecl = do (WC fc (nm, ty, body, rt)) <- withFC $ do
-             rt   <- pure RtLocal -- runtime
-             nm <- simpleName
-             spaced $ match TypeColon
-             ty   <- ctype
-             vspace
-             body <- withFC $ clauses nm
-             pure (nm, ty, body, rt)
-           pure $ Decl { fnName = nm
-                       , fnLoc  = fc
-                       , fnSig  = [Named "thunk" (RC ty)]
-                       , fnBody = ThunkOf body
-                       , fnRT   = rt
-                       , fnLocality = Local
-                       }
+
+decl :: Parser RawDecl
+decl = do
+      (WC fc (nm, ty, body, rt)) <- withFC (do
+        rt <- pure RtLocal -- runtime
+        nm <- simpleName
+        spaced $ match TypeColon
+        (ty, body) <- try (do
+            ty <- ctype <&> \t -> [Named "thunk" (RC t)]
+            vspace
+            (ty,) <$> ((ThunkOf <$> (withFC $ clauses nm)) <|> (nbody nm)))
+          <|> (do
+            ty <- outputs
+            vspace
+            (ty,) <$> nbody nm)
+        pure (nm, ty, body, rt))
+      pure $ Decl { fnName = nm
+                  , fnLoc  = fc
+                  , fnSig  = ty
+                  , fnBody = body
+                  , fnRT   = rt
+                  , fnLocality = Local
+                  }
 
 parseFile = go pfile
 
@@ -557,8 +552,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
         <|> try ((alias <?> "type alias")        <&> \x -> ([] , [x]))
         <|> try (extVDecl                        <&> \x -> ([x], []))
         <|> try (extNDecl                        <&> \x -> ([x], []))
-        <|> try ((vdecl <?> "verb declaration")  <&> \x -> ([x], []))
-        <|> ((ndecl <?> "noun declaration")      <&> \x -> ([x], []))
+        <|> ((decl <?> "declaration")            <&> \x -> ([x], []))
  where
   alias :: Parser (UserName, TypeAlias)
   alias = withFC aliasContents <&>

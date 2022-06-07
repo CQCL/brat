@@ -1,6 +1,6 @@
 # Expectation: This file parses and typechecks
 # Reality:
-#  - id2 confuses the parser
+#  - id2 fails to typecheck as the types of the two id's are not properly merged
 
 id :: Nat -> Nat
 id = x -> x
