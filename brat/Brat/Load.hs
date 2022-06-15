@@ -1,8 +1,8 @@
 module Brat.Load (emptyMod
                  ,loadFile
                  ,loadFiles
-                 ,LoadType(..)
                  ,typeGraph
+                 ,checkDecl
                  ) where
 
 import Brat.Checker.Combine
@@ -34,7 +34,6 @@ import Prelude hiding (last)
 -- A Module is a node in the dependency graph
 type RawMod = (RawEnv, UserName, [UserName])
 type Mod = (VEnv, [Decl], [TypedHole], Graph)
-data LoadType = Lib | Exe deriving (Eq, Show)
 
 emptyMod :: Mod
 emptyMod = (M.empty, [], [], (M.empty, []))
@@ -90,8 +89,8 @@ typeGraph venv fn = do
   (_, (_, g)) <- run (venv, [], fnLoc fn) (checkDecl [] fn)
   pure g
 
-loadStmtsWithEnv :: Mod -> Prefix -> LoadType -> RawEnv -> Either Error Mod
-loadStmtsWithEnv (venv, decls, _, _) pre loadType stmts = do
+loadStmtsWithEnv :: Mod -> Prefix -> RawEnv -> Either Error Mod
+loadStmtsWithEnv (venv, decls, _, _) pre stmts = do
   newDecls <- desugarEnv stmts
   decls <- pure (decls ++ newDecls)
   -- hacky mess - cleanup!
@@ -102,23 +101,17 @@ loadStmtsWithEnv (venv, decls, _, _) pre loadType stmts = do
   let env = (venv, decls, FC (Pos 0 0) (Pos 0 0))
   (_, (holes, graph))   <- run env (mapM (\d -> localFC (fnLoc d) $ checkDecl pre d) decls)
 
-  -- all good? Let's just get the graph for `main` (and assume it's a noun)
-  when (loadType == Exe) $ do
-    main <- maybeToRight (Err Nothing Nothing MainNotFound) $ lookupBy ((=="main") . fnName) id decls
-    run env (checkDecl [] main)
-    pure ()
-
   pure (venv, decls, holes, graph)
 
-loadFile :: LoadType -> FilePath -> String -> ExceptT Error IO Mod
-loadFile lt path fname = do
+loadFile :: FilePath -> String -> ExceptT Error IO Mod
+loadFile path fname = do
   contents <- lift $ readFile (path </> (dropExtension fname) ++ ".brat")
-  loadFiles lt path fname contents
+  loadFiles path fname contents
 
 -- Does not read the main file, but does read any imported files
-loadFiles :: LoadType -> FilePath -> String -> String
+loadFiles :: FilePath -> String -> String
          -> ExceptT Error IO Mod
-loadFiles lt path fname contents = do
+loadFiles path fname contents = do
   let fn = plain fname
   edges <- depGraph [] fn contents
 
@@ -132,9 +125,9 @@ loadFiles lt path fname contents = do
       unless (prf == [fname]) $
         throwError (dumbErr (InternalError "Top of dependency graph wasn't main file"))
       env <- liftEither $ foldM
-             (\e (prefix,stmts) -> loadStmtsWithEnv e prefix Lib stmts) emptyMod
+             (\e (prefix,stmts) -> loadStmtsWithEnv e prefix stmts) emptyMod
              rest
-      liftEither $ loadStmtsWithEnv env [] lt mainStmts
+      liftEither $ loadStmtsWithEnv env [] mainStmts
     Nothing -> throwError (dumbErr (InternalError "Empty dependency graph"))
   where
     depGraph :: [UserName] -> UserName -> String -> ExceptT Error IO [RawMod]

@@ -1,6 +1,7 @@
 module Brat.Compiler (printDeclsHoles, compileFile) where
 
 import Brat.Compile.Circuit
+import Brat.Checker (run)
 import Brat.Syntax.Common (Decl'(..), VType'(..))
 import Brat.Error
 import Brat.Load
@@ -18,7 +19,7 @@ checkFilename file = do
 printDeclsHoles :: String -> IO ()
 printDeclsHoles file = do
   (cwd, file) <- checkFilename file
-  env <- runExceptT $ loadFile Lib cwd file
+  env <- runExceptT $ loadFile cwd file
   (_, decls, holes, _) <- eitherIO env
   putStrLn "Decls:"
   print decls
@@ -29,11 +30,14 @@ printDeclsHoles file = do
 compileFile :: String -> IO ()
 compileFile file = do
   (cwd, file) <- checkFilename file
-  env <- runExceptT $ loadFile Exe cwd file
+  env <- runExceptT $ loadFile cwd file
   (venv, decls, _, _) <- eitherIO env
+  -- all good? Let's just get the graph for `main`
   mn <- eitherIO $
       maybeToRight (Err Nothing Nothing MainNotFound) $
       lookupBy ((== "main") . fnName) id decls
+  eitherIO $ run (venv, decls, fnLoc mn) $ checkDecl [] mn
+
   graph <- eitherIO $ typeGraph venv mn
   let outFile = (dropExtension file) <> ".tk"
   case fnSig mn of

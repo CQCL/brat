@@ -9,7 +9,7 @@ import Test.Tasty.HUnit
 
 import Brat.Checker.Types (Graph, Node, Wire)
 import Brat.Graph
-import Brat.Load (LoadType(..), loadFiles)
+import Brat.Load (loadFiles)
 import Brat.Naming
 import Brat.Syntax.Core
 import Brat.Syntax.Common
@@ -205,6 +205,6 @@ emptyGraph = (M.empty, [])
 
 runProg :: String -> String -> Graph -> Assertion
 runProg name contents expected = do
-  runExceptT (loadFiles Lib "" name contents) >>= \case
+  runExceptT (loadFiles "" name contents) >>= \case
     Right (_, _, _, g) -> g =? expected
     Left err -> assertFailure (show err)

@@ -101,7 +101,7 @@ loadVFile state _ msg = do
     Just (VirtualFile _version str rope) -> do
       let file = toString rope
       liftIO $ debugM "loadVFile" $ "Found file: " ++ show str
-      env <- liftIO . runExceptT $ loadFiles Lib cwd (show fileName) file
+      env <- liftIO . runExceptT $ loadFiles cwd (show fileName) file
       case env of
         Right (_,newDecls,holes,_) -> do
           old@(PS oldDecls _ oldHoles) <- liftIO $ takeMVar state
