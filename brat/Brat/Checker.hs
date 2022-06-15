@@ -24,9 +24,9 @@ import Control.Monad (unless, when, foldM)
 import Control.Monad.Freer
 import Data.Functor (($>))
 import Data.List (intercalate, transpose)
-import Data.List.NonEmpty (NonEmpty(..), filter)
+import Data.List.NonEmpty (NonEmpty(..), filter, last)
 import qualified Data.Map as M
-import Prelude hiding (filter)
+import Prelude hiding (filter, last)
 
 import Brat.Checker.Combine
 import Brat.Checker.Helpers
@@ -43,26 +43,6 @@ import Brat.Syntax.Core
 import Brat.UserName
 
 import Debug.Trace
-
-class (Show t) => AType t where
-  anext :: String -> Thing -> [(Port, t)] -> [(Port, t)] -> Checking Name
-  makeVec :: t -> Term Chk Noun -> t
-  bindToLit :: t -> Either String SimpleType -- Left is error description
-  awire :: (Src, t, Tgt) -> Checking ()
-
-instance AType SType where
-  anext = knext
-  makeVec = Of
-  bindToLit Bit = Right Boolean
-  bindToLit _ = Left " in a kernel"
-  awire (src, ty, tgt) = req $ Wire (src, Left ty, tgt)
-
-instance AType VType where
-  anext = next
-  makeVec = Vector
-  bindToLit (SimpleTy ty) = Right ty
-  bindToLit _ = Left ""
-  awire (src, ty, tgt) = req $ Wire (src, Right ty, tgt)
 
 mergeEnvs :: [Env a] -> Checking (Env a)
 mergeEnvs = foldM combineDisjointEnvs M.empty
@@ -150,6 +130,21 @@ abstractVecLitVec (ty, n) xs = do
     envs <- mapM (abstractAll [((node, "type"), ty)]) xs
     mergeEnvs envs
 
+-- Run a type-checking computation, and ensure that what comes back is a classical thunk
+-- TODO: this should be able to work on kernels too
+onlyThunk :: Checking (Outputs Brat Syn, Connectors Brat Syn Noun)
+          -> Checking (Src, [Input], [Output])
+onlyThunk m = do
+  (outs, ((), ())) <- m
+  outs1 <- case outs of
+    [] -> err $ ExpectedThunk "empty row"
+    x:xs -> pure (x :| xs)
+  rows <- combinationsWithLeftovers outs1
+  case last rows of
+    ((src, C (ss :-> ts)), []) -> pure (src, ss, ts)
+    ((_, C _), (u:us)) -> typeErr $ "Expected empty unders, got: " ++ showRow (u :| us)
+    (x, xs) -> err $ ExpectedThunk (showRow (x :| xs))
+
 -- Allows joining the outputs of two nodes together into a `Combo` node
 class TensorOutputs d where
   tensor :: d -> d -> Checking d
@@ -165,7 +160,7 @@ instance AType ty => TensorOutputs [(Src, ty)] where
   tensor ss [] = pure ss
   tensor [] ts = pure ts
 
-checkOutputs :: (Eq t, CombineThunks (Src, t), AType t)
+checkOutputs :: (Eq t, CombineThunks t, AType t)
              => WC (Term Syn k)
              -> [(Tgt, t)]
              -> [(Src, t)]

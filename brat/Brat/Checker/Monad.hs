@@ -4,11 +4,10 @@ import Brat.Checker.Quantity (Quantity(..), qpred)
 import Brat.Checker.Types
 import Brat.Error (Error(..), ErrorMsg(..))
 import Brat.FC (FC)
-import Brat.Graph (Node'(..), Src, Thing(..))
+import Brat.Graph (Node'(..), Src, Thing(..), Tgt)
 import Brat.Naming (fresh, Name, Namespace)
-import Brat.Syntax.Common (Port)
-import Brat.Syntax.Core (Decl, Input, Output
-                        ,SType, VType)
+import Brat.Syntax.Common
+import Brat.Syntax.Core (Decl, Input, Output, SType, VType, Term)
 import Brat.UserName (UserName)
 
 import Control.Monad.Freer
@@ -136,3 +135,22 @@ knext str th ins outs = do
 wire :: Wire -> Checking ()
 wire w = req $ Wire w
 
+class (Show t) => AType t where
+  anext :: String -> Thing -> [(Port, t)] -> [(Port, t)] -> Checking Name
+  makeVec :: t -> Term Chk Noun -> t
+  bindToLit :: t -> Either String SimpleType -- Left is error description
+  awire :: (Src, t, Tgt) -> Checking ()
+
+instance AType SType where
+  anext = knext
+  makeVec = Of
+  bindToLit Bit = Right Boolean
+  bindToLit _ = Left " in a kernel"
+  awire (src, ty, tgt) = req $ Wire (src, Left ty, tgt)
+
+instance AType VType where
+  anext = next
+  makeVec = Vector
+  bindToLit (SimpleTy ty) = Right ty
+  bindToLit _ = Left ""
+  awire (src, ty, tgt) = req $ Wire (src, Right ty, tgt)

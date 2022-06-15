@@ -55,6 +55,7 @@ common warning-flags
     -Werror=unused-top-binds
     -Werror=unused-local-binds
     -Werror=redundant-constraints
+    -Werror=orphans
 
 library
   import:              haskell, warning-flags

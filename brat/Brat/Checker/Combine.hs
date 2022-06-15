@@ -2,55 +2,48 @@
 
 module Brat.Checker.Combine where
 
-import Brat.Checker.Monad (Checking, next, knext)
+import Brat.Checker.Monad (Checking, AType(..))
 import Brat.Graph (Src, Thing(..))
 import Brat.Syntax.Common (pattern R, pattern Rho, VType'(..))
 import Brat.Syntax.Core (VType, SType)
 
 import Data.List.NonEmpty (NonEmpty(..), (<|))
 
--- Combine two thunks (either classical or kernel) in a list of outputs
--- return Nothing if nothing changes, else return the new thunk
+-- Combine types of two thunks (either classical or kernel) in a list of outputs
+-- return Nothing if they can't be combined, else return type of the combined thunk
 class CombineThunks a where
-  combineThunks :: a -> a -> Checking (Maybe a)
+  combineThunks :: a -> a -> Maybe a
 
-combineHead :: CombineThunks a => [a] -> Checking (Maybe (a, [a]))
-combineHead (f:g:hs) = combineThunks f g >>= \case
-  Just fg -> pure (Just (fg, hs))
+combineHead :: (CombineThunks a, AType a) => [(Src, a)] -> Checking (Maybe ((Src, a), [(Src, a)]))
+combineHead ((s,f):(s',g):hs) = case combineThunks f g of
+  Just fg -> do
+    node <- anext (show s ++ "_" ++ show s') (Combo s s') [] [("fun", fg)]
+    pure $ Just (((node, "fun"), fg), hs)
   Nothing -> pure Nothing
 combineHead _ = pure Nothing
 
 -- Apply `combineHead` until it yields nothing and obtain list of the results
 -- just like `iterate` from the prelude. Include original argument in results
-combinationsWithLeftovers :: CombineThunks a => NonEmpty a -> Checking (NonEmpty (a, [a]))
+combinationsWithLeftovers :: (CombineThunks a, AType a) => NonEmpty (Src, a) -> Checking (NonEmpty ((Src, a), [(Src, a)]))
 combinationsWithLeftovers (f :| xs) =
   combineHead (f:xs) >>= \case
     Nothing -> pure ((f, xs) :| [])
     Just (fg, ys) -> ((f, xs) <|) <$> combinationsWithLeftovers (fg :| ys)
 
 -- instance for `Outputs Brat Syn`
-instance CombineThunks (Src, VType) where
-  combineThunks (src, C cty) (src', C cty') = do
-    let newTy = C (cty <> cty')
-    node <- next (show src ++ "_" ++ show src') (Combo src src') [] [("fun", newTy)]
-    pure $ Just ((node, "fun"), newTy)
+instance CombineThunks VType where
+  combineThunks (C cty) (C cty') = Just $ C (cty <> cty')
 
-  combineThunks (src, K (R ss) (R ts)) (src', K (R us) (R vs)) = do
-    let newTy = K (R (ss <> us)) (R (ts <> vs))
-    node <- next (show src ++ "_" ++ show src') (Combo src src') [] [("fun", newTy)]
-    pure $ Just ((node, "fun"), newTy)
+  combineThunks (K (R ss) (R ts)) (K (R us) (R vs)) = Just $ K (R (ss <> us)) (R (ts <> vs))
 
-  combineThunks _ _ = pure Nothing
+  combineThunks _ _ = Nothing
 
 -- instance for `Outputs Kernel Syn`
-instance CombineThunks (Src, SType) where
-  combineThunks (src, (Rho (R r))) (src', (Rho (R r'))) = do
-    let newTy = Rho (R (r <> r'))
-    node <- knext (show src ++ "_" ++ show src') (Combo src src') [] [("fun", newTy)]
-    pure $ Just ((node, "fun"), newTy)
+instance CombineThunks SType where
+  combineThunks (Rho (R r)) (Rho (R r')) = Just $ Rho (R (r <> r'))
 
-  combineThunks _ _ = pure Nothing
+  combineThunks _ _ = Nothing
 
 -- instance for `forall k. Outputs k Chk`
 instance CombineThunks () where
-  combineThunks _ _ = pure Nothing
+  combineThunks _ _ = Nothing
