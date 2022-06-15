@@ -10,16 +10,11 @@ import Util
 import Control.Monad.Except
 import qualified Data.ByteString as BS
 import Data.ProtoLens (encodeMessage)
-import System.FilePath (dropExtension, splitFileName, takeExtension)
-
-checkFilename file = do
-  unless (takeExtension file == ".brat") $ fail $ "Filename " ++ file ++ " must end in .brat"
-  pure $ splitFileName $ dropExtension file
+import System.FilePath (dropExtension)
 
 printDeclsHoles :: String -> IO ()
 printDeclsHoles file = do
-  (cwd, file) <- checkFilename file
-  env <- runExceptT $ loadFile cwd file
+  env <- runExceptT $ loadFilename file
   (_, decls, holes, _) <- eitherIO env
   putStrLn "Decls:"
   print decls
@@ -29,8 +24,7 @@ printDeclsHoles file = do
 
 compileFile :: String -> IO ()
 compileFile file = do
-  (cwd, file) <- checkFilename file
-  env <- runExceptT $ loadFile cwd file
+  env <- runExceptT $ loadFilename file
   (venv, decls, _, _) <- eitherIO env
   -- all good? Let's just get the graph for `main`
   mn <- eitherIO $

@@ -1,5 +1,5 @@
 module Brat.Load (emptyMod
-                 ,loadFile
+                 ,loadFilename
                  ,loadFiles
                  ,typeGraph
                  ,checkDecl
@@ -103,9 +103,11 @@ loadStmtsWithEnv (venv, decls, _, _) pre stmts = do
 
   pure (venv, decls, holes, graph)
 
-loadFile :: FilePath -> String -> ExceptT Error IO Mod
-loadFile path fname = do
-  contents <- lift $ readFile (path </> (dropExtension fname) ++ ".brat")
+loadFilename :: String -> ExceptT Error IO Mod
+loadFilename file = do
+  unless (takeExtension file == ".brat") $ fail $ "Filename " ++ file ++ " must end in .brat"
+  let (path, fname) = splitFileName $ dropExtension file
+  contents <- lift $ readFile file
   loadFiles path fname contents
 
 -- Does not read the main file, but does read any imported files

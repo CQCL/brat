@@ -11,8 +11,7 @@ import Test.Tasty.ExpectedFailure
 
 parseAndCheck :: FilePath -> TestTree
 parseAndCheck file = testCase (show file) $ do
-  (cwd, file) <- pure $ splitFileName file
-  env <- runExceptT $ loadFile cwd file
+  env <- runExceptT $ loadFilename file
   case env of
     Left err -> assertFailure (show err)
     Right (venv, nouns, holes, _) -> do
