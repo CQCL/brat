@@ -3,7 +3,7 @@
 module Brat.Checker.Combine where
 
 import Brat.Checker.Monad (Checking, AType(..))
-import Brat.Graph (Src, Thing(..))
+import Brat.Graph (Src, Thing(..), ComboType(..))
 import Brat.Syntax.Common (pattern R, pattern Rho, VType'(..))
 import Brat.Syntax.Core (VType, SType)
 
@@ -17,7 +17,9 @@ class CombineThunks a where
 combineHead :: (CombineThunks a, AType a) => [(Src, a)] -> Checking (Maybe ((Src, a), [(Src, a)]))
 combineHead ((s,f):(s',g):hs) = case combineThunks f g of
   Just fg -> do
-    node <- anext (show s ++ "_" ++ show s') (Combo s s') [] [("fun", fg)]
+    node <- anext (show s ++ "_" ++ show s') (Combo Thunk) [("in1", f), ("in2", g)] [("fun", fg)]
+    awire (s, f, (node, ("in1")))
+    awire (s', g, (node, ("in2")))
     pure $ Just (((node, "fun"), fg), hs)
   Nothing -> pure Nothing
 combineHead _ = pure Nothing

@@ -4,13 +4,18 @@ module Test.Circuit.Graph (graphTests) where
 import Brat.Error
 import Brat.Graph
 import Brat.Load
-import Brat.Syntax.Core (Term)
+import Brat.Syntax.Core (Term, VType)
+import Brat.Naming (Name)
 import Test.Circuit.Common
+import Brat.Checker
+import Brat.Syntax.Common
+import Brat.FC
 
 import Control.Monad.Except
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.ExpectedFailure
+import qualified Data.Map as M
 
 graphTest name file graph = testCase name (runProg name file graph)
 
@@ -88,6 +93,40 @@ comment = unlines
   ,""
   ]
 
+dummyFC = FC (Pos 0 0) (Pos 0 0)
+
+mkTensor :: Checking (Name, Name, Name, [(Src, VType)])
+mkTensor = do
+  foo <- next "foo" Source [] [("out1", SimpleTy Natural), ("out2", SimpleTy FloatTy)]
+  bar <- next "bar" Source [] [("out1", SimpleTy IntTy)]
+  qux <- next "qux" Source [] [("res", SimpleTy TextType)]
+  outs <- tensor [((foo, "out1"), SimpleTy Natural),((foo, "out2"), SimpleTy FloatTy)] [((bar, "out1"), SimpleTy IntTy), ((qux, "res"), SimpleTy TextType)]
+  pure (foo, bar, qux, outs)
+
+isCombo :: Thing -> Bool
+isCombo (Combo _) = True
+isCombo _ = False
+
+tensorOutputsTests :: TestTree
+tensorOutputsTests = testCase "tensorOutputs" $ case run (emptyEnv, [], dummyFC) mkTensor of
+  Left err -> assertFailure (show err)
+  Right ((foo, bar, qux, outs), (holes, (nodes, edges))) -> do
+    (M.size nodes) @=? 4 -- three input nodes and one combo
+    let combo_nodes = (M.assocs nodes) >>= (\(name, node) -> if (isCombo $ nodeThing node) then [name] else [])
+    (length combo_nodes) @?= 1
+    let combo_node = head combo_nodes
+    (length outs) @?= 4 -- four wires/ports
+    mapM (@?= combo_node) (map (fst.fst) outs)
+    let actualPorts = M.fromList $ map (\((n,p),ty) -> (p,ty)) outs
+    let expectedPorts = M.fromList [("out1", SimpleTy Natural), ("out2", SimpleTy FloatTy), ("out3", SimpleTy IntTy), ("res", SimpleTy TextType)]
+    actualPorts @?= expectedPorts
+    edges @?= [
+        ((foo,"out1"), Right (SimpleTy Natural), (combo_node, "out1")),
+        ((foo,"out2"), Right (SimpleTy FloatTy), (combo_node, "out2")),
+        ((bar,"out1"), Right (SimpleTy IntTy), (combo_node, "out3")),
+        ((qux,"res"), Right (SimpleTy TextType), (combo_node, "res"))]
+
+
 graphTests = testGroup "Graph" [graphTest "id" idFile idGraph
                                ,graphTest "swap" swapFile swapGraph
                                ,graphTest "X"  xFile  xGraph
@@ -99,4 +138,5 @@ graphTests = testGroup "Graph" [graphTest "id" idFile idGraph
                                ,graphTest "ext"  ext  extGraph
                                ,graphTest "empty" "" emptyGraph
                                ,graphTest "comment" comment emptyGraph
+                               ,tensorOutputsTests
                                ]

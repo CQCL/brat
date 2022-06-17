@@ -191,7 +191,7 @@ emptyGraph = (M.empty, [])
     Target     -> "target"
     Id         -> "id"
     Hypo       -> "hypo"
-    Combo _ _  -> "combo"
+    Combo t     -> "combo_" ++ show t
     Constructor c -> "ctor_" ++ show c
 
   nodeKey :: Node -> String

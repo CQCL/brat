@@ -28,9 +28,10 @@ removeRedundant g@(nodes, _)
   redundant _ = False
 
 uncombo :: (Name, Node) -> Graph -> Graph
-uncombo (name, node) g
-  | Combo l r <- nodeThing node
-  = removeNode name $ rewire name r $ rewire name l g
+uncombo (name, node) g@(_,edges)
+  | Combo _ <- nodeThing node
+  = let outedges = [tgt | ((n, _) ,_, tgt) <- edges, n == name]
+    in removeNode name $ foldr (\tgt g -> rewire name tgt g) g $ outedges
   | otherwise = g
 
 rewire :: Name -> Src -> Graph -> Graph
@@ -45,9 +46,4 @@ rewire old new (nodes, wires) = (nodes, newWires wires)
     | otherwise = w : newWires ws
 
 removeCombo :: Graph -> Graph
-removeCombo g@(nodes,_)
-  = foldr uncombo g (M.assocs (M.filter isCombo nodes))
- where
-  isCombo :: Node -> Bool
-  isCombo n | Combo _ _ <- nodeThing n = True
-            | otherwise = False
+removeCombo g@(nodes,_) = foldr uncombo g $ M.assocs nodes

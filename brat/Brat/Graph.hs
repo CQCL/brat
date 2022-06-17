@@ -21,6 +21,8 @@ nodeThing (KernelNode t _ _) = t
 deriving instance Show (tm Chk Noun) => Show (Node' tm)
 deriving instance Eq (tm Chk Noun) => Eq (Node' tm)
 
+data ComboType = Row | Thunk deriving (Eq, Show);
+
 data Thing
   = Prim String  -- Something in the env
   | Const SimpleTerm
@@ -30,7 +32,7 @@ data Thing
   | Target       -- ..boxes
   | Id           -- Identity node for convenient wiring
   | Hypo         -- Hypothesis for type checking
-  | Combo Src Src
+  | Combo ComboType -- inputs are wired in later
   | Constructor ConsType
   deriving (Eq, Show)
 

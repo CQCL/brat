@@ -18,6 +18,7 @@ module Brat.Checker (check
                     ,next, knext
                     ,localFC
                     ,emptyEnv
+                    ,TensorOutputs(..)
                     ) where
 
 import Control.Monad (unless, when, foldM)
@@ -153,12 +154,13 @@ instance TensorOutputs () where
   tensor () () = pure ()
 
 instance AType ty => TensorOutputs [(Src, ty)] where
-  tensor ss@((ssrc,_):_) ts@((tsrc,_):_) = do
-    let sig = mergeSigs (rowToSig ss) (rowToSig ts)
-    tensorNode <- anext "tensor" (Combo ssrc tsrc) [] sig
-    pure $ sigToRow tensorNode sig
   tensor ss [] = pure ss
   tensor [] ts = pure ts
+  tensor ss ts = do
+    let sig = mergeSigs (rowToSig ss) (rowToSig ts)
+    tensorNode <- anext "tensor" (Combo Row) sig sig
+    mapM (\((src,ty),dstPort) -> awire (src,ty,(tensorNode,dstPort))) (zip (ss ++ ts) (map fst sig))
+    pure $ sigToRow tensorNode sig
 
 checkOutputs :: (Eq t, CombineThunks t, AType t)
              => WC (Term Syn k)
