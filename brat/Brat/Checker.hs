@@ -25,11 +25,11 @@ import Control.Monad (unless, when, foldM)
 import Control.Monad.Freer
 import Data.Functor (($>))
 import Data.List (intercalate, transpose)
-import Data.List.NonEmpty (NonEmpty(..), filter, last)
+import Data.List.NonEmpty (NonEmpty(..), last)
 import qualified Data.Map as M
 import Prelude hiding (filter, last)
 
-import Brat.Checker.Combine
+import Brat.Checker.Combine (combinationsWithLeftovers)
 import Brat.Checker.Helpers
 import Brat.Checker.Monad
 import Brat.Checker.Quantity
@@ -162,24 +162,57 @@ instance AType ty => TensorOutputs [(Src, ty)] where
     mapM (\((src,ty),dstPort) -> awire (src,ty,(tensorNode,dstPort))) (zip (ss ++ ts) (map fst sig))
     pure $ sigToRow tensorNode sig
 
-checkOutputs :: (Eq t, CombineThunks t, AType t)
+data SubtractionResult a = ExactlyEqual | Remainder a
+
+class SubtractThunks a where
+  subtractThunks :: a -> a -> Maybe (SubtractionResult a)
+
+instance SubtractThunks VType where
+  subtractThunks (C (ss :-> ts)) (C (us :-> vs)) = do
+    as <- ss `subtractSig` us
+    rs <- ts `subtractSig` vs
+    return $ case (as,rs) of
+      ([], []) -> ExactlyEqual
+      _ -> Remainder $ C (as :-> rs)
+
+  subtractThunks (K (R ss) (R ts)) (K (R us) (R vs)) = do
+    args <- ss `subtractSig` us
+    res <- ts `subtractSig` vs
+    return $ case (args, res) of
+      ([], []) -> ExactlyEqual
+      _ -> Remainder $ K (R args) (R res)
+
+  subtractThunks a b = if a == b then Just ExactlyEqual else Nothing
+
+instance SubtractThunks SType where
+  subtractThunks (Rho (R r)) (Rho (R s)) = do
+    t <- r `subtractSig` s
+    return (if t == [] then ExactlyEqual else Remainder $ Rho (R t))
+
+  subtractThunks a b = if a == b then Just ExactlyEqual else Nothing
+
+checkOutputs :: (Eq t, SubtractThunks t, AType t)
              => WC (Term Syn k)
              -> [(Tgt, t)]
              -> [(Src, t)]
              -> Checking [(Tgt, t)]
 checkOutputs _ tys [] = pure tys
-checkOutputs tm ((tgt, ty):tys) ((src, ty'):outs)
- | ty == ty' = awire (src, ty, tgt) *> checkOutputs tm tys outs
- | otherwise = do
-     opts <- combinationsWithLeftovers ((src, ty') :| outs)
-     case filter ((ty==).snd.fst) opts of
-       [((src,_),outs)] -> awire (src, ty, tgt) *> checkOutputs tm tys outs
-       [] -> let exp = showRow ((tgt, ty) :| tys)
-                 act = showRow ((src, ty') :| outs)
-             in  req $ Throw $
-                 Err (Just $ fcOf tm) Nothing $
-                 TypeMismatch (show tm) exp act
-       _ -> err $ InternalError "Multiple options in checkOutputs"
+checkOutputs tm ((tgt, ty):tys) ((src, ty'):outs) = case ty `subtractThunks` ty' of
+    Just ExactlyEqual -> awire (src, ty, tgt) *> checkOutputs tm tys outs
+    Just (Remainder rest) -> do
+        -- We'll combine the first src with some other thunk to make the first tys.
+        -- This node outputs the combined thunk
+        combo <- anext ("funcs_" ++ show src) (Combo Thunk) [("in1", ty'), ("in2", rest)] [("fun", ty)]
+        awire ((combo, "fun"), ty, tgt)
+        -- Wire in the first input to the combo, but we don't have the second yet
+        awire (src, ty', (combo, "in1"))
+        -- So leave the second for recursive call or to return as an Under still required
+        checkOutputs tm (((combo, "in2"), rest):tys) outs
+    Nothing -> let exp = showRow ((tgt, ty) :| tys)
+                   act = showRow ((src, ty') :| outs)
+               in req $ Throw $
+                  Err (Just $ fcOf tm) Nothing $
+                  TypeMismatch (show tm) exp act
 
 checkClauses :: Clause Term Verb
              -> Connectors Brat Chk Verb
@@ -215,8 +248,12 @@ check' :: TensorOutputs (Outputs Brat d)
        -> Checking (Outputs Brat d
                    ,Connectors Brat d k) -- rightovers
 check' (s :|: t) tys = do
+  -- in Checking mode, each LHS/RHS removes the wires/types it produces from the Unders remaining,
+  -- including components of thunks joined together by (Combo Thunk)s in checkOutputs
   (outs, tys)  <- check s tys
   (outs', tys) <- check t tys
+  -- in Synthesizing mode, instead we join together the outputs here
+  -- with a (Combo Row), although the latter node may not be useful
   outs <- tensor outs outs'
   pure (outs, tys)
 check' (s :-: t) (overs, unders) = do

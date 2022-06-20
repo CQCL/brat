@@ -1,0 +1,3 @@
+Error in id4@FC {start = Pos {line = 14, col = 23}, end = Pos {line = 14, col = 23}}:
+  Type error: Port not found: a1_1
+

@@ -1,7 +1,0 @@
-I :: { Qubit -o Qubit }
-I = { q -> q }
-
-# We synthesize { Qubit -o Qubit },{ Qubit -o Qubit }
-# but merge the functions it in the typechecker!
-I2 :: { Qubit, Qubit -o Qubit, Qubit }
-I2 = I, I

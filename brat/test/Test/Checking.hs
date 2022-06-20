@@ -19,12 +19,10 @@ parseAndCheck file = testCase (show file) $ do
       ((length venv) + (length nouns) + (length holes) > 0) @? "Should produce something"
 
 expectedFails = map ("examples" </>) ["composition.brat",
-    "juxt.brat",
     "karlheinz.brat",
     "karlheinz_alias.brat",
     "thin.brat",
-    "hea.brat",
-    "merge.brat"]
+    "hea.brat"]
 
 
 parseAndCheckXF :: FilePath -> TestTree

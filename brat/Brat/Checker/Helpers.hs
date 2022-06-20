@@ -4,7 +4,7 @@ module Brat.Checker.Helpers (evalNat
                             ,pullPorts, simpleCheck
                             ,combineDisjointEnvs
                             ,ensureEmpty, noUnders
-                            ,rowToSig, sigToRow
+                            ,rowToSig, sigToRow, subtractSig
                             ) where
 
 import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr)
@@ -78,3 +78,9 @@ sigToRow src = fmap $ \(p,ty) -> ((src, p), ty)
 
 rowToSig :: Traversable t => t (Src, ty) -> t (Port, ty)
 rowToSig = fmap $ \((_, p),ty) -> (p, ty)
+
+-- Ignores port names - appropriate only when the LHS (names) are specified by the user
+subtractSig :: Eq a => [(Port, a)] -> [(Port,a)] -> Maybe [(Port, a)]
+subtractSig xs [] = Just xs
+subtractSig ((_,x):xs) ((_,y):ys) | x == y = subtractSig xs ys
+subtractSig _ _ = Nothing
