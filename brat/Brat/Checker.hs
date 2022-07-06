@@ -119,7 +119,8 @@ abstractVecPat (ty, n) vty p =
       mergeEnvs [venv,venv']
     _ -> err $ NotVecPat (show p) (show (makeVec ty (Simple (Num n))))
 
-abstractVecLitVec :: (EnvFor e aType) => (aType, Term Chk Noun)
+abstractVecLitVec :: (EnvFor e aType)
+                  => (aType, Term Chk Noun)
                   -> [Abstractor]
                   -> Checking (Env e)
 abstractVecLitVec (ty, n) xs = do
@@ -322,14 +323,14 @@ check' (Simple tm) ((), ((src, p), SimpleTy ty):unders) = do
   pure ((), ((), unders))
 check' (Vec [a,b]) ((), (tgt, Product s t):unders) = do
   mkpair <- next "mkpair" (Constructor CPair) [("first", s), ("second", t)] [("value", Product s t)]
-  check1 ((mkpair, "first"), s) a
-  check1 ((mkpair, "second"), t) b
+  check1Under ((mkpair, "first"), s) a
+  check1Under ((mkpair, "second"), t) b
   wire ((mkpair, "value"), Right (Product s t), tgt)
   pure ((), ((), unders))
 check' (Vec elems) ((), (tgt, vty@(Vector ty n)):unders) = do
   hypo <- next "nat hypo" Hypo [("ty", SimpleTy Natural)] []
   fc <- req AskFC
-  check1 ((hypo, "ty"), SimpleTy Natural) (WC fc n)
+  check1Under ((hypo, "ty"), SimpleTy Natural) (WC fc n)
   len <- evalNat n
   unless (length elems == len)
     (err $ VecLength len (show vty) (show (length elems)) (show elems))
@@ -364,7 +365,7 @@ check' (NHole name) ((), unders) = do
   findMatchingNouns :: Checking [[UserName]]
   findMatchingNouns = do
     let tys = snd <$> unders
-    env <- req $ AskVEnv
+    env <- req AskVEnv
     let matches = transpose $
           [ [ (nm, src) | (src, _) <- stuff ]
           | (nm, stuff) <- M.assocs env
@@ -379,9 +380,9 @@ check' (VHole name) (overs, unders) = do
 check' (Slice big slice) ((), (_, s :<<<: t):unders) = do
   natHyp <- next "slice check" Hypo [] []
   fc <- req AskFC
-  check1 ((natHyp, "weeEnd"), SimpleTy Natural) (WC fc s)
-  check1 ((natHyp, "bigEnd"), SimpleTy Natural) (WC fc t)
-  check1 ((natHyp, "bigEnd2"), SimpleTy Natural) big
+  check1Under ((natHyp, "weeEnd"), SimpleTy Natural) (WC fc s)
+  check1Under ((natHyp, "bigEnd"), SimpleTy Natural) (WC fc t)
+  check1Under ((natHyp, "bigEnd2"), SimpleTy Natural) big
   checkNats ((natHyp, "slice"), SimpleTy Natural) slice
   pred <- bigEndPred slice
   checkSlice pred
@@ -397,8 +398,8 @@ check' (Slice big slice) ((), (_, s :<<<: t):unders) = do
   pure ((), ((), unders))
  where
   checkNats :: (Src, VType) -> Slice (WC (Term Chk Noun)) -> Checking ()
-  checkNats tgt (These xs) = mapM_ (check1 tgt) xs
-  checkNats tgt (From x) = check1 tgt x
+  checkNats tgt (These xs) = mapM_ (check1Under tgt) xs
+  checkNats tgt (From x) = check1Under tgt x
 
   bigEndPred :: Slice (WC (Term Chk Noun)) -> Checking (Int -> Bool)
   bigEndPred (These []) = pure (const True) -- We can always select to nothing
@@ -427,7 +428,7 @@ check' (Select from slice) ((), (_, Vector ty n):unders) = do
   ([(_, Vector ty' n')], ((), ())) <- check from ((), ())
   unless (ty == ty') (fail "types no match")
   node <- next "thinning type" Hypo [] []
-  check1 ((node, "th"), n :<<<: n') slice
+  check1Under ((node, "th"), n :<<<: n') slice
   pure ((), ((), unders))
 check' (Pattern p) ((), (tgt:unders))
  = checkRPat tgt (unWC p) $> ((), ((), unders))
@@ -487,7 +488,7 @@ checkRPat (tgt, vty@(Vector ty n)) (PCons b) = do
   pure ()
 
 checkRPat (_, Option _) PNone = pure ()
-checkRPat (tgt, Option ty) (PSome x) = check1 (tgt, ty) x
+checkRPat (tgt, Option ty) (PSome x) = check1Under (tgt, ty) x
 checkRPat (tgt, Option ty) (PSome x) = do
   some <- next "Option.some" (Constructor CSome) [("value", ty)] [("value", Option ty)]
   noUnders $ check x ((), [((some, "value"), ty)])
@@ -495,10 +496,8 @@ checkRPat (tgt, Option ty) (PSome x) = do
   pure ()
 checkRPat unders pat = typeErr $ show pat ++ " not of type " ++ show unders
 
-check1 :: (Tgt, VType) -> WC (Term Chk Noun) -> Checking ()
-check1 tgt tm = do
-  ((), ()) <- noUnders (check tm ((), [tgt]))
-  pure ()
+check1Under :: (Tgt, VType) -> WC (Term Chk Noun) -> Checking ()
+check1Under tgt tm = noUnders (check tm ((), [tgt])) >>= \((),()) -> pure ()
 
 abstractAll :: (EnvFor e aType) => [(Src, aType)]
             -> Abstractor
@@ -511,7 +510,7 @@ abstractAll stuff binder = do
 abstract :: (EnvFor e aType) => [(Src, aType)]
          -> Abstractor
          -> Checking (Env e -- Local env for checking body of lambda
-                     , [(Src, aType)] -- rightovers
+                     ,[(Src, aType)] -- rightovers
                      )
 abstract [] abs = err $ NothingToBind (show abs)
 abstract (input:inputs) (Bind x) = pure (singletonEnv x input, inputs)
@@ -640,7 +639,7 @@ kcheck' (VHole name) (overs, unders) = do
 kcheck' tm@(Vec elems) ((), (tgt, vty@(Of ty n)):unders) = do
   hypo <- next "Vec.size" Hypo [("ty", SimpleTy Natural)] []
   fc   <- req AskFC
-  check1 ((hypo, "ty"), SimpleTy Natural) (WC fc n)
+  check1Under ((hypo, "ty"), SimpleTy Natural) (WC fc n)
 
   len <- evalNat n
   unless (length elems == len)
