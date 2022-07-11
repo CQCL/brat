@@ -5,9 +5,11 @@ module Brat.Checker.Helpers (evalNat
                             ,combineDisjointEnvs
                             ,ensureEmpty, noUnders
                             ,rowToSig, sigToRow, subtractSig
+                            ,showMode, getVec
                             ) where
 
 import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr)
+import Brat.Checker.Types (Modey(..), ValueType)
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (Value(..), evalTerm)
 import Brat.FC (WC(..))
@@ -78,6 +80,15 @@ sigToRow src = fmap $ \(p,ty) -> ((src, p), ty)
 
 rowToSig :: Traversable t => t (Src, ty) -> t (Port, ty)
 rowToSig = fmap $ \((_, p),ty) -> (p, ty)
+
+showMode :: Modey m -> String
+showMode Braty = ""
+showMode Kerny = "(kernel) "
+
+getVec :: Modey m -> ValueType m -> Maybe (ValueType m, Term Chk Noun)
+getVec Braty (Vector ty n) = Just (ty, n)
+getVec Kerny (Of ty n) = Just (ty, n)
+getVec _ _ = Nothing
 
 -- Ignores port names - appropriate only when the LHS (names) are specified by the user
 subtractSig :: Eq a => [(Port, a)] -> [(Port,a)] -> Maybe [(Port, a)]

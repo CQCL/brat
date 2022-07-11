@@ -1,3 +1,5 @@
-Error in rotate@FC {start = Pos {line = 13, col = 29}, end = Pos {line = 13, col = 29}}:
-  Type error: Won't kcheck true
+Error in rotate@FC {start = Pos {line = 16, col = 17}, end = Pos {line = 16, col = 34}}:
+  Expected function to be a (kernel) thunk, but found:
+  (thunk :: {[("a1",Bool)] -> [("a1",{R [("a1",Qubit)] -o R [("a1",Qubit)]})]})
+
 

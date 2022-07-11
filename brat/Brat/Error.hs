@@ -12,7 +12,7 @@ instance Show ParseError where
 data ErrorMsg
  = TypeErr String
  | TypeMismatch String String String
- | ExpectedThunk String
+ | ExpectedThunk String String
  | PattErr String
  | VarNotFound String
  | KVarNotFound String
@@ -46,8 +46,8 @@ instance Show ErrorMsg where
               ,"Expected: " ++ exp
               ,"But got:  " ++ act
               ]
-  show (ExpectedThunk row)
-    = unlines ["Expected function to be a thunk, but found:"
+  show (ExpectedThunk m row)
+    = unlines ["Expected function to be a " ++ m ++ "thunk, but found:"
               ,"  " ++ row
               ]
   show (NothingToBind x) = "Nothing to bind to: " ++ x

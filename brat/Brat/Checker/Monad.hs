@@ -39,6 +39,10 @@ localFC _ (Ret v) = Ret v
 localFC f (Req AskFC k) = localFC f (k f)
 localFC f (Req r k) = Req r (localFC f . k)
 
+localEnv :: Modey m -> Env (EnvData m) -> Checking v -> Checking v
+localEnv Braty env m = localVEnv env m
+localEnv Kerny env m = localKVar env (m <* req KDone)
+
 localVEnv :: VEnv -> Checking v -> Checking v
 localVEnv _   (Ret v) = Ret v
 localVEnv ext (Req (VLup x) k) | Just x <- M.lookup x ext = localVEnv ext (k (Just x))
@@ -79,6 +83,11 @@ localKVar env (Req KDone k) = case [ x | (x,(One,_)) <- M.assocs env ] of
                                               ,"haven't been used"
                                               ]
 localKVar env (Req r k) = Req r (localKVar env . k)
+
+catchErr :: Free CheckingSig a -> Free CheckingSig (Either Error a)
+catchErr (Ret t) = Ret (Right t)
+catchErr (Req (Throw e) _) = pure $ Left e
+catchErr (Req r k) = Req r (catchErr . k)
 
 handler :: Free CheckingSig v
         -> Context

@@ -75,12 +75,12 @@ vecGraph =
    ,("2", BratNode (Const (Num 2)) [] [("value", SimpleTy IntTy)])
    -- This is for the type of the vector
    ,("3", BratNode (Const (Num 3)) [] [("value", SimpleTy Natural)])
-   ,("hypo", BratNode Hypo [("ty", SimpleTy Natural)] [])
+   ,("hypo", BratNode Hypo [("value", SimpleTy Natural)] [])
    ]
   ,[(("0", "value"), Right (SimpleTy IntTy), ("mkvec", "e0"))
    ,(("1", "value"), Right (SimpleTy IntTy), ("mkvec", "e1"))
    ,(("2", "value"), Right (SimpleTy IntTy), ("mkvec", "e2"))
-   ,(("3", "value"), Right (SimpleTy Natural), ("hypo", "ty"))
+   ,(("3", "value"), Right (SimpleTy Natural), ("value", "value"))
    ,(("mkvec", "value"), Right (Vector (SimpleTy IntTy) (Simple (Num 3))), ("xs", "a1"))
    ]
   )
@@ -165,14 +165,14 @@ consGraph =
    ,("2i", BratNode (Const (Num 2)) [] [("value", SimpleTy IntTy)])
    ,("2n", BratNode (Const (Num 2)) [] [("value", SimpleTy Natural)])
    ,("3", BratNode (Const (Num 3)) [] [("value", SimpleTy Natural)])
-   ,("hypo2", BratNode Hypo [("ty", SimpleTy Natural)] [])
-   ,("hypo3", BratNode Hypo [("ty", SimpleTy Natural)] [])
+   ,("hypo2", BratNode Hypo [("value", SimpleTy Natural)] [])
+   ,("hypo3", BratNode Hypo [("value", SimpleTy Natural)] [])
    ]
   ,[(("0", "value"), Right (SimpleTy IntTy), ("vec.cons", "head"))
    ,(("1", "value"), Right (SimpleTy IntTy), ("mkvec", "e0"))
    ,(("2", "value"), Right (SimpleTy IntTy), ("mkvec", "e1"))
-   ,(("2", "value"), Right (SimpleTy Natural), ("hypo2", "ty"))
-   ,(("3", "value"), Right (SimpleTy Natural), ("hypo3", "ty"))
+   ,(("2", "value"), Right (SimpleTy Natural), ("hypo2", "value"))
+   ,(("3", "value"), Right (SimpleTy Natural), ("hypo3", "value"))
    ,(("mkvec", "value"), Right (Vector (SimpleTy IntTy) (Simple (Num 2))), ("two", "a1"))
    ,(("vec.cons", "value"), Right (Vector (SimpleTy IntTy) (Simple (Num 3))), ("three", "a1"))
    ,(("two", "a1"), Right (Vector (SimpleTy IntTy) (Simple (Num 2))), ("vec.cons", "tail"))
@@ -269,8 +269,8 @@ kernelGraph =
 
    ,("2", BratNode (Const (Num 2)) [] [("value", SimpleTy Natural)])
    ,("3", BratNode (Const (Num 3)) [] [("value", SimpleTy Natural)])
-   ,("hypo2", BratNode Hypo [("ty", SimpleTy Natural)] [])
-   ,("hypo3", BratNode Hypo [("ty", SimpleTy Natural)] [])
+   ,("hypo2", BratNode Hypo [("value", SimpleTy Natural)] [])
+   ,("hypo3", BratNode Hypo [("value", SimpleTy Natural)] [])
    ]
   ,[(("src", "a1"), Left (Q Qubit), ("vec.cons", "head"))
    ,(("src", "b1"), Left (Q Qubit), ("mkvec", "e0"))
@@ -278,8 +278,8 @@ kernelGraph =
    ,(("kbox", "fun"), Right ktype, ("id3", "a1"))
    ,(("mkvec", "value"), Left (Of (Q Qubit) (Simple (Num 2))), ("vec.cons", "tail"))
    ,(("vec.cons", "value"), Left (Of (Q Qubit) (Simple (Num 3))), ("tgt", "a1"))
-   ,(("2", "value"), Right (SimpleTy Natural), ("hypo2", "ty"))
-   ,(("3", "value"), Right (SimpleTy Natural), ("hypo3", "ty"))
+   ,(("2", "value"), Right (SimpleTy Natural), ("hypo2", "value"))
+   ,(("3", "value"), Right (SimpleTy Natural), ("hypo3", "value"))
    ]
   )
  where

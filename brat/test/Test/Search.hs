@@ -2,7 +2,7 @@
 
 module Test.Search (searchTests) where
 
-import Brat.Checker (check, run, emptyEnv)
+import Brat.Checker (check, run, emptyEnv, Modey(..))
 import Brat.FC
 import Brat.Naming
 import Brat.Search (vsearch)
@@ -51,7 +51,7 @@ tokensTypecheck kty =
   let kernels = vsearch fc kty in
     case kernels of
       [] -> False
-      (k:_) -> case run (emptyEnv, [], fc) (check (WC fc k) ((), [((src, "fun"), kty)])) of
+      (k:_) -> case run (emptyEnv, [], fc) (check Braty (WC fc k) ((), [((src, "fun"), kty)])) of
                  Right (((), ((), unders)), _) -> null unders
                  Left _ -> False
  where

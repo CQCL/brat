@@ -59,7 +59,7 @@ checkDecl pre Decl{..}
   case fnBody of
     NoLhs body -> do
       ((), ((), [])) <- wrapError (addSrc fnName) $
-                        check body ((), toList (sigToRow tgt fnSig))
+                        check Braty body ((), toList (sigToRow tgt fnSig))
       pure ()
     ThunkOf verb -> do
       let outputs = sigToRow (MkName []) fnSig
