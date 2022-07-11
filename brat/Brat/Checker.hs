@@ -488,7 +488,6 @@ checkRPat (tgt, vty@(Vector ty n)) (PCons b) = do
   pure ()
 
 checkRPat (_, Option _) PNone = pure ()
-checkRPat (tgt, Option ty) (PSome x) = check1Under (tgt, ty) x
 checkRPat (tgt, Option ty) (PSome x) = do
   some <- next "Option.some" (Constructor CSome) [("value", ty)] [("value", Option ty)]
   noUnders $ check x ((), [((some, "value"), ty)])
@@ -529,7 +528,6 @@ abstract ((_, ty):inputs) (Lit tm) = case bindToLit ty of
   Left desc -> typeErr $ "Can't match literal " ++ show tm ++ desc
   Right ty -> simpleCheck ty tm $> (emptyEnv, inputs)
 abstract (input:inputs) (VecLit xs) = (,inputs) <$> abstractVecLit input xs
-abstract _ x = typeErr $ "Can't abstract " ++ show x
 
 
 run :: (VEnv, [Decl], FC)
