@@ -59,7 +59,7 @@ checkDecl pre Decl{..}
   case fnBody of
     NoLhs body -> do
       ((), ((), [])) <- wrapError (addSrc fnName) $
-                        check Braty body ((), toList (sigToRow tgt fnSig))
+                        let ?my = Braty in check body ((), toList (sigToRow tgt fnSig))
       pure ()
     ThunkOf verb -> do
       let outputs = sigToRow (MkName []) fnSig
@@ -71,7 +71,7 @@ checkDecl pre Decl{..}
           let thunkTy = ("value", C (ss :-> ts))
           thunk <- next (name ++ "_thunk") (src :>>: tgt) [] [thunkTy]
           eval  <- next ("Eval(" ++ name ++ ")") (Eval (thunk, "value")) (thunkTy:ss) ts
-          wire ((thunk, "value"), Right (snd thunkTy), (eval, "value"))
+          wire ((thunk, "value"), snd thunkTy, (eval, "value"))
           ((), ([], [])) <- wrapError (addSrc name) $
                             checkClauses (unWC verb) ([((src, port), ty) | (port, ty) <- ss]
                                                      ,[((tgt, port), ty) | (port, ty) <- ts])

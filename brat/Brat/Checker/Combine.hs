@@ -20,8 +20,8 @@ combineHead :: [(Src, VType)] -> Checking (Maybe ((Src, VType), [(Src, VType)]))
 combineHead ((s,f):(s',g):hs) = case combineThunks f g of
   Just fg -> do
     node <- next (show s ++ "_" ++ show s') (Combo Thunk) [("in1", f), ("in2", g)] [("fun", fg)]
-    wire (s, Right f, (node, ("in1")))
-    wire (s', Right g, (node, ("in2")))
+    wire (s, f, (node, ("in1")))
+    wire (s', g, (node, ("in2")))
     pure $ Just (((node, "fun"), fg), hs)
   Nothing -> pure Nothing
 combineHead _ = pure Nothing

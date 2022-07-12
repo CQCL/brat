@@ -52,66 +52,60 @@ mergeEnvs = foldM combineDisjointEnvs M.empty
 emptyEnv :: Env a
 emptyEnv = M.empty
 
-class (AType ty) => EnvFor e ty where
-  singletonEnv :: String -> (Src, ty) -> Env e
-  abstractPattern :: [(Src, ty)] -> Pattern Abstractor -> Maybe (Checking (Env e, [(Src, ty)]))
-  abstractVecLit :: (Src, ty) -> [Abstractor] -> Checking (Env e)
+singletonEnv :: (?my :: Modey m) => String -> (Src, ValueType m) -> Env (EnvData m)
+singletonEnv x input@(_, ty) = case ?my of
+  Braty -> M.singleton (plain x) [input]
+  Kerny -> let q = if copyable ty then Tons else One
+           in  M.singleton (plain x) (q, input)
 
-instance EnvFor [(Src, VType)] VType where
-  singletonEnv x input = M.singleton (plain x) [input]
-  abstractPattern inputs@((_, SimpleTy Natural):_) (POnePlus (Bind x)) = Just $ abstract inputs (Bind x)
-  abstractPattern inputs@((_, SimpleTy Natural):_) (PTwoTimes (Bind x)) = Just $ abstract inputs (Bind x)
-  abstractPattern ((_, List _):inputs) PNil = Just $ pure (emptyEnv, inputs)
-  abstractPattern ((_, List ty):inputs) (PCons (x :||: xs)) = Just $ do
-    node <- next "PCons (List)" Hypo [("head", ty), ("tail", List ty)] []
-    venv <- abstractAll [((node, "head"), ty)] x
-    venv' <- abstractAll [((node, "tail"), List ty)] xs
-    (,inputs) <$> combineDisjointEnvs venv venv'
-  abstractPattern ((src, Option ty):inputs) (PSome x) = Just $ abstract ((src, ty):inputs) x
-  abstractPattern ((_, Option _):inputs) PNone = Just $ pure (emptyEnv, inputs)
-  abstractPattern ((_, vty@(Vector ty n)):inputs) abs = Just $ do
-    n <- evalNat n
-    (,inputs) <$> abstractVecPat (ty, n) vty abs
-  abstractPattern _ _ = Nothing
 
-  abstractVecLit (_, Vector ty n) abss = abstractVecLitVec (ty, n) abss
+abstractPattern :: (?my :: Modey m) => [(Src, ValueType m)] -> Pattern Abstractor -> Maybe (Checking (Env (EnvData m), [(Src, ValueType m)]))
+abstractPattern inputs binder = case ?my of
+  Braty -> case (inputs, binder) of
+    (inputs@((_, SimpleTy Natural):_), POnePlus (Bind x)) -> Just $ abstract inputs (Bind x)
+    (inputs@((_, SimpleTy Natural):_), PTwoTimes (Bind x)) -> Just $ abstract inputs (Bind x)
+    ((_, List _):inputs, PNil) -> Just $ pure (emptyEnv, inputs)
+    ((_, List ty):inputs, (PCons (x :||: xs))) -> Just $ do
+      node <- next "PCons (List)" Hypo [("head", ty), ("tail", List ty)] []
+      venv <- abstractAll [((node, "head"), ty)] x
+      venv' <- abstractAll [((node, "tail"), List ty)] xs
+      (,inputs) <$> combineDisjointEnvs venv venv'
+    ((src, Option ty):inputs, PSome x) -> Just $ abstract ((src, ty):inputs) x
+    ((_, Option _):inputs, PNone) -> Just $ pure (emptyEnv, inputs)
+    ((_, vty@(Vector ty n)):inputs, abs) -> Just $ do
+      n <- evalNat n
+      (,inputs) <$> (let ?my = Braty in abstractVecPat (ty, n) vty abs)
+    _ -> Nothing
+  Kerny -> case (inputs, binder) of
+    ((_, vty@(Of ty n)):inputs, abs) -> Just $ do
+      n <- evalNat n
+      (,inputs) <$> abstractVecPat (ty, n) vty abs
+    _ -> Nothing
 
-  abstractVecLit (_, List ty) xs = do
-    node <- next "List literal pattern" Hypo [("type", ty)] []
-    venvs <- mapM (abstractAll [((node, "type"), ty)]) xs
-    mergeEnvs venvs
 
-  abstractVecLit (src, Product l r) [a,b] = do
-    venv <- abstractAll [(src, l)] a
-    venv' <- abstractAll [(src, r)] b
-    combineDisjointEnvs venv venv'
+abstractVecLit :: (?my :: Modey m) => (Src, ValueType m) -> [Abstractor] -> Checking (Env (EnvData m))
+abstractVecLit input abs = case ?my of
+  Braty -> case (input, abs) of
+    ((_, Vector ty n), abss) -> abstractVecLitVec (ty, n) abss
+    ((_, List ty), abss) -> do
+      node <- next "List literal pattern" Hypo [("type", ty)] []
+      venvs <- mapM (abstractAll [((node, "type"), ty)]) abss
+      mergeEnvs venvs
+    ((src, Product l r), [a,b]) -> do
+      venv <- abstractAll [(src, l)] a
+      venv' <- abstractAll [(src, r)] b
+      combineDisjointEnvs venv venv'
+    (_, xs) -> err $ PattErr $ "Can't bind to Vector Literal " ++ (show xs)
 
-  abstractVecLit _ xs = err $ PattErr $ "Can't bind to Vector Literal " ++ (show xs)
+  Kerny -> case (input, abs) of
+    ((_, Of ty n), abss) -> abstractVecLitVec (ty, n) abss
+    (_, xs) -> err $ PattErr $ "Can't bind to Vector Literal " ++ (show xs) ++ " in kernel"
 
-instance EnvFor (Quantity, (Src, SType)) SType where
-  singletonEnv x input@(_, ty) =
-    let q = if copyable ty then Tons else One
-    in M.singleton (plain x) (q, input)
-  abstractPattern ((_, vty@(Of ty n)):inputs) abs = Just $ do
-    n <- evalNat n
-    (,inputs) <$> abstractVecPat (ty, n) vty abs
-
-  abstractPattern _ _ = Nothing
-  abstractVecLit ((_, Of ty n)) abss = abstractVecLitVec (ty, n) abss
-  abstractVecLit _ xs = err $ PattErr $ "Can't bind to Vector Literal " ++ (show xs) ++ " in kernel"
-
-type CheckConstraints m =
-  (SubtractThunks (ValueType m)
-  ,EnvFor (EnvData m) (ValueType m)
-  ,Eq (ValueType m)
-  ,Show (ValueType m)
-  )
-
-abstractVecPat :: (EnvFor e aType)
-               => (aType, Int)
-               -> aType -- for error message
+abstractVecPat :: (Show (ValueType m), ?my :: Modey m)
+               => (ValueType m, Int)
+               -> (ValueType m) -- for error message
                -> Pattern Abstractor
-               -> Checking (Env e)
+               -> Checking (Env (EnvData m))
 abstractVecPat (ty, n) vty p =
   case p of
     PNil -> do
@@ -127,13 +121,13 @@ abstractVecPat (ty, n) vty p =
       mergeEnvs [venv,venv']
     _ -> err $ NotVecPat (show p) (show (makeVec ty (Simple (Num n))))
 
-abstractVecLitVec :: (EnvFor e aType)
-                  => (aType, Term Chk Noun)
+abstractVecLitVec :: (Show (ValueType m), ?my :: Modey m)
+                  => (ValueType m, Term Chk Noun)
                   -> [Abstractor]
-                  -> Checking (Env e)
+                  -> Checking (Env (EnvData m))
 abstractVecLitVec (ty, n) xs = do
     node <- next "natHypo" Hypo [("value", SimpleTy Natural)] []
-    check' Braty n ((), [((node, "value"), SimpleTy Natural)])
+    let ?my = Braty in check' n ((), [((node, "value"), SimpleTy Natural)])
     n <- evalNat n
     unless (n == length xs)
       (err $ VecPatLength (show xs) (show (makeVec ty (Simple (Num n)))))
@@ -142,42 +136,44 @@ abstractVecLitVec (ty, n) xs = do
 
 -- Run a type-checking computation, and ensure that what comes back
 -- is a classical thunk or kernel as appropriate for `mode`
-onlyThunk :: Modey m
-          -> Checking (Outputs Brat Syn, Connectors Brat Syn Noun)
+onlyThunk :: (?my :: Modey m)
+          => Checking (Outputs Brat Syn, Connectors Brat Syn Noun)
           -> Checking (Src, [(Port, ValueType m)], [(Port, ValueType m)])
-onlyThunk mode comp = do
+onlyThunk comp = do
   (outs, ((), ())) <- comp
   outs1 <- case outs of
-    [] -> err $ ExpectedThunk (showMode mode) "empty row"
+    [] -> err $ ExpectedThunk (showMode ?my) "empty row"
     x:xs -> pure (x :| xs)
   rows <- combinationsWithLeftovers outs1
   let (out, emptyUnders) = last rows
   ensureEmpty "unders" emptyUnders
-  case getThunk mode out of
-    Just res -> pure res
-    Nothing  -> err $ ExpectedThunk (showMode mode) (showRow (out :| []))
- where
-  getThunk :: Modey m -> (Src, VType) -> Maybe (Src, [(Port, ValueType m)], [(Port, ValueType m)])
-  getThunk Braty (src, C (ss :-> ts)) = pure (src, ss, ts)
-  getThunk Kerny (src, K (R ss) (R ts)) = pure (src, ss, ts)
-  getThunk _ _ = Nothing
-
+  case (?my, out) of
+    (Braty, (src, C (ss :-> ts))) -> pure (src, ss, ts)
+    (Kerny, (src, K (R ss) (R ts))) -> pure (src, ss, ts)
+    _ -> err $ ExpectedThunk (showMode ?my) (showRow (out :| []))
 
 -- Allows joining the outputs of two nodes together into a `Combo` node
+vtensor :: (?my :: Modey m) => [(Src, ValueType m)] -> [(Src, ValueType m)] -> Checking [(Src, ValueType m)]
+vtensor ss [] = pure ss
+vtensor [] ts = pure ts
+vtensor ss ts = do
+  let sig = mergeSigs (rowToSig ss) (rowToSig ts)
+  tensorNode <- anext "tensor" (Combo Row) sig sig
+  mapM (\((src,ty),dstPort) -> awire (src,ty,(tensorNode,dstPort)))
+       (zip (ss ++ ts) (map fst sig))
+  pure $ sigToRow tensorNode sig
+
 class TensorOutputs d where
   tensor :: d -> d -> Checking d
 
 instance TensorOutputs () where
   tensor () () = pure ()
 
-instance AType ty => TensorOutputs [(Src, ty)] where
-  tensor ss [] = pure ss
-  tensor [] ts = pure ts
-  tensor ss ts = do
-    let sig = mergeSigs (rowToSig ss) (rowToSig ts)
-    tensorNode <- anext "tensor" (Combo Row) sig sig
-    mapM (\((src,ty),dstPort) -> awire (src,ty,(tensorNode,dstPort))) (zip (ss ++ ts) (map fst sig))
-    pure $ sigToRow tensorNode sig
+instance TensorOutputs [(Src, VType)] where
+ tensor = let ?my = Braty in vtensor
+
+instance TensorOutputs [(Src, SType)] where
+ tensor = let ?my = Kerny in vtensor
 
 data SubtractionResult a = ExactlyEqual | Remainder a
 
@@ -208,6 +204,14 @@ instance SubtractThunks SType where
 
   subtractThunks a b = if a == b then Just ExactlyEqual else Nothing
 
+type CheckConstraints m =
+  (SubtractThunks (ValueType m)
+  ,Eq (ValueType m)
+  ,Show (ValueType m)
+  ,TensorOutputs (Outputs m Syn)
+  ,TensorOutputs (Outputs m Chk)
+  )
+
 checkThunk :: WC (Term Chk Verb) -> Unders Brat Chk -> Checking (Unders Brat Chk)
 checkThunk _ [] = err $ InternalError "checkThunk called with empty unders"
 checkThunk tm (u:us) =
@@ -222,31 +226,30 @@ checkThunk tm (u:us) =
       (h:t) -> aux (h :| t)
 
   -- Type check a thunk against a single combination type, return void for success
-  checkCombination :: CheckConstraints m
-                => Modey m
-                -> Src -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> VType
+  checkCombination :: (CheckConstraints m, ?my :: Modey m)
+                => Src -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> VType
                 -> Checking ()
-  checkCombination m src ins outs fty = do
+  checkCombination src ins outs fty = do
     source <- anext "src" Source [] ins
     target <- anext "tgt" Target outs []
     -- The box is always a `Brat` `Thing` (classical)
     box <- next ("eval(" ++ show src ++ ")") (source :>>: target) [] [("fun", fty)]
-    ((), (emptyOvers, emptyUnders)) <- check m tm (sigToRow box ins, sigToRow box outs)
+    ((), (emptyOvers, emptyUnders)) <- check tm (sigToRow box ins, sigToRow box outs)
     ensureEmpty "overs" emptyOvers 
     ensureEmpty "unders" emptyUnders
 
   -- Split on the type to determine in which mode to `checkCombination`
   tryToCheckThunk :: (Src, VType) -> Checking ()
   tryToCheckThunk (src, ty) = case ty of
-    C (ss :-> ts) -> checkCombination Braty src ss ts ty
-    K (R ss) (R ts) -> checkCombination Kerny src ss ts ty
+    C (ss :-> ts) -> let ?my = Braty in checkCombination src ss ts ty
+    K (R ss) (R ts) -> let ?my = Kerny in checkCombination src ss ts ty
     _ -> typeErr "Not a function type"
 
-checkOutputs :: (Eq t, SubtractThunks t, AType t)
+checkOutputs :: (CheckConstraints m, ?my :: Modey m)
              => WC (Term Syn k)
-             -> [(Tgt, t)]
-             -> [(Src, t)]
-             -> Checking [(Tgt, t)]
+             -> [(Tgt, ValueType m)]
+             -> [(Src, ValueType m)]
+             -> Checking [(Tgt, ValueType m)]
 checkOutputs _ tys [] = pure tys
 checkOutputs tm ((tgt, ty):tys) ((src, ty'):outs) = case ty `subtractThunks` ty' of
     Just ExactlyEqual -> awire (src, ty, tgt) *> checkOutputs tm tys outs
@@ -270,7 +273,7 @@ checkClauses :: Clause Term Verb
              -> Checking (Outputs Brat Chk
                          ,Connectors Brat Chk Verb)
 checkClauses Undefined _ = err (InternalError "Checking undefined clause")
-checkClauses (NoLhs verb) conn = check Braty verb conn
+checkClauses (NoLhs verb) conn = let ?my = Braty in check verb conn
 checkClauses (Clauses cs) conn = do
   (res :| results) <- mapM (\c -> checkClause c conn) cs
   unless (all (== res) results)
@@ -284,46 +287,44 @@ checkClauses (Clauses cs) conn = do
   checkClause (lhs, rhs) =
    let lfc = fcOf lhs
        rfc = fcOf rhs
-   in  check Braty (WC (FC (start lfc) (end rfc)) (lhs :\: rhs))
+   in let ?my = Braty in check (WC (FC (start lfc) (end rfc)) (lhs :\: rhs))
 
-check :: (CheckConstraints m, TensorOutputs (Outputs m d))
-      => Modey m
-      -> WC (Term d k)
+check :: (CheckConstraints m, TensorOutputs (Outputs m d), ?my :: Modey m)
+      => WC (Term d k)
       -> Connectors m d k
       -> Checking (Outputs m d
                   ,Connectors m d k)
-check m (WC fc tm) conn = localFC fc (check' m tm conn)
+check (WC fc tm) conn = localFC fc (check' tm conn)
 
-check' :: (CheckConstraints m, TensorOutputs (Outputs m d))
-       => Modey m
-       -> Term d k
+check' :: (CheckConstraints m, TensorOutputs (Outputs m d), ?my :: Modey m)
+       => Term d k
        -> Connectors m d k
        -> Checking (Outputs m d
                    ,Connectors m d k) -- rightovers
-check' m (s :|: t) tys = do
+check' (s :|: t) tys = do
   -- in Checking mode, each LHS/RHS removes the wires/types it produces from the Unders remaining,
   -- including components of thunks joined together by (Combo Thunk)s in checkOutputs
-  (outs, tys)  <- check m s tys
-  (outs', tys) <- check m t tys
+  (outs, tys)  <- check s tys
+  (outs', tys) <- check t tys
   -- in Synthesizing mode, instead we join together the outputs here
   -- with a (Combo Row), although the latter node may not be useful
   outs <- tensor outs outs'
   pure (outs, tys)
-check' m (s :-: t) (overs, unders) = do
-  (overs, (rightovers, ())) <- check m s (overs, ())
-  (outs,  (emptyOvers, rightunders)) <- check m t (overs, unders)
+check' (s :-: t) (overs, unders) = do
+  (overs, (rightovers, ())) <- check s (overs, ())
+  (outs,  (emptyOvers, rightunders)) <- check t (overs, unders)
   ensureEmpty "overs" emptyOvers
   pure (outs, (rightovers, rightunders))
-check' m (binder :\: body) (overs, unders) = do
+check' (binder :\: body) (overs, unders) = do
   (ext, overs) <- abstract overs (unWC binder)
-  (outs, ((), unders)) <- localEnv m ext $ check m body ((), unders)
+  (outs, ((), unders)) <- localEnv ext $ check body ((), unders)
   pure (outs, (overs, unders))
-check' m (Pull ports t) (overs, unders) = do
+check' (Pull ports t) (overs, unders) = do
   unders <- pullPorts ports unders
-  check m t (overs, unders)
-check' Braty (t ::: outs) (overs, ()) = do
+  check t (overs, unders)
+check' (t ::: outs) (overs, ()) | Braty <- ?my = do
   (unders, dangling) <- mkIds outs
-  ((), overs) <- noUnders $ check Braty t (overs, unders)
+  ((), overs) <- noUnders $ check t (overs, unders)
   pure (dangling, (overs, ()))
  where
   mkIds :: [Output] -> Checking ([(Tgt, VType)] -- Hungry wires
@@ -333,219 +334,214 @@ check' Braty (t ::: outs) (overs, ()) = do
     node <- next "id" Id [(port, ty)] [(port, ty)]
     (hungry, dangling) <- mkIds outs
     pure (((node, port), ty):hungry, ((node, port), ty):dangling)
-check' m (Emb t) (overs, unders) = do
-  (outs, (overs, ())) <- check m t (overs, ())
+check' (Emb t) (overs, unders) = do
+  (outs, (overs, ())) <- check t (overs, ())
   unders <- checkOutputs t unders outs
   pure ((), (overs, unders))
-check' Braty (Th t) ((), unders) = ((),) . ((),) <$> checkThunk t unders
-check' Kerny (Th _) _ = typeErr "no higher order signals! (Th)"
-check' Braty (Var x) ((), ()) = do
-  output <- vlup x
-  pure (output, ((), ()))
-check' Kerny (Var x) ((), ()) = req (KLup x) >>= \case
-  Just output -> pure ([output], ((), ()))
-  Nothing -> err $ KVarNotFound (show x)
-check' m (fun :$: arg) ((), ()) = do
-  (src, ss, ts) <- onlyThunk m $ check Braty fun ((), ())
+check' (Th t) conns = case ?my of
+  Braty -> let ((), unders) = conns in ((),) . ((),) <$> checkThunk t unders
+  Kerny -> typeErr "no higher order signals! (Th)"
+check' (Var x) ((), ()) = case ?my of
+  Braty -> (, ((), ())) <$> vlup x
+  Kerny -> req (KLup x) >>= \case
+    Just output -> pure ([output], ((), ()))
+    Nothing -> err $ KVarNotFound (show x)
+check' (fun :$: arg) ((), ()) = do
+  (src, ss, ts) <- onlyThunk $ let ?my = Braty in check fun ((), ())
   evalNode <- anext "eval" (Eval src) ss ts
-  ((), ()) <- noUnders $ check m arg ((), [((evalNode, port), ty) | (port, ty) <- ss])
-  pure ([ ((evalNode, port), ty) | (port, ty) <- ts], ((), ()))
-check' Braty (Simple tm) ((), ((src, p), SimpleTy ty):unders) = do
-  simpleCheck ty tm
-  this <- next (show tm) (Const tm) [] [("value", SimpleTy ty)]
-  wire ((this, "value"), Right (SimpleTy ty), (src, p))
-  pure ((), ((), unders))
-check' Kerny (Simple (Bool _)) ((), ((_, Bit):unders)) = pure ((), ((), unders))
-check' Braty (Vec [a,b]) ((), (tgt, Product s t):unders) = do
-  mkpair <- next "mkpair" (Constructor CPair) [("first", s), ("second", t)] [("value", Product s t)]
-  check1Under Braty ((mkpair, "first"), s) a
-  check1Under Braty ((mkpair, "second"), t) b
-  wire ((mkpair, "value"), Right (Product s t), tgt)
-  pure ((), ((), unders))
-check' m (Vec elems) ((), (tgt, vty):unders) | Just (ty, n) <- getVec m vty = do
+  ((), ()) <- noUnders $ check arg ((), sigToRow evalNode ss)
+  pure (sigToRow evalNode ts, ((), ()))
+check' (Vec elems) ((), (tgt, vty):unders) | Just (ty, n) <- getVec ?my vty = do
   size <- next "vec.size" Hypo [("value", SimpleTy Natural)] []
   fc <- req AskFC
-  check1Under Braty ((size, "value"), SimpleTy Natural) (WC fc n)
+  let ?my = Braty in check1Under ((size, "value"), SimpleTy Natural) (WC fc n)
   len <- evalNat n
   unless (length elems == len)
     (err $ VecLength len (show vty) (show (length elems)) (show elems))
   let inputs = [('e':show i,ty) | i <- [0..(len-1)]]
   mkvec <- anext "mkvec" (Constructor CVec) inputs [("value", vty)]
-  sequence_ [noUnders $ check m x ((), [((mkvec, p), ty)]) | (x, (p, ty)) <- zip elems inputs]
+  sequence_ [noUnders $ check x ((), [((mkvec, p), ty)]) | (x, (p, ty)) <- zip elems inputs]
   awire ((mkvec, "value"), vty, tgt)
   pure ((), ((), unders))
-check' Braty (Vec elems) ((), (tgt, List ty):unders) = do
-  let inputs = [('e':show i, ty) | (i,_) <- zip [0..] elems]
-  mklist <- next "mklist" (Constructor CList) inputs [("value", List ty)]
-  sequence_ [noUnders $ check Braty x ((), [((mklist, p), ty)]) | (x, (p, ty)) <- zip elems inputs]
-  wire ((mklist,"value"), Right (List ty), tgt)
-  pure ((), ((), unders))
-check' Braty (NHole name) ((), unders) = do
-  fc <- req AskFC
-  suggestions <- getSuggestions fc
-  req $ LogHole $ NBHole name fc suggestions ((), unders)
-  pure ((), ((), []))
- where
-  getSuggestions :: FC -> Checking [String]
-  getSuggestions fc = do
-    matches <- findMatchingNouns
-    let sugg = transpose [ [ tm | tm <- vsearch fc ty ]
-                         | (_, ty) <- unders]
-    let ms = intercalate ", " . fmap show <$> matches
-    let ss = intercalate ", " . fmap show <$> sugg
-    pure $ take 5 (ms ++ ss)
+check' (Pattern p) ((), (tgt:unders))
+ = checkRPat tgt (unWC p) $> ((), ((), unders))
+check' (Let abs x y) conn = do
+  (dangling, ((), ())) <- check x ((), ())
+  env <- abstractAll dangling (unWC abs)
+  localEnv env $ check y conn
+check' (NHole name) ((), unders) = req AskFC >>= \fc -> case ?my of
+  Kerny -> do
+    req $ LogHole $ NKHole name fc ((), unders)
+    pure ((), ((), []))
+  Braty -> do
+    suggestions <- getSuggestions fc
+    req $ LogHole $ NBHole name fc suggestions ((), unders)
+    pure ((), ((), []))
+   where
+    getSuggestions :: FC -> Checking [String]
+    getSuggestions fc = do
+      matches <- findMatchingNouns
+      let sugg = transpose [ [ tm | tm <- vsearch fc ty ]
+                          | (_, ty) <- unders]
+      let ms = intercalate ", " . fmap show <$> matches
+      let ss = intercalate ", " . fmap show <$> sugg
+      pure $ take 5 (ms ++ ss)
 
-  findMatchingNouns :: Checking [[UserName]]
-  findMatchingNouns = do
-    let tys = snd <$> unders
-    env <- req AskVEnv
-    let matches = transpose $
-          [ [ (nm, src) | (src, _) <- stuff ]
-          | (nm, stuff) <- M.assocs env
-          , and (zipWith (==) tys (snd <$> stuff))
-          ]
-    pure $ fmap fst <$> matches
+    findMatchingNouns :: Checking [[UserName]]
+    findMatchingNouns = do
+      let tys = snd <$> unders
+      env <- req AskVEnv
+      let matches = transpose $
+            [ [ (nm, src) | (src, _) <- stuff ]
+            | (nm, stuff) <- M.assocs env
+            , and (zipWith (==) tys (snd <$> stuff))
+            ]
+      pure $ fmap fst <$> matches
 
-check' Kerny (NHole name) ((), unders) = do
+check' (VHole name) (overs, unders) = do
   fc <- req AskFC
-  req $ LogHole $ NKHole name fc ((), unders)
-  pure ((), ((), []))
-check' m (VHole name) (overs, unders) = do
-  fc <- req AskFC
-  req $ LogHole $ case m of
+  req $ LogHole $ case ?my of
     Braty -> VBHole name fc (overs, unders)
     Kerny -> VKHole name fc (overs, unders)
   pure ((), ([], []))
-check' Braty (Slice big slice) ((), (_, s :<<<: t):unders) = do
-  natHyp <- next "slice check" Hypo [] []
-  fc <- req AskFC
-  check1Under Braty ((natHyp, "weeEnd"), SimpleTy Natural) (WC fc s)
-  check1Under Braty ((natHyp, "bigEnd"), SimpleTy Natural) (WC fc t)
-  check1Under Braty ((natHyp, "bigEnd2"), SimpleTy Natural) big
-  checkNats ((natHyp, "slice"), SimpleTy Natural) slice
-  pred <- bigEndPred slice
-  checkSlice pred
+check' t c = case (?my, t, c) of -- remaining cases need to split on ?my
+  (Kerny, Simple (Bool _), ((), ((_, Bit):unders))) -> pure ((), ((), unders))
+  (Braty, Simple tm, ((), ((src, p), SimpleTy ty):unders)) -> do
+    simpleCheck ty tm
+    this <- next (show tm) (Const tm) [] [("value", SimpleTy ty)]
+    wire ((this, "value"), SimpleTy ty, (src, p))
+    pure ((), ((), unders))
+  (Braty, Vec [a,b], ((), (tgt, Product s t):unders)) -> do
+    mkpair <- anext "mkpair" (Constructor CPair) [("first", s), ("second", t)] [("value", Product s t)]
+    check1Under ((mkpair, "first"), s) a
+    check1Under ((mkpair, "second"), t) b
+    wire ((mkpair, "value"), (Product s t), tgt)
+    pure ((), ((), unders))
+  (Braty, Vec elems, ((), (tgt, List ty):unders)) -> do
+    let inputs = [('e':show i, ty) | (i,_) <- zip [0..] elems]
+    mklist <- next "mklist" (Constructor CList) inputs [("value", List ty)]
+    sequence_ [noUnders $ check x ((), [((mklist, p), ty)]) | (x, (p, ty)) <- zip elems inputs]
+    wire ((mklist,"value"), List ty, tgt)
+    pure ((), ((), unders))
+  (Braty, Slice big slice, ((), (_, s :<<<: t):unders)) -> do
+    natHyp <- next "slice check" Hypo [] []
+    fc <- req AskFC
+    check1Under ((natHyp, "weeEnd"), SimpleTy Natural) (WC fc s)
+    check1Under ((natHyp, "bigEnd"), SimpleTy Natural) (WC fc t)
+    check1Under ((natHyp, "bigEnd2"), SimpleTy Natural) big
+    checkNats ((natHyp, "slice"), SimpleTy Natural) slice
+    pred <- bigEndPred slice
+    checkSlice pred
 
-  s <- evalNat s
-  t <- evalNat t
-  big <- evalNat (unWC big)
-  wee <- weeEnd slice t
-  unless (t == big)
-    (fail $ "the big end of " ++ show t ++ " should be " ++ show wee ++ ", not " ++ show big)
-  unless (s == wee)
-    (fail $ "the wee end of " ++ show slice ++ " should be " ++ show wee ++ ", not " ++ show s)
-  pure ((), ((), unders))
- where
-  checkNats :: (Src, VType) -> Slice (WC (Term Chk Noun)) -> Checking ()
-  checkNats tgt (These xs) = mapM_ (check1Under Braty tgt) xs
-  checkNats tgt (From x) = check1Under Braty tgt x
+    s <- evalNat s
+    t <- evalNat t
+    big <- evalNat (unWC big)
+    wee <- weeEnd slice t
+    unless (t == big)
+      (fail $ "the big end of " ++ show t ++ " should be " ++ show wee ++ ", not " ++ show big)
+    unless (s == wee)
+      (fail $ "the wee end of " ++ show slice ++ " should be " ++ show wee ++ ", not " ++ show s)
+    pure ((), ((), unders))
+   where
+    checkNats :: (Src, VType) -> Slice (WC (Term Chk Noun)) -> Checking ()
+    checkNats tgt (These xs) = mapM_ (check1Under tgt) xs
+    checkNats tgt (From x) = check1Under tgt x
 
-  bigEndPred :: Slice (WC (Term Chk Noun)) -> Checking (Int -> Bool)
-  bigEndPred (These []) = pure (const True) -- We can always select to nothing
-  bigEndPred (These xs) = do vs <- mapM (evalNat . unWC) xs
-                             let biggest = foldr1 max vs
-                             pure (>biggest)
-  bigEndPred (From x) = evalNat (unWC x) >>= \n -> pure (>= n)
+    bigEndPred :: Slice (WC (Term Chk Noun)) -> Checking (Int -> Bool)
+    bigEndPred (These []) = pure (const True) -- We can always select to nothing
+    bigEndPred (These xs) = mapM (evalNat . unWC) xs >>= \xs -> pure (>(foldr1 max xs))
+    bigEndPred (From x) = evalNat (unWC x) >>= \n -> pure (>= n)
 
-  weeEnd :: Slice (WC (Term Chk Noun)) -> Int -> Checking Int
-  weeEnd (These xs) _ = pure $ length xs
-  weeEnd (From x) t = do n <- evalNat (unWC x)
-                         pure (t - n)
+    weeEnd :: Slice (WC (Term Chk Noun)) -> Int -> Checking Int
+    weeEnd (These xs) _ = pure $ length xs
+    weeEnd (From x) t = evalNat (unWC x) >>= \n -> pure (t - n)
 
-  checkSlice :: (Int -> Bool) -> Checking ()
-  checkSlice p = do s <- evalNat s
-                    t <- evalNat t
-                    unless
-                      (s <= t)
-                      (fail $ "Slice: " ++ show s ++ " is bigger than " ++ show t)
-                    if p t
-                      then pure ()
-                      else fail "check bad slice bad sorry"
-
+    checkSlice :: (Int -> Bool) -> Checking ()
+    checkSlice p = do s <- evalNat s
+                      t <- evalNat t
+                      unless
+                        (s <= t)
+                        (fail $ "Slice: " ++ show s ++ " is bigger than " ++ show t)
+                      if p t
+                        then pure ()
+                        else fail "check bad slice bad sorry"
 -- Need to think about selecting from things other than vectors?
-check' Braty (Select from slice) ((), (_, Vector ty n):unders) = do
-  ([(_, Vector ty' n')], ((), ())) <- check Braty from ((), ())
-  unless (ty == ty') (fail "types no match")
-  node <- next "thinning type" Hypo [] []
-  check1Under Braty ((node, "th"), n :<<<: n') slice
-  pure ((), ((), unders))
-check' m (Pattern p) ((), (tgt:unders))
- = checkRPat m tgt (unWC p) $> ((), ((), unders))
-check' m (Let abs x y) conn = do
-  (dangling, ((), ())) <- check m x ((), ())
-  env <- abstractAll dangling (unWC abs)
-  localEnv m env $ check m y conn
-check' m t _ = typeErr $ "Won't check " ++ (showMode m) ++ show t
+  (Braty, Select from slice, ((), (_, Vector ty n):unders)) -> do
+    ([(_, Vector ty' n')], ((), ())) <- check from ((), ())
+    unless (ty == ty') (fail "types no match")
+    node <- next "thinning type" Hypo [] []
+    check1Under ((node, "th"), n :<<<: n') slice
+    pure ((), ((), unders))
+  (_, t, _) -> typeErr $ "Won't check " ++ (showMode ?my) ++ show t
+
 
 -- Check a pattern used as a constructor (on the Rhs of a definition)
-checkRPat :: CheckConstraints m => Modey m -> (Tgt, ValueType m) -> Pattern (WC (Term Chk Noun)) -> Checking ()
--- POnePlus and PTwoTimes don't change the type of their arguments, so the
--- arguments should be able to typecheck against the type of the whole
--- expression, which may be either Nat or Int
-checkRPat Braty (tgt, ty) (POnePlus x) = do
-  succ <- next (show ty ++ ".succ") (Constructor CSucc) [("value", ty)] [("value", ty)]
-  noUnders $ check Braty x ((), [((succ, "value"), ty)])
-  wire ((succ, "value"), Right ty, tgt)
-  pure ()
-checkRPat Braty (tgt, ty) (PTwoTimes x) = do
-  doub <- next (show ty ++ ".doub") (Constructor CDoub) [("value", ty)] [("value", ty)]
-  noUnders $ check Braty x ((), [((doub, "value"), ty)])
-  wire ((doub, "value"), Right ty, tgt)
-  pure ()
-checkRPat Braty (_, List _) PNil = pure ()
--- A `cons` on the RHS contain a single variable or application that produces
--- two outputs (head and tail), so typecheck it as such with as normal
-checkRPat Braty (tgt, List ty) (PCons b) = do
-  cons <- next "List.cons" (Constructor CCons) [("head", ty), ("tail", List ty)] [("value", List ty)]
-  noUnders $ check Braty b ((), [((cons, "head"), ty), ((cons, "tail"), List ty)])
-  wire ((cons, "value"), Right (List ty), tgt)
-  pure ()
-checkRPat m (_, vty) p@PNil = case getVec m vty of
-  Just (_, n) -> do
-    hypo <- next "Vec.size" Hypo [("value", SimpleTy Natural)] []
-    noUnders $ check' Braty n ((), [((hypo, "value"), SimpleTy Natural)])
+checkRPat :: (CheckConstraints m, ?my :: Modey m) => (Tgt, ValueType m) -> Pattern (WC (Term Chk Noun)) -> Checking ()
+checkRPat (_, vty) p@PNil | Just (_, n) <- getVec ?my vty = do
+  hypo <- next "Vec.size" Hypo [("value", SimpleTy Natural)] []
+  noUnders $ let ?my = Braty in check' n ((), [((hypo, "value"), SimpleTy Natural)])
 
-    len <- evalNat n
-    when (len /= 0) (err $ VecLength len (show vty) "0" (show p))
-  Nothing -> typeErr $ "Checking literal 'Nil' against non-vector type: " ++ show vty
-checkRPat m (tgt, vty) p@(PCons b) = case getVec m vty of
-  Just (ty, n) -> do
-    hypo <- next "Vec.size" Hypo [("value", SimpleTy Natural)] []
-    noUnders $ check' Braty n ((), [((hypo, "value"), SimpleTy Natural)])
+  len <- evalNat n
+  when (len /= 0) (err $ VecLength len (show vty) "0" (show p))
+checkRPat (tgt, vty) p@(PCons b) | Just (ty, n) <- getVec ?my vty = do
+  hypo <- next "Vec.size" Hypo [("value", SimpleTy Natural)] []
+  noUnders $ let ?my = Braty in check' n ((), [((hypo, "value"), SimpleTy Natural)])
 
-    len <- evalNat n
-    when (len <= 0)
-      (err $ VecLength len (show vty) "(> 0)" (show (PCons b)))
+  len <- evalNat n
+  when (len <= 0)
+    (err $ VecLength len (show vty) "(> 0)" (show p))
 
-    let inps = [("head", ty), ("tail", makeVec ty (Simple (Num (len - 1))))]
-    cons <- anext "Vec.cons" (Constructor CCons) inps [("value", vty)]
-    noUnders $ check m b ((), sigToRow cons inps)
-    awire ((cons, "value"), vty, tgt)
+  let inps = [("head", ty), ("tail", makeVec ty (Simple (Num (len - 1))))]
+  cons <- anext "Vec.cons" (Constructor CCons) inps [("value", vty)]
+  noUnders $ check b ((), sigToRow cons inps)
+  awire ((cons, "value"), vty, tgt)
+  pure ()
+checkRPat unders pat = case (?my, unders, pat) of
+  -- POnePlus and PTwoTimes don't change the type of their arguments, so the
+  -- arguments should be able to typecheck against the type of the whole
+  -- expression, which may be either Nat or Int
+  (Braty, (tgt, ty), POnePlus x) -> do
+    succ <- next (show ty ++ ".succ") (Constructor CSucc) [("value", ty)] [("value", ty)]
+    noUnders $ check x ((), [((succ, "value"), ty)])
+    wire ((succ, "value"), ty, tgt)
     pure ()
-  Nothing -> typeErr $ "Checking 'cons' expr: " ++ show p ++ " against non-vector type: " ++ show vty
-checkRPat Braty (_, Option _) PNone = pure ()
-checkRPat Braty (tgt, Option ty) (PSome x) = do
-  some <- next "Option.some" (Constructor CSome) [("value", ty)] [("value", Option ty)]
-  noUnders $ check Braty x ((), [((some, "value"), ty)])
-  wire ((some, "value"), Right (Option ty), tgt)
-  pure ()
-checkRPat _ unders pat = typeErr $ show pat ++ " not of type " ++ show unders
+  (Braty, (tgt, ty), PTwoTimes x) -> do
+    doub <- next (show ty ++ ".doub") (Constructor CDoub) [("value", ty)] [("value", ty)]
+    noUnders $ check x ((), [((doub, "value"), ty)])
+    wire ((doub, "value"), ty, tgt)
+    pure ()
+  (Braty, (_, List _), PNil) -> pure ()
+  -- A `cons` on the RHS contain a single variable or application that produces
+  -- two outputs (head and tail), so typecheck it as such with as normal
+  (Braty, (tgt, List ty), PCons b) -> do
+    cons <- next "List.cons" (Constructor CCons) [("head", ty), ("tail", List ty)] [("value", List ty)]
+    noUnders $ check b ((), [((cons, "head"), ty), ((cons, "tail"), List ty)])
+    wire ((cons, "value"), List ty, tgt)
+    pure ()
+  (Braty, (_, Option _), PNone) -> pure ()
+  (Braty, (tgt, Option ty), PSome x) -> do
+    some <- next "Option.some" (Constructor CSome) [("value", ty)] [("value", Option ty)]
+    noUnders $ check x ((), [((some, "value"), ty)])
+    wire ((some, "value"), Option ty, tgt)
+    pure ()
+  _ -> typeErr $ show pat ++ " not of type " ++ show unders
 
-check1Under :: CheckConstraints m => Modey m -> (Tgt, ValueType m) -> WC (Term Chk Noun) -> Checking ()
-check1Under m tgt tm = noUnders (check m tm ((), [tgt])) >>= \((),()) -> pure ()
+check1Under :: (CheckConstraints m, ?my :: Modey m) => (Tgt, ValueType m) -> WC (Term Chk Noun) -> Checking ()
+check1Under tgt tm = noUnders (check tm ((), [tgt])) >>= \((),()) -> pure ()
 
-abstractAll :: (EnvFor e aType) => [(Src, aType)]
-            -> Abstractor
-            -> Checking (Env e)
+abstractAll :: (Show (ValueType m), ?my :: Modey m)
+            => [(Src, ValueType m)] -> Abstractor
+            -> Checking (Env (EnvData m))
 abstractAll stuff binder = do
   (env, unders) <- abstract stuff binder
   ensureEmpty "unders after abstract" unders
   pure env
 
-abstract :: (EnvFor e aType) => [(Src, aType)]
+abstract :: (Show (ValueType m), ?my :: Modey m)
+         => [(Src, ValueType m)]
          -> Abstractor
-         -> Checking (Env e -- Local env for checking body of lambda
-                     ,[(Src, aType)] -- rightovers
+         -> Checking (Env (EnvData m) -- Local env for checking body of lambda
+                     ,[(Src, ValueType m)] -- rightovers
                      )
 abstract [] abs = err $ NothingToBind (show abs)
 abstract (input:inputs) (Bind x) = pure (singletonEnv x input, inputs)
@@ -560,9 +556,12 @@ abstract inputs@((_,ty):_) pat@(Pat abs) = case abstractPattern inputs abs of
   Just res -> res
   Nothing -> err (PattErr $
     "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty)
-abstract ((_, ty):inputs) (Lit tm) = case bindToLit ty of
-  Left desc -> typeErr $ "Can't match literal " ++ show tm ++ desc
-  Right ty -> simpleCheck ty tm $> (emptyEnv, inputs)
+abstract ((_, ty):inputs) (Lit tm) = do
+  litTy <- case (?my,ty) of
+    (Kerny, Bit) -> pure $ Boolean
+    (Braty, SimpleTy ty) -> pure $ ty
+    (m,_) -> typeErr $ "Can't match literal literal " ++ show tm ++ (showMode m)
+  simpleCheck litTy tm $> (emptyEnv, inputs)
 abstract (input:inputs) (VecLit xs) = (,inputs) <$> abstractVecLit input xs
 
 

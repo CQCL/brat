@@ -29,7 +29,7 @@ test = testCase "let" $
            (wfc (Var "x"))
       conn = ((), ())
       nil = (emptyEnv, [], fc)
-  in case fst <$> run nil (check Braty (wfc tm) conn) of
+  in case fst <$> run nil (let ?my = Braty in check (wfc tm) conn) of
        Right ([(_, SimpleTy IntTy)], ((), ())) -> pure ()
        Right (outs, ((), ())) -> assertFailure (show outs)
        x -> assertFailure (show x)

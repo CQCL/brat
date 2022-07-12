@@ -20,6 +20,7 @@ common haskell
                        FlexibleInstances,
                        GADTs,
                        GeneralizedNewtypeDeriving,
+                       ImplicitParams,
                        LambdaCase,
                        KindSignatures,
                        RecordWildCards,

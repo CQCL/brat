@@ -39,9 +39,10 @@ localFC _ (Ret v) = Ret v
 localFC f (Req AskFC k) = localFC f (k f)
 localFC f (Req r k) = Req r (localFC f . k)
 
-localEnv :: Modey m -> Env (EnvData m) -> Checking v -> Checking v
-localEnv Braty env m = localVEnv env m
-localEnv Kerny env m = localKVar env (m <* req KDone)
+localEnv :: (?my :: Modey m) => Env (EnvData m) -> Checking v -> Checking v
+localEnv = case ?my of
+  Braty -> localVEnv
+  Kerny -> \env m -> localKVar env (m <* req KDone)
 
 localVEnv :: VEnv -> Checking v -> Checking v
 localVEnv _   (Ret v) = Ret v
@@ -129,37 +130,34 @@ typeErr = err . TypeErr
 instance MonadFail Checking where
   fail = typeErr
 
-next :: String -> Thing -> [Input] -> [Output] -> Checking Name
-next str th ins outs = do
+anext :: (?my :: Modey m) => String -> Thing -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> Checking Name
+anext str th ins outs = do
   this <- req (Fresh str)
-  () <- req (Node this (BratNode th ins outs))
+  () <- req (Node this (mkNode ?my th ins outs))
   pure this
+ where
+  mkNode :: Modey m -> Thing -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> Node
+  mkNode Braty = BratNode
+  mkNode Kerny = KernelNode
+
+next :: String -> Thing -> [Input] -> [Output] -> Checking Name
+next = let ?my = Braty in anext
 
 knext :: String -> Thing -> [(Port, SType)] -> [(Port, SType)] -> Checking Name
-knext str th ins outs = do
-  this <- req (Fresh str)
-  () <- req (Node this (KernelNode th ins outs))
-  pure this
+knext = let ?my = Kerny in anext
 
-wire :: Wire -> Checking ()
-wire w = req $ Wire w
+makeVec :: (?my :: Modey m) => ValueType m -> Term Chk Noun -> ValueType m
+makeVec = case ?my of
+  Braty -> Vector
+  Kerny -> Of
 
-class (Show t) => AType t where
-  anext :: String -> Thing -> [(Port, t)] -> [(Port, t)] -> Checking Name
-  makeVec :: t -> Term Chk Noun -> t
-  bindToLit :: t -> Either String SimpleType -- Left is error description
-  awire :: (Src, t, Tgt) -> Checking ()
+awire :: (?my :: Modey m) => (Src, ValueType m, Tgt) -> Checking ()
+awire (src, ty, tgt) =
+  req $ Wire (src, mkT ?my ty, tgt)
+ where
+  mkT :: Modey m -> ValueType m -> Either SType VType
+  mkT Braty = Right
+  mkT Kerny = Left
 
-instance AType SType where
-  anext = knext
-  makeVec = Of
-  bindToLit Bit = Right Boolean
-  bindToLit _ = Left " in a kernel"
-  awire (src, ty, tgt) = req $ Wire (src, Left ty, tgt)
-
-instance AType VType where
-  anext = next
-  makeVec = Vector
-  bindToLit (SimpleTy ty) = Right ty
-  bindToLit _ = Left ""
-  awire (src, ty, tgt) = req $ Wire (src, Right ty, tgt)
+wire = let ?my = Braty in awire
+kwire = let ?my = Kerny in awire

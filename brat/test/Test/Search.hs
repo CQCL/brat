@@ -51,7 +51,7 @@ tokensTypecheck kty =
   let kernels = vsearch fc kty in
     case kernels of
       [] -> False
-      (k:_) -> case run (emptyEnv, [], fc) (check Braty (WC fc k) ((), [((src, "fun"), kty)])) of
+      (k:_) -> case run (emptyEnv, [], fc) (let ?my = Braty in check (WC fc k) ((), [((src, "fun"), kty)])) of
                  Right (((), ((), unders)), _) -> null unders
                  Left _ -> False
  where
