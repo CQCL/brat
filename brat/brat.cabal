@@ -62,8 +62,7 @@ common warning-flags
 library
   import:              haskell, warning-flags
   default-language:    Haskell2010
-  other-modules:       Brat.Checker.Helpers,
-                       Brat.Checker.Monad,
+  other-modules:       Brat.Checker.Monad,
                        Brat.Checker.Quantity,
                        Brat.Dot,
                        Brat.Eval,
@@ -75,6 +74,7 @@ library
   exposed-modules:     Brat.Checker,
                        Brat.Checker.Combine,
                        Brat.Checker.Types,
+                       Brat.Checker.Helpers,
                        Brat.Compiler,
                        Brat.Compile.Circuit,
                        Brat.Compile.Simple,

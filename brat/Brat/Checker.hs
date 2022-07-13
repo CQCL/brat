@@ -22,6 +22,7 @@ module Brat.Checker (check
                     ,localFC
                     ,emptyEnv
                     ,TensorOutputs(..)
+                    ,checkOutputs
                     ) where
 
 import Control.Monad (unless, when, foldM)
