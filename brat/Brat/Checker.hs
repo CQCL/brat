@@ -60,80 +60,30 @@ singletonEnv x input@(_, ty) = case ?my of
            in  M.singleton (plain x) (q, input)
 
 
-abstractPattern :: (?my :: Modey m) => [(Src, ValueType m)] -> Pattern Abstractor -> Maybe (Checking (Env (EnvData m), [(Src, ValueType m)]))
-abstractPattern inputs binder = case ?my of
-  Braty -> case (inputs, binder) of
-    (inputs@((_, SimpleTy Natural):_), POnePlus (Bind x)) -> Just $ abstract inputs (Bind x)
-    (inputs@((_, SimpleTy Natural):_), PTwoTimes (Bind x)) -> Just $ abstract inputs (Bind x)
-    ((_, List _):inputs, PNil) -> Just $ pure (emptyEnv, inputs)
-    ((_, List ty):inputs, (PCons (x :||: xs))) -> Just $ do
-      node <- next "PCons (List)" Hypo [("head", ty), ("tail", List ty)] []
-      venv <- abstractAll [((node, "head"), ty)] x
-      venv' <- abstractAll [((node, "tail"), List ty)] xs
-      (,inputs) <$> combineDisjointEnvs venv venv'
-    ((src, Option ty):inputs, PSome x) -> Just $ abstract ((src, ty):inputs) x
-    ((_, Option _):inputs, PNone) -> Just $ pure (emptyEnv, inputs)
-    ((_, vty@(Vector ty n)):inputs, abs) -> Just $ do
+abstractVecLit :: (Show (ValueType m), (?my :: Modey m))
+               => (Src, ValueType m)
+               -> [Abstractor]
+              -> Checking (Env (EnvData m))
+abstractVecLit (src, ty) abs
+  | Just (ty, n) <- getVec ?my ty = do
+      node <- next "natHypo" Hypo [("value", SimpleTy Natural)] []
+      let ?my = Braty in check' n ((), [((node, "value"), SimpleTy Natural)])
       n <- evalNat n
-      (,inputs) <$> (let ?my = Braty in abstractVecPat (ty, n) vty abs)
-    _ -> Nothing
-  Kerny -> case (inputs, binder) of
-    ((_, vty@(Of ty n)):inputs, abs) -> Just $ do
-      n <- evalNat n
-      (,inputs) <$> abstractVecPat (ty, n) vty abs
-    _ -> Nothing
+      unless (n == length abs)
+        (err $ VecPatLength (show abs) (show (makeVec ty (Simple (Num n)))))
+      envs <- mapM (abstractAll [((node, "type"), ty)]) abs
+      mergeEnvs envs
+  | otherwise = case (?my, ty, abs) of
+    (Braty, List ty, abss) -> do
+        node <- next "List literal pattern" Hypo [("type", ty)] []
+        venvs <- mapM (abstractAll [((node, "type"), ty)]) abss
+        mergeEnvs venvs
+    (Braty, Product l r, [a,b]) -> do
+        venv <- abstractAll [(src, l)] a
+        venv' <- abstractAll [(src, r)] b
+        combineDisjointEnvs venv venv'
+    _ -> err $ PattErr $ "Can't bind to Vector Literal " ++ (show abs) ++ (showMode ?my)
 
-
-abstractVecLit :: (?my :: Modey m) => (Src, ValueType m) -> [Abstractor] -> Checking (Env (EnvData m))
-abstractVecLit input abs = case ?my of
-  Braty -> case (input, abs) of
-    ((_, Vector ty n), abss) -> abstractVecLitVec (ty, n) abss
-    ((_, List ty), abss) -> do
-      node <- next "List literal pattern" Hypo [("type", ty)] []
-      venvs <- mapM (abstractAll [((node, "type"), ty)]) abss
-      mergeEnvs venvs
-    ((src, Product l r), [a,b]) -> do
-      venv <- abstractAll [(src, l)] a
-      venv' <- abstractAll [(src, r)] b
-      combineDisjointEnvs venv venv'
-    (_, xs) -> err $ PattErr $ "Can't bind to Vector Literal " ++ (show xs)
-
-  Kerny -> case (input, abs) of
-    ((_, Of ty n), abss) -> abstractVecLitVec (ty, n) abss
-    (_, xs) -> err $ PattErr $ "Can't bind to Vector Literal " ++ (show xs) ++ " in kernel"
-
-abstractVecPat :: (Show (ValueType m), ?my :: Modey m)
-               => (ValueType m, Int)
-               -> (ValueType m) -- for error message
-               -> Pattern Abstractor
-               -> Checking (Env (EnvData m))
-abstractVecPat (ty, n) vty p =
-  case p of
-    PNil -> do
-      if n == 0
-        then pure emptyEnv
-        else err $ VecLength n (show vty) "0" (show p)
-    PCons (x :||: xs) -> do
-      -- A `cons` pattern on the LHS needs to have exactly two binders
-      let tailTy = makeVec ty (Simple (Num (n - 1)))
-      node <- anext "PCons (Vec)" Hypo [("head", ty), ("tail", tailTy)] []
-      venv <- abstractAll [((node, "head"), ty)] x
-      venv' <- abstractAll [((node, "tail"), tailTy)] xs
-      mergeEnvs [venv,venv']
-    _ -> err $ NotVecPat (show p) (show (makeVec ty (Simple (Num n))))
-
-abstractVecLitVec :: (Show (ValueType m), ?my :: Modey m)
-                  => (ValueType m, Term Chk Noun)
-                  -> [Abstractor]
-                  -> Checking (Env (EnvData m))
-abstractVecLitVec (ty, n) xs = do
-    node <- next "natHypo" Hypo [("value", SimpleTy Natural)] []
-    let ?my = Braty in check' n ((), [((node, "value"), SimpleTy Natural)])
-    n <- evalNat n
-    unless (n == length xs)
-      (err $ VecPatLength (show xs) (show (makeVec ty (Simple (Num n)))))
-    envs <- mapM (abstractAll [((node, "type"), ty)]) xs
-    mergeEnvs envs
 
 -- Run a type-checking computation, and ensure that what comes back
 -- is a classical thunk or kernel as appropriate for `mode`
@@ -553,10 +503,38 @@ abstract inputs (x :||: y) = do
 abstract inputs (APull ports abst) = do
   inputs <- pullPorts ports inputs
   abstract inputs abst
-abstract inputs@((_,ty):_) pat@(Pat abs) = case abstractPattern inputs abs of
-  Just res -> res
-  Nothing -> err (PattErr $
-    "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty)
+abstract inputs@((_,ty):inputs') pat@(Pat abs)
+  | Just (ety, n) <- getVec ?my ty =
+    (evalNat n) >>= \n -> (,inputs') <$> case abs of
+      PNil -> if n == 0
+        then pure emptyEnv
+        else err $ VecLength n (show ty) "0" (show abs)
+      PCons (x :||: xs) -> do
+        -- A `cons` pattern on the LHS needs to have exactly two binders
+        let tailTy = makeVec ety (Simple (Num (n - 1)))
+        node <- anext "PCons (Vec)" Hypo [("head", ety), ("tail", tailTy)] []
+        venv <- abstractAll [((node, "head"), ety)] x
+        venv' <- abstractAll [((node, "tail"), tailTy)] xs
+        mergeEnvs [venv,venv'] 
+      _ -> err $ NotVecPat (show abs) (show ty)
+  | otherwise = case (?my, inputs) of
+    (Braty, inputs@((src,ty):inputs')) | Just result <- abstractBrat ty abs -> result
+      where
+        abstractBrat :: VType -> (Pattern Abstractor) -> Maybe (Checking (VEnv, [(Src, VType)]))
+        abstractBrat ty abs = case (ty, abs) of
+          (SimpleTy Natural, POnePlus (Bind x)) -> Just $ abstract inputs (Bind x)
+          (SimpleTy Natural, PTwoTimes (Bind x)) -> Just $ abstract inputs (Bind x)
+          (List _, PNil) -> Just $ pure (emptyEnv, inputs')
+          (List ty, (PCons (x :||: xs))) -> Just $ do
+            node <- next "PCons (List)" Hypo [("head", ty), ("tail", List ty)] []
+            venv <- abstractAll [((node, "head"), ty)] x
+            venv' <- abstractAll [((node, "tail"), List ty)] xs
+            (,inputs') <$> combineDisjointEnvs venv venv'
+          (Option ty, PSome x) -> Just $ abstract ((src, ty):inputs') x
+          (Option _, PNone) -> Just $ pure (emptyEnv, inputs')
+          _ -> Nothing
+    _ -> err (PattErr $
+      "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty)
 abstract ((_, ty):inputs) (Lit tm) = do
   litTy <- case (?my,ty) of
     (Kerny, Bit) -> pure $ Boolean
