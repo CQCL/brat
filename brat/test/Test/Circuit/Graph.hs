@@ -177,7 +177,7 @@ subtractThunksTest = testCase "subtractThunks" $ case run (emptyEnv, [], dummyFC
     let combinedOut = [("combined", combinedFn)]
     inNode <- next "in" Source [] args
     outNode <- next "out" Target combinedOut []
-    unders <- checkOutputs dummyTerm (sigToRow outNode combinedOut) (sigToRow inNode args)
+    unders <- let ?my = Braty in checkOutputs dummyTerm (sigToRow outNode combinedOut) (sigToRow inNode args)
     return (inNode, outNode, unders)
 
 
