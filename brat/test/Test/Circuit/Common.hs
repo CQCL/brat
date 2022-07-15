@@ -17,7 +17,7 @@ import Brat.Syntax.Common
 instance IsString Name where
   fromString s = MkName [(s, 0)]
 
-idGraph :: Graph' Term
+idGraph :: Graph
 idGraph = (M.fromList
            [("main_box", BratNode ("src" :>>: "tgt") [] [("fun", kty)])
            ,("main", BratNode Id [("a1", kty)] [("a1", kty)])
@@ -31,7 +31,7 @@ idGraph = (M.fromList
  where
   kty = K (R [("a", Q Qubit)]) (R [("b", Q Qubit)])
 
-swapGraph :: Graph' Term
+swapGraph :: Graph
 swapGraph = (M.fromList
              [("main_box", BratNode ("src" :>>: "tgt") [] [("fun", kty)])
              ,("main", BratNode Id [("a1", kty)] [("a1", kty)])
@@ -48,7 +48,7 @@ swapGraph = (M.fromList
         (R [("a", Q Qubit),  ("b", Q Qubit)])
         (R [("b", Q Qubit), ("a", Q Qubit)])
 
-xGraph :: Graph' Term
+xGraph :: Graph
 xGraph = (M.fromList
           [("tket.X", BratNode (Prim "tket.X") [] [("a1", xTy)])
           ,("X", KernelNode (Eval ("tket.X", "_0")) [("xa", Q Qubit)] [("xb", Q Qubit)])
@@ -67,7 +67,7 @@ xGraph = (M.fromList
   mainTy = K (R [("a", Q Qubit)]) (R [("b", Q Qubit)])
 
 -- TODO:
-rxGraph :: Graph' Term
+rxGraph :: Graph
 rxGraph = (M.fromList
            [("id", BratNode (Prim "Rx")
             [("th", SimpleTy FloatTy)]
@@ -83,7 +83,7 @@ rxGraph = (M.fromList
 
 int = SimpleTy IntTy
 
-twoGraph :: Graph' Term
+twoGraph :: Graph
 twoGraph = (M.fromList
             [("add", BratNode (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))])
             ,("add_eval", BratNode (Eval ("add", "thunk")) [("a", int), ("b", int)] [("c", int)])
@@ -99,7 +99,7 @@ twoGraph = (M.fromList
             ]
            )
 
-oneGraph :: Graph' Term
+oneGraph :: Graph
 oneGraph = (M.fromList
             [("1", BratNode (Const (Num 1)) [] [("value", int)])
             ,("one", BratNode Id [("n", int)] [("n", int)])

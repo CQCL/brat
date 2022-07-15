@@ -9,17 +9,16 @@ import Data.List ((\\))
 import qualified Data.Graph as G
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
+import Brat.Syntax.Core (Input, Output, SType, VType)
 
-data Node' tm
-  = BratNode Thing [Input' tm] [Output' tm]
-  | KernelNode Thing [(Port, SType' tm)] [(Port, SType' tm)]
+data Node
+  = BratNode Thing [Input] [Output]
+  | KernelNode Thing [(Port, SType)] [(Port, SType)]
+ deriving (Eq, Show)
 
-nodeThing :: Node' tm -> Thing
+nodeThing :: Node -> Thing
 nodeThing (BratNode t _ _) = t
 nodeThing (KernelNode t _ _) = t
-
-deriving instance Show (tm Chk Noun) => Show (Node' tm)
-deriving instance Eq (tm Chk Noun) => Eq (Node' tm)
 
 data ComboType = Row | Thunk deriving (Eq, Show);
 
@@ -39,26 +38,17 @@ data Thing
 data ConsType = CCons | CSome | CVec | CList | CPair | CDoub | CSucc
  deriving (Eq, Show)
 
-type Graph' tm = (M.Map Name (Node' tm), [Wire' tm])
-{-
-newtype BGraph' tm nl el = BG ([Node tm], [Wire tm])
-type BGraph tm = BGraph' tm String String
+type Graph = (M.Map Name Node, [Wire])
 
-deriving instance Eq (tm Chk Noun) => Eq (BGraph tm)
-deriving instance Show (tm Chk Noun) => Show (BGraph tm)
--}
-instance {-# OVERLAPPING #-} Show (tm Chk Noun) => Show (Graph' tm) where
+instance {-# OVERLAPPING #-} Show Graph where
   show (ns, ws) = unlines (("Nodes:":(show <$> M.toList ns)) ++ ("":"Wires:":(show <$> ws)))
 
-type Wire' tm = (Src, Either (SType' tm) (VType' tm), Tgt)
+type Wire = (Src, Either SType VType, Tgt)
 
 type Src = (Name, Port)
 type Tgt = (Name, Port)
 
-type Input' tm = (Port, VType' tm)
-type Output' tm = (Port, VType' tm)
-
-toGraph :: Graph' tm -> (G.Graph, G.Vertex -> (Node' tm, Name, [Name]), Name -> Maybe G.Vertex)
+toGraph :: Graph -> (G.Graph, G.Vertex -> (Node, Name, [Name]), Name -> Maybe G.Vertex)
 toGraph (ns, ws) = G.graphFromEdges adj
  where
   -- TODO: Reduce the complexity (O(n^2)) of this function
@@ -68,34 +58,32 @@ toGraph (ns, ws) = G.graphFromEdges adj
           )
         | (name, node) <- M.toList ns]
 
-wiresFrom :: Name -> Graph' tm -> [Wire' tm]
+wiresFrom :: Name -> Graph -> [Wire]
 wiresFrom src (_, ws) = [ w | w@((a, _), _, (_, _)) <- ws, a == src ]
 
-lookupNode :: Name -> Graph' tm -> Maybe (Node' tm)
+lookupNode :: Name -> Graph -> Maybe (Node)
 lookupNode name (ns, _) = M.lookup name ns
 
-wireStart :: Wire' tm -> Name
+wireStart :: Wire -> Name
 wireStart ((x, _), _, _) = x
 
-wireEnd :: Wire' tm -> Name
+wireEnd :: Wire -> Name
 wireEnd (_, _, (x, _)) = x
 
-boxSubgraphs :: forall tm. Eq (tm Chk Noun)
-             => Graph' tm
-             -> (Graph' tm, [(String, Graph' tm)])
+boxSubgraphs :: Graph -> (Graph, [(String, Graph)])
 boxSubgraphs g@(ns,ws) = let subs = fromJust subGraphs
                              (subNodes, subWires) = mconcat $ snd <$> subs
                          in  ((ns M.\\ subNodes, ws \\ subWires), subs)
  where
-  box :: (Name, Node' tm) -> [(String, (Name, Name))]
+  box :: (Name, Node) -> [(String, (Name, Name))]
   box (nm,n)
     | src :>>: tgt <- nodeThing n = [(show nm, (src,tgt))]
     | otherwise = []
 
-  subGraphs :: Maybe [(String, Graph' tm)]
+  subGraphs :: Maybe [(String, Graph)]
   subGraphs = traverse (\(lbl, x) -> (lbl,) <$> boxInsides x) (M.toList ns >>= box)
 
-  boxInsides :: (Name, Name) -> Maybe (Graph' tm)
+  boxInsides :: (Name, Name) -> Maybe (Graph)
   boxInsides (srcId, tgtId) = do
     let wires = wiresFrom srcId g
     case wires of

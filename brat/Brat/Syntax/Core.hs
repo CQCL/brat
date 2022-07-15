@@ -3,7 +3,6 @@
 module Brat.Syntax.Core where
 
 import Brat.FC
-import Brat.Graph
 import Brat.Naming
 import Brat.Syntax.Common
 import Brat.UserName
@@ -14,9 +13,8 @@ import Data.List (intercalate)
 type VType = VType' Term
 type SType = SType' Term
 
-type Input = Input' Term
-type Output = Output' Term
-
+type Input = InOut
+type Output = InOut
 type InOut = (Port, VType)
 
 type CType = CType' InOut

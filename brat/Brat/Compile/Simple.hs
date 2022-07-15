@@ -5,7 +5,6 @@ module Brat.Compile.Simple (removeNode, simplify) where
 
 import Brat.Graph
 import Brat.Naming
-import Brat.Checker
 
 import qualified Data.Map as M
 
@@ -37,7 +36,7 @@ uncombo (name, node) g@(_,edges)
 rewire :: Name -> Src -> Graph -> Graph
 rewire old new (nodes, wires) = (nodes, newWires wires)
  where
-  newWires :: [Wire' tm] -> [Wire' tm]
+  newWires :: [Wire] -> [Wire]
   newWires [] = []
   -- Assuming no cycles
   newWires (w@((src, p), ty, (tgt, q)):ws)

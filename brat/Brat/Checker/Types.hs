@@ -7,19 +7,15 @@ module Brat.Checker.Types (Overs, Unders, Outputs, Connectors
                           ) where
 
 import Brat.Checker.Quantity
-import Brat.Graph (Graph', Node', Wire', Src, Tgt)
+import Brat.Graph (Graph, Node, Wire, Src, Tgt)
 import Brat.FC (FC)
 import Brat.Naming (Name)
 import Brat.Syntax.Common (Dir(..), Kind(..))
-import Brat.Syntax.Core (SType, VType, Term)
+import Brat.Syntax.Core (SType, VType)
 import Brat.UserName (UserName)
 
 import Data.Kind (Type)
 import qualified Data.Map as M
-
-type Graph = Graph' Term
-type Node = Node' Term
-type Wire = Wire' Term
 
 type family Overs (m :: Mode) (k :: Kind) :: Type where
   Overs m Noun = ()

@@ -18,11 +18,11 @@ import Data.ProtoLens.Prism
 import qualified Data.Map as M
 import Data.Text (Text, pack)
 
-import Brat.Graph
+import Brat.Graph as BG
 import Brat.Syntax.Core (SType, Term(..))
 import Brat.Syntax.Common
-import Proto.Graph as G
-import Proto.Graph_Fields as G
+import Proto.Graph as PG
+import Proto.Graph_Fields as PG
 
 import Debug.Trace
 
@@ -63,7 +63,7 @@ data Circuit
             , commands :: [Command]
             } deriving Show
 
-process :: Graph' Term
+process :: BG.Graph
         -> (Row Term, Row Term)
         -> Circuit
 process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
@@ -94,7 +94,7 @@ process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
                                    | otherwise = 0
   countB (Rho r) = count countB r
 
-  smth :: Graph' Term -> Maybe [Command]
+  smth :: BG.Graph -> Maybe [Command]
   smth graph = do
     let (g, f, _) = toGraph graph
     let t = transposeG g
@@ -105,77 +105,77 @@ process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
     traceShowM sources
     pure []
 
-none :: G.Value
-none = let nothing :: G.OptionValue = defMessage & G.maybe'inner .~ Nothing in
-         defMessage & G.maybe'option .- nothing
+none :: PG.Value
+none = let nothing :: PG.OptionValue = defMessage & PG.maybe'inner .~ Nothing in
+         defMessage & PG.maybe'option .- nothing
          
 -- Shortcut for setting a `maybe` field
 (.-) :: ASetter s t k (Maybe v) -> v -> s -> t
 k .- v = k .~ (_Just # v)
 
-circuit2Tierkreis :: Circuit -> G.StructValue
-circuit2Tierkreis Circuit{..} = defMessage & G.map .~ m
+circuit2Tierkreis :: Circuit -> PG.StructValue
+circuit2Tierkreis Circuit{..} = defMessage & PG.map .~ m
  where
-  m :: M.Map Text G.Value
+  m :: M.Map Text PG.Value
   m = M.fromList
       [("implicitPermutation", emptyStruct)
       ,("bits",     toReg "c" bits)
-      ,("commands", defMessage & G.maybe'vec .- cmds)
+      ,("commands", defMessage & PG.maybe'vec .- cmds)
       ,("name",     none)
-      ,("phase",    defMessage & G.maybe'flt .- 0.0)
+      ,("phase",    defMessage & PG.maybe'flt .- 0.0)
       ,("qubits",   toReg "q" qubits)
       ]
 
-  mkCmd :: Command -> G.Value
+  mkCmd :: Command -> PG.Value
   mkCmd Cmd{..} = let qs = defMessage
-                           & G.maybe'vec .- (defMessage
-                                             & G.vec .~ (toReg "q" <$> args))
-                      m :: M.Map Text G.Value
+                           & PG.maybe'vec .- (defMessage
+                                             & PG.vec .~ (toReg "q" <$> args))
+                      m :: M.Map Text PG.Value
                         = M.fromList
                           [("op"
-                           ,defMessage & G.maybe'str .- pack (opType op))
+                           ,defMessage & PG.maybe'str .- pack (opType op))
                           ,("args", qs)]
-                      struct :: G.StructValue = defMessage & G.map .~ m
-                  in  defMessage & G.maybe'struct .- struct
+                      struct :: PG.StructValue = defMessage & PG.map .~ m
+                  in  defMessage & PG.maybe'struct .- struct
 
-  cmds :: G.VecValue
-  cmds = defMessage & G.vec .~ (mkCmd <$> commands)
+  cmds :: PG.VecValue
+  cmds = defMessage & PG.vec .~ (mkCmd <$> commands)
 
-  toReg :: Text -> Int -> G.Value
-  toReg reg n = let structs :: [G.StructValue]
-                      = (\bit -> defMessage & G.map .~ M.fromList [("reg_name", mkStr reg)
-                                                                  ,("index", mkStr . pack $ show bit)])
+  toReg :: Text -> Int -> PG.Value
+  toReg reg n = let structs :: [PG.StructValue]
+                      = (\bit -> defMessage & PG.map .~ M.fromList [("reg_name", mkStr reg)
+                                                                   ,("index", mkStr . pack $ show bit)])
                         <$> [0..n-1]
-                    vecVal = defMessage & G.vec .~ ((\x -> defMessage & G.maybe'struct .- x)
-                                                    <$> structs)
-                in  defMessage & G.maybe'vec .- vecVal
+                    vecVal = defMessage & PG.vec .~ ((\x -> defMessage & PG.maybe'struct .- x)
+                                                     <$> structs)
+                in  defMessage & PG.maybe'vec .- vecVal
 
-  mkStr :: Text -> G.Value
-  mkStr txt = defMessage & G.maybe'str .- txt
+  mkStr :: Text -> PG.Value
+  mkStr txt = defMessage & PG.maybe'str .- txt
 
-  emptyStruct :: G.Value
-  emptyStruct = let struct :: G.StructValue = (defMessage & G.map .~ M.empty) in
-                  defMessage & G.maybe'struct .- struct
+  emptyStruct :: PG.Value
+  emptyStruct = let struct :: PG.StructValue = (defMessage & PG.map .~ M.empty) in
+                  defMessage & PG.maybe'struct .- struct
 
-compileCircuit :: Graph' Term
+compileCircuit :: BG.Graph
                -> (Row Term, Row Term)
-               -> G.Value
-compileCircuit tm tys = defMessage & G.maybe'struct .- (circuit2Tierkreis $ process tm tys)
+               -> PG.Value
+compileCircuit tm tys = defMessage & PG.maybe'struct .- (circuit2Tierkreis $ process tm tys)
 
-empty :: G.Empty
+empty :: PG.Empty
 empty = defMessage
 
-wrapCircuit :: G.Value -> G.Graph
-wrapCircuit v = let node :: G.Node = defMessage & G.maybe'const .~ (_Just # v) in
+wrapCircuit :: PG.Value -> PG.Graph
+wrapCircuit v = let node :: PG.Node = defMessage & PG.maybe'const .~ (_Just # v) in
                    defMessage
-                   & G.nodes .~ (M.fromList
+                   & PG.nodes .~ (M.fromList
                                  [("circuit", node)
                                  ,("output", defMessage
-                                             & G.maybe'output .~ (_Just # empty))
+                                             & PG.maybe'output .~ (_Just # empty))
                                  ])
-                   & G.edges .~ [defMessage
-                                 & G.portFrom .~ "value"
-                                 & G.portTo   .~ "value"
-                                 & G.nodeFrom .~ "circuit"
-                                 & G.nodeTo   .~ "output"
+                   & PG.edges .~ [defMessage
+                                 & PG.portFrom .~ "value"
+                                 & PG.portTo   .~ "value"
+                                 & PG.nodeFrom .~ "circuit"
+                                 & PG.nodeTo   .~ "output"
                                 ]

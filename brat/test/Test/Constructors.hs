@@ -21,7 +21,7 @@ listProg =
   ,"xs = [1,2,3]"
   ]
 
-listGraph :: Graph' Term
+listGraph :: Graph
 listGraph =
   (fromList
    [("xs"
@@ -54,7 +54,7 @@ vecProg =
   ,"xs = [0,1,2]"
   ]
 
-vecGraph :: Graph' Term
+vecGraph :: Graph
 vecGraph =
   (fromList
    [("xs"
@@ -94,7 +94,7 @@ pairProg =
   ,"xs = [1,true]"
   ]
 
-pairGraph :: Graph' Term
+pairGraph :: Graph
 pairGraph =
   (fromList
    [("xs"
@@ -130,7 +130,7 @@ consProg =
   ,"three = cons(0,two)"
   ]
 
-consGraph :: Graph' Term
+consGraph :: Graph
 consGraph =
   (fromList
    [("three"
@@ -191,7 +191,7 @@ numProg =
   ,"m = doub(-3)"
   ]
 
-numGraph :: Graph' Term
+numGraph :: Graph
 numGraph =
   (fromList
    [("n"
@@ -236,7 +236,7 @@ kernelProg =
   ,"id3 = { q0, q1, q2 -> cons(q0, [q1, q2]) }"
   ]
 
-kernelGraph :: Graph' Term
+kernelGraph :: Graph
 kernelGraph =
   (fromList
    [("id3"

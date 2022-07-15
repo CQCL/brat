@@ -14,7 +14,7 @@ import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Common
 import Test.Circuit.Common
 
-processTest :: Graph' Term -> (Row Term, Row Term) -> [Command] -> Assertion
+processTest :: Graph -> (Row Term, Row Term) -> [Command] -> Assertion
 processTest g io c = commands (process g io) @?= c
 
 testId = testCase "id" $

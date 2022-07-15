@@ -4,7 +4,7 @@ import Brat.Checker.Quantity (Quantity(..), qpred)
 import Brat.Checker.Types
 import Brat.Error (Error(..), ErrorMsg(..))
 import Brat.FC (FC)
-import Brat.Graph (Node'(..), Src, Thing(..), Tgt)
+import Brat.Graph (Node(..), Src, Thing(..), Tgt)
 import Brat.Naming (fresh, Name, Namespace)
 import Brat.Syntax.Common
 import Brat.Syntax.Core (Decl, Input, Output, SType, VType, Term)
