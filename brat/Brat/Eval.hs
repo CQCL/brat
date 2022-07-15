@@ -94,7 +94,6 @@ seval :: [Value] -> WC (Term Syn k) -> Eval Value
 seval g (WC fc tm) = addFCToError fc (seval' g tm)
 
 seval' :: [Value] -> Term Syn k -> Eval Value
-seval' g (Bound i) = pure $ g !! i
 seval' g (tm ::: _) = ceval g tm
 seval' g (fun :$: arg) = do
   fun <- seval g fun

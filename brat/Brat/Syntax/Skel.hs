@@ -46,7 +46,6 @@ stripInfo (Th comp) = STh (stripInfo <$> comp)
 stripInfo (Emb x) = stripInfo (unWC x)
 stripInfo (Pull ps x) = SPull ps (stripInfo <$> x)
 stripInfo (Var x) = SVar x
-stripInfo (Bound i) = SBound i
 stripInfo (fun :$: arg) = SApp (stripInfo <$> fun) (stripInfo <$> arg)
 stripInfo (tm ::: ty) = SAnn (stripInfo <$> tm) ty
 stripInfo (a :-: b) = SComp (stripInfo <$> a) (stripInfo <$> b)

@@ -11,6 +11,7 @@ import Brat.Checker
 import Brat.Checker.Helpers (sigToRow)
 import Brat.Syntax.Common
 import Brat.FC
+import Brat.UserName
 
 import qualified Control.Exception as CE (assert)
 import Control.Monad.Except
@@ -144,7 +145,7 @@ tensorOutputsTests = testCase "tensorOutputs" $ case run (emptyEnv, [], dummyFC)
 
 -- This is just because we have to pass some term into checkOutputs in case it needs to produce an error message.
 -- But our case should never have to produce an error message, so assert false.
-dummyTerm = CE.assert False (WC dummyFC $ Bound 0)
+dummyTerm = CE.assert False (WC dummyFC $ Var (PrefixName [] ""))
 
 subtractThunksTest :: TestTree
 subtractThunksTest = testCase "subtractThunks" $ case run (emptyEnv, [], dummyFC) mkThunks of

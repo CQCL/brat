@@ -36,7 +36,6 @@ data Term :: Dir -> Kind -> Type where
   Emb      :: WC (Term Syn k) -> Term Chk k
   Pull     :: [Port] -> WC (Term Chk k) -> Term Chk k
   Var      :: UserName -> Term Syn Noun  -- Look up in noun (value) env
-  Bound    :: Int -> Term Syn Noun  -- Look up in noun (value) env
   (:$:)    :: WC (Term Syn Noun) -> WC (Term Chk Noun) -> Term Syn Noun
   -- TODO: Make it possible for Output to be (Port, SType) when using this in kernels
   (:::)    :: WC (Term Chk k) -> [Output] -> Term Syn k
@@ -69,7 +68,6 @@ instance Show (Term d k) where
               ]
   show (Pull ps x) = concat ((++":") <$> ps) ++ show x
   show (Var x) = show x
-  show (Bound i) = '^':show i
   show (fun :$: arg) = show fun ++ ('(' : show arg ++ ")")
   show (tm ::: ty) = show tm ++ " :: " ++ show ty
   show (a :-: b) = show a ++ "; " ++ show b
