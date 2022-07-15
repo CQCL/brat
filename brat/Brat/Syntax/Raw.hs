@@ -138,96 +138,95 @@ findDuplicates (ndecls, vdecls, aliases)
 desugarErr :: String -> Error
 desugarErr = dumbErr . DesugarErr
 
-desugarVTy :: RawVType -> Desugar VType
-desugarVTy (RK ss ts) = K <$> (desugarRow ss) <*> (desugarRow ts)
- where
-  desugarSType :: SType' Raw -> Desugar (SType)
-  desugarSType (Q q) = pure $ Q q
-  desugarSType Bit = pure Bit
-  desugarSType (Of sty tm) = Of <$> desugarSType sty <*> desugar' tm
-  desugarSType (Rho row) = Rho <$> desugarRow row
+class Desugarable ty where
+  type Desugared ty
+  desugar :: WC ty -> Desugar (WC (Desugared ty))
+  desugar (WC fc tm)
+    = (WC fc <$> desugar' tm)
+      `catchError`
+      (\(Err _ src msg) -> throwError (Err (Just fc) src msg))
 
-  desugarRow :: Row Raw -> Desugar (Row Term)
-  desugarRow (R r) = R <$> mapM (traverse desugarSType) r
+  desugar' :: ty -> Desugar (Desugared ty)
 
-desugarVTy (RC raw) = C <$> desugarCTy raw
-desugarVTy (RSimpleTy simp) = pure $ SimpleTy simp
-desugarVTy (RList raw) = List <$> desugarVTy raw
-desugarVTy (RProduct raw raw') = Product <$> desugarVTy raw <*> desugarVTy raw'
-desugarVTy (RAlias s args) = do
-  (_, aliases) <- ask
-  case lookup s aliases of
-    Nothing -> let msg = DesugarErr $ "Couldn't find an alias for type "
-                         ++ unwords (show s:fmap show args)
-               in  throwError $ Err Nothing (Just (show s)) msg
-    Just (Alias fc _s vars ty) -> do
-      unless (length vars == length args)
-        (throwError . Err (Just fc) (Just (show s)) . DesugarErr $
-          unwords ("Type alias isn't fully applied:":show s:(show <$> args)))
-      let concreteTy = foldr (uncurry instantiateVType) ty (zip [0..] args)
-      desugarVTy concreteTy
-desugarVTy (RTypeFree f) = throwError $
-                           desugarErr ("Trying to desugar free type var: " ++ show f)
-desugarVTy (RTypeVar x) = throwError $
-                          desugarErr ("Trying to desugar bound type var: " ++ show x)
-desugarVTy (RVector vty n)
-  = Vector <$> desugarVTy vty <*> (unWC <$> desugar n)
-desugarVTy (RThinning wee big) = (:<<<:)
-                                 <$> (unWC <$> desugar wee)
-                                 <*> (unWC <$> desugar big)
-desugarVTy (ROption rty) = Option <$> desugarVTy rty
+instance Desugarable (SType' Raw) where
+  type Desugared (SType' Raw) = SType
+  desugar' (Q q) = pure $ Q q
+  desugar' Bit = pure Bit
+  desugar' (Of sty tm) = Of <$> desugar' sty <*> desugar' tm
+  desugar' (Rho row) = Rho <$> desugar' row
 
-desugarCTy :: CType' RawIO -> Desugar (CType' InOut)
-desugarCTy (ss :-> ts) = (:->) <$> desugarIO ss <*> desugarIO ts
+instance Desugarable (Row Raw) where
+  type Desugared (Row Raw) = Row Term
+  desugar' (R r) = R <$> mapM (traverse desugar') r
 
-desugarIO :: [RawIO] -> Desugar [InOut]
-desugarIO = zipWithM aux names
- where
-  aux :: String -> RawIO -> Desugar InOut
-  aux _ (Named port ty) = (port,) <$> desugarVTy ty
-  aux port (Anon ty)    = (port,) <$> desugarVTy ty
+instance Desugarable RawVType where
+  type Desugared RawVType = VType
+  desugar' (RK ss ts) = K <$> (desugar' ss) <*> (desugar' ts)
+  desugar' (RC raw) = C <$> desugar' raw
+  desugar' (RSimpleTy simp) = pure $ SimpleTy simp
+  desugar' (RList raw) = List <$> desugar' raw
+  desugar' (RProduct raw raw') = Product <$> desugar' raw <*> desugar' raw'
+  desugar' (RAlias s args) = do
+    (_, aliases) <- ask
+    case lookup s aliases of
+      Nothing -> let msg = DesugarErr $ "Couldn't find an alias for type "
+                           ++ unwords (show s:fmap show args)
+                 in  throwError $ Err Nothing (Just (show s)) msg
+      Just (Alias fc _s vars ty) -> do
+        unless (length vars == length args)
+          (throwError . Err (Just fc) (Just (show s)) . DesugarErr $
+            unwords ("Type alias isn't fully applied:":show s:(show <$> args)))
+        let concreteTy = foldr (uncurry instantiateVType) ty (zip [0..] args)
+        desugar' concreteTy
+  desugar' (RTypeFree f) = throwError $
+                             desugarErr ("Trying to desugar free type var: " ++ show f)
+  desugar' (RTypeVar x) = throwError $
+                            desugarErr ("Trying to desugar bound type var: " ++ show x)
+  desugar' (RVector vty n)
+    = Vector <$> desugar' vty <*> (unWC <$> desugar n)
+  desugar' (RThinning wee big) = (:<<<:)
+                                   <$> (unWC <$> desugar wee)
+                                   <*> (unWC <$> desugar big)
+  desugar' (ROption rty) = Option <$> desugar' rty
 
-desugar :: WC (Raw d k)
-        -> Desugar (WC (Term d k))
-desugar (WC fc tm)
-  = (WC fc <$> desugar' tm)
-    `catchError`
-    (\(Err _ src msg) -> throwError (Err (Just fc) src msg))
+instance Desugarable (CType' RawIO) where
+  type Desugared (CType' RawIO) = CType' InOut
+  desugar' (ss :-> ts) = (:->) <$> desugar' ss <*> desugar' ts
 
-desugar' :: Raw d k
-         -> Desugar (Term d k)
--- TODO: holes need to know their arity for type checking
-desugar' (RNHole name) = NHole <$> freshM name
-desugar' (RVHole name) = VHole <$> freshM name
-desugar' (RSimple simp) = pure $ Simple simp
-desugar' (a ::|:: b) = (:|:) <$> desugar a <*> desugar b
-desugar' (RTh v) = Th <$> desugar v
-desugar' (REmb syn) = Emb <$> desugar syn
-desugar' (RPull ps raw) = Pull ps <$> desugar raw
-desugar' (RVar  name) = pure (Var name)
-desugar' (fun ::$:: arg)
-  = (:$:) <$> desugar fun <*> desugar arg
-desugar' (tm ::::: outputs) = do
-  tm <- desugar tm
-  ty <- desugarIO outputs
-  pure (tm ::: ty)
-desugar' (syn ::-:: verb) = (:-:) <$> desugar syn <*> desugar verb
-{-
-  tys <- nsynth (unWC syn)
-  case tys of
-    [C (ss :-> ts)] -> do l <- desugar syn
-                          r <- desugar verb
-                          pure (l :-: r)
--}
-desugar' (abst ::\:: raw) = (abst :\:) <$> desugar raw
-desugar' (RVec raws)
-  = Vec <$> mapM (\tm -> desugar tm) raws
-desugar' (RPattern x) = Pattern <$> traverse desugarPattern x
- where
-  desugarPattern :: Pattern (WC (Raw Chk Noun)) -> Desugar (Pattern (WC (Term Chk Noun)))
-  desugarPattern p = traverse (traverse desugar') p
-desugar' (RLet abs thing body) = Let abs <$> desugar thing <*> desugar body
-desugar' x = throwError . desugarErr $ "desugar'"  ++ show x
+instance Desugarable [RawIO] where
+  type Desugared [RawIO] = [InOut]
+  desugar' = zipWithM aux names
+   where
+    aux :: String -> RawIO -> Desugar InOut
+    aux _ (Named port ty) = (port,) <$> desugar' ty
+    aux port (Anon ty)    = (port,) <$> desugar' ty
+
+instance Desugarable (Raw d k) where
+  type Desugared (Raw d k) = Term d k
+  -- TODO: holes need to know their arity for type checking
+  desugar' (RNHole name) = NHole <$> freshM name
+  desugar' (RVHole name) = VHole <$> freshM name
+  desugar' (RSimple simp) = pure $ Simple simp
+  desugar' (a ::|:: b) = (:|:) <$> desugar a <*> desugar b
+  desugar' (RTh v) = Th <$> desugar v
+  desugar' (REmb syn) = Emb <$> desugar syn
+  desugar' (RPull ps raw) = Pull ps <$> desugar raw
+  desugar' (RVar  name) = pure (Var name)
+  desugar' (fun ::$:: arg) = (:$:) <$> desugar fun <*> desugar arg
+  desugar' (tm ::::: outputs) = do
+    tm <- desugar tm
+    ty <- desugar' outputs
+    pure (tm ::: ty)
+  desugar' (syn ::-:: verb) = (:-:) <$> desugar syn <*> desugar verb
+  desugar' (abst ::\:: raw) = (abst :\:) <$> desugar raw
+  desugar' (RVec raws)
+    = Vec <$> mapM (\tm -> desugar tm) raws
+  desugar' (RPattern x) = Pattern <$> traverse desugarPattern x
+   where
+    desugarPattern :: Pattern (WC (Raw Chk Noun)) -> Desugar (Pattern (WC (Term Chk Noun)))
+    desugarPattern p = traverse (traverse desugar') p
+  desugar' (RLet abs thing body) = Let abs <$> desugar thing <*> desugar body
+  desugar' x = throwError . desugarErr $ "desugar'"  ++ show x
 
 desugarNClause :: Clause Raw Noun -> Desugar (Clause Term Noun)
 desugarNClause (ThunkOf clause) = ThunkOf <$> traverse desugarVClause clause
@@ -242,13 +241,14 @@ desugarVClause (Clauses cs) = Clauses <$> mapM branch cs
 desugarVClause (NoLhs rhs) = NoLhs <$> desugar rhs
 desugarVClause Undefined = pure Undefined
 
-desugarDecl :: RawDecl -> Desugar Decl
-desugarDecl d@Decl{..} = do
-  tys  <- desugarIO fnSig
-  noun <- {- fmap bindTerm <$> -} desugarNClause fnBody
-  pure $ d { fnBody = noun
-           , fnSig  = tys
-           }
+instance Desugarable RawDecl where
+  type Desugared RawDecl = Decl
+  desugar' d@Decl{..} = do
+    tys  <- desugar' fnSig
+    noun <- desugarNClause fnBody
+    pure $ d { fnBody = noun
+             , fnSig  = tys
+             }
 
 desugarEnv :: RawEnv -> Either Error [Decl]
 desugarEnv env@(decls, _)
@@ -256,7 +256,7 @@ desugarEnv env@(decls, _)
     . runExcept
     . flip runReaderT env
     . flip runStateT root
-    $ mapM desugarDecl decls
+    $ mapM desugar' decls
 
 abstractVType :: UserName -> Int -> RawVType -> RawVType
 abstractVType x n (RC ctype) = RC (fmap (abstractVType x n) <$> ctype)
