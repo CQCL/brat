@@ -69,9 +69,7 @@ checkDecl pre Decl{..}
           src <- next (name <> "/in") Source ss ss
           tgt <- next (name <> "/out") Target ts ts
           let thunkTy = ("value", C (ss :-> ts))
-          thunk <- next (name ++ "_thunk") (src :>>: tgt) [] [thunkTy]
-          eval  <- next ("Eval(" ++ name ++ ")") (Eval (thunk, "value")) (thunkTy:ss) ts
-          wire ((thunk, "value"), snd thunkTy, (eval, "value"))
+          next (name ++ "_thunk") (src :>>: tgt) [] [thunkTy]
           ((), ([], [])) <- wrapError (addSrc name) $
                             checkClauses (unWC verb) ([((src, port), ty) | (port, ty) <- ss]
                                                      ,[((tgt, port), ty) | (port, ty) <- ts])
