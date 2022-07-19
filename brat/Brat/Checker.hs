@@ -184,7 +184,7 @@ checkThunk tm (u:us) =
     source <- anext "src" Source [] ins
     target <- anext "tgt" Target outs []
     -- The box is always a `Brat` `Thing` (classical)
-    box <- next ("eval(" ++ show src ++ ")") (source :>>: target) [] [("fun", fty)]
+    box <- next (show src ++ "_thunk") (source :>>: target) [] [("fun", fty)]
     ((), (emptyOvers, emptyUnders)) <- check tm (sigToRow box ins, sigToRow box outs)
     ensureEmpty "overs" emptyOvers 
     ensureEmpty "unders" emptyUnders
