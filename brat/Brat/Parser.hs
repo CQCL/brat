@@ -192,16 +192,16 @@ sverb :: Parser (WC (Raw Syn Verb))
 sverb = verbAndJuxt `chainl1` semicolon
  where
   plainVerb :: Parser (Raw Syn Verb)
-  plainVerb = try func
+  plainVerb = try (func snoun)
 
   verbAndJuxt = (try (letin sverb) <|> withFC plainVerb) `chainl1` (try comma)
 
-  func :: Parser (Raw Syn Verb)
-  func = do
-    xs <- withFC binding
-    spaced $ match Arrow
-    body <- snoun
-    pure $ xs ::\:: body
+func :: Parser (WC (Raw d Noun)) -> Parser (Raw d Verb)
+func pbody = do
+  xs <- withFC binding <?> "Binding(s)"
+  spaced $ match Arrow
+  body <- pbody
+  pure $ xs ::\:: body
 
 letin :: Parser (WC (Raw d k)) -> Parser (WC (Raw d k))
 letin p = withFC $ do
@@ -218,19 +218,12 @@ letin p = withFC $ do
 cverb :: Parser (WC (Raw Chk Verb))
 cverb = try (letin cverb <?> "let binding") <|> withFC
   (try (composition <?> "composition")
-  <|> try (func <?> "function")
+  <|> try (func cnoun <?> "function")
   <|> try (nhole <?> "typed hole")
   <|> (REmb <$> sverb <?> "syn verb")
   )
  where
   nhole = RVHole <$> hole
-
-  func :: Parser (Raw Chk Verb)
-  func = do
-    xs <- withFC binding <?> "bindings"
-    spaced $ match Arrow
-    body <- cnoun
-    pure $ xs ::\:: body
 
   composition = compose sverb cverb
 
