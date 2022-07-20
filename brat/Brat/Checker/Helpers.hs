@@ -6,6 +6,7 @@ module Brat.Checker.Helpers (evalNat
                             ,ensureEmpty, noUnders
                             ,rowToSig, sigToRow, subtractSig
                             ,showMode, getVec
+                            ,mkThunkTy
                             ) where
 
 import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr)
@@ -95,3 +96,8 @@ subtractSig :: Eq a => [(Port, a)] -> [(Port,a)] -> Maybe [(Port, a)]
 subtractSig xs [] = Just xs
 subtractSig ((_,x):xs) ((_,y):ys) | x == y = subtractSig xs ys
 subtractSig _ _ = Nothing
+
+mkThunkTy :: Modey m -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> VType' Term
+mkThunkTy Braty ss ts = C (ss :-> ts)
+mkThunkTy Kerny ss ts = K (R ss) (R ts)
+

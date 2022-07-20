@@ -4,6 +4,6 @@ Error in test/golden/kernel/classical_return.brat@FC {start = Pos {line = 4, col
 5 | f :: { Qubit -o Qubit, Int }
   |      ^^^^^^^^^^^^^^^^^^^^^^^
 unexpected { Qubit -o Qubit, Int }
-expecting (...), Bit, Bool, Comment, Float, Horizontal space, Int, List, Nat, Option, Pair, String, Type, Unit, Vec, \n, name, wee end, or {...}
+expecting (...), ->, -o, Bit, Bool, Comment, Float, Horizontal space, Int, List, Money, Nat, Option, Pair, Qubit, String, Type, Unit, Vec, \n, identifier, name, wee end, whitespace, or {...}
 
 

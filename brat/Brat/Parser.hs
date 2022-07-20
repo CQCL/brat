@@ -6,7 +6,6 @@ import Brat.Lexer
 import Brat.Syntax.Common hiding (K)
 import Brat.Syntax.Raw
 import Brat.UserName
-import Util (names)
 
 import Control.Monad (guard, void)
 import Data.Bifunctor
@@ -327,7 +326,7 @@ cnoun' = try (letin cnoun) <|> withFC
 --  from = From <$> (cnoun <* match DotDot)
 
 outputs :: Parser [RawIO]
-outputs = ports
+outputs = rawIO vtype
 
 
 vtype :: Parser RawVType
@@ -340,17 +339,11 @@ vtype' ps = try (round vty) <|> vty
 
   typeVar = RTypeFree <$> userName
 
-  base = try kernel <|> try comp <|> try vec <|> try thinning <|> simple
+  base = try comp <|> try vec <|> try thinning <|> simple
 
   alias = try aliasWithArgs <|> justAlias
 
   justAlias = RAlias <$> userName <*> pure []
-
-  kernel = curly $ do
-    ss <- row
-    spaced $ match Lolly
-    ts <- row
-    return $ RK ss ts
 
   aliasWithArgs = do
     alias <- userName
@@ -358,7 +351,7 @@ vtype' ps = try (round vty) <|> vty
     args <- round $ vtype' ps `sepBy` comma
     pure $ RAlias alias args
 
-  comp = curly $ RC <$> ctype
+  comp = curly $ thunkTy
 
   pair = kmatch KPair *> space *> round (RProduct <$> vtype' ps <* spaced comma <*> vtype' ps)
 
@@ -386,28 +379,30 @@ vtype' ps = try (round vty) <|> vty
     big <- cnoun <?> "big end"
     pure $ RThinning wee big
 
-row :: Parser (Row Raw)
-row = R <$> (nameAnon names <$> rowElem `sepBy` void (try $ spaced comma))
+rawIO :: Parser ty -> Parser [RawIO' ty]
+rawIO tyP = rowElem `sepBy` void (try $ spaced comma)
  where
-  nameAnon :: [String] -> [(Maybe Port, SType' Raw)] -> [(Port, SType' Raw)]
-  nameAnon _ [] = []
-  nameAnon (_:ns) ((Just p, ty):row) = (p, ty) : nameAnon ns row
-  nameAnon (name:ns) ((Nothing, ty):row) = (name, ty) : nameAnon ns row
+  rowElem = try (round rowElem') <|> rowElem'
+  rowElem' = try named <|> (Anon <$> tyP)
 
-  rowElem = try named <|> ((Nothing,) <$> stype)
   named = do
     p <- port
     spaced $ match TypeColon
-    ty <- stype
-    pure $ (Just p, ty)
+    ty <- tyP
+    pure $ (Named p ty)
 
 stype :: Parser (SType' Raw)
-stype = try (Rho <$> square row)
+stype = try (Rho <$> round row)
         <|> try vec
         <|> match (K KQubit) $> Q Qubit
         <|> match (K KMoney) $> Q Money
         <|> match (K KBool)  $> Bit
  where
+  row = fmap R $ some $ do
+    p <- port
+    spaced (match TypeColon)
+    (p,) <$> stype
+
   vec :: Parser (SType' Raw)
   vec = do match (K KVec)
            (ty, n) <- round $ do
@@ -418,21 +413,21 @@ stype = try (Rho <$> square row)
            pure $ Of ty n
 
 
-ctype :: Parser RawCType
+thunkTy :: Parser RawVType
+thunkTy = try (RC <$> ctype) <|> (RK <$> kernel)
+
 ctype = do
-  ins <- ports
-  spaced $ match Arrow
-  outs <- ports
+  ins <- rawIO vtype
+  spaced (match Arrow)
+  outs <- rawIO vtype
   pure (ins :-> outs)
 
-ports = (try named <|> anon) `sepBy1` try (spaced $ match Comma)
- where
-  named = round $ do
-    name <- port
-    spaced $ match TypeColon
-    Named name <$> vtype
-
-  anon = Anon <$> vtype
+kernel :: Parser RawKType
+kernel = do
+  ins <- rawIO stype
+  spaced (match Lolly)
+  outs <- rawIO stype
+  pure (ins :-> outs)
 
 withFC :: Parser a -> Parser (WC a)
 withFC p = do
@@ -467,7 +462,7 @@ decl = do
         nm <- simpleName
         spaced $ match TypeColon
         (ty, body) <- try (do
-            ty <- ctype <&> \t -> [Named "thunk" (RC t)]
+            ty <- thunkTy <&> \ty -> [Named "thunk" ty]
             vspace
             (ty,) <$> ((ThunkOf <$> (withFC $ clauses nm)) <|> (nbody nm)))
           <|> (do
@@ -599,12 +594,12 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
                   space
                   fnName <- simpleName
                   spaced (match TypeColon)
-                  ty <- ctype
+                  ty <- thunkTy
                   optional hspace
                   vspace
                   pure (fnName, ty, symbol)
                 pure Decl { fnName = fnName
-                          , fnSig = [Named "thunk" (RC ty)]
+                          , fnSig = [Named "thunk" ty]
                           , fnBody = Undefined
                           , fnLoc = fc
                           , fnRT = RtLocal

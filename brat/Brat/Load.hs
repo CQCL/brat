@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module Brat.Load (emptyMod
                  ,loadFilename
                  ,loadFiles
@@ -6,7 +8,9 @@ module Brat.Load (emptyMod
                  ) where
 
 import Brat.Checker.Combine
-import Brat.Checker.Helpers (sigToRow)
+import Brat.Checker.Helpers (mkThunkTy, sigToRow)
+import Brat.Checker.Monad
+import Brat.Checker.Types (ValueType)
 import Brat.Checker
 import Brat.Error
 import Brat.FC
@@ -65,15 +69,8 @@ checkDecl pre Decl{..}
       let outputs = sigToRow (MkName []) fnSig
       rows <- combinationsWithLeftovers outputs
       case last rows of
-        ((_, C (ss :-> ts)), []) -> do
-          src <- next (name <> "/in") Source ss ss
-          tgt <- next (name <> "/out") Target ts ts
-          let thunkTy = ("value", C (ss :-> ts))
-          next (name ++ "_thunk") (src :>>: tgt) [] [thunkTy]
-          ((), ([], [])) <- wrapError (addSrc name) $
-                            checkClauses (unWC verb) ([((src, port), ty) | (port, ty) <- ss]
-                                                     ,[((tgt, port), ty) | (port, ty) <- ts])
-          pure ()
+        ((_, C (ss :-> ts)), []) -> let ?my = Braty in go verb ss ts
+        ((_, K (R ss) (R ts)), []) -> let ?my = Kerny in go verb ss ts
         _ -> req $ Throw (dumbErr (InternalError "Thunk type isn't (just) a computation"))
 
     Undefined -> error "No body in `checkDecl`"
@@ -81,6 +78,17 @@ checkDecl pre Decl{..}
   | Extern sym <- fnLocality = () <$ next (show $ PrefixName pre fnName) (Prim sym) [] fnSig
  where
   name = show $ PrefixName pre fnName
+
+  go :: (?my :: Modey m, CheckConstraints m)
+     => WC (Clause Term Verb) -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> Checking ()
+  go verb ss ts = do
+   src <- anext (name <> "/in") Source [] ss
+   tgt <- anext (name <> "/out") Target ts []
+   let thunkTy = ("value", mkThunkTy ?my ss ts)
+   next (name ++ "_thunk") (src :>>: tgt) [] [thunkTy]
+   ((), ([], [])) <- wrapError (addSrc name) $
+                     checkClauses (unWC verb) (sigToRow src ss, sigToRow tgt ts)
+   pure ()
 
 typeGraph :: VEnv -> Decl -> Either Error Graph
 typeGraph venv fn = do

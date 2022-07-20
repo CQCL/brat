@@ -24,6 +24,7 @@ type family TypeOf (k :: Kind) :: Type where
 
 data RawVType
   = RC RawCType
+  | RK RawKType
   | RSimpleTy SimpleType
   | RList RawVType
   | RProduct RawVType RawVType
@@ -32,9 +33,8 @@ data RawVType
   | RTypeVar Int
   | RVector RawVType (WC (Raw Chk Noun))
   | RThinning (WC (Raw Chk Noun)) (WC (Raw Chk Noun))
-  | RK (Row Raw) (Row Raw)
   | ROption RawVType
-  deriving (Eq, Show)
+  deriving Show
 
 data RawIO' ty = Named Port ty | Anon ty deriving (Functor, Show)
 
@@ -47,10 +47,9 @@ instance Eq ty => Eq (RawIO' ty) where
 type RawIO = RawIO' RawVType
 
 type RawCType = CType' RawIO
+type RawKType = CType' (RawIO' (SType' Raw))
 
-deriving instance Eq RawCType
-
-data TypeAlias = Alias FC String [UserName] RawVType deriving (Eq, Show)
+data TypeAlias = Alias FC String [UserName] RawVType deriving Show
 
 type RawDecl = Decl' RawIO Raw
 type RawEnv = ([RawDecl], [(UserName, TypeAlias)])
@@ -76,8 +75,6 @@ data Raw :: Dir -> Kind -> Type where
   RSelect   :: WC (Raw Syn Noun) -> WC (Raw Chk Noun) -> Raw Chk Noun
   RThin     :: WC (Raw Chk Noun) -> Raw Syn Noun
   RPattern  :: WC (Pattern (WC (Raw Chk Noun))) -> Raw Chk Noun
-
-deriving instance Eq (Raw d k)
 
 instance Show (Raw d k) where
   show (RLet abs xs body)
@@ -161,7 +158,7 @@ instance Desugarable (Row Raw) where
 
 instance Desugarable RawVType where
   type Desugared RawVType = VType
-  desugar' (RK ss ts) = K <$> (desugar' ss) <*> (desugar' ts)
+  desugar' (RK raw) = desugar' raw
   desugar' (RC raw) = C <$> desugar' raw
   desugar' (RSimpleTy simp) = pure $ SimpleTy simp
   desugar' (RList raw) = List <$> desugar' raw
@@ -189,15 +186,21 @@ instance Desugarable RawVType where
                                    <*> (unWC <$> desugar big)
   desugar' (ROption rty) = Option <$> desugar' rty
 
-instance Desugarable (CType' RawIO) where
-  type Desugared (CType' RawIO) = CType' InOut
+instance Desugarable RawCType where
+  type Desugared RawCType = CType' InOut
   desugar' (ss :-> ts) = (:->) <$> desugar' ss <*> desugar' ts
 
-instance Desugarable [RawIO] where
-  type Desugared [RawIO] = [InOut]
+instance Desugarable RawKType where
+  type Desugared RawKType = VType
+  desugar' (ss :-> ts) = do
+    ss <- desugar' ss
+    ts <- desugar' ts
+    pure (K (R ss) (R ts))
+
+instance Desugarable ty => Desugarable [RawIO' ty] where
+  type Desugared [RawIO' ty] = [(Port, Desugared ty)]
   desugar' = zipWithM aux names
    where
-    aux :: String -> RawIO -> Desugar InOut
     aux _ (Named port ty) = (port,) <$> desugar' ty
     aux port (Anon ty)    = (port,) <$> desugar' ty
 
@@ -260,6 +263,7 @@ desugarEnv env@(decls, _)
 
 abstractVType :: UserName -> Int -> RawVType -> RawVType
 abstractVType x n (RC ctype) = RC (fmap (abstractVType x n) <$> ctype)
+abstractVType _ _ (RK ctype) = RK ctype
 -- All of our simple types are first order for now
 abstractVType _ _ ty@(RSimpleTy _) = ty
 abstractVType x n (RList ty) = RList (abstractVType x n ty)
@@ -272,11 +276,11 @@ abstractVType x n free@(RTypeFree y) | x == y = RTypeVar n
 abstractVType _ _ ty@(RTypeVar _) = ty
 abstractVType x n (RVector ty size) = RVector (abstractVType x n ty) size
 abstractVType _ _ (RThinning a b) = RThinning a b
-abstractVType _ _ (RK r r') = RK r r'
 abstractVType _ _ (ROption ty) = ROption ty
 
 instantiateVType :: Int -> RawVType -> RawVType -> RawVType
 instantiateVType n to (RC ctype) = RC (fmap (instantiateVType n to) <$> ctype)
+instantiateVType _ _  (RK ctype) = RK ctype
 instantiateVType _ _  ty@(RSimpleTy _) = ty
 instantiateVType n to (RList ty) = RList (instantiateVType n to ty)
 instantiateVType n to (RProduct a b) = RProduct
@@ -288,5 +292,4 @@ instantiateVType n to ty@(RTypeVar m) | n == m = to
                                       | otherwise = ty
 instantiateVType n to (RVector ty m) = RVector (instantiateVType n to ty) m
 instantiateVType _ _  (RThinning a b) = RThinning a b
-instantiateVType _ _ (RK r r') = RK r r'
 instantiateVType n to (ROption ty) = ROption $ instantiateVType n to ty

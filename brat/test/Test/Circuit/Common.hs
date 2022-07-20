@@ -114,9 +114,9 @@ addNGraph
      ,("add_eval", BratNode (Eval ("add", "thunk")) [("a", int), ("b", int)] [("c", int)])
      ,("N", BratNode (Prim "N") [] [("value", int)])
      ,("addN_box", BratNode ("addN_src" :>>: "addN_tgt") [] [("value", addN_ty)])
-     ,("addN_src", BratNode Source [("in", int)] [("in", int)])
-     ,("addN_tgt", BratNode Target [("out", int)] [("out", int)])
-     ,("addN_eval", BratNode (Eval ("addN_box", "value")) [("value", addN_ty), ("in", int)] [("out", int)])
+     ,("addN_src", BratNode Source [] [("in", int)])
+     ,("addN_tgt", BratNode Target [("out", int)] [])
+     ,("addN_eval", BratNode (Eval ("addN_box", "value")) [("in", int)] [("out", int)])
      ,("addN", BratNode Id [("thunk", addN_ty)] [("thunk", addN_ty)])
      ]
     ,[(("addN_src", "in"), Right int, ("add_eval", "a"))

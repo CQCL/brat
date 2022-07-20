@@ -21,8 +21,9 @@ module Brat.Checker (check
                     ,next, knext
                     ,localFC
                     ,emptyEnv
-                    ,TensorOutputs(..)
                     ,checkOutputs
+                    ,CheckConstraints
+                    ,TensorOutputs(..)
                     ) where
 
 import Control.Monad (unless, when, foldM)
@@ -219,26 +220,21 @@ checkOutputs tm ((tgt, ty):tys) ((src, ty'):outs) = case ty `subtractThunks` ty'
                   Err (Just $ fcOf tm) Nothing $
                   TypeMismatch (show tm) exp act
 
-checkClauses :: Clause Term Verb
-             -> Connectors Brat Chk Verb
-             -> Checking (Outputs Brat Chk
-                         ,Connectors Brat Chk Verb)
+checkClauses :: (?my :: Modey m, CheckConstraints m)
+             => Clause Term Verb
+             -> Connectors m Chk Verb
+             -> Checking (Outputs m Chk
+                         ,Connectors m Chk Verb)
 checkClauses Undefined _ = err (InternalError "Checking undefined clause")
-checkClauses (NoLhs verb) conn = let ?my = Braty in check verb conn
+checkClauses (NoLhs verb) conn = check verb conn
 checkClauses (Clauses cs) conn = do
-  (res :| results) <- mapM (\c -> checkClause c conn) cs
+  (res :| results) <- mapM (\c@(lhs, rhs) ->
+    check (WC (clauseFC c) (lhs :\: rhs)) conn) cs
   unless (all (== res) results)
     (fail "Clauses had different rightovers")
   pure res
  where
-  checkClause :: (WC Abstractor, WC (Term Chk Noun))
-              -> Connectors Brat Chk Verb
-              -> Checking (Outputs Brat Chk
-                          ,Connectors Brat Chk Verb)
-  checkClause (lhs, rhs) =
-   let lfc = fcOf lhs
-       rfc = fcOf rhs
-   in let ?my = Braty in check (WC (FC (start lfc) (end rfc)) (lhs :\: rhs))
+  clauseFC (lhs, rhs) = FC (start $ fcOf lhs) (end $ fcOf rhs)
 
 check :: (CheckConstraints m, TensorOutputs (Outputs m d), ?my :: Modey m)
       => WC (Term d k)
