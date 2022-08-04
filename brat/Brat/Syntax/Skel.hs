@@ -19,13 +19,6 @@ subTerms (SAnn x _)     = [x]
 subTerms (SComp a b)    = [a, b]
 subTerms (SLam _ body)  = [body]
 subTerms (SVec xs)      = xs
-subTerms (SSlice s x)   = s : help x
- where
-  help :: Slice (WC Skel) -> [WC Skel]
-  help (From x) = [x]
-  help (These xs) = xs
-subTerms (SSelect s x)  = [s,x]
-subTerms (SThin s)      = [s]
 subTerms _ = []
 
 class Juxt k where
@@ -51,11 +44,8 @@ stripInfo (tm ::: ty) = SAnn (stripInfo <$> tm) ty
 stripInfo (a :-: b) = SComp (stripInfo <$> a) (stripInfo <$> b)
 stripInfo (xs :\: bod) = SLam xs (stripInfo <$> bod)
 stripInfo (Vec xs) = SVec (fmap stripInfo <$> xs)
-stripInfo (Slice x slice) = SSlice (stripInfo <$> x) (fmap stripInfo <$> slice)
-stripInfo (Select vec th) = SSelect (stripInfo <$> vec) (stripInfo <$> th)
 stripInfo (Let abs x y) = SLet abs (stripInfo <$> x) (stripInfo <$> y)
 stripInfo (Pattern (WC fc p)) = SPattern (WC fc (fmap stripInfo <$> p))
-stripInfo (Thin th) = SThin (stripInfo <$> th)
 
 data Skel where
   SSimple   :: SimpleTerm -> Skel
@@ -71,9 +61,6 @@ data Skel where
   SComp     :: WC Skel -> WC Skel -> Skel
   SLam      :: WC Abstractor -> WC Skel -> Skel
   SVec      :: [WC Skel] -> Skel
-  SSlice    :: WC Skel -> Slice (WC Skel) -> Skel
-  SSelect   :: WC Skel -> WC Skel -> Skel
-  SThin     :: WC Skel -> Skel
   SLet      :: WC Abstractor -> WC Skel -> WC Skel -> Skel
   SPattern  :: WC (Pattern (WC Skel)) -> Skel
 

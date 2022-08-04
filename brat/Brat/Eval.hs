@@ -57,9 +57,6 @@ instance Valuable (Pattern (WC (Term Chk Noun))) where
   eval = evalPat
   eval' = evalPat'
 
-err :: String -> Except Error a
-err msg = throwError (Err Nothing Nothing (EvalErr msg))
-
 addFCToError :: FC -> Eval a -> Eval a
 addFCToError fc m = case runExcept m of
                       Right v -> pure v
@@ -82,11 +79,6 @@ ceval' g (Vec ts) = VVec <$> mapM (ceval g) ts
 ceval' g (Emb tm) = seval g tm
 -- eval g (Closure [Value] (Term d k)
 
--- These don't work because we need to hold onto the big end
-ceval' g (Slice bigEnd slice) = do
-  bigEnd <- evalNat g bigEnd
-  slice <- mapM (evalNat g) slice
-  pure $ evalSlice bigEnd slice
 ceval' g (Pattern pat) = eval g pat
 ceval' _ tm = throwError $ Err Nothing Nothing (Unimplemented "ceval" [show tm])
 
@@ -129,18 +121,6 @@ apply (VNat m) ((EPlus (VNat n)):es) = apply (VNat (m + n)) es
 apply (VNat m) ((ETimes (VNat n)):es) = apply (VNat (m + n)) es
 apply v [] = pure v
 apply v es = pure $ v :$ es
-
-evalNat :: [Value] -> WC (Term Chk Noun) -> Eval Int
-evalNat g tm = do
-  v <- ceval g tm
-  case v of
-    (VSimple (Num n)) -> pure n
-    _ -> err $ "Couldn't compute a nat from " ++ show tm ++ ". Got " ++ show v
-
-evalSlice :: Int -> Slice Int -> Value
-evalSlice bigEnd (From n) = VTh (fromNatFrom bigEnd n)
-evalSlice bigEnd (These []) = VTh (zeros bigEnd)
-evalSlice bigEnd (These xs) = VTh $ foldr1 union (fromNat bigEnd <$> xs)
 
 evalTerm :: Valuable (Term d k) => [Decl] -> WC (Term d k) -> Either Error Value
 evalTerm env = runExcept . eval [] . fmap (expandDecls env)

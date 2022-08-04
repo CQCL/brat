@@ -54,7 +54,6 @@ data TypeAlias = Alias FC String [UserName] RawVType deriving Show
 type RawDecl = Decl' RawIO Raw
 type RawEnv = ([RawDecl], [(UserName, TypeAlias)])
 
-type RawSlice = Slice (WC (Raw Chk Noun))
 
 data Raw :: Dir -> Kind -> Type where
   RLet      :: WC Abstractor -> WC (Raw Syn Noun) -> WC (Raw d k) -> Raw d k
@@ -71,9 +70,6 @@ data Raw :: Dir -> Kind -> Type where
   (::-::)   :: WC (Raw Syn k) -> WC (Raw d Verb) -> Raw d k -- vertical juxtaposition (diagrammatic composition)
   (::\::)   :: WC Abstractor -> WC (Raw d Noun) -> Raw d Verb
   RVec      :: [WC (Raw Chk Noun)] -> Raw Chk Noun
-  RSlice    :: RawSlice -> Raw Chk Noun
-  RSelect   :: WC (Raw Syn Noun) -> WC (Raw Chk Noun) -> Raw Chk Noun
-  RThin     :: WC (Raw Chk Noun) -> Raw Syn Noun
   RPattern  :: WC (Pattern (WC (Raw Chk Noun))) -> Raw Chk Noun
 
 instance Show (Raw d k) where
@@ -98,9 +94,6 @@ instance Show (Raw d k) where
   show (a ::-:: b) = show a ++ "; " ++ show b
   show (xs ::\:: bod) = show xs ++ " -> " ++ show bod
   show (RVec xs) = '[' : intercalate ", " (show <$> xs) ++ "]"
-  show (RSlice slice) = '{' : show slice ++ "}slice"
-  show (RSelect from slice) = show from ++ ('{' : show slice ++ "}select")
-  show (RThin tm) = '~' : show tm
   show (RPattern p) = show p
 
 type Desugar = StateT Namespace (ReaderT RawEnv (Except Error))
@@ -229,7 +222,6 @@ instance Desugarable (Raw d k) where
     desugarPattern :: Pattern (WC (Raw Chk Noun)) -> Desugar (Pattern (WC (Term Chk Noun)))
     desugarPattern p = traverse (traverse desugar') p
   desugar' (RLet abs thing body) = Let abs <$> desugar thing <*> desugar body
-  desugar' x = throwError . desugarErr $ "desugar'"  ++ show x
 
 desugarNClause :: Clause Raw Noun -> Desugar (Clause Term Noun)
 desugarNClause (ThunkOf clause) = ThunkOf <$> traverse desugarVClause clause

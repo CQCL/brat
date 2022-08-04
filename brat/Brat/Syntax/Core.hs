@@ -41,9 +41,6 @@ data Term :: Dir -> Kind -> Type where
   (:-:)    :: WC (Term Syn k) -> WC (Term d Verb) -> Term d k
   (:\:)    :: WC Abstractor -> WC (Term d Noun) -> Term d Verb
   Vec      :: [WC (Term Chk Noun)] -> Term Chk Noun
-  Slice    :: WC (Term Chk Noun) -> Slice (WC (Term Chk Noun)) -> Term Chk Noun
-  Select   :: WC (Term Syn Noun) -> WC (Term Chk Noun) -> Term Chk Noun
-  Thin     :: WC (Term Chk Noun) -> Term Syn Noun
   Pattern  :: WC (Pattern (WC (Term Chk Noun))) -> Term Chk Noun
 
 deriving instance Eq (Term d k)
@@ -71,10 +68,7 @@ instance Show (Term d k) where
   show (a :-: b) = show a ++ "; " ++ show b
   show (xs :\: bod) = show xs ++ " => " ++ show bod
   show (Vec xs) = '[' : intercalate ", " (show <$> xs) ++ "]"
-  show (Slice _ slice) = show slice
-  show (Select vec th) = show vec ++ "{" ++ show th ++ "}"
   show (Pattern p) = show p
-  show (Thin x) = '~' : show x
 
 expandDecls :: [Decl] -> Term d k -> Term d k
 expandDecls _ tm = expand tm

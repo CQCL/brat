@@ -40,7 +40,6 @@ data Tok
  | Number Int
  | FloatLit Double
  | Comment String
- | ThinType
  | Newline
  | HSpace Int
  | Quoted String
@@ -71,7 +70,6 @@ instance Show Tok where
   show (Number n) = show n
   show (FloatLit n) = show n
   show (Comment c) = "--" ++ c
-  show ThinType = "<<<"
   show Newline = "\n"
   show (HSpace n) = replicate n ' '
   show (Quoted x) = show x

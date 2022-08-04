@@ -21,7 +21,6 @@ module Brat.Syntax.Common (Port,
                            CType'(..),
                            pattern Extern, pattern Local, -- No reason not to export Locality if required
                            Decl'(..),
-                           Slice(..),
                            Runtime(RtLocal), -- No reason not to export others if required
                            Pattern(..),
                            Abstractor(..),
@@ -184,13 +183,6 @@ deriving instance
 instance (Show io, Show (Clause raw Noun)) => Show (Decl' io raw) where
   show Decl{..} = unlines [fnName ++ " :: " ++ show fnSig
                           ,fnName ++ " = " ++ show fnBody]
-
--- The extra int is the size of the big end of the thinning
-data Slice t = These [t] | From t deriving (Eq, Foldable, Functor, Traversable)
-
-instance Show t => Show (Slice t) where
-  show (These xs) = intercalate "," (show <$> xs)
-  show (From t)  = show t ++ ".."
 
 -- TODO: allow combinations thereof
 -- default to local

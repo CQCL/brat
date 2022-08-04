@@ -232,9 +232,6 @@ var = RVar <$> userName
 snoun' :: Parser (WC (Raw Syn Noun))
 snoun' = try application <|> simpleNoun
  where
---  thin :: Parser (WC (Raw Syn Noun))
---  thin = withFC $ RThin <$> (char '~' *> cnoun)
-
   simpleNoun :: Parser (WC (Raw Syn Noun))
   simpleNoun = try (letin snoun) <|> withFC var
 
@@ -282,19 +279,14 @@ cnoun' = try (letin cnoun) <|> withFC
   (try (thunk <?> "thunk")
   <|> try (pull <?> "port pull")
   <|> try (nounIntoVerb <?> "composition")
-  <|> try (selection <?> "selection")
   <|> try (vec <?> "vector literal")
   <|> (emptyVec <?> "vector literal")
   <|> (nhole <?> "hole")
-  -- TODO: slice notation that isn't thunk notation
-  -- <|> try (slice b <?> "slice")
   <|> try (RPattern <$> withFC (pat cnoun) <?> "pattern")
   <|> try (RSimple <$> simpleTerm)
   <|> try emb
   )
  where
-  selection :: Parser (Raw Chk Noun)
-  selection = RSelect <$> snoun <*> (space *> curly cnoun')
 
   nhole = RNHole <$> hole
 
@@ -313,14 +305,6 @@ cnoun' = try (letin cnoun) <|> withFC
   emptyVec = square $ pure $ RVec []
   vec = RVec <$> square (((:[]) <$> cnoun') `chainl1` (try (spaced (match VecComma)) $> (++)))
 
-  -- {1,2} | {1..} | {4..5}
-  -- Bool: are brackets needed?
---  slice :: Bool -> Parser (Raw Chk Noun)
---  slice True = RSlice <$> curly (try from <|> these)
---  slice False = RSlice <$> (try from <|> these)
-
---  these :: Parser RawSlice
---  these = These <$> (cnoun `sepBy` match Comma)
 
 --  from :: Parser RawSlice
 --  from = From <$> (cnoun <* match DotDot)
@@ -339,7 +323,7 @@ vtype' ps = try (round vty) <|> vty
 
   typeVar = RTypeFree <$> userName
 
-  base = try comp <|> try vec <|> try thinning <|> simple
+  base = try comp <|> try vec <|> simple
 
   alias = try aliasWithArgs <|> justAlias
 
@@ -372,12 +356,6 @@ vtype' ps = try (round vty) <|> vty
            <|> try pair
            <|> try list
            <|> try option
-
-  thinning = do
-    wee <- cnoun <?> "wee end"
-    spaced $ match ThinType
-    big <- cnoun <?> "big end"
-    pure $ RThinning wee big
 
 rawIO :: Parser ty -> Parser [RawIO' ty]
 rawIO tyP = rowElem `sepBy` void (try $ spaced comma)

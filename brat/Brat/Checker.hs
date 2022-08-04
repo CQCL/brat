@@ -370,58 +370,6 @@ check' t c = case (?my, t, c) of -- remaining cases need to split on ?my
     sequence_ [noUnders $ check x ((), [((mklist, p), ty)]) | (x, (p, ty)) <- zip elems inputs]
     wire ((mklist,"value"), List ty, tgt)
     pure ((), ((), unders))
-  (Braty, Slice big slice, ((), (_, s :<<<: t):unders)) -> do
-    natHyp <- next "slice check" Hypo [] []
-    fc <- req AskFC
-    check1Under ((natHyp, "weeEnd"), SimpleTy Natural) (WC fc s)
-    check1Under ((natHyp, "bigEnd"), SimpleTy Natural) (WC fc t)
-    check1Under ((natHyp, "bigEnd2"), SimpleTy Natural) big
-    checkNats ((natHyp, "slice"), SimpleTy Natural) slice
-    pred <- bigEndPred slice
-    checkSlice pred
-
-    s <- evalNat s
-    t <- evalNat t
-    big <- evalNat (unWC big)
-    wee <- weeEnd slice t
-    unless (t == big)
-      (fail $ "the big end of " ++ show t ++ " should be " ++ show wee ++ ", not " ++ show big)
-    unless (s == wee)
-      (fail $ "the wee end of " ++ show slice ++ " should be " ++ show wee ++ ", not " ++ show s)
-    pure ((), ((), unders))
-   where
-    checkNats :: (Src, VType) -> Slice (WC (Term Chk Noun)) -> Checking ()
-    checkNats tgt (These xs) = mapM_ (check1Under tgt) xs
-    checkNats tgt (From x) = check1Under tgt x
-
-    bigEndPred :: Slice (WC (Term Chk Noun)) -> Checking (Int -> Bool)
-    bigEndPred (These []) = pure (const True) -- We can always select to nothing
-    bigEndPred (These xs) = mapM (evalNat . unWC) xs >>= \xs -> pure (>(foldr1 max xs))
-    bigEndPred (From x) = evalNat (unWC x) >>= \n -> pure (>= n)
-
-    weeEnd :: Slice (WC (Term Chk Noun)) -> Int -> Checking Int
-    weeEnd (These xs) _ = pure $ length xs
-    weeEnd (From x) t = evalNat (unWC x) >>= \n -> pure (t - n)
-
-    checkSlice :: (Int -> Bool) -> Checking ()
-    checkSlice p = do s <- evalNat s
-                      t <- evalNat t
-                      unless
-                        (s <= t)
-                        (fail $ "Slice: " ++ show s ++ " is bigger than " ++ show t)
-                      if p t
-                        then pure ()
-                        else fail "check bad slice bad sorry"
--- Need to think about selecting from things other than vectors?
-  (Braty, Select from slice, ((), (_, Vector ty n):unders)) -> do
-    ([(_, Vector ty' n')], ((), ())) <- check from ((), ())
-    unless (ty == ty') (fail "types no match")
-    node <- next "thinning type" Hypo [] []
-    check1Under ((node, "th"), n :<<<: n') slice
-    pure ((), ((), unders))
-  (_, t, _) -> typeErr $ "Won't check " ++ (showMode ?my) ++ show t
-
-
 -- Check a pattern used as a constructor (on the Rhs of a definition)
 checkRPat :: (CheckConstraints m, ?my :: Modey m) => (Tgt, ValueType m) -> Pattern (WC (Term Chk Noun)) -> Checking ()
 checkRPat (_, vty) p@PNil | Just (_, n) <- getVec ?my vty = do
