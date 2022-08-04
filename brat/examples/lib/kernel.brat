@@ -1,4 +1,4 @@
-# Stuff available in tket for compiling circuits
+-- Stuff available in tket for compiling circuits
 
 ext "tket.X" X :: { Qubit -o Qubit }
 ext "tket.Y" Y :: { Qubit -o Qubit }

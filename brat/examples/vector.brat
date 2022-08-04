@@ -1,8 +1,8 @@
-# id :: Nat -> Nat
-# id = x -> x
+-- id :: Nat -> Nat
+-- id = x => x
 
-# fst :: Nat, Nat -> Nat
-# fst = x, y -> x
+-- fst :: Nat, Nat -> Nat
+-- fst = x, y => x
 
 swap :: Nat, Nat -> Nat, Nat
 swap = a, b -> b, a
@@ -10,11 +10,11 @@ swap = a, b -> b, a
 nat :: Nat
 nat = 0
 
-# comp :: Nat, Nat -> Nat
-# comp = x, y -> fst(swap(x, y))
+-- comp :: Nat, Nat -> Nat
+-- comp = x, y => fst(swap(x, y))
 
-# te :: Vec Bool 2
-# te = [true, true]
+-- te :: Vec Bool 2
+-- te = [true, true]
 
 test :: Nat
 test = 1
@@ -25,9 +25,9 @@ ha = ?idk
 type A = Nat
 
 isNil :: Vec(A, 0) -> Bool
-isNil(nil) = true # obvs
+isNil(nil) = true -- obvs
 isNil(cons(x, xs)) = false
 
 head :: List(A) -> A
-# head(nil) = ?head
+-- head(nil) = ?head
 head(cons(x, xs)) = ?cnos

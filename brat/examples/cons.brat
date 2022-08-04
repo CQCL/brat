@@ -3,41 +3,41 @@ ext "" add :: Int, Int -> Int
 copy :: Int -> Int, Int
 copy(x) = x, x
 
-# Function definitions can represent multiple values:
+-- Function definitions can represent multiple values:
 twoThings :: Int, Int
 twoThings = 1, 2
 
-# But bindings cannot:
-# > badBinding :: Int, Int
-# > badBinding = let x = twoThings in x
+-- But bindings cannot:
+-- > badBinding :: Int, Int
+-- > badBinding = let x = twoThings in x
 
 goodBinding :: Int, Int
 goodBinding = let x, y = twoThings in x, y
 
-# Functions can be applied directly to things that
-# represent the right number of values
+-- Functions can be applied directly to things that
+-- represent the right number of values
 three :: Int
 three = add(twoThings)
 
-# Is equivalent to:
+-- Is equivalent to:
 three' :: Int
 three' = let x, y = twoThings in add(x, y)
 
-# The same rules apply to cons, which takes two arguments
-# On the left hand side the head and tail must be bound to
-# seperate variables
+-- The same rules apply to cons, which takes two arguments
+-- On the left hand side the head and tail must be bound to
+-- seperate variables
 uncons :: List(Int) -> Int, List(Int)
 uncons(cons(x, xs)) = x, xs
 
-# > badUncons :: List(Int) -> Int, List(Int)
-# > badUncons(cons(stuff)) = stuff
+-- > badUncons :: List(Int) -> Int, List(Int)
+-- > badUncons(cons(stuff)) = stuff
 
-# However, on the right hand side, something that represents the right number
-# of values can be used as the argument to a cons
+-- However, on the right hand side, something that represents the right number
+-- of values can be used as the argument to a cons
 dup :: Int -> List(Int)
 dup(n) = cons(uncons([1,2,3]))
 
-# Just like a regular function application:
+-- Just like a regular function application:
 pair :: Int, Int -> Pair(Int, Int)
 pair(a, b) = [a, b]
 

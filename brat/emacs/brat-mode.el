@@ -2,7 +2,7 @@
   "[^[:alnum:]]\\(Vec\\|Nat\\|Int\\|List\\|Bool\\|Bit\\|Qubit\\|Pair\\|\\Type\\|String\\|Float\\|Option\\|<<<\\)")
 (defconst brat-punctuation "?\\|;\\|->\\|\\|,\\|=")
 (defconst brat-tricky-punctuation "\\(-o\\)\\|:\\|,")
-(defconst brat-comments "\\(#\\)\\(.*\\)$")
+(defconst brat-comments "\\(--\\)\\(.*\\)$")
 (defconst brat-holes "?[[:alnum:]'_-]*")
 (defconst brat-keywords "^[[:space:]]*\\(type\\|import\\|ext\\)")
 (defconst brat-decl

@@ -10,8 +10,8 @@ unsafeHead(xs) = let cons(x, xs) = xs in x
 unpair :: Pair(Int,Bool) -> Int, Bool
 unpair(p) = let [a, b] = p in a, b
 
-# f :: List(Int) -> List(Int)
-#(f = let xs) = ([0,1] :: List(Int)) in xs
+-- f :: List(Int) -> List(Int)
+--(f = let xs) = ([0,1] :: List(Int)) in xs
 
 triple :: Int -> Int, Int, Int
 triple(z) = let x, y = z, z in x, y, z

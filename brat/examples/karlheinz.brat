@@ -1,21 +1,21 @@
-# This file contains type signatures for various operations laid out in the
-# "Types for Composite Experiments" Confluence page
+-- This file contains type signatures for various operations laid out in the
+-- "Types for Composite Experiments" Confluence page
 
-# Expectation:
-#  - It should parse and type check
-#  - We should fill in the function bodies in future
+-- Expectation:
+--  - It should parse and type check
+--  - We should fill in the function bodies in future
 
-# Reality:
-#  - The body of execute_n fails to parse as a thunk (see composition.brat)
-#  - The semicolon operator doesn't parse right in composeCirc (see composition.brat)
-#  - No instance of List (Pair A B) seems to parse right (see listpair.brat)
-#  - There's no way to write the body of var loop
-#  - Aliasing types to kernels doesn't work (see karlheinz_alias.brat)
+-- Reality:
+--  - The body of execute_n fails to parse as a thunk (see composition.brat)
+--  - The semicolon operator doesn't parse right in composeCirc (see composition.brat)
+--  - No instance of List (Pair A B) seems to parse right (see listpair.brat)
+--  - There's no way to write the body of var loop
+--  - Aliasing types to kernels doesn't work (see karlheinz_alias.brat)
 
-# Suggested types:
-# Real, Nat, Int, Bool, (X * Y), X^n, X -> Y, [ X ], D(X), Dist (∀n. D(B^n))
-# K-circ, O-circ
-# P-circ, M-circ
+-- Suggested types:
+-- Real, Nat, Int, Bool, (X * Y), X^n, X -> Y, [ X ], D(X), Dist (∀n. D(B^n))
+-- K-circ, O-circ
+-- P-circ, M-circ
 
 type Dist = List(Bool)
 type KCirc(q,b) = { Vec(Qubit, q) -o Vec(Bool, b) }
@@ -25,50 +25,50 @@ type MCirc(q,b) = { Vec(Qubit,q) -o Vec(Bool, b) }
 
 type Real = Float
 
-#sample :: Pair N D(X) -> List X
-#sample = ?sample
+--sample :: Pair N D(X) -> List X
+--sample = ?sample
 
-# We should be able to define D(X)
-# promote :: List X -> D(X)
+-- We should be able to define D(X)
+-- promote :: List X -> D(X)
 promote :: List(X) -> Dist
 promote = ?promote
 
 execute :: KCirc(2, 2) -> Dist
 execute = ?execute
 
-# shoot : K-circ -> B^q
+-- shoot : K-circ -> B^q
 shoot :: KCirc -> (result :: List(Bool))
 shoot = ?shoot
 
 get_shots :: (nshots :: Nat), KCirc -> (shots :: List(Bool))
 get_shots = ?get_shots
 
-# This thunk isn't getting parsed for some reason
-# execute_n :: (n :: Nat) -> (f :: { KCirc -> Dist })
-# execute_n = n -> {c -> promote(get_shots(n, c))} # partial application would be good
+-- This thunk isn't getting parsed for some reason
+-- execute_n :: (n :: Nat) -> (f :: { KCirc -> Dist })
+-- execute_n = n -> {c -> promote(get_shots(n, c))} # partial application would be good
 
-# P-circ, M-circ -> K-circ
-# This should work, but it failing should be its own test case
-# composeCirc :: (n :: Nat), PCirc n, MCirc n n -> KCirc n n
-# composeCirc = a, b -> a; b
+-- P-circ, M-circ -> K-circ
+-- This should work, but it failing should be its own test case
+-- composeCirc :: (n :: Nat), PCirc n, MCirc n n -> KCirc n n
+-- composeCirc = a, b -> a; b
 
-# ideally we want n quantified?
-# [P-circ] * [M-circ] ~~> [ P-circ * M-circ ] ~~> [K-circ]
-# genericComposition :: List (Pair PCirc MCirc) -> List KCirc
-# genericComposition = ?gc
+-- ideally we want n quantified?
+-- [P-circ] * [M-circ] ~~> [ P-circ * M-circ ] ~~> [K-circ]
+-- genericComposition :: List (Pair PCirc MCirc) -> List KCirc
+-- genericComposition = ?gc
 
-# compilationPass :: forall X Y. (ins :: (Pair X Circ)) -> (outs :: Pair Circ Y)
-# compilationPass = ?cp
-# 
-# synthesise :: forall (X :: *) -> Circ
-# synthesise = ?syn
+-- compilationPass :: forall X Y. (ins :: (Pair X Circ)) -> (outs :: Pair Circ Y)
+-- compilationPass = ?cp
+-- 
+-- synthesise :: forall (X :: *) -> Circ
+-- synthesise = ?syn
 
-# compile :: Circ -> Pulses
+-- compile :: Circ -> Pulses
 
 ansatz :: (params :: List(Real)) -> PCirc
 ansatz = ?ans
 
-# [R * M-circ]
+-- [R * M-circ]
 observable :: List (Pair(Real, Circ))
 observable = ?obs
 
@@ -76,7 +76,7 @@ quant :: List (List(Bool)) -> Real
 quant = ?q
 
 circuits_to_run :: List KCirc
-circuits_to_run = ?todo # (a p) o (map snd H) 
+circuits_to_run = ?todo -- (a p) o (map snd H)
 
 results :: List(Dist)
 results = map(execute, circuits_to_run)
@@ -95,8 +95,8 @@ evaluate :: (obs :: Observable),
 evaluate = ?eval
 
 my_eval :: List(Real) -> Real
-my_eval = rs -> evaluate(my_obs,my_quant,a,rs)
-#my_eval = evaluate (my_obs,my_quant) a
+my_eval = rs => evaluate(my_obs,my_quant,a,rs)
+--my_eval = evaluate (my_obs,my_quant) a
 
 update :: (obs :: Observable),
           (q :: Quantity),
@@ -114,19 +114,19 @@ my_quant = ?qa
 
 my_update :: List(Float), Float -> List(Float)
 my_update = rs, r -> update(my_obs, my_quant, a, rs, r)
-# This would be better: my_update = update(my_obs, my_quant, a)
+-- This would be better: my_update = update(my_obs, my_quant, a)
 
 var_loop :: {List(Float) -> Float}, {List(Float), Float -> List(Float)}, List(Float), Float -> Float
-var_loop = ?todo #eval, update, params, prev_guess ->
-#   new_guess = eval params
-#   if (good_enough(prev_guess, new_guess)) 
-#      return new_guess
-#   else
-#      return var_loop eval update (update params new_guess) new_guess
+var_loop = ?todo --eval, update, params, prev_guess ->
+--   new_guess = eval params
+--   if (good_enough(prev_guess, new_guess))
+--      return new_guess
+--   else
+--      return var_loop eval update (update params new_guess) new_guess
       
-# my_loop :: (rs :: List Real), (prev :: Real) -> (result :: Real)
-# my_loop = var_loop(my_eval, my_update)
-# 
-# answer :: Float
-# answer = my_loop(initial_params,initial_guess)
+-- my_loop :: (rs :: List Real), (prev :: Real) -> (result :: Real)
+-- my_loop = var_loop(my_eval, my_update)
+--
+-- answer :: Float
+-- answer = my_loop(initial_params,initial_guess)
 

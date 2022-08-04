@@ -1,6 +1,6 @@
-# TODO:
-# `rotate` correctly generates a type error as it's returning a kernel
-# not a qubit, but the error message the user will receive is terrible
+-- TODO:
+-- `rotate` correctly generates a type error as it's returning a kernel
+-- not a qubit, but the error message the user will receive is terrible
 
 ext "" Rx :: Float -> { Qubit -o Qubit }
 ext "" qid :: { Qubit -o Qubit }

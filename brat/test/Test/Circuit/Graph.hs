@@ -91,9 +91,9 @@ ext =
   "ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)"
 
 comment = unlines
-  ["# This is a test"
+  ["-- This is a test"
   ,""
-  ,"# This too"
+  ,"-- This too"
   ,""
   ]
 

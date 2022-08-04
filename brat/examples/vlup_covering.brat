@@ -1,10 +1,10 @@
-# A test case for pull request #31
+-- A test case for pull request #31
 
-# Expectation:
-# - It should parse and generate a type error
-#
-# Reality:
-# - [X] The type checker crashes because of a missing pattern match (fixed by #31)
+-- Expectation:
+-- - It should parse and generate a type error
+--
+-- Reality:
+-- - [X] The type checker crashes because of a missing pattern match (fixed by #31)
 
 import lib.kernel
 

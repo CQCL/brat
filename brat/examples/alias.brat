@@ -24,11 +24,11 @@ alias1 = [1, true]
 alias2 :: IdPair(Nat,Bool)
 alias2 = [1, true]
 
-# test :: Nat, Nat -> Nat
-# test = ?help
+-- test :: Nat, Nat -> Nat
+-- test = ?help
 
-# test :: (a :: Nat), (b :: Nat) -> (c :: Nat)
-# test = add
+-- test :: (a :: Nat), (b :: Nat) -> (c :: Nat)
+-- test = add
 
 test' :: (a :: Nat), (b :: Nat) -> (c :: Nat)
 test' = x, y -> add(x, y)

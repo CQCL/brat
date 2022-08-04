@@ -51,14 +51,14 @@ add(succ(x), y) = add(1, add(x, y))
 double :: Nat -> Nat
 double(x) = add(copyNat(x))
 
-# test :: {A -> A}
-# test = id;?help
+-- test :: {A -> A}
+-- test = id;?help
 
 compTest :: { A -> B }, { B -> C} -> { A -> C }
 compTest(f, g) = { x -> g(f(x)) }
 
-# phasedBell :: (th :: Double), (c :: Qubit), (d :: Qubit) -> (c :: Bit), (d :: Bit)
-# phasedBell = th -> (H ; id , id) ; (measure, measure)
+-- phasedBell :: (th :: Double), (c :: Qubit), (d :: Qubit) -> (c :: Bit), (d :: Bit)
+-- phasedBell = th -> (H ; id , id) ; (measure, measure)
 
 justMeasure :: { c :: Qubit, d :: Qubit -o c :: Bit, d :: Bit }
 justMeasure = { c, d -> M2(c, d) }

@@ -1,7 +1,7 @@
 ext "builtin.iadd" iadd :: (a :: Int), (b :: Int) -> (c :: Int)
 ext "fake.iadd3" iadd3 :: (a :: Int), (b :: Int), (c :: Int) -> (d :: Int)
 
-# These work
+-- These work
 add1 :: Int -> Int
 add1(i) = iadd(1, i)
 

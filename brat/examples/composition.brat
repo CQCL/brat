@@ -1,15 +1,15 @@
-# Expectation:
-#  - These 3 'compose' functions should be equivalent
+-- Expectation:
+--  - These 3 'compose' functions should be equivalent
 
-# Reality:
-#  - `compose1` confuses the parser because of the thunk
-#  - `compose2` confuses the parser by using the ; operator
+-- Reality:
+--  - `compose1` confuses the parser because of the thunk
+--  - `compose2` confuses the parser by using the ; operator
 
 type A = Nat
 type B = Bool
 type C = Unit
 
-# A workaround for not having the ; operator
+-- A workaround for not having the ; operator
 compose :: { A -> B }, { B -> C } -> {A -> C}
 compose(f, g) = { x -> g(f(x)) }
 

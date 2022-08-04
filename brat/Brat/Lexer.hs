@@ -68,7 +68,7 @@ instance Show Tok where
   show DotDot = ".."
   show (Number n) = show n
   show (FloatLit n) = show n
-  show (Comment c) = '#' : c
+  show (Comment c) = "--" ++ c
   show ThinType = "<<<"
   show Newline = "\n"
   show (HSpace n) = replicate n ' '
@@ -191,7 +191,7 @@ qualified = (<?> "qualified name") $ do
   pure (QualifiedId (first :| rest) last)
 
 comment :: Lexer Tok
-comment = char '#' *> ((printChar `manyTill` lookAhead (void newline <|> void eof)) <&> Comment)
+comment = string "--" *> ((printChar `manyTill` lookAhead (void newline <|> void eof)) <&> Comment)
 
 tok :: Lexer Tok
 tok = comment

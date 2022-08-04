@@ -1,4 +1,4 @@
-# Expectation: This file typechecks
+-- Expectation: This file typechecks
 
 id :: Nat -> Nat
 id = x -> x

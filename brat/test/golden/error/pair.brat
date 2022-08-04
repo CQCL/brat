@@ -2,4 +2,4 @@ row :: Int, Bool
 row = 4, true
 
 pair :: Pair(Int, Bool)
-pair = row # Distinct from a pair
+pair = row -- Distinct from a pair

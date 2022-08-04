@@ -13,8 +13,8 @@ vec = [ 0, 1, 2 ]
 hello3 :: Pair(Nat, Nat)
 hello3 = [1 , 2]
  
-# goog :: Nat
-# goog = ?hell
+-- goog :: Nat
+-- goog = ?hell
 
 hello2 :: Nat
 hello2 = hello

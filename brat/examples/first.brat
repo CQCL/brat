@@ -1,6 +1,6 @@
-# This file tests some basics
+-- This file tests some basics
 
-# this is a test comment
+-- this is a test comment
 copy :: (value :: Type) -> (left :: Type), (right :: Type)
 copy = x -> x, x
 

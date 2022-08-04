@@ -1,14 +1,14 @@
-# Expectation: This file parses and typechecks
+-- Expectation: This file parses and typechecks
 
 I :: { Qubit -o Qubit }
 I = { q -> q }
 
-# We synthesize { Qubit -o Qubit },{ Qubit -o Qubit }
-# but merge the kernels in the typechecker
+-- We synthesize { Qubit -o Qubit },{ Qubit -o Qubit }
+-- but merge the kernels in the typechecker
 I2 :: { Qubit, Qubit -o Qubit, Qubit }
 I2 = I, I
 
-# And much the same for classical functions
+-- And much the same for classical functions
 id :: Nat -> Nat
 id = x -> x
 

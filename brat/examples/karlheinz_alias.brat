@@ -1,13 +1,13 @@
-# This is a subset of the karlheinz.brat test file
+-- This is a subset of the karlheinz.brat test file
 
-# Expectation:
-#  - The type of the input to exp expands to
-#       `{ Vec Qubit 2 -o Vec Bool 2 }`   
-#  - The type of the input to execute expands to
-#       `{Vec Qubit 2 -o Vec Bool 1}`
+-- Expectation:
+--  - The type of the input to exp expands to
+--       `{ Vec Qubit 2 -o Vec Bool 2 }`
+--  - The type of the input to execute expands to
+--       `{Vec Qubit 2 -o Vec Bool 1}`
 
-# Reality:
-#  - The parser is confused by arguments to PCirc and KCirc
+-- Reality:
+--  - The parser is confused by arguments to PCirc and KCirc
 
 type Dist = List(Bool)
 type KCirc(q, b) = { Vec(Qubit, q) -o Vec(Bool, b) }

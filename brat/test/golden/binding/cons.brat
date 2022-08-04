@@ -1,5 +1,5 @@
-# On the left hand side of a function definitino, a cons cell's
-# head and tail must be bound to seperate variables
+-- On the left hand side of a function definitino, a cons cell's
+-- head and tail must be bound to seperate variables
 uncons :: List(Int) -> Int, List(Int)
 uncons(cons(x, xs)) = x, xs
 

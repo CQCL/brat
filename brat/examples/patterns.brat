@@ -9,7 +9,7 @@ pred :: Nat -> Nat
 pred(0) = 0
 pred(succ(n)) = n
 
-# ahjh
+-- ahjh
 halfDown :: Nat -> Nat
 halfDown(0) = 0
 halfDown(doub(n)) = n

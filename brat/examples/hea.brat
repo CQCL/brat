@@ -1,14 +1,14 @@
-# Playing with representing a hardware-efficient ansatz
+-- Playing with representing a hardware-efficient ansatz
 
-# Expectation:
-#  - this file parses and typechecks
+-- Expectation:
+--  - this file parses and typechecks
 
-# Reality:
-#  - the parser is struggling with variables being plugged into the end of vectors
+-- Reality:
+--  - the parser is struggling with variables being plugged into the end of vectors
 
 import lib.kernel
 
-type Real = Nat # Temporary hack
+type Real = Nat -- Temporary hack
 
 type Operator = Pair(Pair(Nat, Nat),Real)
 
@@ -29,11 +29,11 @@ apply_operators :: { Vec(Money, numNodes)
                    }
 apply_operators = ?help
 
-# map :: (f :: {A -> B}), (xs :: Vec A n) -> (ys :: Vec B n)
-# map = f, xs -> ?ys
+-- map :: (f :: {A -> B}), (xs :: Vec A n) -> (ys :: Vec B n)
+-- map = f, xs => ?ys
 
 hea :: (rotations :: Vec (Operator, numEdges)),
        (meas :: Vec (Pauli ,numNodes)),
        (cash :: Vec (Money ,numNodes))
     -> (cash :: Vec (Money ,numNodes)), (result :: Vec(Bool, numNodes))
-hea = rots, meas -> ?j # apply-operators; meas(cash); xs -> map(measure,xs); transpose
+hea = rots, meas -> ?j -- apply-operators; meas(cash); xs -> map(measure,xs); transpose

@@ -1,6 +1,6 @@
-# This should fail because it's invalid to have an `Int` in a kernel context.
-# As it stands, this doesn't even parse because once the parser thinks it's
-# looking at a kernel, it only looks for valid kernel types like `Qubit` and
-# `Bool`. We could probably catch this and make the error message nicer.
+-- This should fail because it's invalid to have an `Int` in a kernel context.
+-- As it stands, this doesn't even parse because once the parser thinks it's
+-- looking at a kernel, it only looks for valid kernel types like `Qubit` and
+-- `Bool`. We could probably catch this and make the error message nicer.
 f :: { Qubit -o Qubit, Int }
 f = { q -> q, 1 }

@@ -1,7 +1,7 @@
-# Function definitions can represent multiple values:
+-- Function definitions can represent multiple values:
 twoThings :: Int, Int
 twoThings = 1, 2
 
-# But bindings cannot:
+-- But bindings cannot:
 badBinding :: Int, Int
 badBinding = let x = twoThings in x
