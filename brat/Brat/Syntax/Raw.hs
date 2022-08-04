@@ -32,7 +32,6 @@ data RawVType
   | RTypeFree UserName
   | RTypeVar Int
   | RVector RawVType (WC (Raw Chk Noun))
-  | RThinning (WC (Raw Chk Noun)) (WC (Raw Chk Noun))
   | ROption RawVType
   deriving Show
 
@@ -174,9 +173,6 @@ instance Desugarable RawVType where
                             desugarErr ("Trying to desugar bound type var: " ++ show x)
   desugar' (RVector vty n)
     = Vector <$> desugar' vty <*> (unWC <$> desugar n)
-  desugar' (RThinning wee big) = (:<<<:)
-                                   <$> (unWC <$> desugar wee)
-                                   <*> (unWC <$> desugar big)
   desugar' (ROption rty) = Option <$> desugar' rty
 
 instance Desugarable RawCType where
@@ -267,7 +263,6 @@ abstractVType x n free@(RTypeFree y) | x == y = RTypeVar n
                                      | otherwise = free
 abstractVType _ _ ty@(RTypeVar _) = ty
 abstractVType x n (RVector ty size) = RVector (abstractVType x n ty) size
-abstractVType _ _ (RThinning a b) = RThinning a b
 abstractVType _ _ (ROption ty) = ROption ty
 
 instantiateVType :: Int -> RawVType -> RawVType -> RawVType
@@ -283,5 +278,4 @@ instantiateVType _ _  ty@(RTypeFree _) = ty
 instantiateVType n to ty@(RTypeVar m) | n == m = to
                                       | otherwise = ty
 instantiateVType n to (RVector ty m) = RVector (instantiateVType n to ty) m
-instantiateVType _ _  (RThinning a b) = RThinning a b
 instantiateVType n to (ROption ty) = ROption $ instantiateVType n to ty

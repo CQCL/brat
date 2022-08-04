@@ -74,8 +74,6 @@ data VType' tm
   | List (VType' tm)
   | Product (VType' tm) (VType' tm)
   | Vector (VType' tm) (tm Chk Noun)
-  -- Thinning from wee end to big end
-  | tm Chk Noun :<<<: tm Chk Noun
   | K (Row tm) (Row tm)
   | Option (VType' tm)
 
@@ -89,7 +87,6 @@ instance Show (tm Chk Noun) => Show (VType' tm) where
   show (Vector ty n) = "Vec(" ++ show ty ++ ", " ++ show n ++ ")"
   show (K ins outs) = '{' : show ins ++ " -o " ++ show outs ++ "}"
   show (Option ty) = "Option(" ++ show ty ++ ")"
-  show (s :<<<: t) = "(" ++ show s ++ " <<< " ++ show t ++ ")"
 
 data SimpleType
   = Natural
