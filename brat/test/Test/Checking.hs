@@ -1,6 +1,7 @@
 module Test.Checking (getCheckingTests) where
 
 import Brat.Load
+import Test.Parsing (expectedParsingFails, expectFailForPaths)
 
 import Control.Monad.Except
 import System.FilePath
@@ -18,16 +19,11 @@ parseAndCheck file = testCase (show file) $ do
       print holes
       ((length venv) + (length nouns) + (length holes) > 0) @? "Should produce something"
 
-expectedFails = map ("examples" </>) ["composition.brat",
-    "karlheinz.brat",
-    "karlheinz_alias.brat",
-    "thin.brat",
-    "hea.brat"]
-
+-- At the moment we expect all tests that parse correctly to also typecheck
+expectedCheckingFails = []
 
 parseAndCheckXF :: FilePath -> TestTree
-parseAndCheckXF path =
-  (if path `elem` expectedFails then expectFail else id) $ parseAndCheck path
+parseAndCheckXF = expectFailForPaths (expectedParsingFails ++ expectedCheckingFails) parseAndCheck
 
 getCheckingTests :: IO TestTree
 getCheckingTests = testGroup "checking" . fmap parseAndCheckXF <$> findByExtension [".brat"] "examples"
