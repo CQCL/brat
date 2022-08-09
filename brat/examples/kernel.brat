@@ -10,7 +10,7 @@ Rz :: (th :: Float) -> {a::Qubit -o b::Qubit}
 Rz = ?rz
 
 pba :: Float -> {c :: Qubit,d::Qubit -o c::Qubit,d::Qubit}
-pba = th -> { x, y -> (lib.kernel.H, lib.kernel.qid)(x, y) }
+pba = th => { x, y => (lib.kernel.H, lib.kernel.qid)(x, y) }
 
 th :: {Bool -> Bool}
 th = ?th

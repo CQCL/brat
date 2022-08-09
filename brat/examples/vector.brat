@@ -5,7 +5,7 @@
 -- fst = x, y => x
 
 swap :: Nat, Nat -> Nat, Nat
-swap = a, b -> b, a
+swap = a, b => b, a
 
 nat :: Nat
 nat = 0

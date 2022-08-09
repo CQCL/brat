@@ -1,5 +1,5 @@
 id :: Bool -> Bool
-id = x -> x
+id = x => x
 
 not :: Bool -> Bool
 not(true) = false

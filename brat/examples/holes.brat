@@ -1,6 +1,6 @@
 -- Holes can go in kernels
 f :: { Qubit -o Qubit, Bool }
-f = { q -> q, ?b }
+f = { q => q, ?b }
 
 -- And stand for kernels!
 g :: { Qubit -o Qubit }

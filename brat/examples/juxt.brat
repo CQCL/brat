@@ -1,7 +1,7 @@
 -- Expectation: This file parses and typechecks
 
 I :: { Qubit -o Qubit }
-I = { q -> q }
+I = { q => q }
 
 -- We synthesize { Qubit -o Qubit },{ Qubit -o Qubit }
 -- but merge the kernels in the typechecker
@@ -10,10 +10,10 @@ I2 = I, I
 
 -- And much the same for classical functions
 id :: Nat -> Nat
-id = x -> x
+id = x => x
 
 id2 :: (x :: Nat), (y :: Nat) -> (x :: Nat), (y :: Nat)
 id2 = id, id
 
 id3 :: Nat, Nat -> Nat, Nat
-id3 = x, y -> ?help
+id3 = x, y => ?help

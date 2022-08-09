@@ -2,19 +2,19 @@
 
 -- this is a test comment
 copy :: (value :: Type) -> (left :: Type), (right :: Type)
-copy = x -> x, x
+copy = x => x, x
 
 swap :: (agneta :: Type), (bjorn :: Type) -> (benny :: Type), (annefried :: Type)
-swap = a, b -> b, a
+swap = a, b => b, a
 
 discardNat :: (value :: Nat) -> Unit
-discardNat = x -> <>
+discardNat = x => <>
 
 id :: (value :: Type) -> (value :: Type)
-id = x -> x
+id = x => x
 
 testy :: (x :: Type) -> (x :: Type)
-testy = x -> id(x)
+testy = x => id(x)
 
 noun :: (id :: { (x :: Type) -> (x :: Type) })
-noun = { x -> testy(x) }
+noun = { x => testy(x) }

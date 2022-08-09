@@ -1,2 +1,2 @@
 copy :: { Qubit -o Qubit, Qubit }
-copy = { q -> q, q }
+copy = { q => q, q }

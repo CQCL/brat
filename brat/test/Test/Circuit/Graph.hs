@@ -25,19 +25,19 @@ graphTest name file graph = testCase name (runProg name file graph)
 
 idFile = unlines
   ["main :: { a :: Qubit -o b :: Qubit }"
-  ,"main = { q -> q }"
+  ,"main = { q => q }"
   ]
 
 swapFile = unlines
   ["main :: { a :: Qubit, b :: Qubit -o b :: Qubit, a :: Qubit}"
-  ,"main = { q0, q1 -> q1, q0 }"
+  ,"main = { q0, q1 => q1, q0 }"
   ]
 
 xFile = unlines
   ["ext \"tket.X\" X :: { xa :: Qubit -o xb :: Qubit }"
   ,""
   ,"main :: { a :: Qubit -o b :: Qubit }"
-  ,"main = { q -> X(q) }"
+  ,"main = { q => X(q) }"
   ]
 
 rxFile = unlines
@@ -50,7 +50,7 @@ rxFile = unlines
   ,"xish = Rx(30.0)"
   ,""
   ,"main :: { a :: Qubit -o b :: Qubit }"
-  ,"main = { q -> xish(q) }"
+  ,"main = { q => xish(q) }"
   ]
 
 two = unlines

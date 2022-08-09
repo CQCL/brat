@@ -198,7 +198,7 @@ sverb = verbAndJuxt `chainl1` semicolon
 func :: Parser (WC (Raw d Noun)) -> Parser (Raw d Verb)
 func pbody = do
   xs <- withFC binding <?> "Binding(s)"
-  spaced $ match Arrow
+  spaced $ match FatArrow
   body <- pbody
   pure $ xs ::\:: body
 

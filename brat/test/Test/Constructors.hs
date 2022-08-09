@@ -233,7 +233,7 @@ kernelProg :: String
 kernelProg =
   unlines
   ["id3 :: { Qubit, Qubit, Qubit -o Vec(Qubit,3) }"
-  ,"id3 = { q0, q1, q2 -> cons(q0, [q1, q2]) }"
+  ,"id3 = { q0, q1, q2 => cons(q0, [q1, q2]) }"
   ]
 
 kernelGraph :: Graph

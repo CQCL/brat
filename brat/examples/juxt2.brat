@@ -1,10 +1,10 @@
 -- Expectation: This file typechecks
 
 id :: Nat -> Nat
-id = x -> x
+id = x => x
 
 id2 :: Nat, Nat -> Nat, Nat
-id2 = x, y -> (id,id)(x, y)
+id2 = x, y => (id,id)(x, y)
 
 id3 :: Nat, Nat -> Nat, Nat
-id3 = x, y -> ?help
+id3 = x, y => ?help

@@ -1,5 +1,5 @@
 f :: {a :: Qubit -o a :: Qubit}
-f = { a -> a }
+f = { a => a }
 
 h2 :: {x :: Qubit, y :: Qubit -o z :: Qubit}
-h2 = { p, p -> f(p) }
+h2 = { p, p => f(p) }

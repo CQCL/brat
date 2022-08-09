@@ -1,2 +1,2 @@
 f :: { Vec(Bool, 3) -> Bool }
-f = { [1,2] -> true }
+f = { [1,2] => true }

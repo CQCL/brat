@@ -32,7 +32,7 @@ ordered2 = III:3, 1, IV:4, 2
 
 -- And this also applies to kernels!
 test :: { qin :: Qubit -o b :: Bool, qout :: Qubit }
-test = { q -> qout:q, true }
+test = { q => qout:q, true }
 
 test2 :: { qin :: Qubit, bin :: Bool -o b :: Bool, qout :: Qubit }
-test2 = { bin:b,q -> b,q }
+test2 = { bin:b,q => b,q }

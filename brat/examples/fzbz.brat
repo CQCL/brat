@@ -1,4 +1,4 @@
 ext "" display :: (s :: String) -> (u :: Unit)
 
 main :: String -> Unit
-main = s -> display(s)
+main = s => display(s)

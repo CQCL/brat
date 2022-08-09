@@ -69,7 +69,7 @@ instance Show (Term d k) where
   show (fun :$: arg) = show fun ++ ('(' : show arg ++ ")")
   show (tm ::: ty) = show tm ++ " :: " ++ show ty
   show (a :-: b) = show a ++ "; " ++ show b
-  show (xs :\: bod) = show xs ++ " -> " ++ show bod
+  show (xs :\: bod) = show xs ++ " => " ++ show bod
   show (Vec xs) = '[' : intercalate ", " (show <$> xs) ++ "]"
   show (Slice _ slice) = show slice
   show (Select vec th) = show vec ++ "{" ++ show th ++ "}"

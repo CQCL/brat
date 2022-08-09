@@ -9,7 +9,7 @@ origin' :: Position
 origin' = [0, 0]
 
 add :: Nat, Nat -> Nat
-add = x, y -> x
+add = x, y => x
 
 type SwapPair(a, b) = Pair(b, a)
 
@@ -31,7 +31,7 @@ alias2 = [1, true]
 -- test = add
 
 test' :: (a :: Nat), (b :: Nat) -> (c :: Nat)
-test' = x, y -> add(x, y)
+test' = x, y => add(x, y)
 
 zero :: Nat
 zero = 0
@@ -40,7 +40,7 @@ number :: Nat
 number = zero
 
 fun :: (adder :: { Nat, Nat -> Nat })
-fun = { x, y -> add(x, y) }
+fun = { x, y => add(x, y) }
 
 type Deep(a,b) = Pair(a, b)
 type X(a,b) = Deep(SwapPair(a, b), IdPair(a, b))

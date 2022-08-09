@@ -23,7 +23,7 @@ mat = [[0,1,1,0]
       ]
 
 add1 :: Vec(Nat, n) -> Vec(Nat, n)
-add1 = xs -> ?inc
+add1 = xs => ?inc
 
 explore :: Vec(Vec(Nat, 4), 4) -> Vec(Nat, n)
 explore = ?map

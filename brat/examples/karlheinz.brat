@@ -45,12 +45,12 @@ get_shots = ?get_shots
 
 -- This thunk isn't getting parsed for some reason
 -- execute_n :: (n :: Nat) -> (f :: { KCirc -> Dist })
--- execute_n = n -> {c -> promote(get_shots(n, c))} # partial application would be good
+-- execute_n = n => {c => promote(get_shots(n, c))} # partial application would be good
 
 -- P-circ, M-circ -> K-circ
 -- This should work, but it failing should be its own test case
 -- composeCirc :: (n :: Nat), PCirc n, MCirc n n -> KCirc n n
--- composeCirc = a, b -> a; b
+-- composeCirc = a, b => a; b
 
 -- ideally we want n quantified?
 -- [P-circ] * [M-circ] ~~> [ P-circ * M-circ ] ~~> [K-circ]
@@ -113,11 +113,11 @@ my_quant :: Quantity
 my_quant = ?qa
 
 my_update :: List(Float), Float -> List(Float)
-my_update = rs, r -> update(my_obs, my_quant, a, rs, r)
+my_update = rs, r => update(my_obs, my_quant, a, rs, r)
 -- This would be better: my_update = update(my_obs, my_quant, a)
 
 var_loop :: {List(Float) -> Float}, {List(Float), Float -> List(Float)}, List(Float), Float -> Float
-var_loop = ?todo --eval, update, params, prev_guess ->
+var_loop = ?todo --eval, update, params, prev_guess =>
 --   new_guess = eval params
 --   if (good_enough(prev_guess, new_guess))
 --      return new_guess

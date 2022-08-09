@@ -1,14 +1,14 @@
 id :: Nat -> Nat
-id = x -> x
+id = x => x
 
 -- This depends upon the compiler-generated name "a1".
 id2 :: Nat, Nat -> Nat, Nat
-id2 = x, y -> (id,id)(a1:x, y)
+id2 = x, y => (id,id)(a1:x, y)
 
 -- This depends on compiler resolving the name collision by renaming "a1" -> "a2"
 id3 :: Nat, Nat -> Nat, Nat
-id3 = x,y -> (id,id)(a2:y, x)
+id3 = x,y => (id,id)(a2:y, x)
 
 -- This one should fail because the name "a1_1" is wrong
 id4 :: Nat, Nat -> Nat, Nat
-id4 = x,y -> (id, id)(a1_1:x, y)
+id4 = x,y => (id, id)(a1_1:x, y)

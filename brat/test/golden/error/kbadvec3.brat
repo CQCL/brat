@@ -1,2 +1,2 @@
 constNil :: { Bool -> Vec(Bool,0) }
-constNil = { b -> cons(1, nil) }
+constNil = { b => cons(1, nil) }

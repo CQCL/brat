@@ -36,4 +36,4 @@ hea :: (rotations :: Vec (Operator, numEdges)),
        (meas :: Vec (Pauli ,numNodes)),
        (cash :: Vec (Money ,numNodes))
     -> (cash :: Vec (Money ,numNodes)), (result :: Vec(Bool, numNodes))
-hea = rots, meas -> ?j -- apply-operators; meas(cash); xs -> map(measure,xs); transpose
+hea = rots, meas => ?j -- apply-operators; meas(cash); xs => map(measure,xs); transpose

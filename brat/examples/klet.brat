@@ -1,10 +1,10 @@
 import lib.kernel
 
 id ::  { Qubit -o Qubit }
-id = { q -> let q' = X(q) in X(q') }
+id = { q => let q' = X(q) in X(q') }
 
 tangle :: { Vec(Qubit, 2) -o Qubit, Qubit }
-tangle = { qs -> let [a,b] = qs in a, b }
+tangle = { qs => let [a,b] = qs in a, b }
 
 vtangle :: { Vec(Qubit, 2) -o Vec(Qubit, 2) }
-vtangle = { qs -> let [a,b] = qs in let c, d = CX(a,b) in [c,d] }
+vtangle = { qs => let [a,b] = qs in let c, d = CX(a,b) in [c,d] }

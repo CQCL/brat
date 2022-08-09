@@ -1,2 +1,2 @@
 deleteSnd :: { Qubit, Qubit -o Qubit }
-deleteSnd = { q0, q1 -> q0 }
+deleteSnd = { q0, q1 => q0 }

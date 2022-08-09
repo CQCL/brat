@@ -25,7 +25,7 @@ main :: (value :: Nat)
 main = add((add,add)(unpack_vec(vec)))
 
 main2 :: { Qubit, Qubit -o Bit, Bit }
-main2 = { q0, q1 -> (M,M)(lib.kernel.CZ((lib.kernel.H,qid)(q0,q1))) }
+main2 = { q0, q1 => (M,M)(lib.kernel.CZ((lib.kernel.H,qid)(q0,q1))) }
 -- main2 =
 -- H,id;
 -- cnot;

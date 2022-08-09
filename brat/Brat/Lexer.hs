@@ -27,6 +27,7 @@ data Tok
  | PortColon
  | Hole String
  | Arrow
+ | FatArrow
  | Lolly
  | Curly [Token]
  | Square [Token]
@@ -57,6 +58,7 @@ instance Show Tok where
   show PortColon = ":"
   show (Hole h) = '?':h
   show Arrow = "->"
+  show FatArrow = "=>"
   show Lolly = "-o"
   show (Curly ts) = '{' : concatMap show ts ++ "}"
   show (Square ts) = '[' : concatMap show ts ++ "]"
@@ -206,6 +208,7 @@ tok = comment
       <|> try (string "+" $> Plus)
       <|> try (string "*" $> Times)
       <|> try (string "->") $> Arrow
+      <|> try (string "=>") $> FatArrow
       <|> try (string "-o") $> Lolly
       <|> try (Hole <$> (char '?' *> ident))
       <|> try (string "::" $> TypeColon)
