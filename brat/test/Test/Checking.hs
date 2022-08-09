@@ -15,8 +15,7 @@ parseAndCheck file = testCase (show file) $ do
   env <- runExceptT $ loadFilename file
   case env of
     Left err -> assertFailure (show err)
-    Right (venv, nouns, holes, _) -> do
-      print holes
+    Right (venv, nouns, holes, _) ->
       ((length venv) + (length nouns) + (length holes) > 0) @? "Should produce something"
 
 expectedCheckingFails = ["examples/nested-abstractors.brat"]
