@@ -1,12 +1,12 @@
-# We expect that these examples should typecheck, but the machinery for dealing
-# with nested rows is severly underdeveloped.
+-- We expect that these examples should typecheck, but the machinery for dealing
+-- with nested rows is severly underdeveloped.
 
-# Should the brackets around (q, b) be needed?
+-- Should the brackets around (q, b) be needed?
 unzipHead :: Vec((q :: Qubit, b :: Bit), 4) -o Qubit, Bit
 unzipHead(cons(qb, rest))
- # Currently the whole row is bound to q, and we fail to abstract b
+ -- Currently the whole row is bound to q, and we fail to abstract b
  = let (q, b) = qb in q, b
 
-# Likewise here, the row is bound to b, and we have nothing left to bind to d
+-- Likewise here, the row is bound to b, and we have nothing left to bind to d
 weirdSnd :: a :: Bit, (b :: Bit, c :: Bit), d :: Bit -o Bit
 weirdSnd(a, (b, c), d) = b
