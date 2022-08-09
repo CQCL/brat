@@ -64,7 +64,7 @@ instance (Show q, Show (tm Chk Noun)) => Show (SType'' tm q) where
   show (Q q) = show q
   show Bit = "Bool"
   show (Of ty n) = "Vec(" ++ show ty ++ ", " ++ show n ++ ")"
-  show (Rho (R row)) = intercalate ", " ((\(p, tm) -> p ++ " :: " ++ show tm) <$> row)
+  show (Rho (R row)) = '(' : (intercalate ", " ((\(p, tm) -> p ++ " :: " ++ show tm) <$> row)) ++ ")"
 
 copyable :: SType'' tm q -> Bool
 copyable = null
@@ -220,6 +220,7 @@ data Abstractor
  | Pat (Pattern Abstractor)
  | Lit SimpleTerm
  | VecLit [Abstractor]
+ | Empty
  deriving Eq
 
 instance Show (Abstractor) where

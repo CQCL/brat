@@ -19,8 +19,7 @@ parseAndCheck file = testCase (show file) $ do
       print holes
       ((length venv) + (length nouns) + (length holes) > 0) @? "Should produce something"
 
--- At the moment we expect all tests that parse correctly to also typecheck
-expectedCheckingFails = []
+expectedCheckingFails = ["examples/nested-abstractors.brat"]
 
 parseAndCheckXF :: FilePath -> TestTree
 parseAndCheckXF = expectFailForPaths (expectedParsingFails ++ expectedCheckingFails) parseAndCheck

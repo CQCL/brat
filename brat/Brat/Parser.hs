@@ -142,10 +142,10 @@ juxtaposition p = p `chainl1` (try comma)
 binding :: Parser Abstractor
 binding = do ps <- many (try $ portPull <* space)
              xs <- (try (Pat <$> pat binding)
-                    <|> try vecLit
-                    <|> try (Lit <$> simpleTerm)
-                    <|> (Bind <$> simpleName)
-                   ) `chainl1` (try portComma)
+                   <|> try nestedBinding
+                   <|> try vecLit
+                   <|> try (Lit <$> simpleTerm)
+                   <|> (Bind <$> simpleName)) `chainl1` (try binderComma)
              if null ps
                then pure xs
                else pure $ APull ps xs
@@ -154,10 +154,10 @@ binding = do ps <- many (try $ portPull <* space)
 
   portPull = simpleName <* match PortColon
 
-  portComma :: Parser (Abstractor -> Abstractor -> Abstractor)
-  portComma = spaced $ token0 $ \case
-    Token _ Comma -> Just (:||:)
-    _ -> Nothing
+  nestedBinding = round binding
+
+  binderComma :: Parser (Abstractor -> Abstractor -> Abstractor)
+  binderComma = spaced $ match Comma $> (:||:)
 
 pat :: Parser a -> Parser (Pattern a)
 pat p = try onePlus
@@ -398,7 +398,7 @@ stype = try (Rho <$> round row)
         <|> match (K KMoney) $> Q Money
         <|> match (K KBool)  $> Bit
  where
-  row = fmap R $ some $ do
+  row = fmap R $ (`sepBy` spaced (match Comma)) $ do
     p <- port
     spaced (match TypeColon)
     (p,) <$> stype

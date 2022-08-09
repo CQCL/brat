@@ -490,6 +490,7 @@ abstract :: (Show (ValueType m), ?my :: Modey m)
          -> Checking (Env (EnvData m) -- Local env for checking body of lambda
                      ,[(Src, ValueType m)] -- rightovers
                      )
+abstract [] Empty = pure (emptyEnv, [])
 abstract [] abs = err $ NothingToBind (show abs)
 abstract (input:inputs) (Bind x) = pure (singletonEnv x input, inputs)
 abstract inputs (x :||: y) = do
