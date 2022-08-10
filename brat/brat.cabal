@@ -67,7 +67,6 @@ library
                        Brat.Dot,
                        Brat.Eval,
                        Brat.Lexer,
-                       Brat.Parser,
                        Control.Monad.Freer
 
   exposed-modules:     Brat.Checker,
