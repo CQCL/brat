@@ -305,10 +305,6 @@ cnoun' = try (letin cnoun) <|> withFC
   emptyVec = square $ pure $ RVec []
   vec = RVec <$> square (((:[]) <$> cnoun') `chainl1` (try (spaced (match VecComma)) $> (++)))
 
-
---  from :: Parser RawSlice
---  from = From <$> (cnoun <* match DotDot)
-
 outputs :: Parser [RawIO]
 outputs = rawIO vtype
 
