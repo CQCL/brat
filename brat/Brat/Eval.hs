@@ -7,7 +7,6 @@ import Brat.Error
 import Brat.FC
 import Brat.Syntax.Common
 import Brat.Syntax.Core
-import Brat.Thin
 
 import Control.Monad.Except
 
@@ -26,7 +25,6 @@ data Value
  | VCons Value Value
  | VClos [Value] (Term Chk Verb)
  | Value :$ [Elim]
- | VTh Thinning
  | VSome Value
  | VNone
  deriving (Eq, Show)

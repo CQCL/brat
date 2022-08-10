@@ -67,7 +67,7 @@ library
                        Brat.Dot,
                        Brat.Eval,
                        Brat.Lexer,
-                       Brat.Thin,
+                       Brat.Parser,
                        Control.Monad.Freer
 
   exposed-modules:     Brat.Checker,
@@ -156,7 +156,6 @@ executable brat
                        Brat.Syntax.Core,
                        Brat.Syntax.Raw,
                        Brat.Syntax.Skel
-                       Brat.Thin,
                        Brat.UserName,
                        Control.Monad.Freer,
                        Proto.Graph,
