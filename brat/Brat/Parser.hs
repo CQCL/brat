@@ -150,7 +150,11 @@ binding = do ps <- many (try $ portPull <* space)
                then pure xs
                else pure $ APull ps xs
  where
-  vecLit = VecLit <$> square (binding `sepBy` (spaced (match VecComma)))
+  vecLit = list2Cons <$> square (binding `sepBy` (spaced (match VecComma)))
+
+  list2Cons :: [Abstractor] -> Abstractor
+  list2Cons [] = Pat PNil
+  list2Cons (x:xs) = Pat (PCons (x :||: list2Cons xs))
 
   portPull = simpleName <* match PortColon
 

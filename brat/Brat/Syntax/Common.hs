@@ -208,7 +208,6 @@ data Abstractor
  | APull [Port] (Abstractor)
  | Pat (Pattern Abstractor)
  | Lit SimpleTerm
- | VecLit [Abstractor]
  | Empty
  deriving Eq
 
@@ -218,7 +217,6 @@ instance Show (Abstractor) where
   show (APull ps abs) = concat ((++":") <$> ps) ++ show abs
   show (Pat p) = show p
   show (Lit tm) = show tm
-  show (VecLit abst) = show abst
 
 data Clause (tm :: Dir -> Kind -> Type) (k :: Kind) where
   -- lhs and rhs

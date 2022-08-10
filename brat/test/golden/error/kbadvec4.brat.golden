@@ -1,6 +1,3 @@
 Error in f@FC {start = Pos {line = 2, col = 7}, end = Pos {line = 2, col = 20}}:
-  Pattern: [1,2]
-doesn't match type Vec(Bool, 3)
-(because it's the wrong length)
-
+  Type error: 1 is not of type Bool
 
