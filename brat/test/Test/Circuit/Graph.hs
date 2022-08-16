@@ -110,8 +110,6 @@ equalEdges actual expected = do
     let ioVals = M.fromListWithKey dup_wires (map (\w@(src,_,_) -> (src, pure w)) ws)
     M.fromList <$> (sequence $ map (\(k,iov) -> (k,) <$> iov) $ M.assocs ioVals)
 
-dummyFC = FC (Pos 0 0) (Pos 0 0)
-
 mkTensor :: Checking (Name, Name, Name, [(Src, VType)])
 mkTensor = do
   foo <- next "foo" Source [] [("out1", SimpleTy Natural), ("out2", SimpleTy FloatTy)]
@@ -125,7 +123,7 @@ isCombo (Combo _) = True
 isCombo _ = False
 
 tensorOutputsTests :: TestTree
-tensorOutputsTests = testCase "tensorOutputs" $ case run (emptyEnv, [], dummyFC) mkTensor of
+tensorOutputsTests = testCase "tensorOutputs" $ case run (emptyEnv, [], FC (Pos 0 0) (Pos 0 0)) mkTensor of
   Left err -> assertFailure (show err)
   Right ((foo, bar, qux, outs), (holes, (nodes, edges))) -> do
     (M.size nodes) @=? 4 -- three input nodes and one combo
@@ -145,10 +143,10 @@ tensorOutputsTests = testCase "tensorOutputs" $ case run (emptyEnv, [], dummyFC)
 
 -- This is just because we have to pass some term into checkOutputs in case it needs to produce an error message.
 -- But our case should never have to produce an error message, so assert false.
-dummyTerm = CE.assert False (WC dummyFC $ Var (PrefixName [] ""))
+dummyTerm = CE.assert False (dummyFC $ Var (PrefixName [] ""))
 
 subtractThunksTest :: TestTree
-subtractThunksTest = testCase "subtractThunks" $ case run (emptyEnv, [], dummyFC) mkThunks of
+subtractThunksTest = testCase "subtractThunks" $ case run (emptyEnv, [], FC (Pos 0 0) (Pos 0 0)) mkThunks of
   Left err -> assertFailure (show err)
   Right ((inNode, outNode, unders), (_holes, (nodes, edges))) -> do
       (length unders) @?= 0

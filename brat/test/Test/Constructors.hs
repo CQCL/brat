@@ -26,11 +26,24 @@ listGraph =
   (fromList
    [("xs"
     ,BratNode Id [("a1", List (SimpleTy IntTy))] [("a1", List (SimpleTy IntTy))])
+   ,("mklist.tail.tail"
+    ,BratNode (Constructor CCons)
+     [("head", SimpleTy IntTy)
+     ,("tail", List (SimpleTy IntTy))
+     ]
+     [("value", List (SimpleTy IntTy))]
+    )
+   ,("mklist.tail"
+    ,BratNode (Constructor CCons)
+     [("head", SimpleTy IntTy)
+     ,("tail", List (SimpleTy IntTy))
+     ]
+     [("value", List (SimpleTy IntTy))]
+    )
    ,("mklist"
-    ,BratNode (Constructor CList)
-     [("e0", SimpleTy IntTy)
-     ,("e1", SimpleTy IntTy)
-     ,("e2", SimpleTy IntTy)
+    ,BratNode (Constructor CCons)
+     [("head", SimpleTy IntTy)
+     ,("tail", SimpleTy IntTy)
      ]
      [("value", List (SimpleTy IntTy))]
     )
@@ -38,9 +51,12 @@ listGraph =
    ,("2", BratNode (Const (Num 2)) [] [("value", SimpleTy IntTy)])
    ,("3", BratNode (Const (Num 3)) [] [("value", SimpleTy IntTy)])
    ]
-  ,[(("1", "value"), Right (SimpleTy IntTy), ("mklist", "e0"))
-   ,(("2", "value"), Right (SimpleTy IntTy), ("mklist", "e1"))
-   ,(("3", "value"), Right (SimpleTy IntTy), ("mklist", "e2"))
+  ,[(("1", "value"), Right (SimpleTy IntTy), ("mklist", "head"))
+   ,(("2", "value"), Right (SimpleTy IntTy), ("mklist.tail", "head"))
+   ,(("3", "value"), Right (SimpleTy IntTy), ("mklist.tail.tail", "head"))
+   ,(("nil", "value"), Right (List (SimpleTy IntTy)), ("mklist.tail.tail", "tail"))
+   ,(("mklist.tail.tail", "value"), Right (List (SimpleTy IntTy)), ("mklist.tail", "tail"))
+   ,(("mklist.tail", "value"), Right (List (SimpleTy IntTy)), ("mklist", "tail"))
    ,(("mklist", "value"), Right (List (SimpleTy (IntTy))), ("xs", "a1"))
    ]
   )
@@ -63,24 +79,51 @@ vecGraph =
     [("a1", Vector (SimpleTy IntTy) (Simple (Num 3)))]
     )
    ,("mkvec"
-    ,BratNode (Constructor CVec)
-     [("e0", SimpleTy IntTy)
-     ,("e1", SimpleTy IntTy)
-     ,("e2", SimpleTy IntTy)
+    ,BratNode (Constructor CCons)
+     [("head", SimpleTy IntTy)
+     ,("tail", Vector (SimpleTy IntTy) (Simple (Num 2)))
      ]
      [("value", Vector (SimpleTy IntTy) (Simple (Num 3)))]
     )
+   ,("mkvec.tail"
+    ,BratNode (Constructor CCons)
+     [("head", SimpleTy IntTy)
+     ,("tail", Vector (SimpleTy IntTy) (Simple (Num 1)))
+     ]
+     [("value", Vector (SimpleTy IntTy) (Simple (Num 2)))]
+    )
+   ,("mkvec.tail.tail"
+    ,BratNode (Constructor CCons)
+     [("head", SimpleTy IntTy)
+     ,("tail", Vector (SimpleTy IntTy) (Simple (Num 0)))
+     ]
+     [("value", Vector (SimpleTy IntTy) (Simple (Num 1)))]
+    )
+   ,("nil", BratNode (Constructor CNil) [] [("value", Vector (SimpleTy IntTy) (Simple (Num 0)))])
    ,("0", BratNode (Const (Num 0)) [] [("value", SimpleTy IntTy)])
    ,("1", BratNode (Const (Num 1)) [] [("value", SimpleTy IntTy)])
    ,("2", BratNode (Const (Num 2)) [] [("value", SimpleTy IntTy)])
-   -- This is for the type of the vector
-   ,("3", BratNode (Const (Num 3)) [] [("value", SimpleTy Natural)])
-   ,("hypo", BratNode Hypo [("value", SimpleTy Natural)] [])
+   -- This is for the type of the vectors
+   ,("0n", BratNode (Const (Num 0)) [] [("value", SimpleTy Natural)])
+   ,("1n", BratNode (Const (Num 1)) [] [("value", SimpleTy Natural)])
+   ,("2n", BratNode (Const (Num 2)) [] [("value", SimpleTy Natural)])
+   ,("3n", BratNode (Const (Num 3)) [] [("value", SimpleTy Natural)])
+   ,("hypo0", BratNode Hypo [("value", SimpleTy Natural)] [])
+   ,("hypo1", BratNode Hypo [("value", SimpleTy Natural)] [])
+   ,("hypo2", BratNode Hypo [("value", SimpleTy Natural)] [])
+   ,("hypo3", BratNode Hypo [("value", SimpleTy Natural)] [])
    ]
-  ,[(("0", "value"), Right (SimpleTy IntTy), ("mkvec", "e0"))
-   ,(("1", "value"), Right (SimpleTy IntTy), ("mkvec", "e1"))
-   ,(("2", "value"), Right (SimpleTy IntTy), ("mkvec", "e2"))
-   ,(("3", "value"), Right (SimpleTy Natural), ("value", "value"))
+  ,[(("0", "value"), Right (SimpleTy IntTy), ("mkvec", "head"))
+   ,(("1", "value"), Right (SimpleTy IntTy), ("mkvec.tail", "head"))
+   ,(("2", "value"), Right (SimpleTy IntTy), ("mkvec.tail.tail", "head"))
+   ,(("mkvec.tail", "value"), Right (Vector (SimpleTy IntTy) (Simple (Num 2))), ("mkvec", "tail"))
+   ,(("mkvec.tail.tail", "value"), Right (Vector (SimpleTy IntTy) (Simple (Num 1))), ("mkvec.tail", "tail"))
+   ,(("nil", "value"), Right (Vector (SimpleTy IntTy) (Simple (Num 0))), ("mkvec.tail.tail", "tail"))
+
+   ,(("0n", "value"), Right (SimpleTy Natural), ("hypo0", "value"))
+   ,(("1n", "value"), Right (SimpleTy Natural), ("hypo1", "value"))
+   ,(("2n", "value"), Right (SimpleTy Natural), ("hypo2", "value"))
+   ,(("3n", "value"), Right (SimpleTy Natural), ("hypo3", "value"))
    ,(("mkvec", "value"), Right (Vector (SimpleTy IntTy) (Simple (Num 3))), ("xs", "a1"))
    ]
   )
@@ -144,7 +187,7 @@ consGraph =
      [("a1", Vector (SimpleTy IntTy) (Simple (Num 2)))]
     )
 
-   ,("vec.cons"
+   ,("three.vec.cons"
     ,BratNode (Constructor CCons)
      [("head", SimpleTy IntTy)
      ,("tail", Vector (SimpleTy IntTy) (Simple (Num 2)))
@@ -152,30 +195,47 @@ consGraph =
      [("value", Vector (SimpleTy IntTy) (Simple (Num 3)))]
     )
 
-   ,("mkvec"
-    ,BratNode (Constructor CVec)
-     [("e0", SimpleTy IntTy)
-     ,("e1", SimpleTy IntTy)
+   ,("two.vec.cons"
+    ,BratNode (Constructor CCons)
+     [("head", SimpleTy IntTy)
+     ,("tail", Vector (SimpleTy IntTy) (Simple (Num 1)))
      ]
      [("value", Vector (SimpleTy IntTy) (Simple (Num 2)))]
     )
 
+   ,("two.vec.cons.tail"
+    ,BratNode (Constructor CCons)
+     [("head", SimpleTy IntTy)
+     ,("tail", Vector (SimpleTy IntTy) (Simple (Num 0)))
+     ]
+     [("value", Vector (SimpleTy IntTy) (Simple (Num 1)))]
+    )
+
+   ,("nil", BratNode (Constructor CNil) [] [("value", Vector (SimpleTy IntTy) (Simple (Num 0)))])
    ,("0", BratNode (Const (Num 0)) [] [("value", SimpleTy IntTy)])
    ,("1", BratNode (Const (Num 1)) [] [("value", SimpleTy IntTy)])
-   ,("2i", BratNode (Const (Num 2)) [] [("value", SimpleTy IntTy)])
+   ,("2", BratNode (Const (Num 2)) [] [("value", SimpleTy IntTy)])
+   ,("0n", BratNode (Const (Num 0)) [] [("value", SimpleTy Natural)])
+   ,("1n", BratNode (Const (Num 1)) [] [("value", SimpleTy Natural)])
    ,("2n", BratNode (Const (Num 2)) [] [("value", SimpleTy Natural)])
-   ,("3", BratNode (Const (Num 3)) [] [("value", SimpleTy Natural)])
+   ,("3n", BratNode (Const (Num 3)) [] [("value", SimpleTy Natural)])
+   ,("hypo0", BratNode Hypo [("value", SimpleTy Natural)] [])
+   ,("hypo1", BratNode Hypo [("value", SimpleTy Natural)] [])
    ,("hypo2", BratNode Hypo [("value", SimpleTy Natural)] [])
    ,("hypo3", BratNode Hypo [("value", SimpleTy Natural)] [])
    ]
-  ,[(("0", "value"), Right (SimpleTy IntTy), ("vec.cons", "head"))
-   ,(("1", "value"), Right (SimpleTy IntTy), ("mkvec", "e0"))
-   ,(("2", "value"), Right (SimpleTy IntTy), ("mkvec", "e1"))
-   ,(("2", "value"), Right (SimpleTy Natural), ("hypo2", "value"))
-   ,(("3", "value"), Right (SimpleTy Natural), ("hypo3", "value"))
-   ,(("mkvec", "value"), Right (Vector (SimpleTy IntTy) (Simple (Num 2))), ("two", "a1"))
-   ,(("vec.cons", "value"), Right (Vector (SimpleTy IntTy) (Simple (Num 3))), ("three", "a1"))
-   ,(("two", "a1"), Right (Vector (SimpleTy IntTy) (Simple (Num 2))), ("vec.cons", "tail"))
+  ,[(("0", "value"), Right (SimpleTy IntTy), ("three.vec.cons", "head"))
+   ,(("1", "value"), Right (SimpleTy IntTy), ("two.vec.cons", "head"))
+   ,(("2", "value"), Right (SimpleTy IntTy), ("two.vec.cons.tail", "head"))
+   ,(("nil", "value"), Right (Vector (SimpleTy IntTy) (Simple (Num 0))), ("two.vec.cons.tail", "tail"))
+   ,(("two.vec.cons.tail", "value"), Right (Vector (SimpleTy IntTy) (Simple (Num 1))), ("two.vec.cons", "tail"))
+   ,(("two", "a1"), Right (Vector (SimpleTy IntTy) (Simple (Num 2))), ("two.vec.cons", "tail"))
+   ,(("0n", "value"), Right (SimpleTy Natural), ("hypo0", "value"))
+   ,(("1n", "value"), Right (SimpleTy Natural), ("hypo1", "value"))
+   ,(("2n", "value"), Right (SimpleTy Natural), ("hypo2", "value"))
+   ,(("3n", "value"), Right (SimpleTy Natural), ("hypo3", "value"))
+   ,(("two.vec.cons", "value"), Right (Vector (SimpleTy IntTy) (Simple (Num 2))), ("two", "a1"))
+   ,(("three.vec.cons", "value"), Right (Vector (SimpleTy IntTy) (Simple (Num 3))), ("three", "a1"))
    ]
   )
 
@@ -244,9 +304,15 @@ kernelGraph =
      [("a1", ktype)]
      [("a1", ktype)]
     )
-   ,("mkvec"
-    ,KernelNode (Constructor CVec)
-     [("e0", Q Qubit), ("e1", Q Qubit)]
+   ,("vec.cons.tail.tail"
+    ,KernelNode (Constructor CCons)
+     [("head", Q Qubit), ("tail", Of (Q Qubit) (Simple (Num 0)))]
+     [("value", Of (Q Qubit) (Simple (Num 1)))]
+    )
+
+   ,("vec.cons.tail"
+    ,KernelNode (Constructor CCons)
+     [("head", Q Qubit), ("tail", Of (Q Qubit) (Simple (Num 1)))]
      [("value", Of (Q Qubit) (Simple (Num 2)))]
     )
 
@@ -267,17 +333,29 @@ kernelGraph =
     ,BratNode ("src" :>>: "tgt") [] [("fun", ktype)]
     )
 
+   ,("0", BratNode (Const (Num 0)) [] [("value", SimpleTy Natural)])
+   ,("1", BratNode (Const (Num 1)) [] [("value", SimpleTy Natural)])
    ,("2", BratNode (Const (Num 2)) [] [("value", SimpleTy Natural)])
    ,("3", BratNode (Const (Num 3)) [] [("value", SimpleTy Natural)])
+   ,("hypo0", BratNode Hypo [("value", SimpleTy Natural)] [])
+   ,("hypo1", BratNode Hypo [("value", SimpleTy Natural)] [])
    ,("hypo2", BratNode Hypo [("value", SimpleTy Natural)] [])
    ,("hypo3", BratNode Hypo [("value", SimpleTy Natural)] [])
+   ,("nil", KernelNode (Constructor CNil) [] [("value", Of (Q Qubit) (Simple (Num 0)))])
    ]
   ,[(("src", "a1"), Left (Q Qubit), ("vec.cons", "head"))
-   ,(("src", "b1"), Left (Q Qubit), ("mkvec", "e0"))
-   ,(("src", "c1"), Left (Q Qubit), ("mkvec", "e1"))
-   ,(("kbox", "fun"), Right ktype, ("id3", "a1"))
-   ,(("mkvec", "value"), Left (Of (Q Qubit) (Simple (Num 2))), ("vec.cons", "tail"))
+   ,(("src", "b1"), Left (Q Qubit), ("vec.cons.tail", "head"))
+   ,(("src", "c1"), Left (Q Qubit), ("vec.cons.tail.tail", "head"))
+
+   ,(("nil", "value"), Left (Of (Q Qubit) (Simple (Num 0))), ("vec.cons.tail.tail", "tail"))
+   ,(("vec.cons.tail.tail", "value"), Left (Of (Q Qubit) (Simple (Num 1))), ("vec.cons.tail", "tail"))
+
+   ,(("vec.cons.tail", "value"), Left (Of (Q Qubit) (Simple (Num 2))), ("vec.cons", "tail"))
    ,(("vec.cons", "value"), Left (Of (Q Qubit) (Simple (Num 3))), ("tgt", "a1"))
+
+   ,(("kbox", "fun"), Right ktype, ("id3", "a1"))
+   ,(("0", "value"), Right (SimpleTy Natural), ("hypo0", "value"))
+   ,(("1", "value"), Right (SimpleTy Natural), ("hypo1", "value"))
    ,(("2", "value"), Right (SimpleTy Natural), ("hypo2", "value"))
    ,(("3", "value"), Right (SimpleTy Natural), ("hypo3", "value"))
    ]

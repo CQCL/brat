@@ -1,7 +1,7 @@
 Error in triple@FC {start = Pos {line = 2, col = 17}, end = Pos {line = 2, col = 20}}:
   Expected vector of length 3
 from the type:  Vec(Bool, 3)
-but got vector: nil
+but got vector: []
 of length 0
 
 

@@ -18,7 +18,6 @@ subTerms (SApp f a)     = [f, a]
 subTerms (SAnn x _)     = [x]
 subTerms (SComp a b)    = [a, b]
 subTerms (SLam _ body)  = [body]
-subTerms (SVec xs)      = xs
 subTerms _ = []
 
 class Juxt k where
@@ -43,7 +42,6 @@ stripInfo (fun :$: arg) = SApp (stripInfo <$> fun) (stripInfo <$> arg)
 stripInfo (tm ::: ty) = SAnn (stripInfo <$> tm) ty
 stripInfo (a :-: b) = SComp (stripInfo <$> a) (stripInfo <$> b)
 stripInfo (xs :\: bod) = SLam xs (stripInfo <$> bod)
-stripInfo (Vec xs) = SVec (fmap stripInfo <$> xs)
 stripInfo (Let abs x y) = SLet abs (stripInfo <$> x) (stripInfo <$> y)
 stripInfo (Pattern (WC fc p)) = SPattern (WC fc (fmap stripInfo <$> p))
 
@@ -60,7 +58,6 @@ data Skel where
   SAnn      :: WC Skel -> [Output] -> Skel
   SComp     :: WC Skel -> WC Skel -> Skel
   SLam      :: WC Abstractor -> WC Skel -> Skel
-  SVec      :: [WC Skel] -> Skel
   SLet      :: WC Abstractor -> WC Skel -> WC Skel -> Skel
   SPattern  :: WC (Pattern (WC Skel)) -> Skel
 

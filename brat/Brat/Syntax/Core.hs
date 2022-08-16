@@ -8,7 +8,6 @@ import Brat.Syntax.Common
 import Brat.UserName
 
 import Data.Kind (Type)
-import Data.List (intercalate)
 
 type VType = VType' Term
 type SType = SType' Term
@@ -40,7 +39,6 @@ data Term :: Dir -> Kind -> Type where
   -- vertical juxtaposition (diagrammatic composition)
   (:-:)    :: WC (Term Syn k) -> WC (Term d Verb) -> Term d k
   (:\:)    :: WC Abstractor -> WC (Term d Noun) -> Term d Verb
-  Vec      :: [WC (Term Chk Noun)] -> Term Chk Noun
   Pattern  :: WC (Pattern (WC (Term Chk Noun))) -> Term Chk Noun
 
 deriving instance Eq (Term d k)
@@ -67,8 +65,16 @@ instance Show (Term d k) where
   show (tm ::: ty) = show tm ++ " :: " ++ show ty
   show (a :-: b) = show a ++ "; " ++ show b
   show (xs :\: bod) = show xs ++ " => " ++ show bod
-  show (Vec xs) = '[' : intercalate ", " (show <$> xs) ++ "]"
-  show (Pattern p) = show p
+  show (Pattern p) = prettyVec (unWC p)
+
+prettyVec p = case patList p of
+  Just xs -> show xs
+  Nothing -> show p
+ where
+  patList :: Pattern (WC (Term Chk Noun)) -> Maybe [Term Chk Noun]
+  patList PNil = Just []
+  patList (PCons (WC _ (a :|: (WC _ (Pattern (WC _ p)))))) = ((unWC a):) <$> patList p
+  patList _ = Nothing
 
 expandDecls :: [Decl] -> Term d k -> Term d k
 expandDecls _ tm = expand tm
@@ -86,6 +92,5 @@ expandDecls _ tm = expand tm
   expand (tm ::: ty) = (expand <$> tm) ::: ty
   expand (a :-: b) = (expand <$> a) :-: (expand <$> b)
   expand (abst :\: body) = abst :\: (expand <$> body)
-  expand (Vec xs) = Vec (fmap expand <$> xs)
   expand (Pattern tm) = Pattern $ fmap (fmap expand) <$> tm
   expand tm = error $ "Unimplemented: expand " ++ show tm

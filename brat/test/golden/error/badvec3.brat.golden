@@ -1,7 +1,7 @@
 Error in v3@FC {start = Pos {line = 2, col = 6}, end = Pos {line = 2, col = 18}}:
   Expected vector of length 0
 from the type:  Vec(Int, 0)
-but got vector: cons(1, nil)
+but got vector: [1]
 of length (> 0)
 
 

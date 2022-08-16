@@ -35,7 +35,7 @@ data Thing
   | Constructor ConsType
   deriving (Eq, Show)
 
-data ConsType = CCons | CSome | CVec | CList | CPair | CDoub | CSucc
+data ConsType = CCons | CSome | CPair | CDoub | CSucc | CNil
  deriving (Eq, Show)
 
 type Graph = (M.Map Name Node, [Wire])

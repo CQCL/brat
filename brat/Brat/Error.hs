@@ -9,6 +9,13 @@ newtype ParseError = PE { pretty :: String }
 instance Show ParseError where
   show pe = pretty pe
 
+data LengthConstraintF a = Length a | LongerThan a deriving (Eq, Functor)
+instance Show a => Show (LengthConstraintF a) where
+  show (Length a) = show a
+  show (LongerThan a) = "(> " ++ show a ++ ")"
+
+type LengthConstraint = LengthConstraintF Int
+
 data ErrorMsg
  = TypeErr String
  | TypeMismatch String String String
@@ -17,8 +24,8 @@ data ErrorMsg
  | VarNotFound String
  | KVarNotFound String
  | NothingToBind String
- -- Expected, type, Actual, term
- | VecLength Int String String String
+ -- Expected Length, Type, Actual Length, Actual term
+ | VecLength Int String LengthConstraint String
  -- Binder, Type
  | VecPatLength String String
  -- Term, Type
@@ -51,10 +58,10 @@ instance Show ErrorMsg where
               ,"  " ++ row
               ]
   show (NothingToBind x) = "Nothing to bind to: " ++ x
-  show (VecLength m ty n tm) = unlines ["Expected vector of length " ++ show m
+  show (VecLength m ty l tm) = unlines ["Expected vector of length " ++ show m
                                        ,"from the type:  " ++ ty
                                        ,"but got vector: " ++ tm
-                                       ,"of length " ++ n
+                                       ,"of length " ++ show l
                                        ]
   show (VecPatLength abs ty) = unlines ["Pattern: " ++ abs
                                        ,"doesn't match type " ++ ty

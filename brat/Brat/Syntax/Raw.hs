@@ -68,7 +68,7 @@ data Raw :: Dir -> Kind -> Type where
   (:::::)   :: WC (Raw Chk k) -> [RawIO] -> Raw Syn k
   (::-::)   :: WC (Raw Syn k) -> WC (Raw d Verb) -> Raw d k -- vertical juxtaposition (diagrammatic composition)
   (::\::)   :: WC Abstractor -> WC (Raw d Noun) -> Raw d Verb
-  RVec      :: [WC (Raw Chk Noun)] -> Raw Chk Noun
+  RVec      :: WC [WC (Raw Chk Noun)] -> Raw Chk Noun
   RPattern  :: WC (Pattern (WC (Raw Chk Noun))) -> Raw Chk Noun
 
 instance Show (Raw d k) where
@@ -92,7 +92,7 @@ instance Show (Raw d k) where
   show (tm ::::: ty) = show tm ++ " :: " ++ show ty
   show (a ::-:: b) = show a ++ "; " ++ show b
   show (xs ::\:: bod) = show xs ++ " -> " ++ show bod
-  show (RVec xs) = '[' : intercalate ", " (show <$> xs) ++ "]"
+  show (RVec xs) = '[' : intercalate ", " (show <$> unWC xs) ++ "]"
   show (RPattern p) = show p
 
 type Desugar = StateT Namespace (ReaderT RawEnv (Except Error))
@@ -211,8 +211,11 @@ instance Desugarable (Raw d k) where
     pure (tm ::: ty)
   desugar' (syn ::-:: verb) = (:-:) <$> desugar syn <*> desugar verb
   desugar' (abst ::\:: raw) = (abst :\:) <$> desugar raw
-  desugar' (RVec raws)
-    = Vec <$> mapM (\tm -> desugar tm) raws
+  desugar' (RVec (WC fc [])) = pure $ Pattern (WC fc PNil)
+  desugar' (RVec (WC fc (x:xs))) = do
+    x <- desugar x
+    xs <- desugar' (RVec (WC fc xs))
+    pure $ Pattern (WC fc (PCons (WC fc (x :|: WC fc xs))))
   desugar' (RPattern x) = Pattern <$> traverse desugarPattern x
    where
     desugarPattern :: Pattern (WC (Raw Chk Noun)) -> Desugar (Pattern (WC (Term Chk Noun)))

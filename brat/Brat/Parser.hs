@@ -306,8 +306,14 @@ cnoun' = try (letin cnoun) <|> withFC
   nounIntoVerb :: Parser (Raw Chk Noun)
   nounIntoVerb = compose snoun cverb
 
-  emptyVec = square $ pure $ RVec []
-  vec = RVec <$> square (((:[]) <$> cnoun') `chainl1` (try (spaced (match VecComma)) $> (++)))
+  emptyVec :: Parser (Raw Chk Noun)
+  emptyVec = RVec <$> (withFC $ square $ pure [])
+
+  vec :: Parser (Raw Chk Noun)
+  vec = RVec <$> withFC (square (element `chainl1` (try vecComma)))
+   where
+    vecComma = spaced (match VecComma) $> (++)
+    element = (:[]) <$> cnoun'
 
 outputs :: Parser [RawIO]
 outputs = rawIO vtype

@@ -73,7 +73,6 @@ ceval' _ (Simple tm) = pure $ VSimple tm
 -- ceval g ( ((:-:)  :: Term Syn k -> Term d Verb -> Term d k
 ceval' g (Th f) = pure $ VClos g (unWC f)
 ceval' g (_ :\: body) = eval g body
-ceval' g (Vec ts) = VVec <$> mapM (ceval g) ts
 ceval' g (Emb tm) = seval g tm
 -- eval g (Closure [Value] (Term d k)
 

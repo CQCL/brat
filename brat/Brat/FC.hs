@@ -28,3 +28,5 @@ unWC (WC _ a) = a
 fcOf :: WC a -> FC
 fcOf (WC fc _) = fc
 
+dummyFC :: a -> WC a
+dummyFC = WC (FC (Pos 0 0) (Pos 0 0))
