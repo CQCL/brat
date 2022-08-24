@@ -195,9 +195,12 @@ sverb :: Parser (WC (Raw Syn Verb))
 sverb = verbAndJuxt `chainl1` semicolon
  where
   plainVerb :: Parser (Raw Syn Verb)
-  plainVerb = try (func snoun)
+  plainVerb = try (func snoun) <|> force
 
   verbAndJuxt = (try (letin sverb) <|> withFC plainVerb) `chainl1` (try comma)
+
+  force :: Parser (Raw Syn Verb)
+  force = RForce <$> (snoun <* spaced (round (space *> eof)))
 
 func :: Parser (WC (Raw d Noun)) -> Parser (Raw d Verb)
 func pbody = do

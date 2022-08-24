@@ -6,22 +6,24 @@ module Brat.Checker.Helpers (evalNat
                             ,ensureEmpty, noUnders
                             ,rowToSig, sigToRow, subtractSig
                             ,showMode, getVec
-                            ,mkThunkTy
+                            ,mkThunkTy, getThunks
+                            ,checkWire
                             ) where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr)
-import Brat.Checker.Types (Modey(..), ValueType)
+import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr, anext, awire)
+import Brat.Checker.Types (Mode(..), Modey(..), Overs, Unders, ValueType)
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (Value(..), evalTerm)
 import Brat.FC (WC(..))
 import Brat.Naming (Name)
-import Brat.Graph (Src)
+import Brat.Graph (Src, Tgt, Thing(..))
 import Brat.Syntax.Common
 import Brat.Syntax.Core (Term)
 import Brat.UserName (UserName)
 import Control.Monad.Freer (req, Free(Ret))
 
 import Control.Arrow ((***))
+import Data.Functor (($>))
 import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as M
@@ -101,3 +103,31 @@ mkThunkTy :: Modey m -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> VType'
 mkThunkTy Braty ss ts = C (ss :-> ts)
 mkThunkTy Kerny ss ts = K (R ss) (R ts)
 
+getThunks :: Modey m
+          -> [(Src, ValueType Brat)]
+          -> Checking ([Name]
+                      ,Unders m Chk
+                      ,Overs m Verb
+                      )
+getThunks _ [] = pure ([], [], [])
+getThunks m ((src, ty):rest)
+ | Just (ss, ts) <- isThunkType m ty = do
+  node <- let ?my = m in anext "" (Eval src) ss ts
+  let overs = sigToRow node ss
+  let unders = sigToRow node ts
+  (nodes, unders', overs') <- getThunks m rest
+  pure (node:nodes, unders <> unders', overs <> overs')
+ where
+  isThunkType :: Modey m -> ValueType Brat
+              -> Maybe ([(Port, ValueType m)], [(Port, ValueType m)])
+  isThunkType Braty (C (ss :-> ts)) = Just (ss, ts)
+  isThunkType Kerny (K (R ss) (R ts)) = Just (ss, ts)
+  isThunkType _ _ = Nothing
+getThunks _ _ = typeErr "Force called on non-thunk"
+
+checkWire :: (Eq (ValueType m), ?my :: Modey m)
+          => (Src, ValueType m)
+          -> (Tgt, ValueType m)
+          -> Checking (Maybe ())
+checkWire (src, oTy) (tgt, uTy) | oTy == uTy = awire (src, oTy, tgt) $> Just ()
+checkWire _ _ = pure Nothing

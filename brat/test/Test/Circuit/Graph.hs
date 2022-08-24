@@ -145,41 +145,6 @@ tensorOutputsTests = testCase "tensorOutputs" $ case run (emptyEnv, [], FC (Pos 
 -- But our case should never have to produce an error message, so assert false.
 dummyTerm = CE.assert False (dummyFC $ Var (PrefixName [] ""))
 
-subtractThunksTest :: TestTree
-subtractThunksTest = testCase "subtractThunks" $ case run (emptyEnv, [], FC (Pos 0 0) (Pos 0 0)) mkThunks of
-  Left err -> assertFailure (show err)
-  Right ((inNode, outNode, unders), (_holes, (nodes, edges))) -> do
-      (length unders) @?= 0
-      (M.size nodes) @=? 4 -- input, output, 2*combo
-      let combo_nodes = filter (isCombo.nodeThing.snd) (M.assocs nodes)
-      (length combo_nodes) @?= 2
-      -- one combo node has an edge to the output
-      let [e@((combo1,_),_,_)] = (filter (\(_,_,(tgt,_)) -> tgt == outNode) edges)
-      let [combo2] = delete combo1 (map fst combo_nodes)
-      edges `equalEdges` [
-         ((inNode, "arg1"), Right aFn, (combo1, "in1"))
-        ,((inNode, "arg2"), Right bFn, (combo2, "in1"))
-        -- note there is some renaming of the ports of the passed function here, to suit the target (not source)
-        ,((inNode, "arg3"), Right (C ([("z", SimpleTy TextType)] :-> [("z", SimpleTy TextType)])), (combo2, "in2"))
-        ,((combo2, "fun"), let bc =[("y", SimpleTy FloatTy), ("z", SimpleTy TextType)] in Right (C (bc :-> bc)), (combo1, "in2"))
-        ,((combo1, "fun"), Right combinedFn, (outNode, "combined"))
-        ]
- where
-   aFn = C ([("a", SimpleTy IntTy)] :-> [("a", SimpleTy IntTy)])
-   bFn = C ([("b", SimpleTy FloatTy)] :-> [("b", SimpleTy FloatTy)])
-   cFn = C ([("c", SimpleTy TextType)] :-> [("c", SimpleTy TextType)])
-   combinedFn = let tupleTy = [("x", SimpleTy IntTy), ("y", SimpleTy FloatTy), ("z", SimpleTy TextType)]
-     in C (tupleTy :-> tupleTy)
-   mkThunks :: Checking (Name, Name, [(Tgt, VType)])
-   mkThunks = do
-    let args = [("arg1", aFn), ("arg2", bFn), ("arg3", cFn)]
-    let combinedOut = [("combined", combinedFn)]
-    inNode <- next "in" Source [] args
-    outNode <- next "out" Target combinedOut []
-    unders <- let ?my = Braty in checkOutputs dummyTerm (sigToRow outNode combinedOut) (sigToRow inNode args)
-    return (inNode, outNode, unders)
-
-
 graphTests = testGroup "Graph" [graphTest "id" idFile idGraph
                                ,graphTest "swap" swapFile swapGraph
                                ,graphTest "X"  xFile  xGraph
@@ -192,5 +157,4 @@ graphTests = testGroup "Graph" [graphTest "id" idFile idGraph
                                ,graphTest "empty" "" emptyGraph
                                ,graphTest "comment" comment emptyGraph
                                ,tensorOutputsTests
-                               ,subtractThunksTest
                                ]

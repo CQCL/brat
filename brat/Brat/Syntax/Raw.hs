@@ -61,6 +61,7 @@ data Raw :: Dir -> Kind -> Type where
   RSimple   :: SimpleTerm -> Raw Chk Noun
   (::|::)   :: WC (Raw d k) -> WC (Raw d k) -> Raw d k
   RTh       :: WC (Raw Chk Verb) -> Raw Chk Noun
+  RForce    :: WC (Raw Syn Noun) -> Raw Syn Verb
   REmb      :: WC (Raw Syn k) -> Raw Chk k
   RPull     :: [Port] -> WC (Raw Chk k) -> Raw Chk k
   RVar      :: UserName -> Raw Syn Noun
@@ -79,6 +80,7 @@ instance Show (Raw d k) where
   show (RSimple tm) = show tm
   show (a ::|:: b) = show a ++ ", " ++ show b
   show (RTh comp) = '{' : show comp ++ "}"
+  show (RForce comp) = show comp ++ "()"
   show (REmb x) = '「' : show x ++ "」"
   show (RPull ps (WC _ (REmb (WC _ (fun ::$:: arg)))))
     = unwords [show fun
@@ -201,6 +203,7 @@ instance Desugarable (Raw d k) where
   desugar' (RSimple simp) = pure $ Simple simp
   desugar' (a ::|:: b) = (:|:) <$> desugar a <*> desugar b
   desugar' (RTh v) = Th <$> desugar v
+  desugar' (RForce v) = Force <$> desugar v
   desugar' (REmb syn) = Emb <$> desugar syn
   desugar' (RPull ps raw) = Pull ps <$> desugar raw
   desugar' (RVar  name) = pure (Var name)

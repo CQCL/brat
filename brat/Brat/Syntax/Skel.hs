@@ -13,6 +13,7 @@ subTerms :: Skel -> [WC Skel]
 subTerms (SJuxtNoun a b)    = [a,b]
 subTerms (SJuxtVerb a b)    = [a,b]
 subTerms (STh a)        = [a]
+subTerms (SForce a)     = [a]
 subTerms (SPull _ x)    = [x]
 subTerms (SApp f a)     = [f, a]
 subTerms (SAnn x _)     = [x]
@@ -35,6 +36,7 @@ stripInfo (NHole x) = SHole (show x)
 stripInfo (VHole x) = SHole (show x)
 stripInfo x@(_ :|: _) = stripJuxt x
 stripInfo (Th comp) = STh (stripInfo <$> comp)
+stripInfo (Force comp) = SForce (stripInfo <$> comp)
 stripInfo (Emb x) = stripInfo (unWC x)
 stripInfo (Pull ps x) = SPull ps (stripInfo <$> x)
 stripInfo (Var x) = SVar x
@@ -51,6 +53,7 @@ data Skel where
   SJuxtVerb :: WC Skel -> WC Skel -> Skel
   SJuxtNoun :: WC Skel -> WC Skel -> Skel
   STh       :: WC Skel -> Skel
+  SForce    :: WC Skel -> Skel
   SPull     :: [Port] -> WC Skel -> Skel
   SVar      :: UserName -> Skel
   SBound    :: Int -> Skel

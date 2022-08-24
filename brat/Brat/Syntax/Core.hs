@@ -30,6 +30,7 @@ data Term :: Dir -> Kind -> Type where
   VHole    :: Name -> Term Chk Verb
   (:|:)    :: WC (Term d k) -> WC (Term d k) -> Term d k
   Th       :: WC (Term Chk Verb) -> Term Chk Noun
+  Force    :: WC (Term Syn Noun) -> Term Syn Verb
   Emb      :: WC (Term Syn k) -> Term Chk k
   Pull     :: [Port] -> WC (Term Chk k) -> Term Chk k
   Var      :: UserName -> Term Syn Noun  -- Look up in noun (value) env
@@ -53,6 +54,7 @@ instance Show (Term d k) where
   show (VHole (MkName [])) = "?<root>"
   show (a :|: b) = show a ++ ", " ++ show b
   show (Th comp) = '{' : show comp ++ "}"
+  show (Force th) = show th ++ "()"
   show (Emb x) = '「' : show x ++ "」"
   show (Pull ps (WC _ (Emb (WC _ (fun :$: arg)))))
     = unwords [show fun
@@ -85,6 +87,7 @@ expandDecls _ tm = expand tm
   expand x@(VHole _) = x
   expand (a :|: b) = (expand <$> a) :|: (expand <$> b)
   expand (Th v) = Th (expand <$> v)
+  expand (Force v) = Force (expand <$> v)
   expand (Emb syn) = Emb (expand <$> syn)
   expand (Pull ps t) = Pull ps (expand <$> t)
 --  expand (Var x) = lookupBy ((==x) . fnName) fnBody

@@ -102,38 +102,8 @@ instance TensorOutputs [(Src, VType)] where
 instance TensorOutputs [(Src, SType)] where
  tensor = let ?my = Kerny in vtensor
 
-data SubtractionResult a = ExactlyEqual | Remainder a
-
-class SubtractThunks a where
-  subtractThunks :: a -> a -> Maybe (SubtractionResult a)
-
-instance SubtractThunks VType where
-  subtractThunks (C (ss :-> ts)) (C (us :-> vs)) = do
-    as <- ss `subtractSig` us
-    rs <- ts `subtractSig` vs
-    return $ case (as,rs) of
-      ([], []) -> ExactlyEqual
-      _ -> Remainder $ C (as :-> rs)
-
-  subtractThunks (K (R ss) (R ts)) (K (R us) (R vs)) = do
-    args <- ss `subtractSig` us
-    res <- ts `subtractSig` vs
-    return $ case (args, res) of
-      ([], []) -> ExactlyEqual
-      _ -> Remainder $ K (R args) (R res)
-
-  subtractThunks a b = if a == b then Just ExactlyEqual else Nothing
-
-instance SubtractThunks SType where
-  subtractThunks (Rho (R r)) (Rho (R s)) = do
-    t <- r `subtractSig` s
-    return (if t == [] then ExactlyEqual else Remainder $ Rho (R t))
-
-  subtractThunks a b = if a == b then Just ExactlyEqual else Nothing
-
 type CheckConstraints m =
-  (SubtractThunks (ValueType m)
-  ,Eq (ValueType m)
+  (Eq (ValueType m)
   ,Show (ValueType m)
   ,TensorOutputs (Outputs m Syn)
   ,TensorOutputs (Outputs m Chk)
@@ -172,28 +142,27 @@ checkThunk tm (u:us) =
     K (R ss) (R ts) -> let ?my = Kerny in checkCombination src ss ts ty
     _ -> typeErr "Not a function type"
 
+checkInputs :: (CheckConstraints m, ?my :: Modey m)
+            => WC (Term Syn k)
+            -> [(Src, ValueType m)]
+            -> [(Tgt, ValueType m)]
+            -> Checking [(Src, ValueType m)]
+checkInputs _ overs [] = pure overs
+checkInputs tm@(WC fc _) (o:overs) (u:unders) = localFC fc $ checkWire o u >>= \case
+  Just () -> checkInputs tm overs unders
+  Nothing -> err $ TypeMismatch (show tm) (showRow (u :| unders)) (showRow (o :| overs))
+checkInputs tm [] unders = typeErr $ "No overs but unders: " ++ show unders ++ " for " ++ show tm
+
 checkOutputs :: (CheckConstraints m, ?my :: Modey m)
              => WC (Term Syn k)
              -> [(Tgt, ValueType m)]
              -> [(Src, ValueType m)]
              -> Checking [(Tgt, ValueType m)]
-checkOutputs _ tys [] = pure tys
-checkOutputs tm ((tgt, ty):tys) ((src, ty'):outs) = case ty `subtractThunks` ty' of
-    Just ExactlyEqual -> awire (src, ty, tgt) *> checkOutputs tm tys outs
-    Just (Remainder rest) -> do
-        -- We'll combine the first src with some other thunk to make the first tys.
-        -- This node outputs the combined thunk
-        combo <- anext ("funcs_" ++ show src) (Combo Thunk) [("in1", ty'), ("in2", rest)] [("fun", ty)]
-        awire ((combo, "fun"), ty, tgt)
-        -- Wire in the first input to the combo, but we don't have the second yet
-        awire (src, ty', (combo, "in1"))
-        -- So leave the second for recursive call or to return as an Under still required
-        checkOutputs tm (((combo, "in2"), rest):tys) outs
-    Nothing -> let exp = showRow ((tgt, ty) :| tys)
-                   act = showRow ((src, ty') :| outs)
-               in req $ Throw $
-                  Err (Just $ fcOf tm) Nothing $
-                  TypeMismatch (show tm) exp act
+checkOutputs _ unders [] = pure unders
+checkOutputs tm@(WC fc _) (u:unders) (o:overs) = localFC fc $ checkWire o u >>= \case
+  Just () -> checkOutputs tm unders overs
+  Nothing -> err $ TypeMismatch (show tm) (showRow (u :| unders)) (showRow (o :| overs))
+checkOutputs tm [] overs = typeErr $ "No unders but overs: " ++ show overs ++ " for " ++ show tm
 
 checkClauses :: (?my :: Modey m, CheckConstraints m)
              => Clause Term Verb
@@ -263,6 +232,13 @@ check' (Emb t) (overs, unders) = do
 check' (Th t) conns = case ?my of
   Braty -> let ((), unders) = conns in ((),) . ((),) <$> checkThunk t unders
   Kerny -> typeErr "no higher order signals! (Th)"
+check' (Force th) (overs, ()) = do
+  (outs, ((), ())) <- let ?my = Braty in check th ((), ())
+  -- pull a bunch of thunks (only!) out of here
+  (_, thUnders, thOvers) <- getThunks ?my outs
+  overs <- checkInputs th overs thUnders
+  pure (thOvers, (overs, ()))
+
 check' (Var x) ((), ()) = case ?my of
   Braty -> (, ((), ())) <$> vlup x
   Kerny -> req (KLup x) >>= \case
