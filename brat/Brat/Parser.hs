@@ -79,11 +79,6 @@ square p = label "[...]" $ token0 $ \case
   Token _ (Square toks) -> parseMaybe (spaced p) toks
   _ -> Nothing
 
-curly :: Parser a -> Parser a
-curly p = label "{...}" $ token0 $ \case
-  Token _ (Curly toks) -> parseMaybe (spaced p) toks
-  _ -> Nothing
-
 inLet :: Parser a -> Parser a
 inLet p = label "let ... in" $ token0 $ \case
   Token _ (LetIn toks) -> parseMaybe (spaced p) toks
@@ -107,6 +102,11 @@ comment = label "Comment" $ token0 $ \case
 string :: Parser String
 string = token0 $ \case
   (Token _ (Quoted txt)) -> Just txt
+  _ -> Nothing
+
+thunk :: (FC -> Thunk -> Maybe a) -> Parser a
+thunk f = label "{...}" $ token0 $ \case
+  Token fc (Curly th) -> f fc th
   _ -> Nothing
 
 port = simpleName
@@ -225,11 +225,11 @@ cverb :: Parser (WC (Raw Chk Verb))
 cverb = try (letin cverb <?> "let binding") <|> withFC
   (try (composition <?> "composition")
   <|> try (func cnoun <?> "function")
-  <|> try (nhole <?> "typed hole")
+  <|> try (vhole <?> "typed hole")
   <|> (REmb <$> sverb <?> "syn verb")
   )
  where
-  nhole = RVHole <$> hole
+  vhole = RVHole <$> hole
 
   composition = compose sverb cverb
 
@@ -283,7 +283,7 @@ simpleTerm =
 
 cnoun' :: Parser (WC (Raw Chk Noun))
 cnoun' = try (letin cnoun) <|> withFC
-  (try (thunk <?> "thunk")
+  (try (cthunk <?> "thunk")
   <|> try (pull <?> "port pull")
   <|> try (nounIntoVerb <?> "composition")
   <|> try (vec <?> "vector literal")
@@ -303,8 +303,11 @@ cnoun' = try (letin cnoun) <|> withFC
 
   emb = REmb <$> snoun'
 
-  thunk :: Parser (Raw Chk Noun)
-  thunk = RTh <$> curly cverb
+  cthunk :: Parser (Raw Chk Noun)
+  cthunk = thunk $ \fc th -> case th of
+    Thunk ss -> RTh <$> parseMaybe (spaced cverb) ss
+    Lambda ss ts -> RTh . WC fc <$> ((::\::) <$> parseMaybe (spaced (withFC binding)) ss <*> parseMaybe (spaced cnoun) ts)
+    _ -> Nothing
 
   nounIntoVerb :: Parser (Raw Chk Noun)
   nounIntoVerb = compose snoun cverb
@@ -328,11 +331,14 @@ vtype = vtype' []
 vtype' :: [Parser RawVType] -> Parser RawVType
 vtype' ps = try (round vty) <|> vty
  where
-  vty = choice (try <$> ps) <|> try base <|> try alias <|> typeVar
+  vty = try thunkType
+    <|> choice (try <$> ps)
+    <|> try vec
+    <|> simple
+    <|> try alias
+    <|> typeVar
 
   typeVar = RTypeFree <$> userName
-
-  base = try comp <|> try vec <|> simple
 
   alias = try aliasWithArgs <|> justAlias
 
@@ -343,8 +349,6 @@ vtype' ps = try (round vty) <|> vty
     space
     args <- round $ vtype' ps `sepBy` comma
     pure $ RAlias alias args
-
-  comp = curly $ thunkTy
 
   pair = kmatch KPair *> space *> round (RProduct <$> vtype' ps <* spaced comma <*> vtype' ps)
 
@@ -365,6 +369,13 @@ vtype' ps = try (round vty) <|> vty
            <|> try pair
            <|> try list
            <|> try option
+
+  thunkType = thunk $ \_ th -> case th of
+    Kernel ss ts -> RK <$> ((:->) <$> parseMaybe (spaced (rawIO stype)) ss <*> parseMaybe (spaced (rawIO stype)) ts)
+    FunTy  ss ts -> RC <$> ((:->) <$> parseMaybe (spaced (rawIO vtype)) ss <*> parseMaybe (spaced (rawIO vtype)) ts)
+    Thunk ss -> RC . ([] :->) <$> parseMaybe (spaced (rawIO vtype)) ss
+    _ -> Nothing
+
 
 rawIO :: Parser ty -> Parser [RawIO' ty]
 rawIO tyP = rowElem `sepBy` void (try $ spaced comma)
@@ -400,8 +411,8 @@ stype = try (Rho <$> round row)
            pure $ Of ty n
 
 
-thunkTy :: Parser RawVType
-thunkTy = try (RC <$> ctype) <|> (RK <$> kernel)
+functionType :: Parser RawVType
+functionType = try (RC <$> ctype) <|> (RK <$> kernel)
 
 ctype = do
   ins <- rawIO vtype
@@ -449,7 +460,7 @@ decl = do
         nm <- simpleName
         spaced $ match TypeColon
         (ty, body) <- try (do
-            ty <- thunkTy <&> \ty -> [Named "thunk" ty]
+            ty <- functionType <&> \ty -> [Named "thunk" ty]
             vspace
             (ty,) <$> ((ThunkOf <$> (withFC $ clauses nm)) <|> (nbody nm)))
           <|> (do
@@ -581,7 +592,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
                   space
                   fnName <- simpleName
                   spaced (match TypeColon)
-                  ty <- thunkTy
+                  ty <- functionType
                   optional hspace
                   vspace
                   pure (fnName, ty, symbol)

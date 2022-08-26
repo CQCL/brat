@@ -50,6 +50,7 @@ common warning-flags
     -Wno-unticked-promoted-constructors
     -Wno-unused-do-bind
     -Wno-missing-signatures
+    -Wno-noncanonical-monoid-instances
     -Werror=unused-imports
     -Werror=unused-matches
     -Werror=missing-methods
@@ -88,6 +89,7 @@ library
                        Brat.Syntax.Raw,
                        Brat.Syntax.Skel,
                        Brat.UserName,
+                       Bwd,
                        Proto.Graph, Proto.Graph_Fields,
                        Proto.Signature, Proto.Signature_Fields,
                        Util
@@ -156,6 +158,7 @@ executable brat
                        Brat.Syntax.Raw,
                        Brat.Syntax.Skel
                        Brat.UserName,
+                       Bwd,
                        Control.Monad.Freer,
                        Proto.Graph,
                        Proto.Graph_Fields,

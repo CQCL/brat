@@ -1,4 +1,4 @@
-module Brat.Lexer (Tok(..), Token(..), Keyword(..), lex) where
+module Brat.Lexer (Thunk(..), Tok(..), Token(..), Keyword(..), lex) where
 
 import Prelude hiding (lex)
 import Data.Char (isSpace)
@@ -11,6 +11,7 @@ import Text.Megaparsec hiding (Token, Pos, token)
 import Text.Megaparsec.Char
 
 import Brat.FC
+import Bwd
 
 readL :: Read a => String -> Lexer a
 readL x = case reads x of
@@ -18,6 +19,20 @@ readL x = case reads x of
             _ -> fail ("readL failed on input " ++ x)
 
 type Lexer a = Parsec Void String a
+
+data Thunk where
+  Kernel :: [Token] -> [Token] -> Thunk
+  Lambda :: [Token] -> [Token] -> Thunk
+  FunTy  :: [Token] -> [Token] -> Thunk
+  Thunk  :: [Token] -> Thunk
+
+deriving instance Eq Thunk
+
+instance Show Thunk where
+  show (Kernel ss ts) = foldMap show ss ++ show Lolly ++ foldMap show ts
+  show (Lambda ss ts) = foldMap show ss ++ show FatArrow ++ foldMap show ts
+  show (FunTy ss ts) = foldMap show ss ++ show Arrow ++ foldMap show ts
+  show (Thunk toks) = foldMap show toks
 
 data Tok
  = Ident String
@@ -29,7 +44,7 @@ data Tok
  | Arrow
  | FatArrow
  | Lolly
- | Curly [Token]
+ | Curly Thunk
  | Square [Token]
  | Round [Token]
  | Semicolon
@@ -59,7 +74,7 @@ instance Show Tok where
   show Arrow = "->"
   show FatArrow = "=>"
   show Lolly = "-o"
-  show (Curly ts) = '{' : concatMap show ts ++ "}"
+  show (Curly th) = '{' : show th ++ "}"
   show (Square ts) = '[' : concatMap show ts ++ "]"
   show (Round ts) = '(' : concatMap show ts ++ ")"
   show Semicolon = ";"
@@ -196,7 +211,7 @@ comment = string "--" *> ((printChar `manyTill` lookAhead (void newline <|> void
 tok :: Lexer Tok
 tok = comment
       <|> try (between (char '(') (char ')') (Round <$> many token))
-      <|> try (between (char '{') (char '}') (Curly <$> many token))
+      <|> try (between (char '{') (char '}') (Curly <$> thunk B0))
       <|> try (between (char '[') (char ']') (Square <$> many (try (en $ char ',' $> VecComma)
                                                                 <|> token)))
       <|> try letIn
@@ -222,6 +237,15 @@ tok = comment
       <|> try qualified
       <|> Ident <$> ident
  where
+  thunk :: Bwd Token -> Lexer Thunk
+  thunk prev = try (Thunk (prev <>> []) <$ lookAhead (string "}")) <|> do
+    this <- token
+    case _tok this of
+      Lolly    -> Kernel (prev <>> []) <$> (many token)
+      FatArrow -> Lambda (prev <>> []) <$> (many token)
+      Arrow    -> FunTy  (prev <>> []) <$> (many token)
+      _ -> thunk (prev :< this)
+
   letIn = do
     string "let"
     spc <- whiteSpace
