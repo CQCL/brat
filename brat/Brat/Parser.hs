@@ -305,9 +305,21 @@ cnoun' = try (letin cnoun) <|> withFC
 
   cthunk :: Parser (Raw Chk Noun)
   cthunk = thunk $ \fc th -> case th of
-    Thunk ss -> RTh <$> parseMaybe (spaced cverb) ss
+    Thunk n ss -> RTh <$> braceSection fc n ss
     Lambda ss ts -> RTh . WC fc <$> ((::\::) <$> parseMaybe (spaced (withFC binding)) ss <*> parseMaybe (spaced cnoun) ts)
     _ -> Nothing
+
+  -- Invented variable names look like '1, '2, '3 ...
+  -- which are illegal for the user to use as variables
+  braceSectionAbstractor :: [Int] -> Abstractor
+  braceSectionAbstractor ns = foldr (:||:) Empty (Bind . ('\'':) . show <$> ns)
+
+  braceSection :: FC -> Int -> [Token] -> Maybe (WC (Raw Chk Verb))
+  braceSection _ 0 ts | Just v <- parseMaybe (spaced cverb) ts = Just v
+  braceSection fc n ts = do
+   let abs = WC fc (braceSectionAbstractor [0..n-1])
+   body <- parseMaybe (spaced cnoun) ts
+   pure (WC fc (abs ::\:: body))
 
   nounIntoVerb :: Parser (Raw Chk Noun)
   nounIntoVerb = compose snoun cverb
@@ -373,7 +385,8 @@ vtype' ps = try (round vty) <|> vty
   thunkType = thunk $ \_ th -> case th of
     Kernel ss ts -> RK <$> ((:->) <$> parseMaybe (spaced (rawIO stype)) ss <*> parseMaybe (spaced (rawIO stype)) ts)
     FunTy  ss ts -> RC <$> ((:->) <$> parseMaybe (spaced (rawIO vtype)) ss <*> parseMaybe (spaced (rawIO vtype)) ts)
-    Thunk ss -> RC . ([] :->) <$> parseMaybe (spaced (rawIO vtype)) ss
+    -- Don't allow brace sections as types yet
+    Thunk 0 ss -> RC . ([] :->) <$> parseMaybe (spaced (rawIO vtype)) ss
     _ -> Nothing
 
 

@@ -1,0 +1,34 @@
+ext "" add :: (x :: Int), (y :: Int) -> (z :: Int)
+
+-- Nouns embedded into thunks get turned into lambda expressions which take no arguments
+be5 :: { Int }
+be5 = { 5 }
+  --> { => 5 }
+
+-- Thunked nouns with underscores are syntactic sugar for lambda expressions
+-- where the underscore becomes the lambda's argument
+add5 :: { Int -> Int }
+add5 = {add(_, 5)}
+   --> { '0 => add('0, 5) }
+
+-- When there are multiple underscores, they are bound left-to-right
+add__ :: { Int, Int -> Int }
+add__ = { add(_, _) }
+    --> { '0, '1 => add('0, '1) }
+
+id :: { Int, Bool -> Int, Bool }
+id = { _, _ }
+
+-- It should interact nicely with port pulling too!
+swap :: { Int, Bool -> fst :: Bool, snd :: Int }
+swap = { snd:_,_ }
+
+-- This example needs us to have the `Force` constructor first
+-- be5' :: Int
+-- be5' = be5() --> 5
+
+add5' :: Int
+add5' = add5(1) --> 6
+
+add__' :: Int
+add__' = add__(1,2) --> 3
