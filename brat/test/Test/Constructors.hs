@@ -27,21 +27,21 @@ listGraph =
    [("xs"
     ,BratNode Id [("a1", List (SimpleTy IntTy))] [("a1", List (SimpleTy IntTy))])
    ,("mklist.tail.tail"
-    ,BratNode (Constructor CCons)
+    ,BratNode (Constructor DCons)
      [("head", SimpleTy IntTy)
      ,("tail", List (SimpleTy IntTy))
      ]
      [("value", List (SimpleTy IntTy))]
     )
    ,("mklist.tail"
-    ,BratNode (Constructor CCons)
+    ,BratNode (Constructor DCons)
      [("head", SimpleTy IntTy)
      ,("tail", List (SimpleTy IntTy))
      ]
      [("value", List (SimpleTy IntTy))]
     )
    ,("mklist"
-    ,BratNode (Constructor CCons)
+    ,BratNode (Constructor DCons)
      [("head", SimpleTy IntTy)
      ,("tail", SimpleTy IntTy)
      ]
@@ -79,27 +79,27 @@ vecGraph =
     [("a1", Vector (SimpleTy IntTy) (Simple (Num 3)))]
     )
    ,("mkvec"
-    ,BratNode (Constructor CCons)
+    ,BratNode (Constructor DCons)
      [("head", SimpleTy IntTy)
      ,("tail", Vector (SimpleTy IntTy) (Simple (Num 2)))
      ]
      [("value", Vector (SimpleTy IntTy) (Simple (Num 3)))]
     )
    ,("mkvec.tail"
-    ,BratNode (Constructor CCons)
+    ,BratNode (Constructor DCons)
      [("head", SimpleTy IntTy)
      ,("tail", Vector (SimpleTy IntTy) (Simple (Num 1)))
      ]
      [("value", Vector (SimpleTy IntTy) (Simple (Num 2)))]
     )
    ,("mkvec.tail.tail"
-    ,BratNode (Constructor CCons)
+    ,BratNode (Constructor DCons)
      [("head", SimpleTy IntTy)
      ,("tail", Vector (SimpleTy IntTy) (Simple (Num 0)))
      ]
      [("value", Vector (SimpleTy IntTy) (Simple (Num 1)))]
     )
-   ,("nil", BratNode (Constructor CNil) [] [("value", Vector (SimpleTy IntTy) (Simple (Num 0)))])
+   ,("nil", BratNode (Constructor DNil) [] [("value", Vector (SimpleTy IntTy) (Simple (Num 0)))])
    ,("0", BratNode (Const (Num 0)) [] [("value", SimpleTy IntTy)])
    ,("1", BratNode (Const (Num 1)) [] [("value", SimpleTy IntTy)])
    ,("2", BratNode (Const (Num 2)) [] [("value", SimpleTy IntTy)])
@@ -146,7 +146,7 @@ pairGraph =
      [("a1", Product (SimpleTy IntTy) (SimpleTy Boolean))]
     )
    ,("mkpair"
-    ,BratNode (Constructor CPair)
+    ,BratNode (Constructor DPair)
      [("first", SimpleTy IntTy)
      ,("second", SimpleTy Boolean)
      ]
@@ -188,7 +188,7 @@ consGraph =
     )
 
    ,("three.vec.cons"
-    ,BratNode (Constructor CCons)
+    ,BratNode (Constructor DCons)
      [("head", SimpleTy IntTy)
      ,("tail", Vector (SimpleTy IntTy) (Simple (Num 2)))
      ]
@@ -196,7 +196,7 @@ consGraph =
     )
 
    ,("two.vec.cons"
-    ,BratNode (Constructor CCons)
+    ,BratNode (Constructor DCons)
      [("head", SimpleTy IntTy)
      ,("tail", Vector (SimpleTy IntTy) (Simple (Num 1)))
      ]
@@ -204,14 +204,14 @@ consGraph =
     )
 
    ,("two.vec.cons.tail"
-    ,BratNode (Constructor CCons)
+    ,BratNode (Constructor DCons)
      [("head", SimpleTy IntTy)
      ,("tail", Vector (SimpleTy IntTy) (Simple (Num 0)))
      ]
      [("value", Vector (SimpleTy IntTy) (Simple (Num 1)))]
     )
 
-   ,("nil", BratNode (Constructor CNil) [] [("value", Vector (SimpleTy IntTy) (Simple (Num 0)))])
+   ,("nil", BratNode (Constructor DNil) [] [("value", Vector (SimpleTy IntTy) (Simple (Num 0)))])
    ,("0", BratNode (Const (Num 0)) [] [("value", SimpleTy IntTy)])
    ,("1", BratNode (Const (Num 1)) [] [("value", SimpleTy IntTy)])
    ,("2", BratNode (Const (Num 2)) [] [("value", SimpleTy IntTy)])
@@ -266,13 +266,13 @@ numGraph =
     )
 
    ,("succ"
-    ,BratNode (Constructor CSucc)
+    ,BratNode (Constructor DSucc)
      [("value", SimpleTy Natural)]
      [("value", SimpleTy Natural)]
     )
 
    ,("doub"
-    ,BratNode (Constructor CDoub)
+    ,BratNode (Constructor DDoub)
      [("value", SimpleTy IntTy)]
      [("value", SimpleTy IntTy)]
     )
@@ -305,19 +305,19 @@ kernelGraph =
      [("a1", ktype)]
     )
    ,("vec.cons.tail.tail"
-    ,KernelNode (Constructor CCons)
+    ,KernelNode (Constructor DCons)
      [("head", Q Qubit), ("tail", Of (Q Qubit) (Simple (Num 0)))]
      [("value", Of (Q Qubit) (Simple (Num 1)))]
     )
 
    ,("vec.cons.tail"
-    ,KernelNode (Constructor CCons)
+    ,KernelNode (Constructor DCons)
      [("head", Q Qubit), ("tail", Of (Q Qubit) (Simple (Num 1)))]
      [("value", Of (Q Qubit) (Simple (Num 2)))]
     )
 
    ,("vec.cons"
-    ,KernelNode (Constructor CCons)
+    ,KernelNode (Constructor DCons)
      [("head", Q Qubit), ("tail", Of (Q Qubit) (Simple (Num 2)))]
      [("value", Of (Q Qubit) (Simple (Num 3)))]
     )
@@ -341,7 +341,7 @@ kernelGraph =
    ,("hypo1", BratNode Hypo [("value", SimpleTy Natural)] [])
    ,("hypo2", BratNode Hypo [("value", SimpleTy Natural)] [])
    ,("hypo3", BratNode Hypo [("value", SimpleTy Natural)] [])
-   ,("nil", KernelNode (Constructor CNil) [] [("value", Of (Q Qubit) (Simple (Num 0)))])
+   ,("nil", KernelNode (Constructor DNil) [] [("value", Of (Q Qubit) (Simple (Num 0)))])
    ]
   ,[(("src", "a1"), Left (Q Qubit), ("vec.cons", "head"))
    ,(("src", "b1"), Left (Q Qubit), ("vec.cons.tail", "head"))

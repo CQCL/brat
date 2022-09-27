@@ -8,6 +8,7 @@ module Brat.Checker.Helpers (evalNat
                             ,showMode, getVec
                             ,mkThunkTy, getThunks
                             ,checkWire
+                            ,selectorOutputs
                             ) where
 
 import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr, anext, awire)
@@ -16,9 +17,9 @@ import Brat.Error (ErrorMsg(..))
 import Brat.Eval (Value(..), evalTerm)
 import Brat.FC (WC(..))
 import Brat.Naming (Name)
-import Brat.Graph (Src, Tgt, Thing(..))
+import Brat.Graph (DataNode(..), Src, Tgt, Thing(..))
 import Brat.Syntax.Common
-import Brat.Syntax.Core (Term)
+import Brat.Syntax.Core (Term(..))
 import Brat.UserName (UserName)
 import Control.Monad.Freer (req, Free(Ret))
 
@@ -131,3 +132,19 @@ checkWire :: (Eq (ValueType m), ?my :: Modey m)
           -> Checking (Maybe ())
 checkWire (src, oTy) (tgt, uTy) | oTy == uTy = awire (src, oTy, tgt) $> Just ()
 checkWire _ _ = pure Nothing
+
+-- Inputs, Outputs
+selectorOutputs :: Modey m -> DataNode -> ValueType m
+                -> Maybe [(Port, ValueType m)]
+-- Note: this is the only Kerny selector
+selectorOutputs Kerny DCons (Of elTy (Simple (Num n)))
+  = Just [("head", elTy), ("tail", Of elTy (Simple (Num (n - 1))))]
+selectorOutputs Braty DCons (List ty)
+  = Just [("head", ty), ("tail", List ty)]
+selectorOutputs Braty DCons (Vector elTy (Simple (Num n)))
+  = Just [("head", elTy), ("tail", Vector elTy (Simple (Num (n - 1))))]
+selectorOutputs Braty DSome (Option ty) = Just [("value", ty)]
+selectorOutputs Braty DPair (Product s t) = Just [("first", s), ("second", t)]
+selectorOutputs Braty DDoub ty = Just [("value", ty)]
+selectorOutputs Braty DSucc ty = Just [("value", ty)]
+selectorOutputs _ _ _ = Nothing

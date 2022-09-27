@@ -320,7 +320,7 @@ checkRPat (tgt, vty) p@(PCons b) | Just (ty, n) <- getVec ?my vty = do
     (err $ VecLength len (show vty) (LongerThan 0) (show (Pattern (dummyFC p))))
 
   let inps = [("head", ty), ("tail", makeVec ty (Simple (Num (len - 1))))]
-  cons <- anext "Vec.cons" (Constructor CCons) inps [("value", vty)]
+  cons <- anext "Vec.cons" (Constructor DCons) inps [("value", vty)]
   noUnders $ wrapError (consError len (show vty) p) $ check b ((), sigToRow cons inps)
   awire ((cons, "value"), vty, tgt)
   pure ()
@@ -329,12 +329,12 @@ checkRPat unders pat = case (?my, unders, pat) of
   -- arguments should be able to typecheck against the type of the whole
   -- expression, which may be either Nat or Int
   (Braty, (tgt, ty), POnePlus x) -> do
-    succ <- next (show ty ++ ".succ") (Constructor CSucc) [("value", ty)] [("value", ty)]
+    succ <- next (show ty ++ ".succ") (Constructor DSucc) [("value", ty)] [("value", ty)]
     noUnders $ check x ((), [((succ, "value"), ty)])
     wire ((succ, "value"), ty, tgt)
     pure ()
   (Braty, (tgt, ty), PTwoTimes x) -> do
-    doub <- next (show ty ++ ".doub") (Constructor CDoub) [("value", ty)] [("value", ty)]
+    doub <- next (show ty ++ ".doub") (Constructor DDoub) [("value", ty)] [("value", ty)]
     noUnders $ check x ((), [((doub, "value"), ty)])
     wire ((doub, "value"), ty, tgt)
     pure ()
@@ -342,21 +342,21 @@ checkRPat unders pat = case (?my, unders, pat) of
   -- A `cons` on the RHS contain a single variable or application that produces
   -- two outputs (head and tail), so typecheck it as such with as normal
   (Braty, (tgt, List ty), PCons b) -> do
-    cons <- next "List.cons" (Constructor CCons) [("head", ty), ("tail", List ty)] [("value", List ty)]
+    cons <- next "List.cons" (Constructor DCons) [("head", ty), ("tail", List ty)] [("value", List ty)]
     noUnders $ check b ((), [((cons, "head"), ty), ((cons, "tail"), List ty)])
     wire ((cons, "value"), List ty, tgt)
     pure ()
    -- Until we have heterogenous type lists, pairs are cons lists with 2 elements + nil
   (Braty, (tgt, Product s t),
    PCons (WC _ (a :|: (WC _ (Pattern (WC _ (PCons (WC _ (b :|: (WC _ (Pattern (WC _ PNil)))))))))))) -> do
-    mkpair <- anext "mkpair" (Constructor CPair) [("first", s), ("second", t)] [("value", Product s t)]
+    mkpair <- anext "mkpair" (Constructor DPair) [("first", s), ("second", t)] [("value", Product s t)]
     check1Under ((mkpair, "first"), s) a
     check1Under ((mkpair, "second"), t) b
     wire ((mkpair, "value"), (Product s t), tgt)
     pure ()
   (Braty, (_, Option _), PNone) -> pure ()
   (Braty, (tgt, Option ty), PSome x) -> do
-    some <- next "Option.some" (Constructor CSome) [("value", ty)] [("value", Option ty)]
+    some <- next "Option.some" (Constructor DSome) [("value", ty)] [("value", Option ty)]
     noUnders $ check x ((), [((some, "value"), ty)])
     wire ((some, "value"), Option ty, tgt)
     pure ()
@@ -389,50 +389,31 @@ abstract inputs (x :||: y) = do
 abstract inputs (APull ports abst) = do
   inputs <- pullPorts ports inputs
   abstract inputs abst
-abstract inputs@((_,ty):inputs') pat@(Pat abs)
-  | Just (ety, n) <- getVec ?my ty =
-    (evalNat n) >>= \n -> (,inputs') <$> case abs of
-      PNil -> if n == 0
-        then pure emptyEnv
-        else err $ VecPatLength (show abs) (show ty)
-      PCons (x :||: xs) -> do
-        -- A `cons` pattern on the LHS needs to have exactly two binders
-        let tailTy = makeVec ety (Simple (Num (n - 1)))
-        node <- anext "PCons (Vec)" Hypo [("head", ety), ("tail", tailTy)] []
-        venv <- abstractAll [((node, "head"), ety)] x
-        venv' <- wrapError (consPatErr abs (show ty)) $
-                 abstractAll [((node, "tail"), tailTy)] xs
-        mergeEnvs [venv,venv'] 
-      _ -> err $ NotVecPat (show abs) (show ty)
-  | otherwise = case (?my, inputs) of
-    (Braty, inputs@((src,ty):inputs')) | Just result <- abstractBrat ty abs -> result
-      where
-        abstractBrat :: VType -> (Pattern Abstractor) -> Maybe (Checking (VEnv, [(Src, VType)]))
-        abstractBrat ty abs = case (ty, abs) of
-          (SimpleTy Natural, POnePlus (Bind x)) -> Just $ abstract inputs (Bind x)
-          (SimpleTy Natural, PTwoTimes (Bind x)) -> Just $ abstract inputs (Bind x)
-          (List _, PNil) -> Just $ pure (emptyEnv, inputs')
-          (List ty, (PCons (x :||: xs))) -> Just $ do
-            node <- next "PCons (List)" Hypo [("head", ty), ("tail", List ty)] []
-            venv <- abstractAll [((node, "head"), ty)] x
-            venv' <- wrapError (consPatErr abs (show ty)) $
-                     abstractAll [((node, "tail"), List ty)] xs
-            (,inputs') <$> combineDisjointEnvs venv venv'
-          (Option ty, PSome x) -> Just $ abstract ((src, ty):inputs') x
-          (Option _, PNone) -> Just $ pure (emptyEnv, inputs')
-          (Product s t, (PCons (a :||: (Pat (PCons (b :||: Pat PNil)))))) -> Just $ do
-            (venv, emptyLeftovers) <- abstract [(src, s)] a
-            ensureEmpty
-              "Leftovers from abstracting a pair's first element"
-              emptyLeftovers
-            (venv', emptyLeftovers) <- abstract [(src, t)] b
-            ensureEmpty
-              "Leftovers from abstracting a pair's second element"
-              emptyLeftovers
-            (,inputs') <$> combineDisjointEnvs venv venv'
-          _ -> Nothing
-    _ -> err (PattErr $
-      "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty)
+abstract ((src,ty):inputs) (Pat abs)
+  | Just (ety, n) <- getVec ?my ty = (evalNat n) >>= \n -> (,inputs) <$> case abs of
+    PNil -> if n == 0
+      then pure emptyEnv
+      else err $ VecPatLength (show abs) (show ty)
+    PCons (x :||: xs) -> do
+      -- A `cons` pattern on the LHS needs to have exactly two binders
+      let tailTy = makeVec ety (Simple (Num (n - 1)))
+      node <- anext "PCons (Vec)" (Selector DCons) [("head", ety), ("tail", tailTy)] []
+      venv <- abstractAll [((node, "head"), ety)] x
+      venv' <- wrapError (consPatErr abs (show ty)) $
+                abstractAll [((node, "tail"), tailTy)] xs
+      mergeEnvs [venv,venv']
+    _ -> err $ NotVecPat (show abs) (show ty)
+  | (Braty, List _, PNil) <- (?my, ty, abs) = pure (emptyEnv, inputs)
+  | (Braty, Option _, PNone) <- (?my, ty, abs) = pure (emptyEnv, inputs)
+  | Just (sel, abs, outs) <- patternToData ?my abs ty = do
+      node <- anext (show sel) (Selector sel) [("value", ty)] outs
+      awire (src, ty, (node, "value"))
+      let sel' = sigToRow node outs
+      let absAll = (,inputs) <$> abstractAll sel' abs
+      case sel of
+        DCons -> absAll
+        DPair -> absAll
+        _ -> abstract (sel' ++ inputs) abs
  where
   consPatErr :: Pattern Abstractor -> String -> Error -> Error
   consPatErr abs ty e@Err{msg=(VecPatLength _ _)}
@@ -449,13 +430,27 @@ abstract inputs@((_,ty):inputs') pat@(Pat abs)
   patList (PCons (x :||: (Pat xs))) = (x:) <$> patList xs
   patList _ = Nothing
 
+  patternToData :: Modey m -> Pattern Abstractor -> ValueType m
+              -> Maybe (DataNode, Abstractor, [(Port, ValueType m)])
+  patternToData m abs ty = do
+    (sel, abs) <- (case abs of
+      POnePlus abs -> Just (DSucc, abs)
+      PTwoTimes abs -> Just (DDoub, abs)
+      PCons (a :||: (Pat (PCons (b :||: Pat PNil))))
+        | (Braty, Product _ _) <- (m,ty) -> Just (DPair, a :||: b)
+      PCons abs -> Just (DCons, abs)
+      PSome abs -> Just (DSome, abs)
+      _ -> Nothing)
+    (sel, abs, ) <$> selectorOutputs m sel ty
+
 abstract ((_, ty):inputs) (Lit tm) = do
   litTy <- case (?my,ty) of
     (Kerny, Bit) -> pure $ Boolean
     (Braty, SimpleTy ty) -> pure $ ty
-    (m,_) -> typeErr $ "Can't match literal literal " ++ show tm ++ (showMode m)
+    _ -> typeErr $ "Can't match literal literal " ++ show tm ++ (showMode ?my)
   simpleCheck litTy tm $> (emptyEnv, inputs)
-
+abstract ((_,ty):_) pat = err (PattErr $
+    "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty)
 
 run :: (VEnv, [Decl], FC)
     -> Checking a

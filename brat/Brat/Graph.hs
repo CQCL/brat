@@ -32,10 +32,11 @@ data Thing
   | Id           -- Identity node for convenient wiring
   | Hypo         -- Hypothesis for type checking
   | Combo ComboType -- inputs are wired in later
-  | Constructor ConsType
+  | Constructor DataNode
+  | Selector DataNode
   deriving (Eq, Show)
 
-data ConsType = CCons | CSome | CPair | CDoub | CSucc | CNil
+data DataNode = DCons | DSome | DPair | DDoub | DSucc | DNil
  deriving (Eq, Show)
 
 type Graph = (M.Map Name Node, [Wire])
