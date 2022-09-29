@@ -46,6 +46,9 @@ match tok = label (show tok) $ token0 $ \(Token _ t) -> if t == tok then Just ()
 kmatch :: Keyword -> Parser ()
 kmatch = match . K
 
+matchString :: String -> Parser ()
+matchString s = ident $ \x -> if x == s then Just () else Nothing
+
 ident :: (String -> Maybe a) -> Parser a
 ident f = label "identifier" $ token0 $ \case
   (Token _ (Ident str)) -> f str
@@ -460,7 +463,7 @@ runtime = try (char '@' *> aux <* newline) <|> pure RtLocal
 
 nbody :: String -> Parser (Clause Raw Noun)
 nbody nm = do
-  ident $ \x -> if x == nm then Just () else Nothing
+  matchString nm
   spaced $ match Equal
   body <- cnoun
   return $ NoLhs body
@@ -530,7 +533,7 @@ clauses declName = try noLhs <|> branches
 
   branch = do
     label (declName ++ "(...) = ...") $
-      ident $ \x -> if x == declName then Just () else Nothing
+      matchString declName
     space
     lhs <- withFC $ round (binding <?> "binder")
     spaced $ match Equal
@@ -539,7 +542,7 @@ clauses declName = try noLhs <|> branches
 
   noLhs = label (declName ++ " = ...") $ do
     label declName $
-      ident $ \x -> if x == declName then Just () else Nothing
+      matchString declName
     spaced (match Equal)
     NoLhs <$> cverb
 
