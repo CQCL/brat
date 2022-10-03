@@ -5,6 +5,8 @@ module Brat.Load (emptyMod
                  ,loadFiles
                  ,typeGraph
                  ,checkDecl
+                 ,parseFile
+                 ,desugarEnv
                  ) where
 
 import Brat.Checker.Combine

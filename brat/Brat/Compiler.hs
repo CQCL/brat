@@ -1,4 +1,4 @@
-module Brat.Compiler (printDeclsHoles, compileFile) where
+module Brat.Compiler (printAST, printDeclsHoles, compileFile) where
 
 import Brat.Compile.Circuit
 import Brat.Checker (run)
@@ -21,6 +21,27 @@ printDeclsHoles file = do
   putStrLn ""
   putStrLn "Holes:"
   mapM_ print holes
+
+-- Print an 80 column banner as the header and footer of some IO action's output
+banner :: String -> IO a -> IO a
+banner s m = putStrLn startText *> m <* putStrLn endText
+ where
+  startText = dashes ++ " " ++ s ++ space ++ dashes
+  endText = replicate 80 '-'
+
+  -- Add an extra space if `s` is odd to pad to 80 chars
+  space = ' ' : (replicate (len `mod` 2) ' ')
+  dashes = replicate (39 - hlen) '-'
+  len = length s + 2
+  hlen = len `div` 2
+  
+printAST :: Bool -> Bool -> String -> IO ()
+printAST printRaw printAST file = do
+  cts <- readFile file
+  (_, env@(decls, _)) <- eitherIO $ parseFile file cts
+  when printRaw $ banner "Raw AST" $ mapM_ print decls
+  when printAST $
+    banner "desugared AST" (mapM_ print =<< eitherIO (desugarEnv env))
 
 compileFile :: String -> IO ()
 compileFile file = do
