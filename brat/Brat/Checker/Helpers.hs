@@ -104,6 +104,9 @@ mkThunkTy :: Modey m -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> VType'
 mkThunkTy Braty ss ts = C (ss :-> ts)
 mkThunkTy Kerny ss ts = K (R ss) (R ts)
 
+-- Unders and Overs here are respectively the inputs and outputs for the thunks
+-- This is the dual notion to the overs and unders used for typechecking against
+-- Hence, we return them here in the opposite order to `check`'s connectors
 getThunks :: Modey m
           -> [(Src, ValueType Brat)]
           -> Checking ([Name]
@@ -114,10 +117,10 @@ getThunks _ [] = pure ([], [], [])
 getThunks m ((src, ty):rest)
  | Just (ss, ts) <- isThunkType m ty = do
   node <- let ?my = m in anext "" (Eval src) ss ts
-  let overs = sigToRow node ss
-  let unders = sigToRow node ts
-  (nodes, unders', overs') <- getThunks m rest
-  pure (node:nodes, unders <> unders', overs <> overs')
+  let counders = sigToRow node ss
+  let coovers = sigToRow node ts
+  (nodes, counders', coovers') <- getThunks m rest
+  pure (node:nodes, counders <> counders', coovers <> coovers')
  where
   isThunkType :: Modey m -> ValueType Brat
               -> Maybe ([(Port, ValueType m)], [(Port, ValueType m)])

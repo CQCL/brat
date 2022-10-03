@@ -20,3 +20,14 @@ id3 = x, y => (id,id)(x, y)
 
 asym :: Nat, Nat, Nat -> Nat, Nat, Nat
 asym = id(), id2()
+
+natToBool :: Nat -> Bool
+natToBool(0) = false
+natToBool(n) = true
+
+boolToNat :: Bool -> Nat
+boolToNat(true) = 1
+boolToNat(false) = 0
+
+notId :: { Nat, Bool -> Bool, Nat }
+notId = { natToBool(), boolToNat() }
