@@ -73,7 +73,7 @@ onlyThunk comp = do
     x:xs -> pure (x :| xs)
   rows <- combinationsWithLeftovers outs1
   let (out, emptyUnders) = last rows
-  ensureEmpty "unders" emptyUnders
+  ensureEmpty "onlyThunk unders" emptyUnders
   case (?my, out) of
     (Braty, (src, C (ss :-> ts))) -> pure (src, ss, ts)
     (Kerny, (src, K (R ss) (R ts))) -> pure (src, ss, ts)
@@ -132,8 +132,8 @@ checkThunk tm (u:us) =
     -- The box is always a `Brat` `Thing` (classical)
     box <- next (show src ++ "_thunk") (source :>>: target) [] [("fun", fty)]
     ((), (emptyOvers, emptyUnders)) <- check tm (sigToRow box ins, sigToRow box outs)
-    ensureEmpty "overs" emptyOvers 
-    ensureEmpty "unders" emptyUnders
+    ensureEmpty "checkCombination overs" emptyOvers
+    ensureEmpty "checkCombination unders" emptyUnders
 
   -- Split on the type to determine in which mode to `checkCombination`
   tryToCheckThunk :: (Src, VType) -> Checking ()
@@ -205,7 +205,7 @@ check' (s :|: t) tys = do
 check' (s :-: t) (overs, unders) = do
   (overs, (rightovers, ())) <- check s (overs, ())
   (outs,  (emptyOvers, rightunders)) <- check t (overs, unders)
-  ensureEmpty "overs" emptyOvers
+  ensureEmpty "composition overs" emptyOvers
   pure (outs, (rightovers, rightunders))
 check' (binder :\: body) (overs, unders) = do
   (ext, overs) <- abstract overs (unWC binder)
