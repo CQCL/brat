@@ -315,7 +315,7 @@ cnoun' = try (letin cnoun) <|> withFC
   -- Invented variable names look like '1, '2, '3 ...
   -- which are illegal for the user to use as variables
   braceSectionAbstractor :: [Int] -> Abstractor
-  braceSectionAbstractor ns = foldr (:||:) Empty (Bind . ('\'':) . show <$> ns)
+  braceSectionAbstractor ns = foldr (:||:) AEmpty (Bind . ('\'':) . show <$> ns)
 
   braceSection :: FC -> Int -> [Token] -> Maybe (WC (Raw Chk Verb))
   braceSection _ 0 ts | Just v <- parseMaybe (spaced cverb) ts = Just v

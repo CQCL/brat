@@ -192,6 +192,7 @@ check' :: (CheckConstraints m, TensorOutputs (Outputs m d), ?my :: Modey m)
        -> Connectors m d k
        -> Checking (Outputs m d
                    ,Connectors m d k) -- rightovers
+check' Empty tys = pure ((), tys)
 check' (s :|: t) tys = do
   -- in Checking mode, each LHS/RHS removes the wires/types it produces from the Unders remaining,
   -- including components of thunks joined together by (Combo Thunk)s in checkOutputs
@@ -379,7 +380,7 @@ abstract :: (Show (ValueType m), ?my :: Modey m)
          -> Checking (Env (EnvData m) -- Local env for checking body of lambda
                      ,[(Src, ValueType m)] -- rightovers
                      )
-abstract inputs Empty = pure (emptyEnv, inputs)
+abstract inputs AEmpty = pure (emptyEnv, inputs)
 abstract [] abs = err $ NothingToBind (show abs)
 abstract (input:inputs) (Bind x) = pure (singletonEnv x input, inputs)
 abstract inputs (x :||: y) = do

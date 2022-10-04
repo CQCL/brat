@@ -208,7 +208,7 @@ data Abstractor
  | APull [Port] (Abstractor)
  | Pat (Pattern Abstractor)
  | Lit SimpleTerm
- | Empty
+ | AEmpty
  deriving Eq
 
 instance Show (Abstractor) where
@@ -217,7 +217,7 @@ instance Show (Abstractor) where
   show (APull ps abs) = concat ((++":") <$> ps) ++ show abs
   show (Pat p) = show p
   show (Lit tm) = show tm
-  show Empty = "<empty>"
+  show AEmpty = "<empty>"
 
 data Clause (tm :: Dir -> Kind -> Type) (k :: Kind) where
   -- lhs and rhs

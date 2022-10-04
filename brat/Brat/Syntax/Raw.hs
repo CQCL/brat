@@ -59,6 +59,7 @@ data Raw :: Dir -> Kind -> Type where
   RNHole    :: String -> Raw Chk Noun
   RVHole    :: String -> Raw Chk Verb
   RSimple   :: SimpleTerm -> Raw Chk Noun
+  REmpty    :: Raw Chk Noun
   (::|::)   :: WC (Raw d k) -> WC (Raw d k) -> Raw d k
   RTh       :: WC (Raw Chk Verb) -> Raw Chk Noun
   RForce    :: WC (Raw Syn Noun) -> Raw Syn Verb
@@ -78,6 +79,7 @@ instance Show (Raw d k) where
   show (RNHole name) = '?':name
   show (RVHole name) = '?':name
   show (RSimple tm) = show tm
+  show REmpty = "()"
   show (a ::|:: b) = show a ++ ", " ++ show b
   show (RTh comp) = '{' : show comp ++ "}"
   show (RForce comp) = show comp ++ "()"
@@ -201,6 +203,7 @@ instance Desugarable (Raw d k) where
   desugar' (RNHole name) = NHole <$> freshM name
   desugar' (RVHole name) = VHole <$> freshM name
   desugar' (RSimple simp) = pure $ Simple simp
+  desugar' REmpty = pure Empty
   desugar' (a ::|:: b) = (:|:) <$> desugar a <*> desugar b
   desugar' (RTh v) = Th <$> desugar v
   desugar' (RForce v) = Force <$> desugar v

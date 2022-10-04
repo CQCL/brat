@@ -28,6 +28,7 @@ data Term :: Dir -> Kind -> Type where
   Let      :: WC Abstractor -> WC (Term Syn Noun) -> WC (Term d k) -> Term d k
   NHole    :: Name -> Term Chk Noun
   VHole    :: Name -> Term Chk Verb
+  Empty    :: Term Chk Noun -- The empty row (monoidal unit of :|:)
   (:|:)    :: WC (Term d k) -> WC (Term d k) -> Term d k
   Th       :: WC (Term Chk Verb) -> Term Chk Noun
   Force    :: WC (Term Syn Noun) -> Term Syn Verb
@@ -52,6 +53,7 @@ instance Show (Term d k) where
   show (NHole (MkName [])) = "?<root>"
   show (VHole (MkName (name:_))) = '?' : show (MkName [name])
   show (VHole (MkName [])) = "?<root>"
+  show Empty = "()"
   show (a :|: b) = show a ++ ", " ++ show b
   show (Th comp) = '{' : show comp ++ "}"
   show (Force th) = show th ++ "()"
