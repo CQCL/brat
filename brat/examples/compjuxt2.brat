@@ -1,0 +1,16 @@
+ext "" f :: Nat -> Int
+ext "" g :: Int -> Nat
+
+-- This won't work, because the LHS of an application is currently a noun
+-- (it should be a verb: https://cqc.atlassian.net/jira/software/projects/KARL/boards/43/backlog?selectedIssue=KARL-278)
+-- instead one must define `h = {f(); g())}` and then just `h(x)`.
+
+direct_application :: { Nat -> Nat }
+direct_application = { x => (f(); g())(x) }
+
+direct_application' :: Nat -> Nat
+direct_application' = x => (f(); g())(x)
+
+-- Similarly
+brace_section_application :: { Nat -> Nat }
+brace_section_application = { (f(); g())(_) }

@@ -17,7 +17,8 @@ testParse file = testCase (show file) $ do
     Left err -> assertFailure (show err)
     Right _ -> return () -- OK
 
-expectedParsingFails = map ("examples" </>) ["composition.brat",
+expectedParsingFails = map ("examples" </>) [
+    "compjuxt2.brat",
     "karlheinz.brat",
     "karlheinz_alias.brat",
     "thin.brat",

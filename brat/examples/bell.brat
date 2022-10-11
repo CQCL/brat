@@ -57,14 +57,15 @@ double(x) = add(copyNat(x))
 compTest :: { A -> B }, { B -> C} -> { A -> C }
 compTest(f, g) = { x => g(f(x)) }
 
--- phasedBell :: (th :: Double), (c :: Qubit), (d :: Qubit) -> (c :: Bit), (d :: Bit)
--- phasedBell = th => (H ; id , id) ; (measure, measure)
-
 justMeasure :: { c :: Qubit, d :: Qubit -o c :: Bit, d :: Bit }
 justMeasure = { c, d => M2(c, d) }
 
 idq :: { Qubit -o Qubit }
 idq = { q => q }
 
-phasedBell :: Float -> { c :: Qubit, d :: Qubit -o c :: Bit, d :: Bit }
-phasedBell(th) = { c, d => (M,M)((Rz(th),idq)((H,idq)(c,d))) }
+phasedBell :: (th :: Float) -> { c :: Qubit, d :: Qubit -o c :: Bit, d :: Bit }
+phasedBell(th) = {
+  H(),idq();
+  Rz(th),idq();
+  (M,M)()
+}

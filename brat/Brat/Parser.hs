@@ -195,12 +195,11 @@ pat p = try onePlus
     PTwoTimes <$> round p
 
 sverb :: Parser (WC (Raw Syn Verb))
-sverb = verbAndJuxt `chainl1` semicolon
+sverb = (juxtaposition sverb') `chainl1` try semicolon
  where
-  plainVerb :: Parser (Raw Syn Verb)
-  plainVerb = try (func snoun) <|> force
-
-  verbAndJuxt = (try (letin sverb) <|> withFC plainVerb) `chainl1` (try comma)
+  sverb' :: Parser (WC (Raw Syn Verb))
+  -- note: we might need (round sverb) as an option here too
+  sverb' = try (letin sverb) <|> withFC (try (func snoun) <|> force)
 
   force :: Parser (Raw Syn Verb)
   force = RForce <$> (snoun <* spaced (round (space *> eof)))
@@ -223,41 +222,42 @@ letin p = withFC $ do
   body <- p
   pure $ RLet lhs rhs body
 
--- not usable yet
 cverb :: Parser (WC (Raw Chk Verb))
-cverb = try (letin cverb <?> "let binding") <|> withFC
-  (try (composition <?> "composition")
-  <|> try (func cnoun <?> "function")
-  <|> try (vhole <?> "typed hole")
-  <|> (REmb <$> sverb <?> "syn verb")
-  )
+-- try to parse an sverb;cverb first. If that fails to find a semicolon,
+-- the sverb can be reparsed as a cverb
+cverb = try (withFC $ compose sverb cverb) <|> (juxtaposition cverb')
  where
-  vhole = RVHole <$> hole
+  cverb' :: Parser (WC (Raw Chk Verb))
+  cverb' = try (letin cverb <?> "let binding") <|> withFC
+    (try (func cnoun <?> "function")
+    <|> try (RVHole <$> hole <?> "typed hole")
+    <|> (REmb <$> sverb <?> "syn verb")
+    ) <|> round cverb
 
-  composition = compose sverb cverb
 
 var :: Parser (Raw Syn Noun)
 var = RVar <$> userName
 
 snoun' :: Parser (WC (Raw Syn Noun))
-snoun' = try application <|> simpleNoun
+snoun' = withFC $ do
+  sn <- round snoun <|> letin snoun <|> withFC var
+  try (application sn) <|> pure (unWC sn)
  where
-  simpleNoun :: Parser (WC (Raw Syn Noun))
-  simpleNoun = try (letin snoun) <|> withFC var
-
-  nounAndJuxt :: Parser (WC (Raw Syn Noun))
-  nounAndJuxt = round (juxtaposition snoun)
-                <|> simpleNoun
-
-  application :: Parser (WC (Raw Syn Noun))
-  application = withFC $ do
-    fun <- nounAndJuxt
+  application :: WC (Raw Syn Noun) -> Parser (Raw Syn Noun)
+  application fun = do
     space
     arg <- round cnoun
     pure (fun ::$:: arg)
 
 snoun :: Parser (WC (Raw Syn Noun))
-snoun = snoun' `chainl1` (try comma)
+snoun = do
+  sn <- juxtaposition snoun'
+  -- snoun;sverb is an snoun, so look for trailing ;sverb
+  -- we only need to look for one since sverb;sverb is itself an sverb
+  (fromMaybe sn) <$> (optional $ do
+    f <- try semicolon
+    sv <- sverb
+    return $ f sn sv)
 
 compose :: Parser (WC (Raw Syn k)) -> Parser (WC (Raw d Verb)) -> Parser (Raw d k)
 compose p1 p2 = do
@@ -265,12 +265,6 @@ compose p1 p2 = do
   spaced (match Semicolon) <?> "semicolon"
   y <- p2
   pure (x ::-:: y)
-
-cnoun :: Parser (WC (Raw Chk Noun))
-cnoun = try (withFC $ compose snoun cverb) <|> cnounWithJuxt
- where
-  cnounWithJuxt :: Parser (WC (Raw Chk Noun))
-  cnounWithJuxt = try (juxtaposition cnoun') <|> cnoun'
 
 simpleTerm :: Parser SimpleTerm
 simpleTerm =
@@ -288,14 +282,13 @@ cnoun' :: Parser (WC (Raw Chk Noun))
 cnoun' = try (letin cnoun) <|> withFC
   (try (cthunk <?> "thunk")
   <|> try (pull <?> "port pull")
-  <|> try (nounIntoVerb <?> "composition")
   <|> try (vec <?> "vector literal")
   <|> (emptyVec <?> "vector literal")
   <|> (nhole <?> "hole")
   <|> try (RPattern <$> withFC (pat cnoun) <?> "pattern")
   <|> try (RSimple <$> simpleTerm)
   <|> try emb
-  )
+  ) <|> round cnoun
  where
 
   nhole = RNHole <$> hole
@@ -324,9 +317,6 @@ cnoun' = try (letin cnoun) <|> withFC
    body <- parseMaybe (spaced cnoun) ts
    pure (WC fc (abs ::\:: body))
 
-  nounIntoVerb :: Parser (Raw Chk Noun)
-  nounIntoVerb = compose snoun cverb
-
   emptyVec :: Parser (Raw Chk Noun)
   emptyVec = RVec <$> (withFC $ square $ pure [])
 
@@ -335,6 +325,17 @@ cnoun' = try (letin cnoun) <|> withFC
    where
     vecComma = spaced (match VecComma) $> (++)
     element = (:[]) <$> cnoun'
+
+cnoun :: Parser (WC (Raw Chk Noun))
+cnoun = try (withFC $ nounIntoVerb) <|> juxtaposition cnoun'
+ where
+  -- try nounIntoVerb first: the leading (juxtaposition snoun')
+  -- can definitely be reparsed as a (juxtaposition cnoun')
+  -- if we fail to find a semicolon. We look for (juxtaposition snoun')
+  -- rather than snoun because anything after a semicolon would be parsed
+  -- by snoun as an sverb, but here we can allow (more flexible) cverb.
+  nounIntoVerb :: Parser (Raw Chk Noun)
+  nounIntoVerb = compose (juxtaposition snoun') cverb
 
 outputs :: Parser [RawIO]
 outputs = rawIO vtype
