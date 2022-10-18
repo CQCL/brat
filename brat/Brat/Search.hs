@@ -7,9 +7,9 @@ import Brat.Syntax.Core
 import Brat.Syntax.Common
 import Brat.UserName
 
-vec :: [WC (Term Chk Noun)] -> Term Chk Noun
-vec [] = Con (plain "nil") (dummyFC Empty)
-vec (x:xs) = Con (plain "cons") (dummyFC (x :|: dummyFC (vec xs)))
+vec :: FC -> [WC (Term Chk Noun)] -> Term Chk Noun
+vec fc [] = Con (plain "nil") (WC fc Empty)
+vec fc (x:xs) = Con (plain "cons") (WC fc (x :|: WC fc (vec fc xs)))
 
 -- Easiest answers
 tokenValues :: FC -> VType -> [Term Chk Noun]
@@ -22,10 +22,10 @@ tokenValues _  (SimpleTy TextType) = Simple . Text <$> ("":((:[])<$>['A'..]))
 tokenValues _  (SimpleTy Star) = []
 tokenValues fc (List ty) = concat $ do tm <- tokenValues fc ty
                                        list <- iterate (tm:) []
-                                       [[vec (WC fc <$> list)]]
+                                       [[vec fc (WC fc <$> list)]]
 tokenValues fc (Product s t)
-  = zipWith (\a b -> vec [(WC fc a), (WC fc b)]) (cycle $ tokenValues fc s) (cycle $ tokenValues fc t)
-tokenValues fc (Vector ty (Simple (Num n))) = vec <$> (replicate n . WC fc <$> tokenValues fc ty)
+  = zipWith (\a b -> vec fc [(WC fc a), (WC fc b)]) (cycle $ tokenValues fc s) (cycle $ tokenValues fc t)
+tokenValues fc (Vector ty (Simple (Num n))) = vec fc <$> (replicate n . WC fc <$> tokenValues fc ty)
 tokenValues _ (Vector _ _) = [] -- not enough info
 tokenValues fc (K (R ss) (R ts)) =
   let lhs = WC fc (binders ss)
@@ -48,7 +48,7 @@ tokenValues fc (K (R ss) (R ts)) =
   tokenSType (Of (Q _) _) = []
   tokenSType (Of sty (Simple (Num n))) = do
     sty <- tokenSType sty
-    [vec (WC fc <$> replicate n sty)]
+    [vec fc (WC fc <$> replicate n sty)]
   tokenSType (Of _ _) = []
   tokenSType (Rho (R row)) = tokenRow row
 
