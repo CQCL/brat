@@ -169,28 +169,28 @@ binding = do ps <- many (try $ portPull <* space)
 pat :: Parser a -> Parser (Pattern a)
 pat p = try onePlus
       <|> try twoTimes
-      <|> try (kmatch KNil $> PNil)
+      <|> try (matchString "nil" $> PNil)
       <|> try cons
-      <|> try (kmatch KNone $> PNone)
+      <|> try (matchString "none" $> PNone)
       <|> try psome
  where
   psome = do
-    kmatch KSome
+    matchString "some"
     space
     PSome <$> round p
 
   cons = do
-    kmatch KCons
+    matchString "cons"
     space
     PCons <$> round p
 
   onePlus = do
-    kmatch KOnePlus
+    matchString "succ"
     space
     POnePlus <$> round p
 
   twoTimes = do
-    kmatch KTwoTimes
+    matchString "doub"
     space
     PTwoTimes <$> round p
 
@@ -275,8 +275,8 @@ simpleTerm =
   <|> (match UnitElem $> Unit)
  where
   bool :: Parser SimpleTerm
-  bool = Bool <$> (kmatch KTrue $> True
-                   <|> kmatch KFalse $> False)
+  bool = Bool <$> (matchString "true" $> True
+                   <|> matchString "false" $> False)
 
 cnoun' :: Parser (WC (Raw Chk Noun))
 cnoun' = try (letin cnoun) <|> withFC
@@ -285,7 +285,6 @@ cnoun' = try (letin cnoun) <|> withFC
   <|> try (vec <?> "vector literal")
   <|> (emptyVec <?> "vector literal")
   <|> (nhole <?> "hole")
-  <|> try (RPattern <$> withFC (pat cnoun) <?> "pattern")
   <|> try (RSimple <$> simpleTerm)
   <|> try emb
   ) <|> round cnoun

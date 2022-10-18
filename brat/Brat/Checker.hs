@@ -26,7 +26,7 @@ module Brat.Checker (check
                     ,TensorOutputs(..)
                     ) where
 
-import Control.Monad (unless, when, foldM)
+import Control.Monad (unless, foldM)
 import Control.Monad.Freer
 import Data.Functor (($>))
 import Data.List (intercalate, transpose)
@@ -250,8 +250,6 @@ check' (fun :$: arg) ((), ()) = do
   evalNode <- anext "eval" (Eval src) ss ts
   ((), ()) <- noUnders $ check arg ((), sigToRow evalNode ss)
   pure (sigToRow evalNode ts, ((), ()))
-check' (Pattern p) ((), (tgt:unders))
- = checkRPat tgt (unWC p) $> ((), ((), unders))
 check' (Let abs x y) conn = do
   (dangling, ((), ())) <- check x ((), ())
   env <- abstractAll dangling (unWC abs)
@@ -291,6 +289,41 @@ check' (VHole name) (overs, unders) = do
     Braty -> VBHole name fc (overs, unders)
     Kerny -> VKHole name fc (overs, unders)
   pure ((), ([], []))
+check'
+  (Con (PrefixName [] "cons") (WC _ (x :|: (WC _ (Con (PrefixName [] "cons") (WC _ (y :|: (WC _ (Con (PrefixName [] "nil") (WC _ Empty))))))))))
+  ((), ((hungry, p), ty):unders) | (Braty, Product a b) <- (?my, ty) = do
+  ctor <- anext "DPair" (Constructor DPair)  [("first", a), ("second", b)] [("value", Product a b)]
+  noUnders $ check x ((), [((ctor, "first"), a)])
+  noUnders $ check y ((), [((ctor, "second"), b)])
+  awire ((ctor, "value"), Product a b, (hungry, p))
+  pure ((), ((), unders))
+check' pat@(Con (PrefixName [] con) arg) ((), (((hungry, p), ty):unders))
+  | Just (_, n) <- getVec ?my ty = do
+      n <- evalNat n
+      case patternToData ?my con ty of
+        Nothing -> error "uhh"
+        Just node -> case conFields ?my node ty of
+          Nothing -> err $ VecLength n (show ty) (case con of
+            "nil" -> Length 0
+            "cons" -> LongerThan 0) (show pat)
+          Just ins -> do
+            ctor <- anext "" (Constructor node) ins [("value", ty)]
+            noUnders $ wrapError (consError n (show ty) pat) $ check arg ((), sigToRow ctor ins)
+            awire ((ctor, "value"), ty, (hungry, p))
+            pure ((), ((), unders))
+  | Just node <- patternToData ?my con ty, Just cins <- conFields ?my node ty = do
+      let couts = [("value", ty)]
+      ctor <- anext (show con) (Constructor node) cins couts -- what comes out?
+      let cunders = sigToRow ctor cins
+      let covers = sigToRow ctor couts
+      ((), ((), cUnders)) <- check arg ((), cunders)
+      ensureEmpty "constructor unders" cUnders
+      let [(value,_)] = covers
+      awire (value, ty, (hungry, p))
+      pure ((), ((), unders))
+  | Just node <- patternToData ?my con ty, Nothing <- conFields ?my node ty
+  = typeErr $ show pat ++ " not of type " ++ showRow (((hungry, p), ty):|unders)
+
 check' t c = case (?my, t, c) of -- remaining cases need to split on ?my
   (Kerny, Simple (Bool _), ((), ((_, Bit):unders))) -> pure ((), ((), unders))
   (Braty, Simple tm, ((), ((src, p), SimpleTy ty):unders)) -> do
@@ -298,73 +331,12 @@ check' t c = case (?my, t, c) of -- remaining cases need to split on ?my
     this <- next (show tm) (Const tm) [] [("value", SimpleTy ty)]
     wire ((this, "value"), SimpleTy ty, (src, p))
     pure ((), ((), unders))
+  _ -> error $ "check this: " ++ show t
 
-consError :: Int -> String -> (Pattern (WC (Term Chk Noun))) -> Error -> Error
+consError :: Int -> String -> Term Chk Noun -> Error -> Error
 consError i ty p e@Err{..} = case msg of
-  VecLength _ _ l _ -> e { msg = VecLength i ty ((1+) <$> l) (show (Pattern (dummyFC p))) }
+  VecLength _ _ l _ -> e { msg = VecLength i ty ((1+) <$> l) (show p) }
   _ -> e
-
--- Check a pattern used as a constructor (on the Rhs of a definition)
-checkRPat :: (CheckConstraints m, ?my :: Modey m) => (Tgt, ValueType m) -> Pattern (WC (Term Chk Noun)) -> Checking ()
-checkRPat (_, vty) p@PNil | Just (_, n) <- getVec ?my vty = do
-  hypo <- next "Vec.size" Hypo [("value", SimpleTy Natural)] []
-  noUnders $ let ?my = Braty in check' n ((), [((hypo, "value"), SimpleTy Natural)])
-
-  len <- evalNat n
-  when (len /= 0) (err $ VecLength len (show vty) (Length 0) (show (Pattern (dummyFC p))))
-checkRPat (tgt, vty) p@(PCons b) | Just (ty, n) <- getVec ?my vty = do
-  hypo <- next "Vec.size" Hypo [("value", SimpleTy Natural)] []
-  noUnders $ let ?my = Braty in check' n ((), [((hypo, "value"), SimpleTy Natural)])
-
-  len <- evalNat n
-  when (len <= 0)
-    (err $ VecLength len (show vty) (LongerThan 0) (show (Pattern (dummyFC p))))
-
-  let inps = [("head", ty), ("tail", makeVec ty (Simple (Num (len - 1))))]
-  cons <- anext "Vec.cons" (Constructor DCons) inps [("value", vty)]
-  noUnders $ wrapError (consError len (show vty) p) $ check b ((), sigToRow cons inps)
-  awire ((cons, "value"), vty, tgt)
-  pure ()
-checkRPat unders pat = case (?my, unders, pat) of
-  -- POnePlus and PTwoTimes don't change the type of their arguments, so the
-  -- arguments should be able to typecheck against the type of the whole
-  -- expression, which may be either Nat or Int
-  (Braty, (tgt, ty), POnePlus x) -> do
-    succ <- next (show ty ++ ".succ") (Constructor DSucc) [("value", ty)] [("value", ty)]
-    noUnders $ check x ((), [((succ, "value"), ty)])
-    wire ((succ, "value"), ty, tgt)
-    pure ()
-  (Braty, (tgt, ty), PTwoTimes x) -> do
-    doub <- next (show ty ++ ".doub") (Constructor DDoub) [("value", ty)] [("value", ty)]
-    noUnders $ check x ((), [((doub, "value"), ty)])
-    wire ((doub, "value"), ty, tgt)
-    pure ()
-  (Braty, (_, List _), PNil) -> pure ()
-  -- A `cons` on the RHS contain a single variable or application that produces
-  -- two outputs (head and tail), so typecheck it as such with as normal
-  (Braty, (tgt, List ty), PCons b) -> do
-    cons <- next "List.cons" (Constructor DCons) [("head", ty), ("tail", List ty)] [("value", List ty)]
-    noUnders $ check b ((), [((cons, "head"), ty), ((cons, "tail"), List ty)])
-    wire ((cons, "value"), List ty, tgt)
-    pure ()
-   -- Until we have heterogenous type lists, pairs are cons lists with 2 elements + nil
-  (Braty, (tgt, Product s t),
-   PCons (WC _ (a :|: (WC _ (Pattern (WC _ (PCons (WC _ (b :|: (WC _ (Pattern (WC _ PNil)))))))))))) -> do
-    mkpair <- anext "mkpair" (Constructor DPair) [("first", s), ("second", t)] [("value", Product s t)]
-    check1Under ((mkpair, "first"), s) a
-    check1Under ((mkpair, "second"), t) b
-    wire ((mkpair, "value"), (Product s t), tgt)
-    pure ()
-  (Braty, (_, Option _), PNone) -> pure ()
-  (Braty, (tgt, Option ty), PSome x) -> do
-    some <- next "Option.some" (Constructor DSome) [("value", ty)] [("value", Option ty)]
-    noUnders $ check x ((), [((some, "value"), ty)])
-    wire ((some, "value"), Option ty, tgt)
-    pure ()
-  _ -> typeErr $ show (Pattern (dummyFC pat)) ++ " not of type " ++ show unders
-
-check1Under :: (CheckConstraints m, ?my :: Modey m) => (Tgt, ValueType m) -> WC (Term Chk Noun) -> Checking ()
-check1Under tgt tm = noUnders (check tm ((), [tgt])) >>= \((),()) -> pure ()
 
 abstractAll :: (Show (ValueType m), ?my :: Modey m)
             => [(Src, ValueType m)] -> Abstractor
@@ -442,7 +414,7 @@ abstract ((src,ty):inputs) (Pat abs)
       PCons abs -> Just (DCons, abs)
       PSome abs -> Just (DSome, abs)
       _ -> Nothing)
-    (sel, abs, ) <$> selectorOutputs m sel ty
+    (sel, abs, ) <$> conFields m sel ty
 
 abstract ((_, ty):inputs) (Lit tm) = do
   litTy <- case (?my,ty) of

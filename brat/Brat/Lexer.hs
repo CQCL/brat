@@ -125,17 +125,10 @@ data Keyword
   | KPair
   | KTypeType
   | KUnit
-  | KTrue | KFalse
   | KExt
   | KString
-  | KOnePlus
-  | KTwoTimes
   | KFloat
-  | KNil
-  | KCons
   | KOption
-  | KSome
-  | KNone
   | KImport
   deriving Eq
 
@@ -152,18 +145,10 @@ instance Show Keyword where
   show KPair = "Pair"
   show KTypeType = "Type"
   show KUnit = "Unit"
-  show KTrue = "true"
-  show KFalse = "false"
   show KExt = "ext"
   show KString = "String"
-  show KOnePlus = "succ"
-  show KTwoTimes = "doub"
   show KFloat = "Float"
-  show KNil = "nil"
-  show KCons = "cons"
   show KOption = "Option"
-  show KSome = "some"
-  show KNone = "none"
   show KImport = "import"
 
 keyword :: Lexer Keyword
@@ -178,21 +163,13 @@ keyword
      <|> string "Qubit" $> KQubit
      <|> string "Money" $> KMoney
      <|> string "Type"  $> KTypeType
-     <|> string "true"  $> KTrue
-     <|> string "false" $> KFalse
      <|> string "Pair"  $> KPair
      <|> string "ext"   $> KExt
      <|> try (string "String" $> KString)
      <|> string "Float" $> KFloat
-     <|> try (string "nil") $> KNil
-     <|> string "cons"  $> KCons
      <|> string "Option" $> KOption
-     <|> string "some"  $> KSome
-     <|> string "none"  $> KNone
      <|> string "Unit"  $> KUnit
      <|> string "import" $> KImport
-     <|> string "succ" $> KOnePlus
-     <|> string "doub" $> KTwoTimes
     ) <* notFollowedBy identChar
 
 identChar :: Lexer Char

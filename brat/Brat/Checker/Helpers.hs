@@ -8,7 +8,7 @@ module Brat.Checker.Helpers (evalNat
                             ,showMode, getVec
                             ,mkThunkTy, getThunks
                             ,checkWire
-                            ,selectorOutputs
+                            ,conFields, patternToData
                             ) where
 
 import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr, anext, awire)
@@ -20,7 +20,7 @@ import Brat.Naming (Name)
 import Brat.Graph (DataNode(..), Src, Tgt, Thing(..))
 import Brat.Syntax.Common
 import Brat.Syntax.Core (Term(..))
-import Brat.UserName (UserName)
+import Brat.UserName (UserName(..))
 import Control.Monad.Freer (req, Free(Ret))
 
 import Control.Arrow ((***))
@@ -136,18 +136,36 @@ checkWire :: (Eq (ValueType m), ?my :: Modey m)
 checkWire (src, oTy) (tgt, uTy) | oTy == uTy = awire (src, oTy, tgt) $> Just ()
 checkWire _ _ = pure Nothing
 
--- Inputs, Outputs
-selectorOutputs :: Modey m -> DataNode -> ValueType m
-                -> Maybe [(Port, ValueType m)]
--- Note: this is the only Kerny selector
-selectorOutputs Kerny DCons (Of elTy (Simple (Num n)))
+conFields :: Modey m -> DataNode -> ValueType m
+              -> Maybe [(Port, ValueType m)]
+-- Note: These are the only Kerny constructors
+conFields Kerny DNil (Of _ (Simple (Num 0))) = Just []
+conFields Kerny DCons (Of elTy (Simple (Num n))) | n > 0
   = Just [("head", elTy), ("tail", Of elTy (Simple (Num (n - 1))))]
-selectorOutputs Braty DCons (List ty)
+
+conFields Braty DNil (List _) = Just []
+conFields Braty DCons (List ty)
   = Just [("head", ty), ("tail", List ty)]
-selectorOutputs Braty DCons (Vector elTy (Simple (Num n)))
+
+conFields Braty DNil (Vector _ (Simple (Num 0))) = Just []
+conFields Braty DCons (Vector elTy (Simple (Num n))) | n > 0
   = Just [("head", elTy), ("tail", Vector elTy (Simple (Num (n - 1))))]
-selectorOutputs Braty DSome (Option ty) = Just [("value", ty)]
-selectorOutputs Braty DPair (Product s t) = Just [("first", s), ("second", t)]
-selectorOutputs Braty DDoub ty = Just [("value", ty)]
-selectorOutputs Braty DSucc ty = Just [("value", ty)]
-selectorOutputs _ _ _ = Nothing
+
+conFields Braty DNone (Option _) = Just []
+conFields Braty DSome (Option ty) = Just [("value", ty)]
+conFields Braty DPair (Product s t) = Just [("first", s), ("second", t)]
+conFields Braty DDoub ty = Just [("value", ty)]
+conFields Braty DSucc ty = Just [("value", ty)]
+conFields _ _ _ = Nothing
+
+patternToData :: Modey m -> String -> ValueType m
+              -> Maybe DataNode
+patternToData m c ty = case c of
+  "succ" -> Just DSucc
+  "doub" -> Just DDoub
+  "cons" | (Braty, Product _ _) <- (m,ty) -> Just DPair
+  "cons" -> Just DCons
+  "some" -> Just DSome
+  "none" -> Just DNone
+  "nil" -> Just DNil
+  _ -> Nothing

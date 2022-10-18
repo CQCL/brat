@@ -45,7 +45,7 @@ stripInfo (tm ::: ty) = SAnn (stripInfo <$> tm) ty
 stripInfo (a :-: b) = SComp (stripInfo <$> a) (stripInfo <$> b)
 stripInfo (xs :\: bod) = SLam xs (stripInfo <$> bod)
 stripInfo (Let abs x y) = SLet abs (stripInfo <$> x) (stripInfo <$> y)
-stripInfo (Pattern (WC fc p)) = SPattern (WC fc (fmap stripInfo <$> p))
+stripInfo (Con c arg) = SCon c (stripInfo <$> arg)
 
 data Skel where
   SSimple   :: SimpleTerm -> Skel
@@ -62,7 +62,7 @@ data Skel where
   SComp     :: WC Skel -> WC Skel -> Skel
   SLam      :: WC Abstractor -> WC Skel -> Skel
   SLet      :: WC Abstractor -> WC Skel -> WC Skel -> Skel
-  SPattern  :: WC (Pattern (WC Skel)) -> Skel
+  SCon      :: UserName -> WC Skel -> Skel
 
 deriving instance Show Skel
 deriving instance Eq Skel

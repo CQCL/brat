@@ -51,10 +51,6 @@ instance Valuable (Term Syn k) where
   eval = seval
   eval' = seval'
 
-instance Valuable (Pattern (WC (Term Chk Noun))) where
-  eval = evalPat
-  eval' = evalPat'
-
 addFCToError :: FC -> Eval a -> Eval a
 addFCToError fc m = case runExcept m of
                       Right v -> pure v
@@ -75,8 +71,6 @@ ceval' g (Th f) = pure $ VClos g (unWC f)
 ceval' g (_ :\: body) = eval g body
 ceval' g (Emb tm) = seval g tm
 -- eval g (Closure [Value] (Term d k)
-
-ceval' g (Pattern pat) = eval g pat
 ceval' _ tm = throwError $ Err Nothing Nothing (Unimplemented "ceval" [show tm])
 
 seval :: [Value] -> WC (Term Syn k) -> Eval Value
@@ -90,25 +84,6 @@ seval' g (fun :$: arg) = do
   apply fun [EApp arg]
 seval' g (_ :\: body) = eval g body
 seval' _ tm = throwError $ Err Nothing Nothing (Unimplemented "seval" [show tm])
-
-evalPat :: [Value] -> WC (Pattern (WC (Term Chk Noun))) -> Eval Value
-evalPat g (WC fc pat) = addFCToError fc (evalPat' g pat)
-
-evalPat' :: [Value] -> Pattern (WC (Term Chk Noun)) -> Eval Value
-evalPat' g (POnePlus tm) = eval g tm >>= flip apply [EPlus (VNat 1)]
-evalPat' g (PTwoTimes tm) = eval g tm >>= flip apply [ETimes (VNat 2)]
-evalPat' _ PNil = pure $ VVec []
-evalPat' g (PCons tm)
-  -- Only work if `tm` is the simplest version
-  | (x :|: xs) <- unWC tm = do
-  x <- eval g x
-  xs <- eval g xs
-  case xs of
-    VVec xs -> pure $ VVec (x:xs)
-    _ -> pure $ VCons x xs
-  | otherwise = throwError $ Err Nothing Nothing (BadCons (show tm))
-evalPat' g (PSome x) = VSome <$> eval g x
-evalPat' _ PNone = pure VNone
 
 pattern VNat n = VSimple (Num n)
 

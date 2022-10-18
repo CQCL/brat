@@ -47,6 +47,7 @@ listGraph =
      ]
      [("value", List (SimpleTy IntTy))]
     )
+   ,("nil", BratNode (Constructor DNil) [] [("value", List (SimpleTy IntTy))])
    ,("1", BratNode (Const (Num 1)) [] [("value", SimpleTy IntTy)])
    ,("2", BratNode (Const (Num 2)) [] [("value", SimpleTy IntTy)])
    ,("3", BratNode (Const (Num 3)) [] [("value", SimpleTy IntTy)])

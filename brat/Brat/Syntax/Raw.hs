@@ -71,7 +71,7 @@ data Raw :: Dir -> Kind -> Type where
   (::-::)   :: WC (Raw Syn k) -> WC (Raw d Verb) -> Raw d k -- vertical juxtaposition (diagrammatic composition)
   (::\::)   :: WC Abstractor -> WC (Raw d Noun) -> Raw d Verb
   RVec      :: WC [WC (Raw Chk Noun)] -> Raw Chk Noun
-  RPattern  :: WC (Pattern (WC (Raw Chk Noun))) -> Raw Chk Noun
+  RCon      :: UserName -> WC (Raw Chk Noun) -> Raw Chk Noun
 
 instance Show (Raw d k) where
   show (RLet abs xs body)
@@ -97,7 +97,7 @@ instance Show (Raw d k) where
   show (a ::-:: b) = show a ++ "; " ++ show b
   show (xs ::\:: bod) = show xs ++ " -> " ++ show bod
   show (RVec xs) = '[' : intercalate ", " (show <$> unWC xs) ++ "]"
-  show (RPattern p) = show p
+  show (RCon c xs) = "Con(" ++ show c ++ "(" ++ show xs ++ "))"
 
 type Desugar = StateT Namespace (ReaderT RawEnv (Except Error))
 
@@ -130,6 +130,12 @@ findDuplicates (ndecls, vdecls, aliases)
 
 desugarErr :: String -> Error
 desugarErr = dumbErr . DesugarErr
+
+isConstructor :: UserName -> Bool
+isConstructor (PrefixName [] c) = c `elem` constructors
+ where
+  constructors = ["cons", "nil", "succ", "doub", "some", "none"]
+isConstructor _ = False
 
 class Desugarable ty where
   type Desugared ty
@@ -207,7 +213,18 @@ instance Desugarable (Raw d k) where
   desugar' (a ::|:: b) = (:|:) <$> desugar a <*> desugar b
   desugar' (RTh v) = Th <$> desugar v
   desugar' (RForce v) = Force <$> desugar v
-  desugar' (REmb syn) = Emb <$> desugar syn
+  desugar' (REmb syn) = case unWC syn of
+    -- Try to catch constructor applications which have been parsed as applications
+    (WC _ (RVar c)) ::$:: a -> do
+      pure (isConstructor c) >>= \case
+        True -> Con c <$> desugar a
+        False -> Emb <$> desugar syn
+    -- Try to catch nullary constructors
+    (RVar c) -> do
+      pure (isConstructor c) >>= \case
+        True -> pure $ Con c (WC (fcOf syn) Empty)
+        False -> Emb <$> desugar syn
+    _ -> Emb <$> desugar syn
   desugar' (RPull ps raw) = Pull ps <$> desugar raw
   desugar' (RVar  name) = pure (Var name)
   desugar' (fun ::$:: arg) = (:$:) <$> desugar fun <*> desugar arg
@@ -217,16 +234,13 @@ instance Desugarable (Raw d k) where
     pure (tm ::: ty)
   desugar' (syn ::-:: verb) = (:-:) <$> desugar syn <*> desugar verb
   desugar' (abst ::\:: raw) = (abst :\:) <$> desugar raw
-  desugar' (RVec (WC fc [])) = pure $ Pattern (WC fc PNil)
+  desugar' (RVec (WC fc [])) = pure $ Con (plain "nil") (WC fc Empty)
   desugar' (RVec (WC fc (x:xs))) = do
     x <- desugar x
     xs <- desugar' (RVec (WC fc xs))
-    pure $ Pattern (WC fc (PCons (WC fc (x :|: WC fc xs))))
-  desugar' (RPattern x) = Pattern <$> traverse desugarPattern x
-   where
-    desugarPattern :: Pattern (WC (Raw Chk Noun)) -> Desugar (Pattern (WC (Term Chk Noun)))
-    desugarPattern p = traverse (traverse desugar') p
+    pure $ Con (plain "cons") (WC fc (x :|: WC fc xs))
   desugar' (RLet abs thing body) = Let abs <$> desugar thing <*> desugar body
+  desugar' (RCon name args) = Con name <$> desugar args
 
 desugarNClause :: Clause Raw Noun -> Desugar (Clause Term Noun)
 desugarNClause (ThunkOf clause) = ThunkOf <$> traverse desugarVClause clause

@@ -5,10 +5,11 @@ import Data.List (transpose)
 import Brat.FC
 import Brat.Syntax.Core
 import Brat.Syntax.Common
+import Brat.UserName
 
 vec :: [WC (Term Chk Noun)] -> Term Chk Noun
-vec [] = Pattern (dummyFC PNil)
-vec (x:xs) = Pattern (dummyFC (PCons (dummyFC (x :|: dummyFC (vec xs)))))
+vec [] = Con (plain "nil") (dummyFC Empty)
+vec (x:xs) = Con (plain "cons") (dummyFC (x :|: dummyFC (vec xs)))
 
 -- Easiest answers
 tokenValues :: FC -> VType -> [Term Chk Noun]
@@ -54,9 +55,9 @@ tokenValues fc (K (R ss) (R ts)) =
   comma :: Term Chk Noun -> Term Chk Noun -> Term Chk Noun
   comma a b = WC fc a :|: WC fc b
 
-tokenValues fc (Option ty) = (:) (Pattern (WC fc PNone)) $ do
+tokenValues fc (Option ty) = (:) (Con (plain "none") (WC fc Empty)) $ do
   val <- tokenValues fc ty
-  [Pattern (WC fc (PSome (WC fc val)))]
+  [Con (plain "some") (WC fc val)]
 tokenValues _ _ = []
 
 tokenFuncs :: FC -> CType -> [Term Chk Verb]

@@ -36,7 +36,7 @@ data Thing
   | Selector DataNode
   deriving (Eq, Show)
 
-data DataNode = DCons | DSome | DPair | DDoub | DSucc | DNil
+data DataNode = DCons | DNil | DSome | DNone | DPair | DDoub | DSucc
  deriving (Eq, Show)
 
 type Graph = (M.Map Name Node, [Wire])

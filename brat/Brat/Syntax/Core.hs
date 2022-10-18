@@ -44,7 +44,8 @@ data Term :: Dir -> Kind -> Type where
   -- vertical juxtaposition (diagrammatic or sequential composition)
   (:-:)    :: WC (Term Syn k) -> WC (Term d Verb) -> Term d k
   (:\:)    :: WC Abstractor -> WC (Term d Noun) -> Term d Verb
-  Pattern  :: WC (Pattern (WC (Term Chk Noun))) -> Term Chk Noun
+  -- Type constructors
+  Con      :: UserName -> WC (Term Chk Noun) -> Term Chk Noun
 
 deriving instance Eq (Term d k)
 
@@ -72,16 +73,16 @@ instance Show (Term d k) where
   show (tm ::: ty) = show tm ++ " :: " ++ show ty
   show (a :-: b) = show a ++ "; " ++ show b
   show (xs :\: bod) = show xs ++ " => " ++ show bod
-  show (Pattern p) = prettyVec (unWC p)
-
-prettyVec p = case patList p of
-  Just xs -> show xs
-  Nothing -> show p
- where
-  patList :: Pattern (WC (Term Chk Noun)) -> Maybe [Term Chk Noun]
-  patList PNil = Just []
-  patList (PCons (WC _ (a :|: (WC _ (Pattern (WC _ p)))))) = ((unWC a):) <$> patList p
-  patList _ = Nothing
+  show (Con c arg) = case prettyPat (Con c arg) of
+    Nothing -> case unWC arg of
+      Empty -> show c
+      _ -> show c ++ "(" ++ show arg ++ ")"
+    Just xs -> show xs
+   where
+    prettyPat :: Term Chk Noun -> Maybe [Term Chk Noun]
+    prettyPat (Con (PrefixName [] "nil") (WC _ Empty)) = Just []
+    prettyPat (Con (PrefixName [] "cons") (WC _ (x :|: xs))) = ((unWC x) :) <$> prettyPat (unWC xs)
+    prettyPat _ = Nothing
 
 expandDecls :: [Decl] -> Term d k -> Term d k
 expandDecls _ tm = expand tm
@@ -100,5 +101,4 @@ expandDecls _ tm = expand tm
   expand (tm ::: ty) = (expand <$> tm) ::: ty
   expand (a :-: b) = (expand <$> a) :-: (expand <$> b)
   expand (abst :\: body) = abst :\: (expand <$> body)
-  expand (Pattern tm) = Pattern $ fmap (fmap expand) <$> tm
   expand tm = error $ "Unimplemented: expand " ++ show tm
