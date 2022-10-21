@@ -1,6 +1,6 @@
-no_braces :: Qubit -o Qubit
+no_braces(Qubit) -o Qubit
 no_braces = ?afew
 
-match_on_bool :: Bool, Qubit -o Qubit
+match_on_bool :: { Bool, Qubit -o Qubit }
 match_on_bool(true, q) = no_braces(q)
 match_on_bool(false, q) = q

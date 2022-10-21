@@ -1,6 +1,6 @@
-ext "" addn :: Nat, Nat -> Nat
+ext "" addn :: { Nat, Nat -> Nat }
 
-id2 :: Nat, Nat -> Nat, Nat
+id2(Nat, Nat) -> Nat, Nat
 id2 = x,y => x,y
 
 -- This wont work because `1, 2` isn't `Syn`

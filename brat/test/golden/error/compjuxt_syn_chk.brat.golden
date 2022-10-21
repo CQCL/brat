@@ -4,6 +4,6 @@ Error in test/golden/error/compjuxt_syn_chk.brat@FC {start = Pos {line = 7, col 
 8 | num_lit = { (1, 2); id2() }
   |           ^^^^^^^^^^^^^^^^^
 unexpected { (1, 2); id2() }
-expecting (...), <>, Comment, Horizontal space, \n, bool, float, hole, let ... in, name, nat, port pull, string, thunk, or vector literal
+expecting (...), <>, Binding(s), Comment, Horizontal space, \n, bool, float, function, hole, let ... in, let binding, name, nat, port pull, string, syn verb, thunk, typed hole, or vector literal
 
 

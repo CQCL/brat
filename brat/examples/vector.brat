@@ -4,7 +4,7 @@
 -- fst :: Nat, Nat -> Nat
 -- fst = x, y => x
 
-swap :: Nat, Nat -> Nat, Nat
+swap(Nat, Nat) -> Nat, Nat
 swap = a, b => b, a
 
 nat :: Nat
@@ -24,10 +24,10 @@ ha = ?idk
 
 type A = Nat
 
-isNil :: Vec(A, 0) -> Bool
+isNil :: { Vec(A, 0) -> Bool }
 isNil(nil) = true -- obvs
 isNil(cons(x, xs)) = false
 
-head :: List(A) -> A
+head(List(A)) -> A
 -- head(nil) = ?head
 head(cons(x, xs)) = ?cnos

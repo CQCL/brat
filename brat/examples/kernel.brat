@@ -6,10 +6,10 @@ zero = 9
 H :: { a :: Qubit -o b :: Qubit}
 H = ?und
 
-Rz :: (th :: Float) -> {a::Qubit -o b::Qubit}
+Rz(th :: Float)-> {a::Qubit -o b::Qubit}
 Rz = ?rz
 
-pba :: Float -> {c :: Qubit,d::Qubit -o c::Qubit,d::Qubit}
+pba(Float)-> {c :: Qubit,d::Qubit -o c::Qubit,d::Qubit}
 pba = th => { x, y => (lib.kernel.H, lib.kernel.qid)(x, y) }
 
 th :: {Bool -> Bool}

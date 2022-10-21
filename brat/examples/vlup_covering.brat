@@ -8,7 +8,7 @@
 
 import lib.kernel
 
-maybeRotate :: Bool -> { Qubit -o Qubit }
+maybeRotate(Bool) -> { Qubit -o Qubit }
 maybeRotate(true) = Rx(30.0)
 maybeRotate(false) = qid
 

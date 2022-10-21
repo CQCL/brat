@@ -1,5 +1,5 @@
 -- `cons` but as a function
-mkList :: (head :: Int), (tail :: List(Int)) -> List(Int)
+mkList(head :: Int, tail :: List(Int)) -> List(Int)
 mkList(x,xs) = cons(x,xs)
 
 wrongOrder :: (end :: List(Int)), (start :: Int)
@@ -12,7 +12,7 @@ myList :: List(Int)
 myList = let start:x, xs = wrongOrder in mkList(x, xs)
 
 -- We can also do this in function definitions
-lam :: (bad :: Bool), (good :: Int) -> (c :: Int)
+lam(bad :: Bool, good :: Int) -> (c :: Int)
 lam(good:x, y) = x
 
 -- We can also swap the order in which we specify our outputs,

@@ -429,19 +429,19 @@ stype = try (Rho <$> round row)
 
 functionType :: Parser RawVType
 functionType = try (RC <$> ctype) <|> (RK <$> kernel)
+ where
+  ctype = do
+    ins <- round $ rawIO vtype
+    spaced (match Arrow)
+    outs <- rawIO vtype
+    pure (ins :-> outs)
 
-ctype = do
-  ins <- rawIO vtype
-  spaced (match Arrow)
-  outs <- rawIO vtype
-  pure (ins :-> outs)
-
-kernel :: Parser RawKType
-kernel = do
-  ins <- rawIO stype
-  spaced (match Lolly)
-  outs <- rawIO stype
-  pure (ins :-> outs)
+  kernel :: Parser RawKType
+  kernel = do
+    ins <- round $ rawIO stype
+    spaced (match Lolly)
+    outs <- rawIO stype
+    pure (ins :-> outs)
 
 withFC :: Parser a -> Parser (WC a)
 withFC p = do
@@ -474,15 +474,17 @@ decl = do
       (WC fc (nm, ty, body, rt)) <- withFC (do
         rt <- pure RtLocal -- runtime
         nm <- simpleName
-        spaced $ match TypeColon
-        (ty, body) <- try (do
-            ty <- functionType <&> \ty -> [Named "thunk" ty]
-            vspace
-            (ty,) <$> ((ThunkOf <$> (withFC $ clauses nm)) <|> (nbody nm)))
-          <|> (do
-            ty <- outputs
-            vspace
-            (ty,) <$> nbody nm)
+        space
+        ty <- try (functionType <&> \ty -> [Named "thunk" ty])
+              <|> (spaced (match TypeColon) >> outputs)
+        vspace
+        let allow_clauses = case ty of
+                                 [Named _ t] -> is_fun_ty t
+                                 [Anon t] -> is_fun_ty t
+                                 _ -> False
+        body <- (if allow_clauses
+          then (ThunkOf <$> (withFC $ clauses nm)) <|> (nbody nm)
+          else (nbody nm))
         pure (nm, ty, body, rt))
       pure $ Decl { fnName = nm
                   , fnLoc  = fc
@@ -491,6 +493,11 @@ decl = do
                   , fnRT   = rt
                   , fnLocality = Local
                   }
+    where
+      is_fun_ty :: RawVType -> Bool
+      is_fun_ty (RC _) = True
+      is_fun_ty (RK _) = True
+      is_fun_ty _ = False
 
 parseFile = go pfile
 
@@ -607,7 +614,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
                   symbol <- string
                   space
                   fnName <- simpleName
-                  spaced (match TypeColon)
+                  space
                   ty <- functionType
                   optional hspace
                   vspace

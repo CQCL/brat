@@ -8,7 +8,7 @@ type Position = Pos(Nat)
 origin' :: Position
 origin' = [0, 0]
 
-add :: Nat, Nat -> Nat
+add :: { Nat,Nat -> Nat }
 add = x, y => x
 
 type SwapPair(a, b) = Pair(b, a)
@@ -30,7 +30,7 @@ alias2 = [1, true]
 -- test :: (a :: Nat), (b :: Nat) -> (c :: Nat)
 -- test = add
 
-test' :: (a :: Nat), (b :: Nat) -> (c :: Nat)
+test'(a :: Nat, b :: Nat) -> c :: Nat
 test' = x, y => add(x, y)
 
 zero :: Nat

@@ -16,26 +16,26 @@ I3 = { (I, I)() }
 
 
 -- And much the same for classical functions
-id :: Nat -> Nat
+id(Nat) -> Nat
 id = x => x
 
-id2 :: (x :: Nat), (y :: Nat) -> (x :: Nat), (y :: Nat)
+id2(x :: Nat, y :: Nat) -> (x :: Nat), (y :: Nat)
 id2 = { (id,id)() }
 
-id3 :: Nat, Nat -> Nat, Nat
+id3(Nat, Nat) -> Nat, Nat
 id3 = x, y => (id,id)(x, y)
 
-asym :: Nat, Nat, Nat -> Nat, Nat, Nat
+asym(Nat, Nat, Nat) -> Nat, Nat, Nat
 asym = { (id,id2)() }
 
-sandwich :: Nat, Nat, Nat, Nat -> Nat, Nat, Nat, Nat
+sandwich :: { Nat, Nat, Nat, Nat -> Nat, Nat, Nat, Nat }
 sandwich = { (id,id2,id)() }
 
-natToBool :: Nat -> Bool
+natToBool(Nat) -> Bool
 natToBool(0) = false
 natToBool(n) = true
 
-boolToNat :: Bool -> Nat
+boolToNat(Bool) -> Nat
 boolToNat(true) = 1
 boolToNat(false) = 0
 

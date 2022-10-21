@@ -1,2 +1,2 @@
-f :: Nat -> Nat
+f :: { Nat -> Nat }
 f(x) = g(x)

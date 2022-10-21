@@ -1,4 +1,4 @@
-ext "add" add :: (a :: Int), (b :: Int) -> (c :: Int)
+ext "add" add(a :: Int, b :: Int) -> (c :: Int)
 
 twoThings :: (I :: Int), (II :: Int)
 twoThings = 1, 2

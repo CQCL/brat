@@ -4,22 +4,22 @@ xs = [0,1,2]
 xs' :: List(Int)
 xs' = let ys = xs in ys
 
-unsafeHead :: List(Int) -> Int
+unsafeHead :: { List(Int) -> Int }
 unsafeHead(xs) = let cons(x, xs) = xs in x
 
-unpair :: Pair(Int,Bool) -> Int, Bool
+unpair(Pair(Int,Bool)) -> Int, Bool
 unpair(p) = let [a, b] = p in a, b
 
 -- f :: List(Int) -> List(Int)
 --(f = let xs) = ([0,1] :: List(Int)) in xs
 
-triple :: Int -> Int, Int, Int
+triple :: {Int -> Int, Int, Int }
 triple(z) = let x, y = z, z in x, y, z
 
-inc :: Int -> Int
+inc(Int) -> Int
 inc(n) = succ(n)
 
-ext "" map :: {Int -> Int}, List(Int) -> List(Int)
+ext "" map({Int -> Int}, List(Int)) -> List(Int)
 
 nums :: List(Int)
 nums = let xs = map(inc, xs) in xs

@@ -128,8 +128,8 @@ addNGraph
  where
   addN_ty = C ([("in", int)] :-> [("out", int)])
 
-addN2Graph :: Graph
-addN2Graph
+addNmainGraph :: Graph
+addNmainGraph
   = (M.fromList
      [("add", BratNode (Prim "add") [("a", int), ("b", int)] [("c", int)])
      ,("N", BratNode (Prim "N") [] [("value", int)])

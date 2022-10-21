@@ -32,8 +32,8 @@ apply_operators = ?help
 -- map :: (f :: {A -> B}), (xs :: Vec A n) -> (ys :: Vec B n)
 -- map = f, xs => ?ys
 
-hea :: (rotations :: Vec (Operator, numEdges)),
-       (meas :: Vec (Pauli ,numNodes)),
-       (cash :: Vec (Money ,numNodes))
-    -> (cash :: Vec (Money ,numNodes)), (result :: Vec(Bool, numNodes))
+hea(rotations :: Vec (Operator, numEdges)
+   ,meas :: Vec (Pauli ,numNodes)   
+   ,(cash :: Vec (Money ,numNodes)))
+   -> (cash :: Vec (Money ,numNodes)), (result :: Vec(Bool, numNodes))
 hea = rots, meas => ?j -- apply-operators; meas(cash); xs => map(measure,xs); transpose

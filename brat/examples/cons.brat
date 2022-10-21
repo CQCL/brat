@@ -1,6 +1,6 @@
-ext "" add :: Int, Int -> Int
+ext "" add(Int, Int) -> Int
 
-copy :: Int -> Int, Int
+copy(Int) -> Int, Int
 copy(x) = x, x
 
 -- Function definitions can represent multiple values:
@@ -26,7 +26,7 @@ three' = let x, y = twoThings in add(x, y)
 -- The same rules apply to cons, which takes two arguments
 -- On the left hand side the head and tail must be bound to
 -- seperate variables
-uncons :: List(Int) -> Int, List(Int)
+uncons(List(Int)) -> Int, List(Int)
 uncons(cons(x, xs)) = x, xs
 
 -- > badUncons :: List(Int) -> Int, List(Int)
@@ -34,11 +34,11 @@ uncons(cons(x, xs)) = x, xs
 
 -- However, on the right hand side, something that represents the right number
 -- of values can be used as the argument to a cons
-dup :: Int -> List(Int)
+dup(Int) -> List(Int)
 dup(n) = cons(uncons([1,2,3]))
 
 -- Just like a regular function application:
-pair :: Int, Int -> Pair(Int, Int)
+pair(Int, Int) -> Pair(Int, Int)
 pair(a, b) = [a, b]
 
 test :: Pair(Int, Int)

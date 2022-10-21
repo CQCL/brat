@@ -1,7 +1,7 @@
 -- On the left hand side of a function definitino, a cons cell's
--- head and tail must be bound to seperate variables
-uncons :: List(Int) -> Int, List(Int)
+-- head and tail must be bound to separate variables
+uncons :: { List(Int) -> Int, List(Int) }
 uncons(cons(x, xs)) = x, xs
 
-badUncons :: List(Int) -> Int, List(Int)
+badUncons(List(Int)) -> Int, List(Int)
 badUncons(cons(stuff)) = stuff

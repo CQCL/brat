@@ -1,4 +1,4 @@
-ext "" add :: (x :: Int), (y :: Int) -> (z :: Int)
+ext "" add(x :: Int, y :: Int) -> (z :: Int)
 
 -- Nouns embedded into thunks get turned into lambda expressions which take no arguments
 be5 :: { Int }

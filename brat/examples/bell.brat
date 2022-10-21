@@ -4,7 +4,7 @@ type A = Bool
 type B = Nat
 type C = Bool
 
-Rx :: Float -> { Qubit -o Qubit }
+Rx(Float) -> { Qubit -o Qubit }
 Rx(th) = lib.kernel.Rx(th)
 
 H :: { Qubit -o Qubit }
@@ -16,45 +16,45 @@ M2 = { q0, q1 => (lib.kernel.measure, lib.kernel.measure)(q0, q1) }
 M :: { Qubit -o Bit }
 M = lib.kernel.measure
 
-id :: A -> A
+id(A) -> A
 id = a => a
 
-id2 :: A, B -> A, B
+id2(A, B) -> A, B
 id2 = a, b => a, b
 
 thId :: (fn :: {A -> A})
 thId = { x => id(x) }
 
-f' :: A -> B
+f'(A) -> B
 f' = ?f'
 
-g' :: B -> C
+g'(B) -> C
 g' = ?g'
 
-fg :: A -> C
+fg(A) -> C
 fg = ?fg
 
 
-id' :: (f :: {A -> A}), A -> A
+id'(f :: {A -> A}, A) -> A
 id' = f, a => f(a)
 
-id'' :: A -> A
+id''(A) -> A
 id''(x) = id((id)(x))
 
-copyNat :: Nat -> Nat, Nat
+copyNat(Nat) -> Nat, Nat
 copyNat(x) = x, x
 
-add :: Nat, Nat -> Nat
+add(Nat, Nat) -> Nat
 add(0, y) = y
 add(succ(x), y) = add(1, add(x, y))
 
-double :: Nat -> Nat
+double(Nat) -> Nat
 double(x) = add(copyNat(x))
 
 -- test :: {A -> A}
 -- test = id;?help
 
-compTest :: { A -> B }, { B -> C} -> { A -> C }
+compTest({ A -> B }, { B -> C}) -> { A -> C }
 compTest(f, g) = { x => g(f(x)) }
 
 justMeasure :: { c :: Qubit, d :: Qubit -o c :: Bit, d :: Bit }
@@ -63,7 +63,7 @@ justMeasure = { c, d => M2(c, d) }
 idq :: { Qubit -o Qubit }
 idq = { q => q }
 
-phasedBell :: (th :: Float) -> { c :: Qubit, d :: Qubit -o c :: Bit, d :: Bit }
+phasedBell :: { (th :: Float) -> { c :: Qubit, d :: Qubit -o c :: Bit, d :: Bit } }
 phasedBell(th) = {
   H(),idq();
   Rz(th),idq();

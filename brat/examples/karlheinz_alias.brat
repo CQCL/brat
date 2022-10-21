@@ -13,8 +13,8 @@ type Dist = List(Bool)
 type KCirc(q, b) = { Vec(Qubit, q) -o Vec(Bool, b) }
 type PCirc(q) = { Vec(Qubit, q) -o Vec(Bool, q) }
 
-exp :: PCirc(2) -> Dist
+exp(PCirc(2)) -> Dist
 exp = ?exp
 
-execute :: KCirc(2, 1) -> Dist
+execute(KCirc(2, 1)) -> Dist
 execute = ?a

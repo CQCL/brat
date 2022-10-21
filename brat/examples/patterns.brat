@@ -1,43 +1,43 @@
-id :: Bool -> Bool
+id :: {Bool -> Bool}
 id = x => x
 
-not :: Bool -> Bool
+not :: { Bool -> Bool }
 not(true) = false
 not(false) = true
 
-pred :: Nat -> Nat
+pred(Nat) -> Nat
 pred(0) = 0
 pred(succ(n)) = n
 
 -- ahjh
-halfDown :: Nat -> Nat
+halfDown :: { Nat -> Nat }
 halfDown(0) = 0
 halfDown(doub(n)) = n
 halfDown(succ(n)) = halfDown(n)
 
-is_cool :: String -> Bool
+is_cool :: {String -> Bool}
 is_cool("cool") = true
 is_cool(x) = false
 
-left :: Pair(Nat, Bool) -> Nat
+left :: { Pair(Nat, Bool) -> Nat }
 left([nat , bool]) = nat
 
-unpair :: Pair(Nat, Bool) -> Nat, Bool
+unpair :: { Pair(Nat, Bool) -> Nat, Bool }
 unpair([l, r]) = l, r
 
-unVec3 :: Vec(Nat,3) -> Nat, Nat, Nat
+unVec3 :: { Vec(Nat,3) -> Nat, Nat, Nat }
 unVec3([a, b, c]) = a, b, c
 
-fromSingleton :: List(Int) -> Option(Int)
+fromSingleton(List(Int)) -> Option(Int)
 fromSingleton([x]) = some(x)
 fromSingleton(x) = none
 
-vfromSingleton :: Vec(Int, 1) -> Int
+vfromSingleton :: { Vec(Int, 1) -> Int }
 vfromSingleton([x]) = x
 
-vfromSingleton' :: Vec(Int, 1) -> Int
+vfromSingleton'(Vec(Int, 1)) -> Int
 vfromSingleton'(cons(x, nil)) = x
 
-mapOption :: {Int -> Int}, Option(Int) -> Option(Int)
+mapOption :: { {Int -> Int}, Option(Int) -> Option(Int) }
 mapOption(f, none) = none
 mapOption(f, some(x)) = some(f(x))

@@ -41,7 +41,7 @@ xFile = unlines
   ]
 
 rxFile = unlines
-  ["ext \"Rx\" Rx :: (th :: Float) -> { rxa :: Qubit -o rxb :: Qubit }"
+  ["ext \"Rx\" Rx(th :: Float) -> { rxa :: Qubit -o rxb :: Qubit }"
   ,""
   ,"nums :: (x :: Int), (y :: Int), (z :: Int)"
   ,"nums = 1, 2 ,3"
@@ -54,7 +54,7 @@ rxFile = unlines
   ]
 
 two = unlines
-  ["ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)"
+  ["ext \"add\" add(a :: Int, b :: Int) -> (c :: Int)"
   ,""
   ,"one :: (n :: Int)"
   ,"one = 1"
@@ -70,25 +70,28 @@ one = unlines
 
 addN = unlines
   ["ext \"N\" N :: (value :: Int)"
-  ,"ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)"
+  ,"ext \"add\" add(a :: Int, b :: Int) -> (c :: Int)"
   ,""
-  ,"addN :: (in :: Int) -> (out :: Int)"
+  ,"addN(in :: Int) -> (out :: Int)"
   ,"addN(n) = add(n, N)"
   ]
 
 addN2 = unlines
   ["ext \"N\" N :: (value :: Int)"
-  ,"ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)"
+  ,"ext \"add\" add :: {a :: Int, b :: Int -> c :: Int}"
   ,""
-  ,"addN :: (in :: Int) -> (out :: Int)"
+  ,"addN(in :: Int) -> (out :: Int)"
   ,"addN(n) = add(n, N)"
-  ,""
+  ]
+
+addNmain = addN ++ unlines
+  [""
   ,"main :: Int"
   ,"main = addN(1)"
   ]
 
 ext =
-  "ext \"add\" add :: (a :: Int), (b :: Int) -> (c :: Int)"
+  "ext \"add\" add(a :: Int, b :: Int) -> (c :: Int)"
 
 comment = unlines
   ["-- This is a test"
@@ -152,7 +155,8 @@ graphTests = testGroup "Graph" [graphTest "id" idFile idGraph
                                ,graphTest "two" two   twoGraph
                                ,graphTest "one" one   oneGraph
                                ,graphTest "addN" addN addNGraph
-                               ,expectFail $ graphTest "addN2" addN2 addN2Graph
+                               ,expectFail $ graphTest "addN2" addN2 addNGraph
+                               ,expectFail $ graphTest "addNmain" addNmain addNmainGraph
                                ,graphTest "ext"  ext  extGraph
                                ,graphTest "empty" "" emptyGraph
                                ,graphTest "comment" comment emptyGraph

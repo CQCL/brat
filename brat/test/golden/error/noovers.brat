@@ -1,2 +1,2 @@
-f :: Int -> Unit
+f(Int) -> Unit
 f(a, b) = <>
