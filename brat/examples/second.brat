@@ -7,6 +7,9 @@ world = 1
 empty :: Vec(Nat, 0)
 empty = []
 
+empty_spaced :: Vec(Nat, 0)
+empty_spaced = [ ]
+
 vec :: Vec(Nat, 3)
 vec = [ 0, 1, 2 ]
 

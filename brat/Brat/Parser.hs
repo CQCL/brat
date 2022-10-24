@@ -13,11 +13,15 @@ import Data.List.NonEmpty (toList, NonEmpty(..), nonEmpty)
 import Data.Functor (($>), (<&>))
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Set (empty)
-import Data.Void
 import Prelude hiding (lex, round)
 import Text.Megaparsec hiding (Pos, Token, empty, match)
 
-type Parser a = Parsec Void [Token] a
+newtype CustomError = Custom String deriving (Eq, Ord)
+
+type Parser a = Parsec CustomError [Token] a
+
+instance ShowErrorComponent CustomError where
+  showErrorComponent (Custom s) = s
 
 newline = label "\\n" $ match Newline
 
@@ -283,7 +287,6 @@ cnoun' = try (letin cnoun) <|> withFC
   (try (cthunk <?> "thunk")
   <|> try (pull <?> "port pull")
   <|> try (vec <?> "vector literal")
-  <|> (emptyVec <?> "vector literal")
   <|> (nhole <?> "hole")
   <|> try (RSimple <$> simpleTerm)
   <|> try emb
@@ -316,12 +319,21 @@ cnoun' = try (letin cnoun) <|> withFC
    body <- parseMaybe (spaced cnoun) ts
    pure (WC fc (abs ::\:: body))
 
-  emptyVec :: Parser (Raw Chk Noun)
-  emptyVec = RVec <$> (withFC $ square $ pure [])
+  mkNil :: FC -> Raw Chk Noun
+  mkNil fc = RCon (plain "nil") (WC fc REmpty)
+
+  vec2Cons :: Pos -> [WC (Raw Chk Noun)] -> WC (Raw Chk Noun)
+  -- The nil element gets as FC the closing ']' of the [li,te,ral]
+  vec2Cons end [] = let fc = FC end{col=(col end)-1} end in WC fc (mkNil fc)
+  -- We give each cell of the list an FC which starts with the FC
+  -- of its head element and ends at the end of the list (the closing ']')
+  vec2Cons end (x:xs) = let fc = FC (start $ fcOf x) end in
+    WC fc $ RCon (plain "cons") (WC fc (x ::|:: (vec2Cons end xs)))
 
   vec :: Parser (Raw Chk Noun)
-  vec = RVec <$> withFC (square (element `chainl1` (try vecComma)))
+  vec = (\(WC fc x) -> unWC $ vec2Cons (end fc) x) <$> withFC (square elems)
    where
+    elems = (eof $> []) <|> (element `chainl1` (try vecComma))
     vecComma = spaced (match VecComma) $> (++)
     element = (:[]) <$> cnoun'
 

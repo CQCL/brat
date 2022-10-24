@@ -307,8 +307,9 @@ check' pat@(Con (PrefixName [] con) arg) ((), (((hungry, p), ty):unders))
             "nil" -> Length 0
             "cons" -> LongerThan 0) (show pat)
           Just ins -> do
+            outerFC <- req AskFC
             ctor <- anext "" (Constructor node) ins [("value", ty)]
-            noUnders $ wrapError (consError n (show ty) pat) $ check arg ((), sigToRow ctor ins)
+            noUnders $ wrapError (consError n (show ty) pat outerFC) $ check arg ((), sigToRow ctor ins)
             awire ((ctor, "value"), ty, (hungry, p))
             pure ((), ((), unders))
   | Just node <- patternToData ?my con ty, Just cins <- conFields ?my node ty = do
@@ -333,9 +334,9 @@ check' t c = case (?my, t, c) of -- remaining cases need to split on ?my
     pure ((), ((), unders))
   _ -> error $ "check this: " ++ show t
 
-consError :: Int -> String -> Term Chk Noun -> Error -> Error
-consError i ty p e@Err{..} = case msg of
-  VecLength _ _ l _ -> e { msg = VecLength i ty ((1+) <$> l) (show p) }
+consError :: Int -> String -> Term Chk Noun -> FC -> Error -> Error
+consError i ty p fc e = case e of
+  Err{msg=VecLength _ _ l _} -> e { msg = VecLength i ty ((1+) <$> l) (show p), fc = Just fc }
   _ -> e
 
 abstractAll :: (Show (ValueType m), ?my :: Modey m)

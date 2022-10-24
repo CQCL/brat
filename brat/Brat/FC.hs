@@ -30,6 +30,3 @@ fcOf (WC fc _) = fc
 
 dummyFC :: a -> WC a
 dummyFC = WC (FC (Pos 0 0) (Pos 0 0))
-
-spanFC :: FC -> FC -> FC
-spanFC a b = FC (start a) (end b)

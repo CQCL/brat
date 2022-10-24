@@ -7,7 +7,6 @@ module Brat.Syntax.Raw where
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
-import Data.List (intercalate)
 import Data.Kind (Type)
 
 import Brat.Error
@@ -70,7 +69,6 @@ data Raw :: Dir -> Kind -> Type where
   (:::::)   :: WC (Raw Chk k) -> [RawIO] -> Raw Syn k
   (::-::)   :: WC (Raw Syn k) -> WC (Raw d Verb) -> Raw d k -- vertical juxtaposition (diagrammatic composition)
   (::\::)   :: WC Abstractor -> WC (Raw d Noun) -> Raw d Verb
-  RVec      :: WC [WC (Raw Chk Noun)] -> Raw Chk Noun
   RCon      :: UserName -> WC (Raw Chk Noun) -> Raw Chk Noun
 
 instance Show (Raw d k) where
@@ -96,7 +94,6 @@ instance Show (Raw d k) where
   show (tm ::::: ty) = show tm ++ " :: " ++ show ty
   show (a ::-:: b) = show a ++ "; " ++ show b
   show (xs ::\:: bod) = show xs ++ " -> " ++ show bod
-  show (RVec xs) = '[' : intercalate ", " (show <$> unWC xs) ++ "]"
   show (RCon c xs) = "Con(" ++ show c ++ "(" ++ show xs ++ "))"
 
 type Desugar = StateT Namespace (ReaderT RawEnv (Except Error))
@@ -234,11 +231,6 @@ instance Desugarable (Raw d k) where
     pure (tm ::: ty)
   desugar' (syn ::-:: verb) = (:-:) <$> desugar syn <*> desugar verb
   desugar' (abst ::\:: raw) = (abst :\:) <$> desugar raw
-  desugar' (RVec (WC fc [])) = pure $ Con (plain "nil") (WC fc Empty)
-  desugar' (RVec (WC fc (x:xs))) = do
-    x <- desugar x
-    xs <- desugar' (RVec (WC fc xs))
-    pure $ Con (plain "cons") (WC fc (x :|: WC fc xs))
   desugar' (RLet abs thing body) = Let abs <$> desugar thing <*> desugar body
   desugar' (RCon name args) = Con name <$> desugar args
 
