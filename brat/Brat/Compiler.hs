@@ -53,7 +53,8 @@ compileFile file = do
       lookupBy ((== "main") . fnName) id decls
   eitherIO $ run (venv, decls, fnLoc mn) $ checkDecl [] mn
 
-  graph <- eitherIO $ typeGraph venv mn
+  (_, (_, graph)) <- eitherIO $ run (venv, [], fnLoc mn) (checkDecl [] mn)
+
   let outFile = (dropExtension file) <> ".tk"
   case fnSig mn of
     [(_, K ss ts)] -> do

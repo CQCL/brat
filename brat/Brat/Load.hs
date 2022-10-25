@@ -3,7 +3,6 @@
 module Brat.Load (emptyMod
                  ,loadFilename
                  ,loadFiles
-                 ,typeGraph
                  ,checkDecl
                  ,parseFile
                  ,desugarEnv
@@ -91,11 +90,6 @@ checkDecl pre Decl{..}
    ((), ([], [])) <- wrapError (addSrc name) $
                      checkClauses (unWC verb) (sigToRow src ss, sigToRow tgt ts)
    pure ()
-
-typeGraph :: VEnv -> Decl -> Either Error Graph
-typeGraph venv fn = do
-  (_, (_, g)) <- run (venv, [], fnLoc fn) (checkDecl [] fn)
-  pure g
 
 loadStmtsWithEnv :: Mod -> Prefix -> RawEnv -> Either Error Mod
 loadStmtsWithEnv (venv, decls, _, _) pre stmts = do
