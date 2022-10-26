@@ -355,7 +355,6 @@ abstract :: (Show (ValueType m), ?my :: Modey m)
                      )
 abstract inputs AEmpty = pure (emptyEnv, inputs)
 abstract [] abs = err $ NothingToBind (show abs)
-abstract (input:inputs) (Bind x) = pure (singletonEnv x input, inputs)
 abstract inputs (x :||: y) = do
   (venv, inputs)  <- abstract inputs x
   (venv', inputs) <- abstract inputs y
@@ -363,66 +362,58 @@ abstract inputs (x :||: y) = do
 abstract inputs (APull ports abst) = do
   inputs <- pullPorts ports inputs
   abstract inputs abst
-abstract ((src,ty):inputs) (Pat abs)
-  | Just (ety, n) <- getVec ?my ty = (evalNat n) >>= \n -> (,inputs) <$> case abs of
+abstract (input:inputs) (APat (Bind x)) = pure (singletonEnv x input, inputs)
+abstract ((_,ty):inputs) (APat abs) | Just (ety, n) <- getVec ?my ty =
+  (evalNat n) >>= \n -> (,inputs) <$> case abs of
     PNil -> if n == 0
       then pure emptyEnv
       else err $ VecPatLength (show abs) (show ty)
-    PCons (x :||: xs) -> do
+    PCons x xs -> do
       -- A `cons` pattern on the LHS needs to have exactly two binders
       let tailTy = makeVec ety (Simple (Num (n - 1)))
       node <- anext "PCons (Vec)" (Selector DCons) [("head", ety), ("tail", tailTy)] []
-      venv <- abstractAll [((node, "head"), ety)] x
+      venv <- abstractAll [((node, "head"), ety)] (APat x)
       venv' <- wrapError (consPatErr abs (show ty)) $
-                abstractAll [((node, "tail"), tailTy)] xs
+                abstractAll [((node, "tail"), tailTy)] (APat xs)
       mergeEnvs [venv,venv']
     _ -> err $ NotVecPat (show abs) (show ty)
-  | (Braty, List _, PNil) <- (?my, ty, abs) = pure (emptyEnv, inputs)
-  | (Braty, Option _, PNone) <- (?my, ty, abs) = pure (emptyEnv, inputs)
-  | Just (sel, abs, outs) <- patternToData ?my abs ty = do
+  where
+    consPatErr :: Pattern -> String -> Error -> Error
+    consPatErr p ty e@Err{msg=(VecPatLength _ _)}
+      = e { msg = VecPatLength (prettyPat p) ty }
+    consPatErr _ _ e = e
+
+    prettyPat :: Pattern -> String
+    prettyPat p = case patList p of
+      Just xs -> show xs
+      Nothing -> show p
+
+    patList :: Pattern -> Maybe [Pattern]
+    patList PNil = Just []
+    patList (PCons x xs) = (x:) <$> patList xs
+    patList _ = Nothing
+
+abstract ((src,ty):inputs) (APat (PCons x (PCons y PNil)))
+  | (Braty, Product a b) <- (?my, ty) = do
+  node <- anext (show DPair) (Selector DPair) [("value", Product a b)] [("first", a), ("second", b)]
+  awire (src, Product a b, (node, "value"))
+  env <- abstractAll [((node, "first"), a), ((node, "second"), b)] (APat x :||: APat y)
+  pure (env, inputs)
+
+abstract ((src,ty):inputs) (APat (PCon con abs))
+  | Just sel <- patternToData ?my con ty
+  , Just outs <- conFields ?my sel ty = do
       node <- anext (show sel) (Selector sel) [("value", ty)] outs
       awire (src, ty, (node, "value"))
-      let sel' = sigToRow node outs
-      let absAll = (,inputs) <$> abstractAll sel' abs
-      case sel of
-        DCons -> absAll
-        DPair -> absAll
-        _ -> abstract (sel' ++ inputs) abs
- where
-  consPatErr :: Pattern Abstractor -> String -> Error -> Error
-  consPatErr abs ty e@Err{msg=(VecPatLength _ _)}
-    = e { msg = VecPatLength (prettyPat abs) ty }
-  consPatErr _ _ e = e
-
-  prettyPat :: Pattern Abstractor -> String
-  prettyPat p = case patList p of
-    Just xs -> show xs
-    Nothing -> show p
-
-  patList :: Pattern Abstractor -> Maybe [Abstractor]
-  patList PNil = Just []
-  patList (PCons (x :||: (Pat xs))) = (x:) <$> patList xs
-  patList _ = Nothing
-
-  patternToData :: Modey m -> Pattern Abstractor -> ValueType m
-              -> Maybe (DataNode, Abstractor, [(Port, ValueType m)])
-  patternToData m abs ty = do
-    (sel, abs) <- (case abs of
-      POnePlus abs -> Just (DSucc, abs)
-      PTwoTimes abs -> Just (DDoub, abs)
-      PCons (a :||: (Pat (PCons (b :||: Pat PNil))))
-        | (Braty, Product _ _) <- (m,ty) -> Just (DPair, a :||: b)
-      PCons abs -> Just (DCons, abs)
-      PSome abs -> Just (DSome, abs)
-      _ -> Nothing)
-    (sel, abs, ) <$> conFields m sel ty
-
-abstract ((_, ty):inputs) (Lit tm) = do
+      let selectOvers = sigToRow node outs
+      (,inputs) <$> abstractAll selectOvers abs
+abstract ((_, ty):inputs) (APat (Lit tm)) = do
   litTy <- case (?my,ty) of
     (Kerny, Bit) -> pure $ Boolean
     (Braty, SimpleTy ty) -> pure $ ty
-    _ -> typeErr $ "Can't match literal literal " ++ show tm ++ (showMode ?my)
+    (m,_) -> typeErr $ "Can't match literal " ++ show tm ++ (showMode m)
   simpleCheck litTy tm $> (emptyEnv, inputs)
+abstract (_:inputs) (APat DontCare) = pure (emptyEnv, inputs)
 abstract ((_,ty):_) pat = err (PattErr $
     "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty)
 

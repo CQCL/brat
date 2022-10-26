@@ -76,7 +76,7 @@ tokenFuncs fc (ss :-> ts)
 binders :: [a] -> Abstractor
 binders xs = foldr1 (:||:) $ zipWith const (binder <$> ['a'..]) xs
  where
-  binder = Bind . (:[])
+  binder = APat . Bind . (:[])
 
 vsearch :: FC -> VType -> [Term Chk Noun]
 vsearch fc = take 5 . tokenValues fc

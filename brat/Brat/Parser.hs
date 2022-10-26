@@ -148,20 +148,19 @@ juxtaposition p = p `chainl1` (try comma)
 
 binding :: Parser Abstractor
 binding = do ps <- many (try $ portPull <* space)
-             xs <- (try (Pat <$> pat binding)
-                   <|> try nestedBinding
-                   <|> try vecLit
-                   <|> try (Lit <$> simpleTerm)
-                   <|> (Bind <$> simpleName)) `chainl1` (try binderComma)
+             xs <- (try (APat <$> pat)
+                   <|> nestedBinding)
+                   `chainl1` try binderComma
              if null ps
                then pure xs
                else pure $ APull ps xs
  where
-  vecLit = list2Cons <$> square (binding `sepBy` (spaced (match VecComma)))
+  vecPat = square (binding `sepBy` (spaced (match VecComma))) >>= list2Cons
 
-  list2Cons :: [Abstractor] -> Abstractor
-  list2Cons [] = Pat PNil
-  list2Cons (x:xs) = Pat (PCons (x :||: list2Cons xs))
+  list2Cons :: [Abstractor] -> Parser Pattern
+  list2Cons [] = pure PNil
+  list2Cons (APat x:xs) = PCons x <$> (list2Cons xs)
+  list2Cons _ = customFailure (Custom "Internal error list2Cons")
 
   portPull = simpleName <* match PortColon
 
@@ -170,33 +169,37 @@ binding = do ps <- many (try $ portPull <* space)
   binderComma :: Parser (Abstractor -> Abstractor -> Abstractor)
   binderComma = spaced $ match Comma $> (:||:)
 
-pat :: Parser a -> Parser (Pattern a)
-pat p = try onePlus
-      <|> try twoTimes
-      <|> try (matchString "nil" $> PNil)
-      <|> try cons
-      <|> try (matchString "none" $> PNone)
-      <|> try psome
- where
-  psome = do
-    matchString "some"
-    space
-    PSome <$> round p
+  pat :: Parser Pattern
+  pat = try vecPat
+    <|> (match Underscore $> DontCare)
+    <|> try (Lit <$> simpleTerm)
+    <|> try onePlus
+    <|> try twoTimes
+    <|> try (matchString "nil" $> PNil)
+    <|> try cons
+    <|> try (matchString "none" $> PNone)
+    <|> try psome
+    <|> (Bind <$> simpleName)
+   where
+    psome = do
+      matchString "some"
+      space
+      PSome <$> round pat
 
-  cons = do
-    matchString "cons"
-    space
-    PCons <$> round p
+    cons = do
+      matchString "cons"
+      space
+      PCon "cons" <$> round binding
 
-  onePlus = do
-    matchString "succ"
-    space
-    POnePlus <$> round p
+    onePlus = do
+      matchString "succ"
+      space
+      POnePlus <$> round pat
 
-  twoTimes = do
-    matchString "doub"
-    space
-    PTwoTimes <$> round p
+    twoTimes = do
+      matchString "doub"
+      space
+      PTwoTimes <$> round pat
 
 sverb :: Parser (WC (Raw Syn Verb))
 sverb = (juxtaposition sverb') `chainl1` try semicolon
@@ -310,7 +313,8 @@ cnoun' = try (letin cnoun) <|> withFC
   -- Invented variable names look like '1, '2, '3 ...
   -- which are illegal for the user to use as variables
   braceSectionAbstractor :: [Int] -> Abstractor
-  braceSectionAbstractor ns = foldr (:||:) AEmpty (Bind . ('\'':) . show <$> ns)
+  braceSectionAbstractor ns = foldr (:||:) AEmpty $
+                              (\x -> APat (Bind ('\'': show x))) <$> ns
 
   braceSection :: FC -> Int -> [Token] -> Maybe (WC (Raw Chk Verb))
   braceSection _ 0 ts | Just v <- parseMaybe (spaced cverb) ts = Just v

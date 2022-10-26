@@ -25,7 +25,14 @@ module Brat.Syntax.Common (Port,
                            Pattern(..),
                            Abstractor(..),
                            Clause(..),
-                           mergeSigs, showRow
+                           mergeSigs, showRow,
+                           pattern PSome,
+                           pattern PNone,
+                           pattern POnePlus,
+                           pattern PTwoTimes,
+                           pattern PNil,
+                           pattern PCons,
+
                           ) where
 
 import Brat.FC
@@ -185,39 +192,56 @@ instance (Show io, Show (Clause raw Noun)) => Show (Decl' io raw) where
 -- default to local
 data Runtime = RtTierkreis | RtLocal | RtKernel deriving (Eq, Show)
 
-data Pattern tm
- = POnePlus tm
- | PTwoTimes tm
- | PNil
- | PCons tm
- | PSome tm
- | PNone
- deriving (Eq, Foldable, Functor, Traversable)
-
-instance Show tm => Show (Pattern tm) where
-  show (POnePlus x) = "succ(" ++ show x ++ ")"
-  show (PTwoTimes x) = "doub(" ++ show x ++ ")"
-  show PNil = "nil"
-  show (PCons x) = "cons(" ++ show x ++ ")"
-  show (PSome x) = "some(" ++ show x ++ ")"
-  show PNone = "none"
-
-data Abstractor
+-- Ways to bind one thing
+data Pattern
  = Bind String
- | Abstractor :||: Abstractor
- | APull [Port] (Abstractor)
- | Pat (Pattern Abstractor)
+ | PCon String Abstractor
  | Lit SimpleTerm
- | AEmpty
+ | DontCare
+ deriving Eq
+
+instance Show Pattern where
+  show (Bind x) = x
+  show (PCon c AEmpty) = c
+  show (PCon c arg) = case prettyPat (PCon c arg) of
+    Just xs -> show xs
+    Nothing -> c ++ "(" ++ show arg ++ ")"
+  show (Lit tm) = show tm
+  show DontCare = "_"
+
+prettyPat :: Pattern -> Maybe [Pattern]
+prettyPat PNil = Just []
+prettyPat (PCons x xs) = (x:) <$> prettyPat xs
+prettyPat _ = Nothing
+
+pattern PNone, PNil :: Pattern
+pattern PNone = PCon "none" AEmpty
+pattern PNil = PCon "nil" AEmpty
+
+pattern PSome, POnePlus, PTwoTimes :: Pattern -> Pattern
+pattern PSome x = PCon "some" (APat x)
+pattern POnePlus x = PCon "succ" (APat x)
+pattern PTwoTimes x = PCon "doub" (APat x)
+
+pattern PCons :: Pattern -> Pattern -> Pattern
+pattern PCons x xs = PCon "cons" (APat x :||: APat xs)
+
+-- Ways to bind a row of things
+data Abstractor
+ -- There's nothing and that's how we want it
+ = AEmpty
+ | Abstractor :||: Abstractor
+ -- Pull port name being abstracted to the front
+ -- b:x, c:y, z -> ...
+ | APull [Port] (Abstractor)
+ | APat Pattern
  deriving Eq
 
 instance Show (Abstractor) where
-  show (Bind x) = x
+  show AEmpty = "<empty>"
   show (x :||: y) = show x ++ ", " ++ show y
   show (APull ps abs) = concat ((++":") <$> ps) ++ show abs
-  show (Pat p) = show p
-  show (Lit tm) = show tm
-  show AEmpty = "<empty>"
+  show (APat p) = show p
 
 data Clause (tm :: Dir -> Kind -> Type) (k :: Kind) where
   -- lhs and rhs

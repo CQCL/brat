@@ -17,7 +17,7 @@ instance IsString UserName where
   fromString = PrefixName []
 
 instance IsString Abstractor where
-  fromString = Bind
+  fromString = APat . Bind
 
 fc = FC (Pos 0 0) (Pos 0 0)
 wfc = WC fc
