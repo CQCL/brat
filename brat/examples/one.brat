@@ -26,7 +26,7 @@ mkList(x, xs) = cons(x, xs)
 
 increments(Nat, List(Nat)) -> Nat, List(Nat)
 increments(n, cons(x, cons(y, xs))) = increments(aux(gt(y,x), n), mkList(y, xs))
--- increments(n, xs) = n, (nil)
+increments(n, xs) = n, (nil)
 
 window(List(Nat)) -> List (Vec(Nat, 3))
 window(cons(x, cons(y, cons(z, xs)))) = cons([x,y,z], window(cons(y, cons(z, xs))))
