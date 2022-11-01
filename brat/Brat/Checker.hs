@@ -85,10 +85,10 @@ vtensor ss [] = pure ss
 vtensor [] ts = pure ts
 vtensor ss ts = do
   let sig = mergeSigs (rowToSig ss) (rowToSig ts)
-  tensorNode <- anext "tensor" (Combo Row) sig sig
-  mapM (\((src,ty),dstPort) -> awire (src,ty,(tensorNode,dstPort)))
-       (zip (ss ++ ts) (map fst sig))
-  pure $ sigToRow tensorNode sig
+  (_, unders, overs) <- anext "tensor" (Combo Row) sig sig
+  mapM (\(((dangling,_),ty), ((hungry, _),_)) -> awire (dangling,ty,hungry))
+       (zip (ss ++ ts) unders)
+  pure $ overs
 
 class TensorOutputs d where
   tensor :: d -> d -> Checking d
@@ -127,11 +127,11 @@ checkThunk tm (u:us) =
                 => Src -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> VType
                 -> Checking ()
   checkCombination src ins outs fty = do
-    source <- anext "src" Source [] ins
-    target <- anext "tgt" Target outs []
+    (source, [], overs) <- anext "src" Source [] ins
+    (target, unders, []) <- anext "tgt" Target outs []
     -- The box is always a `Brat` `Thing` (classical)
-    box <- next (show src ++ "_thunk") (source :>>: target) [] [("fun", fty)]
-    ((), (emptyOvers, emptyUnders)) <- check tm (sigToRow box ins, sigToRow box outs)
+    next (show src ++ "_thunk") (source :>>: target) [] [("fun", fty)]
+    ((), (emptyOvers, emptyUnders)) <- check tm (overs, unders)
     ensureEmpty "checkCombination overs" emptyOvers
     ensureEmpty "checkCombination unders" emptyUnders
 
@@ -223,9 +223,9 @@ check' (t ::: outs) (overs, ()) | Braty <- ?my = do
                                 ,[(Src, VType)]) -- Dangling wires
   mkIds [] = pure ([], [])
   mkIds ((port, ty):outs) = do
-    node <- next "id" Id [(port, ty)] [(port, ty)]
-    (hungry, dangling) <- mkIds outs
-    pure (((node, port), ty):hungry, ((node, port), ty):dangling)
+    (_, [under], [over]) <- next "id" Id [(port, ty)] [(port, ty)]
+    (unders, overs) <- mkIds outs
+    pure (under:unders, over:overs)
 check' (Emb t) (overs, unders) = do
   (outs, (overs, ())) <- check t (overs, ())
   unders <- checkOutputs t unders outs
@@ -247,9 +247,9 @@ check' (Var x) ((), ()) = case ?my of
     Nothing -> err $ KVarNotFound (show x)
 check' (fun :$: arg) ((), ()) = do
   (src, ss, ts) <- onlyThunk $ let ?my = Braty in check fun ((), ())
-  evalNode <- anext "eval" (Eval src) ss ts
-  ((), ()) <- noUnders $ check arg ((), sigToRow evalNode ss)
-  pure (sigToRow evalNode ts, ((), ()))
+  (_, unders, overs) <- anext "eval" (Eval src) ss ts
+  ((), ()) <- noUnders $ check arg ((), unders)
+  pure (overs, ((), ()))
 check' (Let abs x y) conn = do
   (dangling, ((), ())) <- check x ((), ())
   env <- abstractAll dangling (unWC abs)
@@ -291,11 +291,13 @@ check' (VHole name) (overs, unders) = do
   pure ((), ([], []))
 check'
   (Con (PrefixName [] "cons") (WC _ (x :|: (WC _ (Con (PrefixName [] "cons") (WC _ (y :|: (WC _ (Con (PrefixName [] "nil") (WC _ Empty))))))))))
-  ((), ((hungry, p), ty):unders) | (Braty, Product a b) <- (?my, ty) = do
-  ctor <- anext "DPair" (Constructor DPair)  [("first", a), ("second", b)] [("value", Product a b)]
-  noUnders $ check x ((), [((ctor, "first"), a)])
-  noUnders $ check y ((), [((ctor, "second"), b)])
-  awire ((ctor, "value"), Product a b, (hungry, p))
+  ((), ((hungry, _), ty):unders) | (Braty, Product a b) <- (?my, ty) = do
+  (_, [first,second], [((dangling,_),_)]) <- anext "DPair" (Constructor DPair)
+                                             [("first", a), ("second", b)]
+                                             [("value", Product a b)]
+  noUnders $ check x ((), [first])
+  noUnders $ check y ((), [second])
+  awire (dangling, Product a b, hungry)
   pure ((), ((), unders))
 check' pat@(Con (PrefixName [] con) arg) ((), (((hungry, p), ty):unders))
   | Just (_, n) <- getVec ?my ty = do
@@ -308,29 +310,25 @@ check' pat@(Con (PrefixName [] con) arg) ((), (((hungry, p), ty):unders))
             "cons" -> LongerThan 0) (show pat)
           Just ins -> do
             outerFC <- req AskFC
-            ctor <- anext "" (Constructor node) ins [("value", ty)]
-            noUnders $ wrapError (consError n (show ty) pat outerFC) $ check arg ((), sigToRow ctor ins)
-            awire ((ctor, "value"), ty, (hungry, p))
+            (_, cUnders, [((dangling,_),_)]) <- anext "" (Constructor node) ins [("value", ty)]
+            noUnders $ wrapError (consError n (show ty) pat outerFC) $ check arg ((), cUnders)
+            awire (dangling, ty, hungry)
             pure ((), ((), unders))
   | Just node <- patternToData ?my con ty, Just cins <- conFields ?my node ty = do
-      let couts = [("value", ty)]
-      ctor <- anext (show con) (Constructor node) cins couts -- what comes out?
-      let cunders = sigToRow ctor cins
-      let covers = sigToRow ctor couts
-      ((), ((), cUnders)) <- check arg ((), cunders)
-      ensureEmpty "constructor unders" cUnders
-      let [(value,_)] = covers
-      awire (value, ty, (hungry, p))
+      (_, cUnders, [((dangling,_),_)]) <- anext (show con) (Constructor node)
+                                          cins [("value", ty)]
+      noUnders $ check arg ((), cUnders)
+      awire (dangling, ty, hungry)
       pure ((), ((), unders))
   | Just node <- patternToData ?my con ty, Nothing <- conFields ?my node ty
   = typeErr $ show pat ++ " not of type " ++ showRow (((hungry, p), ty):|unders)
 
 check' t c = case (?my, t, c) of -- remaining cases need to split on ?my
   (Kerny, Simple (Bool _), ((), ((_, Bit):unders))) -> pure ((), ((), unders))
-  (Braty, Simple tm, ((), ((src, p), SimpleTy ty):unders)) -> do
+  (Braty, Simple tm, ((), ((hungry, _), SimpleTy ty):unders)) -> do
     simpleCheck ty tm
-    this <- next (show tm) (Const tm) [] [("value", SimpleTy ty)]
-    wire ((this, "value"), SimpleTy ty, (src, p))
+    (_, [], [((dangling,_),_)]) <- next (show tm) (Const tm) [] [("value", SimpleTy ty)]
+    wire (dangling, SimpleTy ty, hungry)
     pure ((), ((), unders))
   _ -> error $ "check this: " ++ show t
 
@@ -363,7 +361,7 @@ abstract inputs (APull ports abst) = do
   inputs <- pullPorts ports inputs
   abstract inputs abst
 abstract (input:inputs) (APat (Bind x)) = pure (singletonEnv x input, inputs)
-abstract ((_,ty):inputs) (APat abs) | Just (ety, n) <- getVec ?my ty =
+abstract (((dangling,_),ty):inputs) (APat abs) | Just (ety, n) <- getVec ?my ty =
   (evalNat n) >>= \n -> (,inputs) <$> case abs of
     PNil -> if n == 0
       then pure emptyEnv
@@ -371,10 +369,12 @@ abstract ((_,ty):inputs) (APat abs) | Just (ety, n) <- getVec ?my ty =
     PCons x xs -> do
       -- A `cons` pattern on the LHS needs to have exactly two binders
       let tailTy = makeVec ety (Simple (Num (n - 1)))
-      node <- anext "PCons (Vec)" (Selector DCons) [("head", ety), ("tail", tailTy)] []
-      venv <- abstractAll [((node, "head"), ety)] (APat x)
+      (_, [((hungry,_),_)], [head,tail]) <- anext "PCons (Vec)" (Selector DCons)
+                                            [("value", ty)] [("head", ety), ("tail", tailTy)]
+      awire (dangling, ty, hungry)
+      venv <- abstractAll [head] (APat x)
       venv' <- wrapError (consPatErr abs (show ty)) $
-                abstractAll [((node, "tail"), tailTy)] (APat xs)
+                abstractAll [tail] (APat xs)
       mergeEnvs [venv,venv']
     _ -> err $ NotVecPat (show abs) (show ty)
   where
@@ -393,20 +393,20 @@ abstract ((_,ty):inputs) (APat abs) | Just (ety, n) <- getVec ?my ty =
     patList (PCons x xs) = (x:) <$> patList xs
     patList _ = Nothing
 
-abstract ((src,ty):inputs) (APat (PCons x (PCons y PNil)))
+abstract (((dangling,_),ty):inputs) (APat (PCons x (PCons y PNil)))
   | (Braty, Product a b) <- (?my, ty) = do
-  node <- anext (show DPair) (Selector DPair) [("value", Product a b)] [("first", a), ("second", b)]
-  awire (src, Product a b, (node, "value"))
-  env <- abstractAll [((node, "first"), a), ((node, "second"), b)] (APat x :||: APat y)
+  (_, [((hungry, _), _)], overs) <- anext (show DPair) (Selector DPair)
+                                    [("value", Product a b)] [("first", a), ("second", b)]
+  awire (dangling, Product a b, hungry)
+  env <- abstractAll overs (APat x :||: APat y)
   pure (env, inputs)
 
-abstract ((src,ty):inputs) (APat (PCon con abs))
+abstract (((dangling,_),ty):inputs) (APat (PCon con abs))
   | Just sel <- patternToData ?my con ty
   , Just outs <- conFields ?my sel ty = do
-      node <- anext (show sel) (Selector sel) [("value", ty)] outs
-      awire (src, ty, (node, "value"))
-      let selectOvers = sigToRow node outs
-      (,inputs) <$> abstractAll selectOvers abs
+      (_,[((hungry,_),_)],overs) <- anext (show sel) (Selector sel) [("value", ty)] outs
+      awire (dangling, ty, hungry)
+      (,inputs) <$> abstractAll overs abs
 abstract ((_, ty):inputs) (APat (Lit tm)) = do
   litTy <- case (?my,ty) of
     (Kerny, Bit) -> pure $ Boolean

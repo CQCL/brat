@@ -27,6 +27,9 @@ module Brat.Syntax.Common (Port,
                            Clause(..),
                            mergeSigs, showRow,
                            pattern PSome,
+                           Src, Tgt,
+                           End,
+                           PortDir(..),
                            pattern PNone,
                            pattern POnePlus,
                            pattern PTwoTimes,
@@ -36,6 +39,7 @@ module Brat.Syntax.Common (Port,
                           ) where
 
 import Brat.FC
+import Brat.Naming
 
 import Data.Char (isDigit)
 import Data.List (intercalate)
@@ -44,7 +48,17 @@ import qualified Data.List.Reverse.StrictSpine as Rev (span)
 import Data.Kind (Type)
 import qualified Data.Set as Set
 
+data PortDir = In | Ex deriving (Eq, Ord, Show)
 type Port = String
+-- Ends represent wires to/from a specific port on a node
+type End = (Name    -- Which node the end is associated with
+           ,PortDir -- Whether this End is an (In)put or Output (Ex)
+           ,Int)    -- The node's index among ports of the same direction
+
+-- PortDir had BETTER be Ex!
+type Src = (End, Port)
+-- PortDir had BETTER be In!
+type Tgt = (End, Port)
 
 data Quantum = Qubit | Money deriving (Eq, Show)
 newtype Row' tm q = R [(Port, SType'' tm q)] deriving (Functor, Foldable, Traversable)

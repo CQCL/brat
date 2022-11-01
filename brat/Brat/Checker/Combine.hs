@@ -2,9 +2,10 @@
 
 module Brat.Checker.Combine where
 
-import Brat.Checker.Monad (Checking, wire, next)
-import Brat.Graph (Src, Thing(..), ComboType(..))
-import Brat.Syntax.Common (pattern R, VType'(..))
+import Brat.Checker.Helpers (next, wire)
+import Brat.Checker.Monad (Checking)
+import Brat.Graph (Thing(..), ComboType(..))
+import Brat.Syntax.Common (pattern R, VType'(..), Src)
 import Brat.Syntax.Core (VType)
 
 import Data.List.NonEmpty (NonEmpty(..), (<|))
@@ -17,12 +18,13 @@ combineThunks (K (R ss) (R ts)) (K (R us) (R vs)) = Just $ K (R (ss <> us)) (R (
 combineThunks _ _ = Nothing
 
 combineHead :: [(Src, VType)] -> Checking (Maybe ((Src, VType), [(Src, VType)]))
-combineHead ((s,f):(s',g):hs) = case combineThunks f g of
+combineHead (((s,_),f):((s',_),g):hs) = case combineThunks f g of
   Just fg -> do
-    node <- next (show s ++ "_" ++ show s') (Combo Thunk) [("in1", f), ("in2", g)] [("fun", fg)]
-    wire (s, f, (node, ("in1")))
-    wire (s', g, (node, ("in2")))
-    pure $ Just (((node, "fun"), fg), hs)
+    (_, [in1, in2], [fun]) <- next (show s ++ "_" ++ show s') (Combo Thunk)
+                             [("in1", f), ("in2", g)] [("fun", fg)]
+    wire (s, f, fst (fst in1))
+    wire (s', g, fst (fst in2))
+    pure $ Just (fun, hs)
   Nothing -> pure Nothing
 combineHead _ = pure Nothing
 

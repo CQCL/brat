@@ -8,13 +8,14 @@ import Brat.Syntax.Core (Term(..), VType)
 import Brat.Naming (Name)
 import Test.Circuit.Common
 import Brat.Checker
-import Brat.Checker.Helpers (sigToRow)
+import Brat.Checker.Helpers
 import Brat.Syntax.Common
 import Brat.FC
 import Brat.UserName
 
 import qualified Control.Exception as CE (assert)
 import Control.Monad.Except
+import Data.Tuple.HT
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.ExpectedFailure
@@ -108,18 +109,18 @@ equalEdges actual expected = do
   actual @?= expected
  where
   dup_wires s _ _ = assertFailure $ "Multiple wires for same source: " ++ (show s)
-  key_by_src :: [Wire] -> IO (M.Map Src Wire)
+  key_by_src :: [Wire] -> IO (M.Map End Wire)
   key_by_src ws = do
     let ioVals = M.fromListWithKey dup_wires (map (\w@(src,_,_) -> (src, pure w)) ws)
     M.fromList <$> (sequence $ map (\(k,iov) -> (k,) <$> iov) $ M.assocs ioVals)
 
 mkTensor :: Checking (Name, Name, Name, [(Src, VType)])
 mkTensor = do
-  foo <- next "foo" Source [] [("out1", SimpleTy Natural), ("out2", SimpleTy FloatTy)]
-  bar <- next "bar" Source [] [("out1", SimpleTy IntTy)]
-  qux <- next "qux" Source [] [("res", SimpleTy TextType)]
-  outs <- tensor [((foo, "out1"), SimpleTy Natural),((foo, "out2"), SimpleTy FloatTy)] [((bar, "out1"), SimpleTy IntTy), ((qux, "res"), SimpleTy TextType)]
-  pure (foo, bar, qux, outs)
+  (fooNode, _, foos) <- next "foo" Source [] [("out1", SimpleTy Natural), ("out2", SimpleTy FloatTy)]
+  (barNode, _, [bar]) <- next "bar" Source [] [("out1", SimpleTy IntTy)]
+  (quxNode, _, [qux]) <- next "qux" Source [] [("res", SimpleTy TextType)]
+  outs <- tensor foos [bar, qux]
+  pure (fooNode, barNode, quxNode, outs)
 
 isCombo :: Thing -> Bool
 isCombo (Combo _) = True
@@ -134,15 +135,15 @@ tensorOutputsTests = testCase "tensorOutputs" $ case run (emptyEnv, [], FC (Pos 
     (length combo_nodes) @?= 1
     let combo_node = head combo_nodes
     (length outs) @?= 4 -- four wires/ports
-    mapM (@?= combo_node) (map (fst.fst) outs)
+    mapM (@?= combo_node) (map (fst3.fst.fst) outs)
     let actualPorts = M.fromList $ map (\((n,p),ty) -> (p,ty)) outs
     let expectedPorts = M.fromList [("out1", SimpleTy Natural), ("out2", SimpleTy FloatTy), ("out3", SimpleTy IntTy), ("res", SimpleTy TextType)]
     actualPorts @?= expectedPorts
-    edges `equalEdges` [
-        ((foo,"out1"), Right (SimpleTy Natural), (combo_node, "out1")),
-        ((foo,"out2"), Right (SimpleTy FloatTy), (combo_node, "out2")),
-        ((bar,"out1"), Right (SimpleTy IntTy), (combo_node, "out3")),
-        ((qux,"res"), Right (SimpleTy TextType), (combo_node, "res"))]
+    edges `equalEdges`
+      [((foo,Ex,0), Right (SimpleTy Natural), (combo_node, In, 0))
+      ,((foo,Ex,1), Right (SimpleTy FloatTy), (combo_node, In, 1))
+      ,((bar,Ex,0), Right (SimpleTy IntTy), (combo_node, In, 2))
+      ,((qux,Ex,0), Right (SimpleTy TextType), (combo_node, In, 3))]
 
 -- This is just because we have to pass some term into checkOutputs in case it needs to produce an error message.
 -- But our case should never have to produce an error message, so assert false.

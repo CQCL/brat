@@ -9,7 +9,7 @@ module Brat.Load (emptyMod
                  ) where
 
 import Brat.Checker.Combine
-import Brat.Checker.Helpers (mkThunkTy, sigToRow)
+import Brat.Checker.Helpers (mkThunkTy, anext)
 import Brat.Checker.Monad
 import Brat.Checker.Types (ValueType)
 import Brat.Checker
@@ -51,7 +51,8 @@ addNounsToEnv pre = aux root
   aux namespace (Decl{..}:decls) =
     let (freshName, newNamespace) = fresh fnName namespace
         newKey = PrefixName pre fnName
-        newValue = [ ((freshName, port), ty) | (port, ty) <- fnSig ]
+        newValue = [ (((freshName, Ex, i), port), ty)
+                   | (i, (port, ty)) <- zip [0..] fnSig ]
     in  M.insert newKey newValue $ aux newNamespace decls
 
 checkDecl :: Prefix -> Decl -> Checking ()
@@ -60,35 +61,37 @@ checkDecl pre Decl{..}
   fnSig <- case fnSig of
     [] -> req $ Throw (Err (Just fnLoc) Nothing (EmptyRow fnName))
     (x:xs) -> pure (x :| xs)
-  tgt <- next fnName Id (toList fnSig) (toList fnSig)
+  (_, unders, _) <- next fnName Id (toList fnSig) (toList fnSig)
   case fnBody of
     NoLhs body -> do
       ((), ((), [])) <- wrapError (addSrc fnName) $
-                        let ?my = Braty in check body ((), toList (sigToRow tgt fnSig))
+                        let ?my = Braty in check body ((), unders)
       pure ()
+    -- TODO: Unify this with `getThunks` and `check (Th _)` code
     ThunkOf verb -> do
-      let outputs = sigToRow (MkName []) fnSig
-      rows <- combinationsWithLeftovers outputs
-      case last rows of
-        ((_, C (ss :-> ts)), []) -> let ?my = Braty in go verb ss ts
-        ((_, K (R ss) (R ts)), []) -> let ?my = Kerny in go verb ss ts
-        _ -> req $ Throw (dumbErr (InternalError "Thunk type isn't (just) a computation"))
-
+      case unders of
+        (u:unders) -> do
+          rows <- combinationsWithLeftovers (u:|unders)
+          case last rows of
+            ((_, C (ss :-> ts)), []) -> let ?my = Braty in checkThunk verb ss ts
+            ((_, K (R ss) (R ts)), []) -> let ?my = Kerny in checkThunk verb ss ts
+            _ -> req $ Throw (dumbErr (InternalError "Thunk type isn't (just) a computation"))
+        _ -> error $ "No outputs in function type"
     Undefined -> error "No body in `checkDecl`"
 
   | Extern sym <- fnLocality = () <$ next (show $ PrefixName pre fnName) (Prim sym) [] fnSig
  where
   name = show $ PrefixName pre fnName
 
-  go :: (?my :: Modey m, CheckConstraints m)
-     => WC (Clause Term Verb) -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> Checking ()
-  go verb ss ts = do
-   src <- anext (name <> "/in") Source [] ss
-   tgt <- anext (name <> "/out") Target ts []
+  checkThunk :: (?my :: Modey m, CheckConstraints m)
+             => WC (Clause Term Verb) -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> Checking ()
+  checkThunk verb ss ts = do
+   (src, [], overs) <- anext (name <> "/in") Source [] ss
+   (tgt, unders, []) <- anext (name <> "/out") Target ts []
    let thunkTy = ("value", mkThunkTy ?my ss ts)
    next (name ++ "_thunk") (src :>>: tgt) [] [thunkTy]
    ((), ([], [])) <- wrapError (addSrc name) $
-                     checkClauses (unWC verb) (sigToRow src ss, sigToRow tgt ts)
+                     checkClauses (unWC verb) (overs, unders)
    pure ()
 
 loadStmtsWithEnv :: Mod -> Prefix -> RawEnv -> Either Error Mod

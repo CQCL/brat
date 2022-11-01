@@ -5,7 +5,6 @@ module Brat.Graph where
 import Brat.Naming
 import Brat.Syntax.Common
 
-import Data.List ((\\))
 import qualified Data.Graph as G
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
@@ -44,10 +43,8 @@ type Graph = (M.Map Name Node, [Wire])
 instance {-# OVERLAPPING #-} Show Graph where
   show (ns, ws) = unlines (("Nodes:":(show <$> M.toList ns)) ++ ("":"Wires:":(show <$> ws)))
 
-type Wire = (Src, Either SType VType, Tgt)
-
-type Src = (Name, Port)
-type Tgt = (Name, Port)
+-- Ends BETTER be Ex to In!
+type Wire = (End, Either SType VType, End)
 
 toGraph :: Graph -> (G.Graph, G.Vertex -> (Node, Name, [Name]), Name -> Maybe G.Vertex)
 toGraph (ns, ws) = G.graphFromEdges adj
@@ -55,27 +52,39 @@ toGraph (ns, ws) = G.graphFromEdges adj
   -- TODO: Reduce the complexity (O(n^2)) of this function
   adj = [ (node
           ,name
-          ,[ tgt | ((src,_), _, (tgt, _)) <- ws, src == name ]
+          ,[ tgt | ((src,_,_), _, (tgt,_, _)) <- ws, src == name ]
           )
         | (name, node) <- M.toList ns]
 
 wiresFrom :: Name -> Graph -> [Wire]
-wiresFrom src (_, ws) = [ w | w@((a, _), _, (_, _)) <- ws, a == src ]
+wiresFrom src (_, ws) = [ w | w@((a,_, _), _, _) <- ws, a == src ]
 
 lookupNode :: Name -> Graph -> Maybe (Node)
 lookupNode name (ns, _) = M.lookup name ns
 
 wireStart :: Wire -> Name
-wireStart ((x, _), _, _) = x
+wireStart ((x,_, _), _, _) = x
 
 wireEnd :: Wire -> Name
-wireEnd (_, _, (x, _)) = x
+wireEnd (_, _, (x,_, _)) = x
 
 boxSubgraphs :: Graph -> (Graph, [(String, Graph)])
 boxSubgraphs g@(ns,ws) = let subs = fromJust subGraphs
                              (subNodes, subWires) = mconcat $ snd <$> subs
-                         in  ((ns M.\\ subNodes, ws \\ subWires), subs)
+                         in  ((ns M.\\ subNodes, deleteAll wireEq subWires ws)
+                             ,subs)
  where
+  wireEq :: Wire -> Wire -> Bool
+  wireEq (a0, _, b0) (a1, _, b1) = (a0 == a1) || (b0 == b1)
+
+  elemBy :: (a -> a -> Bool) -> a -> [a] -> Bool
+  elemBy f a xs = any (f a) xs
+
+  deleteAll :: (a -> a -> Bool) -> [a] -> [a] -> [a]
+  deleteAll _ _ [] = []
+  deleteAll f as (x:xs) | elemBy f x as = deleteAll f as xs
+                        | otherwise = x : deleteAll f as xs
+
   box :: (Name, Node) -> [(String, (Name, Name))]
   box (nm,n)
     | src :>>: tgt <- nodeThing n = [(show nm, (src,tgt))]

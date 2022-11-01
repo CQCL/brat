@@ -184,7 +184,6 @@ test-suite tests
                        Test.Circuit.Common,
                        Test.Circuit.Gen,
                        Test.Circuit.Graph,
-                       Test.Combine,
                        Test.Compile.RemoveNode,
                        Test.Constructors,
                        Test.Failure,
@@ -205,4 +204,5 @@ test-suite tests
                        filepath,
                        silently,
                        text,
-                       QuickCheck
+                       QuickCheck,
+                       utility-ht

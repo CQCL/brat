@@ -4,10 +4,9 @@ import Brat.Checker.Quantity (Quantity(..), qpred)
 import Brat.Checker.Types
 import Brat.Error (Error(..), ErrorMsg(..))
 import Brat.FC (FC)
-import Brat.Graph (Node(..), Src, Thing(..), Tgt)
 import Brat.Naming (fresh, Name, Namespace)
 import Brat.Syntax.Common
-import Brat.Syntax.Core (Decl, Input, Output, SType, VType, Term)
+import Brat.Syntax.Core (Decl, SType, VType, Term)
 import Brat.UserName (UserName)
 
 import Control.Monad.Freer
@@ -28,7 +27,7 @@ data CheckingSig ty where
   AskFC   :: CheckingSig FC
   VLup    :: UserName -> CheckingSig (Maybe [(Src, VType)])
   KLup    :: UserName -> CheckingSig (Maybe (Src, SType))
-  Node    :: Name -> Node -> CheckingSig ()
+  AddNode :: Name -> Node -> CheckingSig ()
   Wire    :: Wire -> CheckingSig ()
   Decls   :: CheckingSig [Decl]
   KDone   :: CheckingSig ()
@@ -104,7 +103,7 @@ handler (Req s k) ctx ns
                          return (v,(hole:holes,g),ns)
       AskFC -> handler (k (typeFC ctx)) ctx ns
       VLup s -> handler (k $ M.lookup s (venv ctx)) ctx ns
-      Node name node -> do
+      AddNode name node -> do
         (v,(holes,g),ns) <- handler (k ()) ctx ns
         return (v,(holes,(M.singleton name node, []) <> g),ns)
       Wire w -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
@@ -130,34 +129,7 @@ typeErr = err . TypeErr
 instance MonadFail Checking where
   fail = typeErr
 
-anext :: (?my :: Modey m) => String -> Thing -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> Checking Name
-anext str th ins outs = do
-  this <- req (Fresh str)
-  () <- req (Node this (mkNode ?my th ins outs))
-  pure this
- where
-  mkNode :: Modey m -> Thing -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> Node
-  mkNode Braty = BratNode
-  mkNode Kerny = KernelNode
-
-next :: String -> Thing -> [Input] -> [Output] -> Checking Name
-next = let ?my = Braty in anext
-
-knext :: String -> Thing -> [(Port, SType)] -> [(Port, SType)] -> Checking Name
-knext = let ?my = Kerny in anext
-
 makeVec :: (?my :: Modey m) => ValueType m -> Term Chk Noun -> ValueType m
 makeVec = case ?my of
   Braty -> Vector
   Kerny -> Of
-
-awire :: (?my :: Modey m) => (Src, ValueType m, Tgt) -> Checking ()
-awire (src, ty, tgt) =
-  req $ Wire (src, mkT ?my ty, tgt)
- where
-  mkT :: Modey m -> ValueType m -> Either SType VType
-  mkT Braty = Right
-  mkT Kerny = Left
-
-wire = let ?my = Braty in awire
-kwire = let ?my = Kerny in awire

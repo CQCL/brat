@@ -4,7 +4,6 @@ import Test.Tasty.Silver.Interactive (defaultMain)
 import Test.Checking
 import Test.Circuit.Gen
 import Test.Circuit.Graph
-import Test.Combine
 import Test.Compile.RemoveNode
 import Test.Constructors
 import Test.Failure
@@ -25,7 +24,6 @@ main = do
                                 ,nameTests
                                 ,parsingTests
                                 ,searchTests
-                                ,combineTests
                                 ,constructorTests
                                 ,removeNodeTests
                                 ]

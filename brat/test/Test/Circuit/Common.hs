@@ -2,12 +2,13 @@
 
 module Test.Circuit.Common where
 
+import Control.Arrow ((&&&))
 import Control.Monad.Except (runExceptT)
 import qualified Data.Map as M
+import Data.Tuple.HT
 import Data.String (IsString(..))
 import Test.Tasty.HUnit
 
-import Brat.Checker.Types (Graph, Node, Wire)
 import Brat.Graph
 import Brat.Load (loadFiles)
 import Brat.Naming
@@ -24,8 +25,8 @@ idGraph = (M.fromList
            ,("src", KernelNode Source [] [("a", Q Qubit)])
            ,("tgt", KernelNode Target [("b", Q Qubit)] [])
            ]
-          ,[(("src", "a"), Left (Q Qubit), ("tgt", "b"))
-           ,(("main_box", "fun"), Right kty, ("main", "a1"))
+          ,[(("src", Ex, 0), Left (Q Qubit), ("tgt", In, 0))
+           ,(("main_box", Ex, 0), Right kty, ("main", In, 0))
            ]
           )
  where
@@ -38,9 +39,9 @@ swapGraph = (M.fromList
              ,("src", KernelNode Source [] [("a", Q Qubit), ("b", Q Qubit)])
              ,("tgt", KernelNode Target [("b", Q Qubit), ("a", Q Qubit)] [])
              ]
-            ,[(("src", "a"), Left (Q Qubit), ("tgt", "a"))
-             ,(("src", "b"), Left (Q Qubit), ("tgt", "b"))
-             ,(("main_box", "fun"), Right kty, ("main", "a1"))
+            ,[(("src", Ex, 0), Left (Q Qubit), ("tgt", In, 1))
+             ,(("src", Ex, 1), Left (Q Qubit), ("tgt", In, 0))
+             ,(("main_box", Ex, 0), Right kty, ("main", In, 0))
              ]
             )
  where
@@ -51,15 +52,15 @@ swapGraph = (M.fromList
 xGraph :: Graph
 xGraph = (M.fromList
           [("tket.X", BratNode (Prim "tket.X") [] [("a1", xTy)])
-          ,("X", KernelNode (Eval ("tket.X", "_0")) [("xa", Q Qubit)] [("xb", Q Qubit)])
           ,("main_box", BratNode ("src" :>>: "tgt") [] [("fun", mainTy)])
+          ,("X", KernelNode (Eval (("tket.X", Ex, 0), "_0")) [("xa", Q Qubit)] [("xb", Q Qubit)])
           ,("main", BratNode Id [("a1", mainTy)] [("a1", mainTy)])
           ,("src", KernelNode Source [] [("a", Q Qubit)])
           ,("tgt", KernelNode Target [("b", Q Qubit)] [])
           ]
-         ,[(("src", "a"), Left (Q Qubit), ("X", "xa"))
-          ,(("X", "xb"), Left (Q Qubit), ("tgt", "b"))
-          ,(("main_box", "fun"), Right mainTy, ("main", "a1"))
+         ,[(("src", Ex, 0), Left (Q Qubit), ("X", In, 0))
+          ,(("X", Ex, 0), Left (Q Qubit), ("tgt", In, 0))
+          ,(("main_box", Ex, 0), Right mainTy, ("main", In, 0))
           ]
          )
  where
@@ -86,16 +87,16 @@ int = SimpleTy IntTy
 twoGraph :: Graph
 twoGraph = (M.fromList
             [("add", BratNode (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))])
-            ,("add_eval", BratNode (Eval ("add", "thunk")) [("a", int), ("b", int)] [("c", int)])
+            ,("add_eval", BratNode (Eval (("add", Ex, 0), "thunk")) [("a", int), ("b", int)] [("c", int)])
             ,("1a", BratNode (Const (Num 1)) [] [("value", int)])
             ,("1b", BratNode (Const (Num 1)) [] [("value", int)])
             ,("one", BratNode Id [("n", int)] [("n", int)])
             ,("two", BratNode Id [("a1", int)] [("a1", int)])
             ]
-           ,[(("1a", "value"), Right int, ("one", "n"))
-            ,(("1b", "value"), Right int, ("add_eval", "a"))
-            ,(("one", "n"), Right int, ("add_eval", "b"))
-            ,(("add_eval", "c"), Right int, ("two", "a1"))
+           ,[(("1a", Ex, 0), Right int, ("one", In, 0))
+            ,(("1b", Ex, 0), Right int, ("add_eval", In, 0))
+            ,(("one", Ex, 0), Right int, ("add_eval", In, 1))
+            ,(("add_eval", Ex, 0), Right int, ("two", In, 0))
             ]
            )
 
@@ -104,25 +105,24 @@ oneGraph = (M.fromList
             [("1", BratNode (Const (Num 1)) [] [("value", int)])
             ,("one", BratNode Id [("n", int)] [("n", int)])
             ]
-           ,[(("1", "value"), Right int, ("one", "n"))]
+           ,[(("1", Ex, 0), Right int, ("one", In, 0))]
            )
 
 addNGraph :: Graph
 addNGraph
   = (M.fromList
      [("add", BratNode (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))])
-     ,("add_eval", BratNode (Eval ("add", "thunk")) [("a", int), ("b", int)] [("c", int)])
+     ,("add_eval", BratNode (Eval (("add", Ex, 0), "thunk")) [("a", int), ("b", int)] [("c", int)])
      ,("N", BratNode (Prim "N") [] [("value", int)])
      ,("addN_box", BratNode ("addN_src" :>>: "addN_tgt") [] [("value", addN_ty)])
      ,("addN_src", BratNode Source [] [("in", int)])
      ,("addN_tgt", BratNode Target [("out", int)] [])
-     ,("addN_eval", BratNode (Eval ("addN_box", "value")) [("in", int)] [("out", int)])
+     ,("addN_eval", BratNode (Eval (("addN_box", Ex, 0), "value")) [("in", int)] [("out", int)])
      ,("addN", BratNode Id [("thunk", addN_ty)] [("thunk", addN_ty)])
      ]
-    ,[(("addN_src", "in"), Right int, ("add_eval", "a"))
-     ,(("N", "value"), Right int, ("add_eval", "b"))
-     ,(("add", "c"), Right int, ("addN_tgt", "out"))
-     ,(("addN_box", "value"), Right addN_ty, ("addN_eval", "value"))
+    ,[(("addN_src", Ex, 0), Right int, ("add_eval", In, 1))
+     ,(("N", Ex, 0), Right int, ("add_eval", In, 0))
+     ,(("add", Ex, 0), Right int, ("addN_tgt", In, 0))
      ]
     )
  where
@@ -136,14 +136,14 @@ addNmainGraph
      ,("addN_box", BratNode ("addN_src" :>>: "addN_tgt") [] [("value", addN_ty)])
      ,("addN_src", BratNode Source [("in", int)] [("in", int)])
      ,("addN_tgt", BratNode Target [("out", int)] [("out", int)])
-     ,("addN_eval", BratNode (Eval ("addN_box", "value")) [("value", addN_ty), ("in", int)] [("out", int)])
+     ,("addN_eval", BratNode (Eval (("addN_box", Ex, 0), "value")) [("value", addN_ty), ("in", int)] [("out", int)])
      ,("addN", BratNode (Prim "addN") [("in", int)] [("out", int)])
      ,("1", BratNode (Const (Num 1)) [] [("value", int)])
      ]
-    ,[(("addN_src", "in"), Right int, ("add", "a"))
-     ,(("N", "value"), Right int, ("add", "b"))
-     ,(("add", "c"), Right int, ("addN_tgt", "out"))
-     ,(("addN_box", "value"), Right addN_ty, ("addN_eval", "value"))
+    ,[(("addN_src", Ex, 0), Right int, ("add", In, 0))
+     ,(("N", Ex, 0), Right int, ("add", In, 1))
+     ,(("add", Ex, 0), Right int, ("addN_tgt", In, 0))
+     ,(("addN_box", Ex, 0), Right addN_ty, ("addN_eval", In, 0))
      ]
     )
  where
@@ -171,7 +171,7 @@ emptyGraph = (M.empty, [])
   wireSet ws = foldr (M.alter inc) M.empty (wireKey <$> ws)
 
   wireKey :: Wire -> String
-  wireKey ((_, p), ty, (_, q)) = unwords [p, "--", show ty, "->", q]
+  wireKey ((_,d,i), ty, (_,d',i')) = unwords [show (d,i), "--", show ty, "->", show (d',i')]
 
   nodeEq :: Assertion
   nodeEq = let (s1, s2) = (nodeSet (snd <$> M.toList ns), nodeSet (snd <$> M.toList ns'))

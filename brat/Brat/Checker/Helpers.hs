@@ -4,22 +4,24 @@ module Brat.Checker.Helpers (evalNat
                             ,pullPorts, simpleCheck
                             ,combineDisjointEnvs
                             ,ensureEmpty, noUnders
-                            ,rowToSig, sigToRow, subtractSig
+                            ,rowToSig, subtractSig
                             ,showMode, getVec
                             ,mkThunkTy, getThunks
                             ,checkWire
                             ,conFields, patternToData
+                            ,awire, wire, kwire
+                            ,anext, next, knext
                             ) where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr, anext, awire)
+import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr)
 import Brat.Checker.Types (Mode(..), Modey(..), Overs, Unders, ValueType)
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (Value(..), evalTerm)
 import Brat.FC (WC(..))
 import Brat.Naming (Name)
-import Brat.Graph (DataNode(..), Src, Tgt, Thing(..))
+import Brat.Graph (DataNode(..), Node(..), Thing(..))
 import Brat.Syntax.Common
-import Brat.Syntax.Core (Term(..))
+import Brat.Syntax.Core (Term(..), SType, VType)
 import Brat.UserName (UserName(..))
 import Control.Monad.Freer (req, Free(Ret))
 
@@ -40,14 +42,19 @@ simpleCheck TextType (Text _) = pure ()
 simpleCheck UnitTy Unit = pure ()
 simpleCheck ty tm = fail (unwords [show tm, "is not of type", show ty])
 
-pullPorts :: [Port] -> [((Name, Port), ty)] -> Checking [((Name, Port), ty)]
+pullPorts :: Show ty
+          => [Port]
+          -> [((End, Port), ty)]
+          -> Checking [((End, Port), ty)]
 pullPorts [] types = pure types
 pullPorts (p:ports) types = do
   (x, types) <- pull1Port p types
   (x:) <$> pullPorts ports types
  where
-  pull1Port :: Port -> [((Name, Port), ty)]
-            -> Checking (((Name, Port), ty), [((Name, Port), ty)])
+  pull1Port :: Show ty
+            => Port
+            -> [((End, Port), ty)]
+            -> Checking (((End, Port), ty), [((End, Port), ty)])
   pull1Port p [] = fail $ "Port not found: " ++ p
   pull1Port p (x@((_, p'), _):xs)
    | p == p' = pure (x, xs)
@@ -79,9 +86,6 @@ noUnders m = do
   ensureEmpty "unders" unders
   pure (outs, overs)
 
-sigToRow :: Traversable t => Name -> t (Port, ty) -> t (Src, ty)
-sigToRow src = fmap $ \(p,ty) -> ((src, p), ty)
-
 rowToSig :: Traversable t => t (Src, ty) -> t (Port, ty)
 rowToSig = fmap $ \((_, p),ty) -> (p, ty)
 
@@ -100,9 +104,52 @@ subtractSig xs [] = Just xs
 subtractSig ((_,x):xs) ((_,y):ys) | x == y = subtractSig xs ys
 subtractSig _ _ = Nothing
 
+anext :: (?my :: Modey m)
+      => String -> Thing
+      -> [(Port, ValueType m)] -- Inputs and Outputs use deBruijn indices
+      -> [(Port, ValueType m)]
+      -> Checking (Name, Unders m Chk, Overs m Verb)
+anext str th ins outs = do
+  node <- req (Fresh str) -- Pick a name for the thunk
+  -- Use the new name to generate Ends with which to instantiate types
+  let unders = [ (((node, In, i), p), ty) | (i,(p,ty)) <- zip [0..] ins ]
+  let overs  = [ (((node, Ex, i), p), ty) | (i,(p,ty)) <- zip [0..] outs ]
+  () <- req (AddNode node (mkNode ?my th ins outs))
+  pure (node, unders, overs)
+ where
+  mkNode :: Modey m -> Thing
+         -> [(Port, ValueType m)]
+         -> [(Port, ValueType m)]
+         -> Node
+  mkNode Braty = BratNode
+  mkNode Kerny = KernelNode
+
+next :: String -> Thing
+     -> [(Port, ValueType Brat)]
+     -> [(Port, ValueType Brat)]
+     -> Checking (Name, Unders Brat Chk, Overs Brat Verb)
+next = let ?my = Braty in anext
+
+knext :: String -> Thing
+      -> [(Port, ValueType Kernel)]
+      -> [(Port, ValueType Kernel)]
+      -> Checking (Name, Unders Kernel Chk, Overs Kernel Verb)
+knext = let ?my = Kerny in anext
+
+awire :: (?my :: Modey m) => (End, ValueType m, End) -> Checking ()
+awire (src@(_, Ex, _), ty, tgt@(_, In, _)) = do
+  ty <- mkT ?my ty
+  req $ Wire (src, ty, tgt)
+ where
+  mkT :: Modey m -> ValueType m -> Checking (Either SType VType)
+  mkT Braty ty = pure $ Right ty
+  mkT Kerny ty = pure $ Left ty
+
 mkThunkTy :: Modey m -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> VType' Term
 mkThunkTy Braty ss ts = C (ss :-> ts)
 mkThunkTy Kerny ss ts = K (R ss) (R ts)
+wire = let ?my = Braty in awire
+kwire = let ?my = Kerny in awire
 
 -- Unders and Overs here are respectively the inputs and outputs for the thunks
 -- This is the dual notion to the overs and unders used for typechecking against
@@ -116,9 +163,7 @@ getThunks :: Modey m
 getThunks _ [] = pure ([], [], [])
 getThunks m ((src, ty):rest)
  | Just (ss, ts) <- isThunkType m ty = do
-  node <- let ?my = m in anext "" (Eval src) ss ts
-  let counders = sigToRow node ss
-  let coovers = sigToRow node ts
+  (node, counders, coovers) <- let ?my = m in anext "" (Eval src) ss ts
   (nodes, counders', coovers') <- getThunks m rest
   pure (node:nodes, counders <> counders', coovers <> coovers')
  where
@@ -133,7 +178,7 @@ checkWire :: (Eq (ValueType m), ?my :: Modey m)
           => (Src, ValueType m)
           -> (Tgt, ValueType m)
           -> Checking (Maybe ())
-checkWire (src, oTy) (tgt, uTy) | oTy == uTy = awire (src, oTy, tgt) $> Just ()
+checkWire ((src,_), oTy) ((tgt,_), uTy) | oTy == uTy = awire (src, oTy, tgt) $> Just ()
 checkWire _ _ = pure Nothing
 
 conFields :: Modey m -> DataNode -> ValueType m

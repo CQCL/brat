@@ -7,10 +7,10 @@ module Brat.Checker.Types (Overs, Unders, Outputs, Connectors
                           ) where
 
 import Brat.Checker.Quantity
-import Brat.Graph (Graph, Node, Wire, Src, Tgt)
+import Brat.Graph (Graph, Node, Wire)
 import Brat.FC (FC)
 import Brat.Naming (Name)
-import Brat.Syntax.Common (Dir(..), Kind(..))
+import Brat.Syntax.Common (Dir(..), Kind(..), Src, Tgt)
 import Brat.Syntax.Core (SType, VType)
 import Brat.UserName (UserName)
 
