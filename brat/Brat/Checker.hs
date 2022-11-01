@@ -30,7 +30,7 @@ import Control.Monad (unless, foldM)
 import Control.Monad.Freer
 import Data.Functor (($>))
 import Data.List (intercalate, transpose)
-import Data.List.NonEmpty (NonEmpty(..), last)
+import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as M
 import Prelude hiding (filter, last)
 
@@ -60,24 +60,6 @@ singletonEnv x input@(_, ty) = case ?my of
   Kerny -> let q = if copyable ty then Tons else One
            in  M.singleton (plain x) (q, input)
 
-
--- Run a type-checking computation, and ensure that what comes back
--- is a classical thunk or kernel as appropriate for `mode`
-onlyThunk :: (?my :: Modey m)
-          => Checking (Outputs Brat Syn, Connectors Brat Syn Noun)
-          -> Checking (Src, [(PortName, ValueType m)], [(PortName, ValueType m)])
-onlyThunk comp = do
-  (outs, ((), ())) <- comp
-  outs1 <- case outs of
-    [] -> err $ ExpectedThunk (showMode ?my) "empty row"
-    x:xs -> pure (x :| xs)
-  rows <- combinationsWithLeftovers outs1
-  let (out, emptyUnders) = last rows
-  ensureEmpty "onlyThunk unders" emptyUnders
-  case (?my, out) of
-    (Braty, (src, C (ss :-> ts))) -> pure (src, ss, ts)
-    (Kerny, (src, K (R ss) (R ts))) -> pure (src, ss, ts)
-    _ -> err $ ExpectedThunk (showMode ?my) (showRow (out :| []))
 
 -- Allows joining the outputs of two nodes together into a `Combo` node
 vtensor :: (?my :: Modey m) => [(Src, ValueType m)] -> [(Src, ValueType m)] -> Checking [(Src, ValueType m)]
@@ -246,8 +228,8 @@ check' (Var x) ((), ()) = case ?my of
     Just output -> pure ([output], ((), ()))
     Nothing -> err $ KVarNotFound (show x)
 check' (fun :$: arg) ((), ()) = do
-  (src, ss, ts) <- onlyThunk $ let ?my = Braty in check fun ((), ())
-  (_, unders, overs) <- anext "eval" (Eval src) ss ts
+  (thunks, ((), ())) <- let ?my = Braty in check fun ((), ())
+  (_, unders, overs) <- getThunks ?my thunks
   ((), ()) <- noUnders $ check arg ((), unders)
   pure (overs, ((), ()))
 check' (Let abs x y) conn = do

@@ -172,7 +172,7 @@ getThunks m ((src, ty):rest)
   isThunkType Braty (C (ss :-> ts)) = Just (ss, ts)
   isThunkType Kerny (K (R ss) (R ts)) = Just (ss, ts)
   isThunkType _ _ = Nothing
-getThunks _ _ = typeErr "Force called on non-thunk"
+getThunks m (out:_) = err $ ExpectedThunk (showMode m) (showRow (out :| []))
 
 checkWire :: (Eq (ValueType m), ?my :: Modey m)
           => (Src, ValueType m)
