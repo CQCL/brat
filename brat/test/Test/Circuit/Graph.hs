@@ -135,15 +135,15 @@ tensorOutputsTests = testCase "tensorOutputs" $ case run (emptyEnv, [], FC (Pos 
     (length combo_nodes) @?= 1
     let combo_node = head combo_nodes
     (length outs) @?= 4 -- four wires/ports
-    mapM (@?= combo_node) (map (fst3.fst.fst) outs)
+    mapM (@?= combo_node) (map (fst.fst.fst) outs)
     let actualPorts = M.fromList $ map (\((n,p),ty) -> (p,ty)) outs
     let expectedPorts = M.fromList [("out1", SimpleTy Natural), ("out2", SimpleTy FloatTy), ("out3", SimpleTy IntTy), ("res", SimpleTy TextType)]
     actualPorts @?= expectedPorts
     edges `equalEdges`
-      [((foo,Ex,0), Right (SimpleTy Natural), (combo_node, In, 0))
-      ,((foo,Ex,1), Right (SimpleTy FloatTy), (combo_node, In, 1))
-      ,((bar,Ex,0), Right (SimpleTy IntTy), (combo_node, In, 2))
-      ,((qux,Ex,0), Right (SimpleTy TextType), (combo_node, In, 3))]
+      [((foo,Ex 0), Right (SimpleTy Natural), (combo_node, In 0))
+      ,((foo,Ex 1), Right (SimpleTy FloatTy), (combo_node, In 1))
+      ,((bar,Ex 0), Right (SimpleTy IntTy), (combo_node, In 2))
+      ,((qux,Ex 0), Right (SimpleTy TextType), (combo_node, In 3))]
 
 -- This is just because we have to pass some term into checkOutputs in case it needs to produce an error message.
 -- But our case should never have to produce an error message, so assert false.

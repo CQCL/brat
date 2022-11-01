@@ -34,7 +34,7 @@ data RawVType
   | ROption RawVType
   deriving Show
 
-data RawIO' ty = Named Port ty | Anon ty deriving (Functor, Show)
+data RawIO' ty = Named PortName ty | Anon ty deriving (Functor, Show)
 
 instance Eq ty => Eq (RawIO' ty) where
   Named _ ty == Named _ ty' = ty == ty'
@@ -63,7 +63,7 @@ data Raw :: Dir -> Kind -> Type where
   RTh       :: WC (Raw Chk Verb) -> Raw Chk Noun
   RForce    :: WC (Raw Syn Noun) -> Raw Syn Verb
   REmb      :: WC (Raw Syn k) -> Raw Chk k
-  RPull     :: [Port] -> WC (Raw Chk k) -> Raw Chk k
+  RPull     :: [PortName] -> WC (Raw Chk k) -> Raw Chk k
   RVar      :: UserName -> Raw Syn Noun
   (::$::)   :: WC (Raw Syn Noun) -> WC (Raw Chk Noun) -> Raw Syn Noun -- Eval with ChkRaw n argument
   (:::::)   :: WC (Raw Chk k) -> [RawIO] -> Raw Syn k
@@ -194,7 +194,7 @@ instance Desugarable RawKType where
     pure (K (R ss) (R ts))
 
 instance Desugarable ty => Desugarable [RawIO' ty] where
-  type Desugared [RawIO' ty] = [(Port, Desugared ty)]
+  type Desugared [RawIO' ty] = [(PortName, Desugared ty)]
   desugar' = zipWithM aux names
    where
     aux _ (Named port ty) = (port,) <$> desugar' ty

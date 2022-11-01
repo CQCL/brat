@@ -43,18 +43,18 @@ simpleCheck UnitTy Unit = pure ()
 simpleCheck ty tm = fail (unwords [show tm, "is not of type", show ty])
 
 pullPorts :: Show ty
-          => [Port]
-          -> [((End, Port), ty)]
-          -> Checking [((End, Port), ty)]
+          => [PortName]
+          -> [((End, PortName), ty)]
+          -> Checking [((End, PortName), ty)]
 pullPorts [] types = pure types
 pullPorts (p:ports) types = do
   (x, types) <- pull1Port p types
   (x:) <$> pullPorts ports types
  where
   pull1Port :: Show ty
-            => Port
-            -> [((End, Port), ty)]
-            -> Checking (((End, Port), ty), [((End, Port), ty)])
+            => PortName
+            -> [((End, PortName), ty)]
+            -> Checking (((End, PortName), ty), [((End, PortName), ty)])
   pull1Port p [] = fail $ "Port not found: " ++ p
   pull1Port p (x@((_, p'), _):xs)
    | p == p' = pure (x, xs)
@@ -86,7 +86,7 @@ noUnders m = do
   ensureEmpty "unders" unders
   pure (outs, overs)
 
-rowToSig :: Traversable t => t (Src, ty) -> t (Port, ty)
+rowToSig :: Traversable t => t (Src, ty) -> t (PortName, ty)
 rowToSig = fmap $ \((_, p),ty) -> (p, ty)
 
 showMode :: Modey m -> String
@@ -99,45 +99,45 @@ getVec Kerny (Of ty n) = Just (ty, n)
 getVec _ _ = Nothing
 
 -- Ignores port names - appropriate only when the LHS (names) are specified by the user
-subtractSig :: Eq a => [(Port, a)] -> [(Port,a)] -> Maybe [(Port, a)]
+subtractSig :: Eq a => [(PortName, a)] -> [(PortName,a)] -> Maybe [(PortName, a)]
 subtractSig xs [] = Just xs
 subtractSig ((_,x):xs) ((_,y):ys) | x == y = subtractSig xs ys
 subtractSig _ _ = Nothing
 
 anext :: (?my :: Modey m)
       => String -> Thing
-      -> [(Port, ValueType m)] -- Inputs and Outputs use deBruijn indices
-      -> [(Port, ValueType m)]
+      -> [(PortName, ValueType m)] -- Inputs and Outputs use deBruijn indices
+      -> [(PortName, ValueType m)]
       -> Checking (Name, Unders m Chk, Overs m Verb)
 anext str th ins outs = do
   node <- req (Fresh str) -- Pick a name for the thunk
   -- Use the new name to generate Ends with which to instantiate types
-  let unders = [ (((node, In, i), p), ty) | (i,(p,ty)) <- zip [0..] ins ]
-  let overs  = [ (((node, Ex, i), p), ty) | (i,(p,ty)) <- zip [0..] outs ]
+  let unders = [ (((node, In i), p), ty) | (i,(p,ty)) <- zip [0..] ins ]
+  let overs  = [ (((node, Ex i), p), ty) | (i,(p,ty)) <- zip [0..] outs ]
   () <- req (AddNode node (mkNode ?my th ins outs))
   pure (node, unders, overs)
  where
   mkNode :: Modey m -> Thing
-         -> [(Port, ValueType m)]
-         -> [(Port, ValueType m)]
+         -> [(PortName, ValueType m)]
+         -> [(PortName, ValueType m)]
          -> Node
   mkNode Braty = BratNode
   mkNode Kerny = KernelNode
 
 next :: String -> Thing
-     -> [(Port, ValueType Brat)]
-     -> [(Port, ValueType Brat)]
+     -> [(PortName, ValueType Brat)]
+     -> [(PortName, ValueType Brat)]
      -> Checking (Name, Unders Brat Chk, Overs Brat Verb)
 next = let ?my = Braty in anext
 
 knext :: String -> Thing
-      -> [(Port, ValueType Kernel)]
-      -> [(Port, ValueType Kernel)]
+      -> [(PortName, ValueType Kernel)]
+      -> [(PortName, ValueType Kernel)]
       -> Checking (Name, Unders Kernel Chk, Overs Kernel Verb)
 knext = let ?my = Kerny in anext
 
 awire :: (?my :: Modey m) => (End, ValueType m, End) -> Checking ()
-awire (src@(_, Ex, _), ty, tgt@(_, In, _)) = do
+awire (src@(_, Ex _), ty, tgt@(_, In _)) = do
   ty <- mkT ?my ty
   req $ Wire (src, ty, tgt)
  where
@@ -145,7 +145,7 @@ awire (src@(_, Ex, _), ty, tgt@(_, In, _)) = do
   mkT Braty ty = pure $ Right ty
   mkT Kerny ty = pure $ Left ty
 
-mkThunkTy :: Modey m -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> VType' Term
+mkThunkTy :: Modey m -> [(PortName, ValueType m)] -> [(PortName, ValueType m)] -> VType' Term
 mkThunkTy Braty ss ts = C (ss :-> ts)
 mkThunkTy Kerny ss ts = K (R ss) (R ts)
 wire = let ?my = Braty in awire
@@ -168,7 +168,7 @@ getThunks m ((src, ty):rest)
   pure (node:nodes, counders <> counders', coovers <> coovers')
  where
   isThunkType :: Modey m -> ValueType Brat
-              -> Maybe ([(Port, ValueType m)], [(Port, ValueType m)])
+              -> Maybe ([(PortName, ValueType m)], [(PortName, ValueType m)])
   isThunkType Braty (C (ss :-> ts)) = Just (ss, ts)
   isThunkType Kerny (K (R ss) (R ts)) = Just (ss, ts)
   isThunkType _ _ = Nothing
@@ -182,7 +182,7 @@ checkWire ((src,_), oTy) ((tgt,_), uTy) | oTy == uTy = awire (src, oTy, tgt) $> 
 checkWire _ _ = pure Nothing
 
 conFields :: Modey m -> DataNode -> ValueType m
-              -> Maybe [(Port, ValueType m)]
+              -> Maybe [(PortName, ValueType m)]
 -- Note: These are the only Kerny constructors
 conFields Kerny DNil (Of _ (Simple (Num 0))) = Just []
 conFields Kerny DCons (Of elTy (Simple (Num n))) | n > 0

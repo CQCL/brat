@@ -54,7 +54,7 @@ data Skel where
   SJuxtNoun :: WC Skel -> WC Skel -> Skel
   STh       :: WC Skel -> Skel
   SForce    :: WC Skel -> Skel
-  SPull     :: [Port] -> WC Skel -> Skel
+  SPull     :: [PortName] -> WC Skel -> Skel
   SVar      :: UserName -> Skel
   SBound    :: Int -> Skel
   SApp      :: WC Skel -> WC Skel -> Skel

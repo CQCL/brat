@@ -6,14 +6,14 @@ import Brat.Syntax.Core
 
 import qualified Data.Map as M
 
-labelType :: Either SType VType -> (Port, Port) -> String
+labelType :: Either SType VType -> (PortName, PortName) -> String
 labelType (Left _) _ = ""
 labelType (Right vty) (p, q) = unwords ["[label ="
                                        ,show (unwords ["[", p, "--(" ++ show vty ++ ")->", q, "]"])
                                        ,"]"]
 
 mkEdge :: Wire -> String
-mkEdge ((src,_,p), ty, (tgt,_,q)) = unwords [show (show src), "->", show (show tgt), labelType ty (show p,show q)]
+mkEdge ((src, Ex p), ty, (tgt, In q)) = unwords [show (show src), "->", show (show tgt), labelType ty (show p,show q)]
 
 dot :: Graph -> String
 dot g

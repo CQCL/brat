@@ -12,7 +12,7 @@ import Brat.Syntax.Core (Input, Output, SType, VType)
 
 data Node
   = BratNode Thing [Input] [Output]
-  | KernelNode Thing [(Port, SType)] [(Port, SType)]
+  | KernelNode Thing [(PortName, SType)] [(PortName, SType)]
  deriving (Eq, Show)
 
 nodeThing :: Node -> Thing
@@ -52,21 +52,21 @@ toGraph (ns, ws) = G.graphFromEdges adj
   -- TODO: Reduce the complexity (O(n^2)) of this function
   adj = [ (node
           ,name
-          ,[ tgt | ((src,_,_), _, (tgt,_, _)) <- ws, src == name ]
+          ,[ tgt | ((src,_), _, (tgt,_)) <- ws, src == name ]
           )
         | (name, node) <- M.toList ns]
 
 wiresFrom :: Name -> Graph -> [Wire]
-wiresFrom src (_, ws) = [ w | w@((a,_, _), _, _) <- ws, a == src ]
+wiresFrom src (_, ws) = [ w | w@((a, _), _, _) <- ws, a == src ]
 
 lookupNode :: Name -> Graph -> Maybe (Node)
 lookupNode name (ns, _) = M.lookup name ns
 
 wireStart :: Wire -> Name
-wireStart ((x,_, _), _, _) = x
+wireStart ((x,_), _, _) = x
 
 wireEnd :: Wire -> Name
-wireEnd (_, _, (x,_, _)) = x
+wireEnd (_, _, (x,_)) = x
 
 boxSubgraphs :: Graph -> (Graph, [(String, Graph)])
 boxSubgraphs g@(ns,ws) = let subs = fromJust subGraphs

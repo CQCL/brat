@@ -3,7 +3,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE PatternSynonyms #-}
 
-module Brat.Syntax.Common (Port,
+module Brat.Syntax.Common (PortName,
                            Row,
                            -- constructors for Quantum (type could be exported if required):
                            pattern Qubit, pattern Money,
@@ -29,7 +29,7 @@ module Brat.Syntax.Common (Port,
                            pattern PSome,
                            Src, Tgt,
                            End,
-                           PortDir(..),
+                           Port(..),
                            pattern PNone,
                            pattern POnePlus,
                            pattern PTwoTimes,
@@ -48,20 +48,20 @@ import qualified Data.List.Reverse.StrictSpine as Rev (span)
 import Data.Kind (Type)
 import qualified Data.Set as Set
 
-data PortDir = In | Ex deriving (Eq, Ord, Show)
-type Port = String
+data Port = In Int | Ex Int deriving (Eq, Ord, Show)
+type PortName = String
 -- Ends represent wires to/from a specific port on a node
-type End = (Name    -- Which node the end is associated with
-           ,PortDir -- Whether this End is an (In)put or Output (Ex)
-           ,Int)    -- The node's index among ports of the same direction
+type End = (Name -- Which node the end is associated with
+           ,Port -- The direction and index of the relevant port
+           ) 
 
 -- PortDir had BETTER be Ex!
-type Src = (End, Port)
+type Src = (End, PortName)
 -- PortDir had BETTER be In!
-type Tgt = (End, Port)
+type Tgt = (End, PortName)
 
 data Quantum = Qubit | Money deriving (Eq, Show)
-newtype Row' tm q = R [(Port, SType'' tm q)] deriving (Functor, Foldable, Traversable)
+newtype Row' tm q = R [(PortName, SType'' tm q)] deriving (Functor, Foldable, Traversable)
 type Row tm = Row' tm Quantum
 
 deriving instance Show (SType'' tm q) => Show (Row' tm q)
@@ -90,7 +90,7 @@ copyable :: SType'' tm q -> Bool
 copyable = null
 
 data VType' tm
-  = C (CType' (Port, VType' tm))
+  = C (CType' (PortName, VType' tm))
   | SimpleTy SimpleType
   | List (VType' tm)
   | Product (VType' tm) (VType' tm)
@@ -151,19 +151,19 @@ data CType' io = [io] :-> [io] deriving Functor
 instance Show io => Show (CType' io) where
   show (ss :-> ts) = unwords [show ss, "->", show ts]
 
-deriving instance Eq (VType' tm) => Eq (CType' (Port, VType' tm))
+deriving instance Eq (VType' tm) => Eq (CType' (PortName, VType' tm))
 
-instance Semigroup (CType' (Port, ty)) where
+instance Semigroup (CType' (PortName, ty)) where
   (ss :-> ts) <> (us :-> vs) = (mergeSigs ss us) :-> (mergeSigs ts vs)
 
 instance Semigroup (Row' tm q) where
   R ss <> R ts = R (mergeSigs ss ts)
 
 -- For use in semigroup instances of `CType` and `Row`
-mergeSigs :: [(Port, a)] -> [(Port, a)] -> [(Port, a)]
+mergeSigs :: [(PortName, a)] -> [(PortName, a)] -> [(PortName, a)]
 mergeSigs xs ys = aux Set.empty (xs ++ ys)
  where
-  aux :: Set.Set Port -> [(Port, a)] -> [(Port, a)]
+  aux :: Set.Set PortName -> [(PortName, a)] -> [(PortName, a)]
   aux _ [] = []
   aux seen ((p,ty):rest)
    | Set.member p seen
@@ -171,7 +171,7 @@ mergeSigs xs ys = aux Set.empty (xs ++ ys)
        (p', ty) : aux (Set.insert p' seen) rest
    | otherwise = (p, ty) : aux (Set.insert p seen) rest
 
-  names :: Port -> [String]
+  names :: PortName -> [String]
   names port
     = let (prefix, xs) = Rev.span isDigit port
           ixs = case xs of
@@ -247,7 +247,7 @@ data Abstractor
  | Abstractor :||: Abstractor
  -- Pull port name being abstracted to the front
  -- b:x, c:y, z -> ...
- | APull [Port] (Abstractor)
+ | APull [PortName] (Abstractor)
  | APat Pattern
  deriving Eq
 

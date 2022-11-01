@@ -65,7 +65,7 @@ singletonEnv x input@(_, ty) = case ?my of
 -- is a classical thunk or kernel as appropriate for `mode`
 onlyThunk :: (?my :: Modey m)
           => Checking (Outputs Brat Syn, Connectors Brat Syn Noun)
-          -> Checking (Src, [(Port, ValueType m)], [(Port, ValueType m)])
+          -> Checking (Src, [(PortName, ValueType m)], [(PortName, ValueType m)])
 onlyThunk comp = do
   (outs, ((), ())) <- comp
   outs1 <- case outs of
@@ -124,7 +124,7 @@ checkThunk tm (u:us) =
 
   -- Type check a thunk against a single combination type, return void for success
   checkCombination :: (CheckConstraints m, ?my :: Modey m)
-                => Src -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> VType
+                => Src -> [(PortName, ValueType m)] -> [(PortName, ValueType m)] -> VType
                 -> Checking ()
   checkCombination src ins outs fty = do
     (source, [], overs) <- anext "src" Source [] ins

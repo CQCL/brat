@@ -51,7 +51,7 @@ addNounsToEnv pre = aux root
   aux namespace (Decl{..}:decls) =
     let (freshName, newNamespace) = fresh fnName namespace
         newKey = PrefixName pre fnName
-        newValue = [ (((freshName, Ex, i), port), ty)
+        newValue = [ (((freshName, Ex i), port), ty)
                    | (i, (port, ty)) <- zip [0..] fnSig ]
     in  M.insert newKey newValue $ aux newNamespace decls
 
@@ -84,7 +84,7 @@ checkDecl pre Decl{..}
   name = show $ PrefixName pre fnName
 
   checkThunk :: (?my :: Modey m, CheckConstraints m)
-             => WC (Clause Term Verb) -> [(Port, ValueType m)] -> [(Port, ValueType m)] -> Checking ()
+             => WC (Clause Term Verb) -> [(PortName, ValueType m)] -> [(PortName, ValueType m)] -> Checking ()
   checkThunk verb ss ts = do
    (src, [], overs) <- anext (name <> "/in") Source [] ss
    (tgt, unders, []) <- anext (name <> "/out") Target ts []

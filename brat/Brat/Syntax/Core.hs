@@ -14,7 +14,7 @@ type SType = SType' Term
 
 type Input = InOut
 type Output = InOut
-type InOut = (Port, VType)
+type InOut = (PortName, VType)
 
 type CType = CType' InOut
 
@@ -34,12 +34,12 @@ data Term :: Dir -> Kind -> Type where
   Th       :: WC (Term Chk Verb) -> Term Chk Noun
   Force    :: WC (Term Syn Noun) -> Term Syn Verb
   Emb      :: WC (Term Syn k) -> Term Chk k
-  Pull     :: [Port] -> WC (Term Chk k) -> Term Chk k
+  Pull     :: [PortName] -> WC (Term Chk k) -> Term Chk k
   Var      :: UserName -> Term Syn Noun  -- Look up in noun (value) env
   -- Function application
   (:$:)    :: WC (Term Syn Noun) -> WC (Term Chk Noun) -> Term Syn Noun
   -- Type annotations (annotating a term with its outputs)
-  -- TODO: Make it possible for Output to be (Port, SType) when using this in kernels
+  -- TODO: Make it possible for Output to be (PortName, SType) when using this in kernels
   (:::)    :: WC (Term Chk k) -> [Output] -> Term Syn k
   -- vertical juxtaposition (diagrammatic or sequential composition)
   (:-:)    :: WC (Term Syn k) -> WC (Term d Verb) -> Term d k

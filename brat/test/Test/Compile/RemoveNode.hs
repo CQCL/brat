@@ -27,9 +27,9 @@ testGraph =
           ,(c, idNode)
           ,(out, outNode)
           ]
-        ,[((a, Ex, 0), Right int, (b, In, 0))
-         ,((b, Ex, 0), Right int, (c, In, 0))
-         ,((c, Ex, 0), Right int, (out, In, 0))
+        ,[((a, Ex 0), Right int, (b, In 0))
+         ,((b, Ex 0), Right int, (c, In 0))
+         ,((c, Ex 0), Right int, (out, In 0))
          ]
         )
 
@@ -40,8 +40,8 @@ removeA = testCase "removeNode.a" $ do
           ,(c, idNode)
           ,(out, outNode)
           ]
-        ,[((b, Ex, 0), Right int, (c, In, 0))
-         ,((c, Ex, 0), Right int, (out, In, 0))
+        ,[((b, Ex 0), Right int, (c, In 0))
+         ,((c, Ex 0), Right int, (out, In 0))
          ]
         )
     in removeNode a testGraph =? exp
@@ -53,7 +53,7 @@ removeB = testCase "removeNode.b" $ do
           ,(c, idNode)
           ,(out, outNode)
           ]
-        ,[((c, Ex, 0), Right int, (out, In, 0))]
+        ,[((c, Ex 0), Right int, (out, In 0))]
         )
     in removeNode b testGraph =? exp
 
