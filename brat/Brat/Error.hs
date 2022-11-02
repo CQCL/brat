@@ -32,6 +32,7 @@ data ErrorMsg
  | NotVecPat String String
 
  | EmptyRow String
+ | MultipleOutputsForThunk String
  | VecEval String
  | ParseErr ParseError
  | LexErr ParseError
@@ -71,6 +72,11 @@ instance Show ErrorMsg where
                                   ,"to be a vector pattern when binding type", ty]
 
   show (EmptyRow fn) = "Declaration of " ++ fn ++ " doesn't have any outputs"
+  show (MultipleOutputsForThunk fn) = unwords ["Declaration of"
+                                              ,fn
+                                              ,"has too many outputs:"
+                                              ,"expected one thunk type"
+                                              ]
   show (VecEval n) = "Couldn't determine that " ++ n ++ " is a Nat"
   show (PattErr x) = "Type error in pattern: " ++ x
   show (ParseErr x) = "Parse error " ++ show x

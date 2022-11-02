@@ -8,7 +8,6 @@ module Brat.Load (emptyMod
                  ,desugarEnv
                  ) where
 
-import Brat.Checker.Combine
 import Brat.Checker.Helpers (mkThunkTy, anext)
 import Brat.Checker.Monad
 import Brat.Checker.Types (ValueType)
@@ -28,7 +27,7 @@ import Util
 import Control.Monad.Except
 import Data.List (elemIndex)
 import Data.List.HT (viewR)
-import Data.List.NonEmpty (NonEmpty(..), last, toList)
+import Data.List.NonEmpty (NonEmpty(..), toList)
 import qualified Data.Graph as G
 import qualified Data.Map as M
 import System.Directory (doesFileExist)
@@ -70,13 +69,13 @@ checkDecl pre Decl{..}
     -- TODO: Unify this with `getThunks` and `check (Th _)` code
     ThunkOf verb -> do
       case unders of
-        (u:unders) -> do
-          rows <- combinationsWithLeftovers (u:|unders)
-          case last rows of
-            ((_, C (ss :-> ts)), []) -> let ?my = Braty in checkThunk verb ss ts
-            ((_, K (R ss) (R ts)), []) -> let ?my = Kerny in checkThunk verb ss ts
-            _ -> req $ Throw (dumbErr (InternalError "Thunk type isn't (just) a computation"))
-        _ -> error $ "No outputs in function type"
+        [u] -> do
+          case u of
+            (_, C (ss :-> ts)) -> let ?my = Braty in checkThunk verb ss ts
+            (_, K (R ss) (R ts)) -> let ?my = Kerny in checkThunk verb ss ts
+            _ -> req $ Throw (dumbErr (ExpectedThunk "" (show u)))
+        [] -> err $ EmptyRow name
+        _ -> err $ MultipleOutputsForThunk name
     Undefined -> error "No body in `checkDecl`"
 
   | Extern sym <- fnLocality = () <$ next (show $ PrefixName pre fnName) (Prim sym) [] fnSig

@@ -71,7 +71,6 @@ library
                        Control.Monad.Freer
 
   exposed-modules:     Brat.Checker,
-                       Brat.Checker.Combine,
                        Brat.Checker.Types,
                        Brat.Checker.Helpers,
                        Brat.Compiler,
@@ -135,7 +134,6 @@ executable brat
                        utility-ht
 
   other-modules:       Brat.Checker,
-                       Brat.Checker.Combine,
                        Brat.Checker.Helpers,
                        Brat.Checker.Quantity,
                        Brat.Checker.Monad,
