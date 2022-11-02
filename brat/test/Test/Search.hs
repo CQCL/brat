@@ -52,7 +52,7 @@ tokensTypecheck kty =
     case kernels of
       [] -> False
       (k:_) -> case run (emptyEnv, [], fc)
-                    (let ?my = Braty in check (WC fc k) ((), [(((src, Ex 0), "fun"), kty)])) of
+                    (let ?my = Braty in check (WC fc k) ((), [(((src, In 0), "fun"), kty)])) of
                  Right (((), ((), unders)), _) -> null unders
                  Left _ -> False
  where
