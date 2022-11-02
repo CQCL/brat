@@ -268,6 +268,8 @@ check'
   pure ((), ((), unders))
 check' pat@(Con (PrefixName [] con) arg) ((), (((hungry, p), ty):unders))
   | Just (_, n) <- getVec ?my ty = do
+      (_, lenUnders, []) <- next "vec_len" Hypo [("value", SimpleTy Natural)] []
+      noUnders $ let ?my = Braty in check' n ((), lenUnders)
       n <- evalNat n
       case patternToData ?my con ty of
         Nothing -> error "uhh"

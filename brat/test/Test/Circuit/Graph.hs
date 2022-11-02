@@ -155,8 +155,8 @@ graphTests = testGroup "Graph" [graphTest "id" idFile idGraph
                                ,expectFail $ graphTest "Rx" rxFile rxGraph
                                ,graphTest "two" two   twoGraph
                                ,graphTest "one" one   oneGraph
-                               ,graphTest "addN" addN addNGraph
-                               ,expectFail $ graphTest "addN2" addN2 addNGraph
+                               ,graphTest "addN" addN (addNGraph "thunk")
+                               ,graphTest "addN2" addN2 (addNGraph "a1")
                                ,expectFail $ graphTest "addNmain" addNmain addNmainGraph
                                ,graphTest "ext"  ext  extGraph
                                ,graphTest "empty" "" emptyGraph

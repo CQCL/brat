@@ -43,7 +43,7 @@ listGraph =
    ,("mklist"
     ,BratNode (Constructor DCons)
      [("head", SimpleTy IntTy)
-     ,("tail", SimpleTy IntTy)
+     ,("tail", List (SimpleTy IntTy))
      ]
      [("value", List (SimpleTy IntTy))]
     )

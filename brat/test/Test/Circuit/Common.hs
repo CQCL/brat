@@ -108,16 +108,15 @@ oneGraph = (M.fromList
            ,[(("1", Ex 0), Right int, ("one", In 0))]
            )
 
-addNGraph :: Graph
-addNGraph
+addNGraph :: String -> Graph
+addNGraph port_name
   = (M.fromList
-     [("add", BratNode (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))])
+     [("add", BratNode (Prim "add") [] [(port_name, C ([("a", int), ("b", int)] :-> [("c", int)]))])
      ,("add_eval", BratNode (Eval (("add", Ex 0), "thunk")) [("a", int), ("b", int)] [("c", int)])
      ,("N", BratNode (Prim "N") [] [("value", int)])
      ,("addN_box", BratNode ("addN_src" :>>: "addN_tgt") [] [("value", addN_ty)])
      ,("addN_src", BratNode Source [] [("in", int)])
      ,("addN_tgt", BratNode Target [("out", int)] [])
-     ,("addN_eval", BratNode (Eval (("addN_box", Ex 0), "value")) [("in", int)] [("out", int)])
      ,("addN", BratNode Id [("thunk", addN_ty)] [("thunk", addN_ty)])
      ]
     ,[(("addN_src", Ex 0), Right int, ("add_eval", In 1))
@@ -161,11 +160,10 @@ emptyGraph = (M.empty, [])
 (=?) :: Graph -- Actual
      -> Graph -- Expected
      -> Assertion
-(ns, ws) =? (ns', ws') = nodeEq >> wireEq
+(ns_act, ws_act) =? (ns_exp, ws_exp) = nodeEq >> wireEq
  where
   wireEq :: Assertion
-  wireEq = let (s1, s2) = (wireSet ws, wireSet ws')
-           in assertEqual (unlines [show s1, show s2]) (M.empty) (M.difference s1 s2)
+  wireEq = assertNoDifference "Wires" (wireSet ws_act) (wireSet ws_exp)
 
   wireSet :: [Wire] -> M.Map String Int
   wireSet ws = foldr (M.alter inc) M.empty (wireKey <$> ws)
@@ -174,9 +172,7 @@ emptyGraph = (M.empty, [])
   wireKey ((_,p), ty, (_,p')) = unwords [show p, "--", show ty, "->", show p']
 
   nodeEq :: Assertion
-  nodeEq = let (s1, s2) = (nodeSet (snd <$> M.toList ns), nodeSet (snd <$> M.toList ns'))
-               pp = unlines . fmap show . M.toList
-           in  assertEqual (unlines ["Actual:", pp s1, "Expected:", pp s2]) M.empty (M.difference s1 s2)
+  nodeEq = assertNoDifference "Nodes" (nodeSet ns_act) (nodeSet ns_exp)
 
   inc :: Maybe Int -> Maybe Int
   inc = Just . maybe 1 (1+)
@@ -200,8 +196,20 @@ emptyGraph = (M.empty, [])
   nodeKey (KernelNode thing ins outs)
     = thingKey True thing ++ (unlines [show ins, show outs])
 
-  nodeSet :: [Node] -> M.Map String Int
-  nodeSet ns = foldr (M.alter inc) M.empty (nodeKey <$> ns)
+  nodeSet :: M.Map k Node -> M.Map String Int
+  nodeSet ns = foldr (M.alter inc) M.empty (nodeKey <$> (snd <$> M.toList ns))
+
+  -- `M.difference a b` finds things that are in `a` but not in `b`
+  assertNoDifference :: String -> M.Map String Int -> M.Map String Int -> Assertion -- Actual vs Expected
+  assertNoDifference msg act exp = case (M.difference act exp, M.difference exp act) of
+    -- Extra wires in actual and expected maps
+    (mAct, mExp)
+      | M.null mAct, M.null mExp -> pure ()
+      | M.null mAct -> assertFailure $ msg ++ " expected but not found: " ++ show mExp
+      | M.null mExp -> assertFailure $ msg ++ " found but not expected: " ++ show mAct
+      | otherwise -> assertFailure $ unlines [msg ++ "expected: " ++ show mExp
+                                             ," but found: " ++ show mAct
+                                             ]
 
 runProg :: String -> String -> Graph -> Assertion
 runProg name contents expected = do
