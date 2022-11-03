@@ -16,7 +16,13 @@ ext "tket.CH" CH :: { Qubit, Qubit -o Qubit, Qubit }
 ext "tket.CRx" CRx(Float) -> { Qubit, Qubit -o Qubit, Qubit }
 ext "tket.CRy" CRy(Float) -> { Qubit, Qubit -o Qubit, Qubit }
 ext "tket.CRz" CRz(Float) -> { Qubit, Qubit -o Qubit, Qubit }
-ext "tket.M" measure :: { Qubit -o Bool }
+ext "tket.M" M :: { Qubit -o Bool }
+
+ext "builtin.measure" measure :: { Qubit -o q::Money, b::Bool }
+ext "builtin.fresh" fresh :: { Money -o Qubit }
+
+bid :: { Bool -o Bool }
+bid = { b => b }
 
 qid :: { Qubit -o Qubit }
 qid = { q => q }

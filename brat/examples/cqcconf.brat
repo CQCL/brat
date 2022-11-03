@@ -1,8 +1,5 @@
 import lib.kernel
 
-M :: {Qubit -o Bit }
-M = lib.kernel.measure
-
 which(Bool, Type, Type) -> Type
 which(true, a, b) = a
 which(false, a, b) = b
@@ -28,4 +25,4 @@ main2 :: { Qubit, Qubit -o Bit, Bit }
 main2 =
  (H,qid)();
  lib.kernel.CZ();
- (M,M)()
+ (lib.kernel.M,lib.kernel.M)()

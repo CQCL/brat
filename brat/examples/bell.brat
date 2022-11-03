@@ -11,10 +11,7 @@ H :: { Qubit -o Qubit }
 H = lib.kernel.H
 
 M2 :: { Qubit, Qubit -o Bit, Bit }
-M2 = { q0, q1 => (lib.kernel.measure, lib.kernel.measure)(q0, q1) }
-
-M :: { Qubit -o Bit }
-M = lib.kernel.measure
+M2 = { lib.kernel.M(), lib.kernel.M() }
 
 id(A) -> A
 id = a => a
