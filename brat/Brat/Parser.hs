@@ -125,15 +125,22 @@ comma = spaced $ token0 $ \case
     in  WC fc (a ::|:: b)
   _ -> Nothing
 
-semicolon :: Parser (WC (Raw Syn k) -> WC (Raw d Verb) -> WC (Raw d k))
+semicolon :: Parser (WC (Raw Syn Verb) -> WC (Raw d Verb) -> WC (Raw d Verb))
 semicolon = spaced $ token0 $ \case
   Token _ Semicolon -> Just $ \a b ->
     let fc = FC (start (fcOf a)) (end (fcOf b))
     in  WC fc (a ::-:: b)
   _ -> Nothing
 
-chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a
-chainl1 px pf = px >>= rest
+into :: Parser (WC (Raw Syn Noun) -> WC (Raw d Verb) -> WC (Raw d Noun))
+into = spaced $ token0 $ \case
+  Token _ Into -> Just $ \a b ->
+    let fc = FC (start (fcOf a)) (end (fcOf b))
+    in  WC fc (a ::-:: b)
+  _ -> Nothing
+
+chainl1' :: Parser a -> Parser b -> Parser (a -> b -> a) -> Parser a
+chainl1' start px pf = start >>= rest
  where
   rhs = do f <- pf
            x <- px
@@ -142,6 +149,9 @@ chainl1 px pf = px >>= rest
   rest x = optional rhs >>= \case
     Just (f, y) -> rest (f x y)
     Nothing     -> pure x
+
+chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a
+chainl1 px = chainl1' px px
 
 juxtaposition :: Parser (WC (Raw d k)) -> Parser (WC (Raw d k))
 juxtaposition p = p `chainl1` (try comma)
@@ -232,7 +242,7 @@ letin p = withFC $ do
 cverb :: Parser (WC (Raw Chk Verb))
 -- try to parse an sverb;cverb first. If that fails to find a semicolon,
 -- the sverb can be reparsed as a cverb
-cverb = try (withFC $ compose sverb cverb) <|> (juxtaposition cverb')
+cverb = try (withFC $ compose Semicolon sverb cverb) <|> (juxtaposition cverb')
  where
   cverb' :: Parser (WC (Raw Chk Verb))
   cverb' = try (letin cverb <?> "let binding") <|> withFC
@@ -257,19 +267,12 @@ snoun' = withFC $ do
     pure (fun ::$:: arg)
 
 snoun :: Parser (WC (Raw Syn Noun))
-snoun = do
-  sn <- juxtaposition snoun'
-  -- snoun;sverb is an snoun, so look for trailing ;sverb
-  -- we only need to look for one since sverb;sverb is itself an sverb
-  (fromMaybe sn) <$> (optional $ do
-    f <- try semicolon
-    sv <- sverb
-    return $ f sn sv)
+snoun = chainl1' (juxtaposition snoun') sverb (try into)
 
-compose :: Parser (WC (Raw Syn k)) -> Parser (WC (Raw d Verb)) -> Parser (Raw d k)
-compose p1 p2 = do
+compose :: Tok -> Parser (WC (Raw Syn k)) -> Parser (WC (Raw d Verb)) -> Parser (Raw d k)
+compose t p1 p2 = do
   x <- p1
-  spaced (match Semicolon) <?> "semicolon"
+  spaced (match t) <?> show t
   y <- p2
   pure (x ::-:: y)
 
@@ -342,15 +345,25 @@ cnoun' = try (letin cnoun) <|> withFC
     element = (:[]) <$> cnoun'
 
 cnoun :: Parser (WC (Raw Chk Noun))
-cnoun = try (withFC $ nounIntoVerb) <|> juxtaposition cnoun'
+cnoun = try (withFC $ nounIntoVerbs) <|> juxtaposition cnoun'
  where
-  -- try nounIntoVerb first: the leading (juxtaposition snoun')
-  -- can definitely be reparsed as a (juxtaposition cnoun')
-  -- if we fail to find a semicolon. We look for (juxtaposition snoun')
-  -- rather than snoun because anything after a semicolon would be parsed
-  -- by snoun as an sverb, but here we can allow (more flexible) cverb.
-  nounIntoVerb :: Parser (Raw Chk Noun)
-  nounIntoVerb = compose (juxtaposition snoun') cverb
+  -- Try nounIntoVerbs first: We can accept a chain of |>'s that
+  -- looks like `snoun |> sverb |> sverb |> ... |> cverb`. If we
+  -- fail to find a cverb at the end, we can just reparse the
+  -- previous sverb as a cverb. 
+  nounIntoVerbs :: Parser (Raw Chk Noun)
+  nounIntoVerbs = do 
+    x <- juxtaposition snoun'
+    f <- into
+    nounIntoVerbs' x f
+    
+  nounIntoVerbs' x f =
+    try (do y <- sverb
+            optional into >>= \case
+              Just f' -> nounIntoVerbs' (f x y) f'
+              Nothing -> pure (REmb (f x y)))
+    <|> ((x ::-::) <$> cverb)
+
 
 outputs :: Parser [RawIO]
 outputs = rawIO vtype

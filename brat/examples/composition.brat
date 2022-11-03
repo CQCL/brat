@@ -15,7 +15,7 @@ compose(f, g) = { x => g(f(x)) }
 
 
 compose1( {A -> B}, { {A -> B} -> {A -> C}} ) -> {A -> C}
-compose1(f, g) = { x => (f;g())(x) }
+compose1(f, g) = { x => (f |> g())(x) }
 -- equivalent to
 compose1a :: { { A -> B }, { {A -> B} -> {A -> C} } -> {A -> C} }
 compose1a(f, g) = { x => (g(f))(x) }
@@ -26,13 +26,13 @@ compose2(f, g) = {f(); g()}
 
 -- the following are all just differently-bracketed versions of the same thing
 compose3 :: { { A -> B }, { B -> C } -> {A -> C} }
-compose3(f, g) = { x => (x; f(); g()) }
+compose3(f, g) = { x => (x |> f(); g()) }
 
 compose3a({ A -> B }, { B -> C }) -> {A -> C}
-compose3a(f, g) = { x => x; f(); g() }
+compose3a(f, g) = { x => x |> f(); g() }
 
 compose3b :: { { A -> B }, { B -> C } -> {A -> C} }
-compose3b(f, g) = { x => (x; (f(); g())) }
+compose3b(f, g) = { x => (x |> (f(); g())) }
 
 compose3c({ A -> B }, { B -> C }) -> {A -> C}
-compose3c(f, g) = { x => x; (f(); g()) }
+compose3c(f, g) = { x => x |> (f(); g()) }

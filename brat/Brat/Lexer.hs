@@ -52,6 +52,7 @@ data Tok
  | Square [Token]
  | Round [Token]
  | Semicolon
+ | Into
  | Comma
  | VecComma
  | K Keyword
@@ -83,6 +84,7 @@ instance Show Tok where
   show (Square ts) = '[' : concatMap show ts ++ "]"
   show (Round ts) = '(' : concatMap show ts ++ ")"
   show Semicolon = ";"
+  show Into = "|>"
   show Comma = ","
   show VecComma = ","
   show (K k) = show k
@@ -212,6 +214,7 @@ tok = comment
       <|> try (char ':' $> PortColon)
       <|> try (char '=' $> Equal)
       <|> try (char ';' $> Semicolon)
+      <|> try (string "|>" $> Into)
       <|> try (char ',' $> Comma)
       <|> try (string ".." $> DotDot)
       <|> try (string "<>" $> UnitElem)
