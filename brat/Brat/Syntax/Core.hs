@@ -62,11 +62,7 @@ instance Show (Term d k) where
   show (Th comp) = '{' : show comp ++ "}"
   show (Force th) = show th ++ "()"
   show (Emb x) = '「' : show x ++ "」"
-  show (Pull ps (WC _ (Emb (WC _ (fun :$: arg)))))
-    = unwords [show fun
-              ,"(" ++ concat ((++":") <$> ps)
-              ,show arg ++ ")"
-              ]
+  show (Pull [] x) = "[]:" ++ show x
   show (Pull ps x) = concat ((++":") <$> ps) ++ show x
   show (Var x) = show x
   show (fun :$: arg) = show fun ++ ('(' : show arg ++ ")")

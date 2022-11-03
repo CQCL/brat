@@ -82,11 +82,6 @@ instance Show (Raw d k) where
   show (RTh comp) = '{' : show comp ++ "}"
   show (RForce comp) = show comp ++ "()"
   show (REmb x) = '「' : show x ++ "」"
-  show (RPull ps (WC _ (REmb (WC _ (fun ::$:: arg)))))
-    = unwords [show fun
-              ,"(" ++ concat ((++":") <$> ps)
-              ,show arg ++ ")"
-              ]
   show (RPull [] x) = "[]:" ++ show x
   show (RPull ps x) = concat ((++":") <$> ps) ++ show x
   show (RVar x) = show x
