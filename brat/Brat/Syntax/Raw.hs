@@ -93,7 +93,7 @@ instance Show (Raw d k) where
   show (fun ::$:: arg) = show fun ++ ('(' : show arg ++ ")")
   show (tm ::::: ty) = show tm ++ " :: " ++ show ty
   show (a ::-:: b) = show a ++ "; " ++ show b
-  show (xs ::\:: bod) = show xs ++ " -> " ++ show bod
+  show (xs ::\:: bod) = show xs ++ " => " ++ show bod
   show (RCon c xs) = "Con(" ++ show c ++ "(" ++ show xs ++ "))"
 
 type Desugar = StateT Namespace (ReaderT RawEnv (Except Error))
