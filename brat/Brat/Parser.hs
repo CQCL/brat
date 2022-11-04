@@ -219,7 +219,7 @@ sverb = (juxtaposition sverb') `chainl1` try semicolon
   sverb' = try (letin sverb) <|> withFC (try (func snoun) <|> force)
 
   force :: Parser (Raw Syn Verb)
-  force = RForce <$> (snoun <* spaced (round (space *> eof)))
+  force = RForce <$> (snoun' <* spaced (round (space *> eof)))
 
 func :: Parser (WC (Raw d Noun)) -> Parser (Raw d Verb)
 func pbody = do
