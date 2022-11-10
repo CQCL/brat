@@ -158,14 +158,14 @@ juxtaposition p = p `chainl1` (try comma)
 
 binding :: Parser Abstractor
 binding = do ps <- many (try $ portPull <* space)
-             xs <- (try (APat <$> pat)
-                   <|> nestedBinding)
-                   `chainl1` try binderComma
+             xs <- binding' `chainl1` try binderComma
              if null ps
                then pure xs
                else pure $ APull ps xs
  where
-  vecPat = square (binding `sepBy` (spaced (match VecComma))) >>= list2Cons
+  binding' :: Parser Abstractor
+  binding' = (try (APat <$> pat) <|> round binding)
+  vecPat = square (binding' `sepBy` (spaced (match Comma))) >>= list2Cons
 
   list2Cons :: [Abstractor] -> Parser Pattern
   list2Cons [] = pure PNil
@@ -173,8 +173,6 @@ binding = do ps <- many (try $ portPull <* space)
   list2Cons _ = customFailure (Custom "Internal error list2Cons")
 
   portPull = simpleName <* match PortColon
-
-  nestedBinding = round binding
 
   binderComma :: Parser (Abstractor -> Abstractor -> Abstractor)
   binderComma = spaced $ match Comma $> (:||:)
@@ -343,7 +341,7 @@ cnoun' = try (letin cnoun) <|> withFC
   vec = (\(WC fc x) -> unWC $ vec2Cons (end fc) x) <$> withFC (square elems)
    where
     elems = (eof $> []) <|> (element `chainl1` (try vecComma))
-    vecComma = spaced (match VecComma) $> (++)
+    vecComma = spaced (match Comma) $> (++)
     element = (:[]) <$> cnoun'
 
 cnoun :: Parser (WC (Raw Chk Noun))

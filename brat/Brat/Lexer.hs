@@ -54,7 +54,6 @@ data Tok
  | Semicolon
  | Into
  | Comma
- | VecComma
  | K Keyword
  | DotDot
  | Number Int
@@ -86,7 +85,6 @@ instance Show Tok where
   show Semicolon = ";"
   show Into = "|>"
   show Comma = ","
-  show VecComma = ","
   show (K k) = show k
   show DotDot = ".."
   show (Number n) = show n
@@ -197,8 +195,7 @@ tok :: Lexer Tok
 tok = comment
       <|> try (between (char '(') (char ')') (Round <$> many token))
       <|> try (between (char '{') (char '}') (Curly . thunk <$> many token))
-      <|> try (between (char '[') (char ']') (Square <$> many (try (en $ char ',' $> VecComma)
-                                                                <|> token)))
+      <|> try (between (char '[') (char ']') (Square <$> many token))
       <|> try (Underscore <$ string "_")
       <|> try letIn
       <|> try (Quoted <$> (char '"' *> printChar `manyTill` char '"'))
