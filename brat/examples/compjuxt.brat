@@ -34,8 +34,8 @@ funky_application' :: { a :: Nat, b :: Nat -> Nat }
 funky_application' = x, y => x, y |> addn()
 
 
-int :: { Int }
-int = { idi(1) }
+int :: { -> Int }
+int = { => idi(1) }
 int' :: Int
 int' = idi(1)
 

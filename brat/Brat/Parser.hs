@@ -310,7 +310,9 @@ cnoun' = try (letin cnoun) <|> withFC
   cthunk :: Parser (Raw Chk Noun)
   cthunk = thunk $ \fc th -> case th of
     Thunk n ss -> RTh <$> braceSection fc n ss
-    Lambda ss ts -> RTh . WC fc <$> ((::\::) <$> parseMaybe (spaced (withFC binding)) ss <*> parseMaybe (spaced cnoun) ts)
+    Lambda ss ts -> let maybeAbs = parseMaybe (spaced (withFC binding)) ss
+                        abstractor = fromMaybe (WC fc AEmpty) maybeAbs
+        in (RTh . WC fc . (abstractor ::\::)) <$> parseMaybe (spaced cnoun) ts
     _ -> Nothing
 
   -- Invented variable names look like '1, '2, '3 ...
@@ -320,7 +322,7 @@ cnoun' = try (letin cnoun) <|> withFC
                               (\x -> APat (Bind ('\'': show x))) <$> ns
 
   braceSection :: FC -> Int -> [Token] -> Maybe (WC (Raw Chk Verb))
-  braceSection _ 0 ts | Just v <- parseMaybe (spaced cverb) ts = Just v
+  braceSection _ 0 ts = parseMaybe (spaced cverb) ts
   braceSection fc n ts = do
    let abs = WC fc (braceSectionAbstractor [0..n-1])
    body <- parseMaybe (spaced cnoun) ts
@@ -415,10 +417,9 @@ vtype' ps = try (round vty) <|> vty
            <|> try option
 
   thunkType = thunk $ \_ th -> case th of
+    -- Don't allow brace sections as types yet
     Kernel ss ts -> RK <$> ((:->) <$> parseMaybe (spaced (rawIO stype)) ss <*> parseMaybe (spaced (rawIO stype)) ts)
     FunTy  ss ts -> RC <$> ((:->) <$> parseMaybe (spaced (rawIO vtype)) ss <*> parseMaybe (spaced (rawIO vtype)) ts)
-    -- Don't allow brace sections as types yet
-    Thunk 0 ss -> RC . ([] :->) <$> parseMaybe (spaced (rawIO vtype)) ss
     _ -> Nothing
 
 
