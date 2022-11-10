@@ -66,7 +66,7 @@ data Raw :: Dir -> Kind -> Type where
   RPull     :: [PortName] -> WC (Raw Chk k) -> Raw Chk k
   RVar      :: UserName -> Raw Syn Noun
   (::$::)   :: WC (Raw Syn Noun) -> WC (Raw Chk Noun) -> Raw Syn Noun -- Eval with ChkRaw n argument
-  (:::::)   :: WC (Raw Chk k) -> [RawIO] -> Raw Syn k
+  (:::::)   :: WC (Raw Chk Noun) -> [RawIO] -> Raw Syn Noun
   (::-::)   :: WC (Raw Syn k) -> WC (Raw d Verb) -> Raw d k -- vertical juxtaposition (diagrammatic composition)
   (::\::)   :: WC Abstractor -> WC (Raw d Noun) -> Raw d Verb
   RCon      :: UserName -> WC (Raw Chk Noun) -> Raw Chk Noun

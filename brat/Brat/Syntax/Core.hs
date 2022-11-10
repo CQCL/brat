@@ -40,7 +40,7 @@ data Term :: Dir -> Kind -> Type where
   (:$:)    :: WC (Term Syn Noun) -> WC (Term Chk Noun) -> Term Syn Noun
   -- Type annotations (annotating a term with its outputs)
   -- TODO: Make it possible for Output to be (PortName, SType) when using this in kernels
-  (:::)    :: WC (Term Chk k) -> [Output] -> Term Syn k
+  (:::)    :: WC (Term Chk Noun) -> [Output] -> Term Syn Noun
   -- vertical juxtaposition (diagrammatic or sequential composition)
   (:-:)    :: WC (Term Syn k) -> WC (Term d Verb) -> Term d k
   (:\:)    :: WC Abstractor -> WC (Term d Noun) -> Term d Verb
