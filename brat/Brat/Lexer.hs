@@ -2,7 +2,7 @@ module Brat.Lexer (Thunk(..), Tok(..), Token(..), Keyword(..), lex) where
 
 import Prelude hiding (lex)
 import Control.Exception (assert)
-import Control.Monad.State (State, put, get, runState)
+import Control.Monad.State (State, put, get,evalState)
 import Data.Char (isSpace)
 import Data.Functor (($>), (<&>), void)
 import Data.List (intercalate)
@@ -196,7 +196,7 @@ comment = string "--" *> ((printChar `manyTill` lookAhead (void newline <|> void
 tok :: Lexer Tok
 tok = comment
       <|> try (between (char '(') (char ')') (Round <$> many token))
-      <|> try (between (char '{') (char '}') (Curly <$> thunk 0 B0))
+      <|> try (between (char '{') (char '}') (Curly . thunk <$> many token))
       <|> try (between (char '[') (char ']') (Square <$> many (try (en $ char ',' $> VecComma)
                                                                 <|> token)))
       <|> try (Underscore <$ string "_")
@@ -224,17 +224,16 @@ tok = comment
       <|> try qualified
       <|> Ident <$> ident
  where
-  thunk :: Int -> Bwd Token -> Lexer Thunk
-  -- the n is a piece of state, but we cannot use the state monad for 'thunk' itself
-  -- because we are in the parser monad. (We can for callees, however.)
-  thunk n prev = try (Thunk n (prev <>> []) <$ lookAhead (string "}")) <|> do
-    this <- token
-    case _tok this of
-      Lolly    -> assert (n == 0) $ Kernel (prev <>> []) <$> (many token)
-      FatArrow -> assert (n == 0) $ Lambda (prev <>> []) <$> (many token)
-      Arrow    -> assert (n == 0) $ FunTy  (prev <>> []) <$> (many token)
-      _ -> let (t, n') = runState (numberUnderscoresTerm this) n in
-        thunk n' (prev :< t)
+  thunk :: [Token] -> Thunk
+  thunk ts = evalState (thunk' B0 ts) 0
+  thunk' :: Bwd Token -> [Token] -> State Int Thunk
+  -- if we've hit the end of the tokens (i.e. }) without an arrow then it's a Thunk
+  thunk' prev [] = get >>= \n -> return $ Thunk n (prev <>> [])
+  thunk' prev (t:ts) = get >>= \n -> case _tok t of
+    Lolly    -> assert (n == 0) $ return $ Kernel (prev <>> []) ts
+    FatArrow -> assert (n == 0) $ return $ Lambda (prev <>> []) ts
+    Arrow    -> assert (n == 0) $ return $ FunTy  (prev <>> []) ts
+    _ -> numberUnderscoresTerm t >>= \numbered -> thunk' (prev :< numbered) ts
 
   numberUnderscoresTerm :: Token -> State Int Token
   numberUnderscoresTerm t = let tk = Token (fc t) in case _tok t of
