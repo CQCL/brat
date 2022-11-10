@@ -2,7 +2,7 @@ module Brat.Checker.Monad where
 
 import Brat.Checker.Quantity (Quantity(..), qpred)
 import Brat.Checker.Types
-import Brat.Error (Error(..), ErrorMsg(..))
+import Brat.Error (Error(..), ErrorMsg(..), dumbErr)
 import Brat.FC (FC)
 import Brat.Naming (fresh, Name, Namespace)
 import Brat.Syntax.Common
@@ -65,7 +65,7 @@ lookupAndUse :: UserName -> KEnv -> Either Error (Maybe ((Src, SType), KEnv))
 lookupAndUse x kenv = case M.lookup x kenv of
    Nothing -> Right Nothing
    Just (q, rest) -> case qpred q of
-                      Nothing -> Left $ Err Nothing Nothing $ TypeErr $ (show x) ++ " has already been used"
+                      Nothing -> Left $ dumbErr $ TypeErr $ (show x) ++ " has already been used"
                       Just q -> Right $ Just (rest, M.insert x (q, rest) kenv)
 
 localKVar :: KEnv -> Free CheckingSig v -> Free CheckingSig v

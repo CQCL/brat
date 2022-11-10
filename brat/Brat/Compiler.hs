@@ -49,7 +49,7 @@ compileFile file = do
   (venv, decls, _, _) <- eitherIO env
   -- all good? Let's just get the graph for `main`
   mn <- eitherIO $
-      maybeToRight (Err Nothing Nothing MainNotFound) $
+      maybeToRight (dumbErr MainNotFound) $
       lookupBy ((== "main") . fnName) id decls
   eitherIO $ run (venv, decls, fnLoc mn) $ checkDecl [] mn
 

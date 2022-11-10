@@ -99,7 +99,7 @@ loadStmtsWithEnv (venv, decls, _, _) pre stmts = do
   decls <- pure (decls ++ newDecls)
   -- hacky mess - cleanup!
   unless (null (duplicates decls)) $
-    Left . Err Nothing Nothing . NameClash $ show (duplicates decls)
+    Left . dumbErr . NameClash $ show (duplicates decls)
   venv <- pure $ venv <> addNounsToEnv pre decls
   -- giving a dummy file context - not ideal
   let env = (venv, decls, FC (Pos 0 0) (Pos 0 0))

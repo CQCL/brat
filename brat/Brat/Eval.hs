@@ -71,7 +71,7 @@ ceval' g (Th f) = pure $ VClos g (unWC f)
 ceval' g (_ :\: body) = eval g body
 ceval' g (Emb tm) = seval g tm
 -- eval g (Closure [Value] (Term d k)
-ceval' _ tm = throwError $ Err Nothing Nothing (Unimplemented "ceval" [show tm])
+ceval' _ tm = throwError $ dumbErr (Unimplemented "ceval" [show tm])
 
 seval :: [Value] -> WC (Term Syn k) -> Eval Value
 seval g (WC fc tm) = addFCToError fc (seval' g tm)
@@ -83,7 +83,7 @@ seval' g (fun :$: arg) = do
   arg <- ceval g arg
   apply fun [EApp arg]
 seval' g (_ :\: body) = eval g body
-seval' _ tm = throwError $ Err Nothing Nothing (Unimplemented "seval" [show tm])
+seval' _ tm = throwError $ dumbErr (Unimplemented "seval" [show tm])
 
 pattern VNat n = VSimple (Num n)
 
