@@ -1,5 +1,5 @@
-ext "" f :: Nat -> Int
-ext "" g :: Int -> Nat
+ext "" f :: { Nat -> Int }
+ext "" g :: { Int -> Nat }
 
 -- This won't work, because the LHS of an application is currently a noun
 -- (it should be a verb: https://cqc.atlassian.net/jira/software/projects/KARL/boards/43/backlog?selectedIssue=KARL-278)

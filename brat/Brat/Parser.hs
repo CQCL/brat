@@ -14,7 +14,7 @@ import Data.Functor (($>), (<&>))
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Set (empty)
 import Prelude hiding (lex, round)
-import Text.Megaparsec hiding (Pos, Token, empty, match)
+import Text.Megaparsec hiding (Pos, Token, empty, match, ParseError)
 
 newtype CustomError = Custom String deriving (Eq, Ord)
 
@@ -525,29 +525,19 @@ decl = do
       is_fun_ty (RK _) = True
       is_fun_ty _ = False
 
-parseFile = go pfile
-
-go :: Parser a -> String -> String -> Either Error a
-go p fname contents = do
-  toks <- first fixLexErr (parse lex fname contents)
-  first fixParseErr (parse p fname toks)
+parseFile :: String -> String -> Either Error ([UserName], RawEnv)
+parseFile fname contents = do
+  toks <- first (wrapParseErr LexErr) (parse lex fname contents)
+  first (wrapParseErr ParseErr) (parse pfile fname toks)
  where
-  fixLexErr :: ShowErrorComponent e
-            => ParseErrorBundle String e -> Error
-  fixLexErr er = let prettyErr = errorBundlePretty er
-                     -- TODO: return all of the errors
-                     e :| _errs = bundleErrors er
-                     fc = mkFC (errorOffset e) (bundlePosState er)
-                 in  Err (Just fc) (Just fname) $ LexErr (PE prettyErr)
-
-  fixParseErr :: ShowErrorComponent e
-              => ParseErrorBundle [Token] e -> Error
-  fixParseErr er = let prettyErr = errorBundlePretty er
-                       -- TODO: return all of the errors
-                       e :| _errs = bundleErrors er
-                       fc = mkFC (errorOffset e) (bundlePosState er)
-                   in  Err (Just fc) (Just fname) $ ParseErr (PE prettyErr)
-
+  wrapParseErr :: (VisualStream t, TraversableStream t, ShowErrorComponent e)
+            => (ParseError -> ErrorMsg) -> ParseErrorBundle t e -> Error
+  wrapParseErr wrapper er = let
+      prettyErr = errorBundlePretty er
+      -- TODO: return all of the errors
+      e :| _errs = bundleErrors er
+      fc = mkFC (errorOffset e) (bundlePosState er)
+    in  Err (Just fc) (Just fname) $ wrapper (PE prettyErr)
 
   mkFC :: TraversableStream a => Int -> PosState a -> FC
   mkFC os pst = let (_, pst') = reachOffset os pst
