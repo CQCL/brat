@@ -3,16 +3,16 @@ type B = Bool
 type C = Unit
 
 test1(A, {A -> B}, {B -> C}) -> C
-test1(x,f,g) = x |> f() |> g()
+test1(x,f,g) = x |> f |> g
 
 test2(A, {A -> B}, {B -> C}) -> C
-test2(x,f,g) = (x |> f()) |> g()
+test2(x,f,g) = (x |> f) |> g
 
 test3(A, {A -> B}, {A -> {B -> C}}) -> C
-test3(x,f,g) = x |> f() ; (x |> g())()
+test3(x,f,g) = x |> f ; (x |> g)
 
 test4(A, {A -> B}, {A -> {B -> C}}) -> {A -> C}
-test4(x,f,g) = { f() ; (x |> g())() }
+test4(x,f,g) = { f ; (x |> g) }
 
 test5(A, {A -> B}, {B -> {B -> C}}) -> {A -> C}
-test5(x,f,g) = { f() ; (x |> f() ; g())() }
+test5(x,f,g) = { f ; (x |> f ; g) }

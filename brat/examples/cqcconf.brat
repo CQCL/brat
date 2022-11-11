@@ -23,6 +23,6 @@ main = add((add,add)(unpack_vec(vec)))
 
 main2 :: { Qubit, Qubit -o Bit, Bit }
 main2 =
- (H,qid)();
- lib.kernel.CZ();
- (lib.kernel.M,lib.kernel.M)()
+ H,qid;
+ lib.kernel.CZ;
+ lib.kernel.M,lib.kernel.M

@@ -215,7 +215,7 @@ sverb = (juxtaposition sverb') `chainl1` try semicolon
   sverb' = try (letin sverb) <|> withFC (try (func snoun) <|> force)
 
   force :: Parser (Raw Syn Verb)
-  force = RForce <$> (snoun' <* spaced (round (space *> eof)))
+  force = RForce <$> snoun'  -- Force implicitly
 
 func :: Parser (WC (Raw d Noun)) -> Parser (Raw d Verb)
 func pbody = do
@@ -313,14 +313,14 @@ cnoun' = try (letin cnoun) <|> withFC
 
   -- Invented variable names look like '1, '2, '3 ...
   -- which are illegal for the user to use as variables
-  braceSectionAbstractor :: [Int] -> Abstractor
-  braceSectionAbstractor ns = foldr (:||:) AEmpty $
-                              (\x -> APat (Bind ('\'': show x))) <$> ns
+  braceSectionAbstractor :: Int -> Abstractor
+  braceSectionAbstractor n = foldr (:||:) AEmpty $
+                             (\x -> APat (Bind ('\'': show x))) <$> [0..n-1]
 
   braceSection :: FC -> Int -> [Token] -> Maybe (WC (Raw Chk Verb))
   braceSection _ 0 ts = parseMaybe (spaced cverb) ts
   braceSection fc n ts = do
-   let abs = WC fc (braceSectionAbstractor [0..n-1])
+   let abs = WC fc (braceSectionAbstractor n)
    body <- parseMaybe (spaced cnoun) ts
    pure (WC fc (abs ::\:: body))
 

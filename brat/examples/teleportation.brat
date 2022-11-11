@@ -20,8 +20,8 @@ packCash(m, m') = [m, m']
 
 bell00 :: { Qubit, Qubit -o Qubit, Qubit }
 bell00 = {
- lib.kernel.H(), lib.kernel.qid();
- lib.kernel.CX()
+ lib.kernel.H, lib.kernel.qid;
+ lib.kernel.CX
 }
 
 alice'(Qubit, Qubit) -o Bool, Bool, Money, Money
@@ -32,10 +32,10 @@ alice'(a, q) = let (a, q) = lib.kernel.CX(a, q) in
 -- A more "Braty" version of the above function
 alice :: { Qubit, Qubit -o Bool, Bool, Vec(Money, 2) }
 alice = {
- lib.kernel.CX();
- lib.kernel.qid(), lib.kernel.H();
- measure2();
- (bid,bid,packCash)()
+ lib.kernel.CX;
+ lib.kernel.qid, lib.kernel.H;
+ measure2;
+ bid,bid,packCash
 }
 
 bob :: { Qubit, x :: Bool, y :: Bool -o Qubit }
@@ -46,6 +46,6 @@ bob(q, x, y) =
 
 tele(Qubit, Qubit, Qubit) -o Qubit, Vec(Money, 2)
 tele =
- lib.kernel.qid(),bell00();
- (alice, lib.kernel.qid)();
+ lib.kernel.qid,bell00;
+ alice, lib.kernel.qid;
  x, y, ms, q => bob(q, x, y), ms
