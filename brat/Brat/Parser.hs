@@ -156,16 +156,14 @@ chainl1 px = chainl1' px px
 juxtaposition :: Parser (WC (Raw d k)) -> Parser (WC (Raw d k))
 juxtaposition p = p `chainl1` (try comma)
 
-binding :: Parser Abstractor
-binding = do ps <- many (try $ portPull <* space)
-             xs <- binding' `chainl1` try binderComma
-             if null ps
-               then pure xs
-               else pure $ APull ps xs
+abstractor :: Parser Abstractor
+abstractor = do ps <- many (try $ portPull <* space)
+                xs <- binding `chainl1` try binderComma
+                pure $ if null ps then xs else APull ps xs
  where
-  binding' :: Parser Abstractor
-  binding' = (try (APat <$> pat) <|> round binding)
-  vecPat = square (binding' `sepBy` (spaced (match Comma))) >>= list2Cons
+  binding :: Parser Abstractor
+  binding = (try (APat <$> pat) <|> round abstractor)
+  vecPat = square (binding `sepBy` (spaced (match Comma))) >>= list2Cons
 
   list2Cons :: [Abstractor] -> Parser Pattern
   list2Cons [] = pure PNil
@@ -197,7 +195,7 @@ binding = do ps <- many (try $ portPull <* space)
     cons = do
       matchString "cons"
       space
-      PCon "cons" <$> round binding
+      PCon "cons" <$> round abstractor
 
     onePlus = do
       matchString "succ"
@@ -221,7 +219,7 @@ sverb = (juxtaposition sverb') `chainl1` try semicolon
 
 func :: Parser (WC (Raw d Noun)) -> Parser (Raw d Verb)
 func pbody = do
-  xs <- withFC binding <?> "Binding(s)"
+  xs <- withFC abstractor <?> "Binding(s)"
   spaced $ match FatArrow
   body <- pbody
   pure $ xs ::\:: body
@@ -229,7 +227,7 @@ func pbody = do
 letin :: Parser (WC (Raw d k)) -> Parser (WC (Raw d k))
 letin p = withFC $ do
   (lhs,rhs) <- inLet $ do
-    abs <- withFC binding
+    abs <- withFC abstractor
     spaced $ match Equal
     thing <- snoun
     pure (abs, thing)
@@ -308,9 +306,9 @@ cnoun' = try (letin cnoun) <|> withFC
   cthunk :: Parser (Raw Chk Noun)
   cthunk = thunk $ \fc th -> case th of
     Thunk n ss -> RTh <$> braceSection fc n ss
-    Lambda ss ts -> let maybeAbs = parseMaybe (spaced (withFC binding)) ss
-                        abstractor = fromMaybe (WC fc AEmpty) maybeAbs
-        in (RTh . WC fc . (abstractor ::\::)) <$> parseMaybe (spaced cnoun) ts
+    Lambda ss ts -> let maybeAbs = parseMaybe (spaced (withFC abstractor)) ss
+                        abstr = fromMaybe (WC fc AEmpty) maybeAbs
+        in (RTh . WC fc . (abstr ::\::)) <$> parseMaybe (spaced cnoun) ts
     _ -> Nothing
 
   -- Invented variable names look like '1, '2, '3 ...
@@ -570,7 +568,7 @@ clauses declName = try noLhs <|> branches
     label (declName ++ "(...) = ...") $
       matchString declName
     space
-    lhs <- withFC $ round (binding <?> "binder")
+    lhs <- withFC $ round (abstractor <?> "binder")
     spaced $ match Equal
     rhs <- cnoun
     pure (lhs,rhs)
