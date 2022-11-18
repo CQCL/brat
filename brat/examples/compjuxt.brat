@@ -11,6 +11,21 @@ id2 = { f,f; g,g }
 id2'(Nat, Nat) -> Nat, Nat
 id2' = f,f; g,g
 
+-- Compose forced juxtapositions of nouns
+id2a :: { Nat, Int -> Nat, Int }
+id2a = { (f,g); g,f }
+
+id2b :: { Nat, Int -> Nat, Int }
+id2b = { f,g; (g,f) }
+
+id2c :: { Nat, Int -> Nat, Int }
+id2c = { (f,g); (g,f) }
+
+-- Note brackets here; without them, would be parsed as (idi(), f()); (g(), idn())
+mixture :: { Int, Nat, Nat -> Int, Nat, Nat }
+mixture = { idi, (f; g), idn }
+
+
 swap :: { a :: Nat, b :: Nat -> b :: Nat, a :: Nat }
 swap = { x, y => a:id2(x, y) }
 swap' :: { a :: Nat, b :: Nat -> b :: Nat, a :: Nat }

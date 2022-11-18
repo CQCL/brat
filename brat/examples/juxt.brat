@@ -6,11 +6,11 @@ I = { q => q }
 I' :: { Qubit -o Qubit }
 I' = { I }
 
--- We synthesize { Qubit -o Qubit },{ Qubit -o Qubit }
--- but merge the kernels in the typechecker
 I2 :: { Qubit, Qubit -o Qubit, Qubit }
 I2 = { I, I }
 
+I4 :: { Qubit, Qubit -o Qubit, Qubit }
+I4 = { I, (x => x)}
 
 -- And much the same for classical functions
 id(Nat) -> Nat
@@ -21,6 +21,9 @@ id2 = { id,id }
 
 id3(Nat, Nat) -> Nat, Nat
 id3 = x, y => (id,id)(x, y)
+
+id4 :: { Nat, Nat -> Nat, Nat }
+id4 = { id, (x => x)}
 
 asym(Nat, Nat, Nat) -> Nat, Nat, Nat
 asym = { id,id2 }

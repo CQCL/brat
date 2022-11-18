@@ -211,8 +211,7 @@ sverb :: Parser (WC (Raw Syn Verb))
 sverb = (juxtaposition sverb') `chainl1` try semicolon
  where
   sverb' :: Parser (WC (Raw Syn Verb))
-  -- note: we might need (round sverb) as an option here too
-  sverb' = try (letin sverb) <|> withFC (try (func snoun) <|> force)
+  sverb' = try (letin sverb) <|> round sverb <|> withFC (try (func snoun) <|> force)
 
   force :: Parser (Raw Syn Verb)
   force = RForce <$> snoun'  -- Force implicitly
