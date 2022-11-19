@@ -12,6 +12,7 @@ import Brat.Checker.Helpers
 import Brat.Syntax.Common
 import Brat.FC
 import Brat.UserName
+import Test.Checking (runEmpty)
 
 import qualified Control.Exception as CE (assert)
 import Control.Monad.Except
@@ -127,7 +128,7 @@ isCombo (Combo _) = True
 isCombo _ = False
 
 tensorOutputsTests :: TestTree
-tensorOutputsTests = testCase "tensorOutputs" $ case run (emptyEnv, [], FC (Pos 0 0) (Pos 0 0)) mkTensor of
+tensorOutputsTests = testCase "tensorOutputs" $ case runEmpty mkTensor of
   Left err -> assertFailure (show err)
   Right ((foo, bar, qux, outs), (holes, (nodes, edges))) -> do
     (M.size nodes) @=? 4 -- three input nodes and one combo

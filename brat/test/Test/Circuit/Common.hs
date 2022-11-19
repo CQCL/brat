@@ -154,8 +154,6 @@ extGraph
    ,[]
    )
 
-emptyGraph = (M.empty, [])
-
 -- Test the "close-enough" "equality" of two graphs
 (=?) :: Graph -- Actual
      -> Graph -- Expected

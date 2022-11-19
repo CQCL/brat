@@ -3,6 +3,7 @@ module Brat.Compiler (printAST, printDeclsHoles, compileFile) where
 import Brat.Compile.Circuit
 import Brat.Checker (run)
 import Brat.Syntax.Common (Decl'(..), VType'(..))
+import Brat.Naming (root)
 import Brat.Error
 import Brat.Load
 import Util
@@ -51,9 +52,9 @@ compileFile file = do
   mn <- eitherIO $
       maybeToRight (dumbErr MainNotFound) $
       lookupBy ((== "main") . fnName) id decls
-  eitherIO $ run (venv, decls, fnLoc mn) $ checkDecl [] mn
+  eitherIO $ run (venv, decls, fnLoc mn) root $ checkDecl [] mn
 
-  (_, (_, graph)) <- eitherIO $ run (venv, [], fnLoc mn) (checkDecl [] mn)
+  (_, (_, graph), _) <- eitherIO $ run (venv, [], fnLoc mn) root (checkDecl [] mn)
 
   let outFile = (dropExtension file) <> ".tk"
   case fnSig mn of

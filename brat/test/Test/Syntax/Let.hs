@@ -9,6 +9,7 @@ import Brat.Naming
 import Brat.Syntax.Common
 import Brat.Syntax.Core
 import Brat.UserName
+import Test.Checking (runEmpty)
 
 import Data.String
 import Test.Tasty.HUnit
@@ -28,8 +29,7 @@ test = testCase "let" $
                                      ::: [("a", SimpleTy IntTy), ("b", SimpleTy IntTy)]))
            (wfc (Var "x"))
       conn = ((), ())
-      nil = (emptyEnv, [], fc)
-  in case fst <$> run nil (let ?my = Braty in check (wfc tm) conn) of
+  in case fst <$> runEmpty (let ?my = Braty in check (wfc tm) conn) of
        Right ([(_, SimpleTy IntTy)], ((), ())) -> pure ()
        Right (outs, ((), ())) -> assertFailure (show outs)
        x -> assertFailure (show x)

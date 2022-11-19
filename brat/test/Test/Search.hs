@@ -2,13 +2,14 @@
 
 module Test.Search (searchTests) where
 
-import Brat.Checker (check, run, emptyEnv, Modey(..))
+import Brat.Checker (check, Modey(..))
 import Brat.FC
 import Brat.Naming
 import Brat.Search (vsearch)
 import Brat.Syntax.Common
 import Brat.Syntax.Core
 import Util (names)
+import Test.Checking (runEmpty)
 
 import Data.Either (isRight)
 import Data.Functor ((<&>))
@@ -51,10 +52,9 @@ tokensTypecheck kty =
   let kernels = vsearch fc kty in
     case kernels of
       [] -> False
-      (k:_) -> case run (emptyEnv, [], fc)
-                    (let ?my = Braty in check (WC fc k) ((), [(((src, In 0), "fun"), kty)])) of
-                 Right (((), ((), unders)), _) -> null unders
-                 Left _ -> False
+      (k:_) -> case runEmpty (let ?my = Braty in check (WC fc k) ((), [(((src, In 0), "fun"), kty)])) of
+          Right (((), ((), unders)), _) -> null unders
+          Left _ -> False
  where
   fc = FC (Pos 0 0) (Pos 0 0)
   src = MkName [("src", 0)]

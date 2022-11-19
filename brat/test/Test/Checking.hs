@@ -1,6 +1,11 @@
-module Test.Checking (getCheckingTests) where
+module Test.Checking (getCheckingTests, runEmpty) where
 
+import Brat.Checker (run, emptyEnv, Checking, TypedHole)
+import Brat.Error (Error)
+import Brat.FC
+import Brat.Graph (Graph)
 import Brat.Load
+import Brat.Naming (root)
 import Test.Parsing (expectedParsingFails, expectFailForPaths)
 
 import Control.Monad.Except
@@ -25,3 +30,6 @@ parseAndCheckXF = expectFailForPaths (expectedParsingFails ++ expectedCheckingFa
 
 getCheckingTests :: IO TestTree
 getCheckingTests = testGroup "checking" . fmap parseAndCheckXF <$> findByExtension [".brat"] "examples"
+
+runEmpty :: Checking v -> Either Error (v,([TypedHole],Graph))
+runEmpty m = (\(a,b,_) -> (a,b)) <$> run (emptyEnv, [], FC (Pos 0 0) (Pos 0 0)) root m

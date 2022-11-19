@@ -387,10 +387,10 @@ abstract ((_,ty):_) pat = err (PattErr $
     "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty)
 
 run :: (VEnv, [Decl], FC)
+    -> Namespace
     -> Checking a
-    -> Either Error (a, ([TypedHole], Graph))
-run (ve, ds, fc) m = let ctx = Ctx { venv = ve
+    -> Either Error (a, ([TypedHole], Graph), Namespace)
+run (ve, ds, fc) ns m = let ctx = Ctx { venv = ve
                                    , decls = ds
                                    , typeFC = fc
-                                   } in
-                       (\(a,b,_) -> (a,b)) <$> handler m ctx root
+                                   } in handler m ctx ns

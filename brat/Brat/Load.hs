@@ -14,7 +14,7 @@ import Brat.Checker.Types (ValueType)
 import Brat.Checker
 import Brat.Error
 import Brat.FC
-import Brat.Graph (Thing(..))
+import Brat.Graph (emptyGraph, Thing(..))
 import Brat.Naming
 import Brat.Parser
 import Brat.Syntax.Common
@@ -101,11 +101,19 @@ loadStmtsWithEnv (venv, decls, _, _) pre stmts = do
   unless (null (duplicates decls)) $
     Left . dumbErr . NameClash $ show (duplicates decls)
   venv <- pure $ venv <> addNounsToEnv pre decls
-  -- giving a dummy file context - not ideal
-  let env = (venv, decls, FC (Pos 0 0) (Pos 0 0))
-  (_, (holes, graph))   <- run env (mapM (\d -> localFC (fnLoc d) $ checkDecl pre d) decls)
+  (holes, graph, _nsp) <- foldM (checkDecl' venv decls pre) ([], emptyGraph, root) decls
 
   pure (venv, decls, holes, graph)
+ where
+  -- A composable version of `checkDecl`
+  checkDecl' :: VEnv -> [Decl] -> Prefix -- static environment, context
+            -> ([TypedHole], Graph, Namespace) -- compiled output + namespace-state
+            -> Decl -- to check
+            -> Either Error ([TypedHole], Graph, Namespace)
+  checkDecl' venv decls pre (holes, graph, nsp) d = do
+    ((), (holes', graph'), nsp') <- run (venv, decls, fnLoc d) nsp (checkDecl pre d)
+    pure (holes ++ holes', graph <> graph', nsp')
+
 
 loadFilename :: String -> ExceptT Error IO Mod
 loadFilename file = do

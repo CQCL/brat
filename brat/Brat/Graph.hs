@@ -39,6 +39,8 @@ data DataNode = DCons | DNil | DSome | DNone | DPair | DDoub | DSucc
  deriving (Eq, Show)
 
 type Graph = (M.Map Name Node, [Wire])
+emptyGraph :: Graph
+emptyGraph = (M.empty, [])
 
 instance {-# OVERLAPPING #-} Show Graph where
   show (ns, ws) = unlines (("Nodes:":(show <$> M.toList ns)) ++ ("":"Wires:":(show <$> ws)))
