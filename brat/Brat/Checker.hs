@@ -65,7 +65,7 @@ vtensor :: (?my :: Modey m) => [(Src, ValueType m)] -> [(Src, ValueType m)] -> C
 vtensor ss [] = pure ss
 vtensor [] ts = pure ts
 vtensor ss ts = do
-  let sig = mergeSigs (rowToSig ss) (rowToSig ts)
+  let sig = rowToSig ss <> rowToSig ts
   (_, unders, overs) <- anext "tensor" (Combo Row) sig sig
   mapM (\(((dangling,_),ty), ((hungry, _),_)) -> awire (dangling,ty,hungry))
        (zip (ss ++ ts) unders)

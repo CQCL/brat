@@ -45,6 +45,7 @@ data ErrorMsg
  | Unimplemented String [String]
  | ImportCycle String String
  | FileNotFound String
+ | AmbiguousPortPull String String
  | InternalError String
 
 instance Show ErrorMsg where
@@ -91,6 +92,7 @@ instance Show ErrorMsg where
   show (Unimplemented f args) = unwords ("Unimplemented, sorry! --":f:args)
   show (ImportCycle a b) = unwords ["Cycle detected in imports:", a, "is reachable from", b]
   show (FileNotFound f) = "File not found: " ++ show f
+  show (AmbiguousPortPull p row) = "Port " ++ p ++ " is ambiguous in " ++ row
   show (InternalError x) = "Internal error: " ++ x
 
 data Error = Err { fc  :: Maybe FC

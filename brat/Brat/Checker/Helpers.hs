@@ -57,7 +57,10 @@ pullPorts (p:ports) types = do
             -> Checking (((End, PortName), ty), [((End, PortName), ty)])
   pull1Port p [] = fail $ "Port not found: " ++ p
   pull1Port p (x@((_, p'), _):xs)
-   | p == p' = pure (x, xs)
+   | p == p'
+   = if (p `elem` (snd . fst <$> xs))
+     then err (AmbiguousPortPull p (showRow (x :| xs)))
+     else pure (x, xs)
    | otherwise = (id *** (x:)) <$> pull1Port p xs
 
 evalNat :: Term Chk Noun -> Checking Int

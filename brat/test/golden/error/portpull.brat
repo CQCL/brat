@@ -11,4 +11,4 @@ id3 = x,y => (id,id)(a1:y, x)
 
 -- This one should fail because the name "a1_1" is wrong
 id4(Nat, Nat) -> Nat, Nat
-id4 = x,y => (id, id)(a1_1:x, y)
+id4 = x,y => (id, id)(a1:x, y)

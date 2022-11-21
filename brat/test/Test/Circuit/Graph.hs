@@ -138,7 +138,7 @@ tensorOutputsTests = testCase "tensorOutputs" $ case runEmpty mkTensor of
     (length outs) @?= 4 -- four wires/ports
     mapM (@?= combo_node) (map (fst.fst.fst) outs)
     let actualPorts = M.fromList $ map (\((n,p),ty) -> (p,ty)) outs
-    let expectedPorts = M.fromList [("out1", SimpleTy Natural), ("out2", SimpleTy FloatTy), ("out3", SimpleTy IntTy), ("res", SimpleTy TextType)]
+    let expectedPorts = M.fromList [("out1", SimpleTy Natural), ("out2", SimpleTy FloatTy), ("out1", SimpleTy IntTy), ("res", SimpleTy TextType)]
     actualPorts @?= expectedPorts
     edges `equalEdges`
       [((foo,Ex 0), Right (SimpleTy Natural), (combo_node, In 0))

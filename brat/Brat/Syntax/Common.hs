@@ -25,7 +25,7 @@ module Brat.Syntax.Common (PortName,
                            Pattern(..),
                            Abstractor(..),
                            Clause(..),
-                           mergeSigs, showRow,
+                           showRow,
                            pattern PSome,
                            Src, Tgt,
                            End,
@@ -41,12 +41,9 @@ module Brat.Syntax.Common (PortName,
 import Brat.FC
 import Brat.Naming
 
-import Data.Char (isDigit)
 import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.List.Reverse.StrictSpine as Rev (span)
 import Data.Kind (Type)
-import qualified Data.Set as Set
 
 data Port = In Int | Ex Int deriving (Eq, Ord, Show)
 type PortName = String
@@ -154,33 +151,10 @@ instance Show io => Show (CType' io) where
 deriving instance Eq (VType' tm) => Eq (CType' (PortName, VType' tm))
 
 instance Semigroup (CType' (PortName, ty)) where
-  (ss :-> ts) <> (us :-> vs) = (mergeSigs ss us) :-> (mergeSigs ts vs)
+  (ss :-> ts) <> (us :-> vs) = (ss <> us) :-> (ts <> vs)
 
 instance Semigroup (Row' tm q) where
-  R ss <> R ts = R (mergeSigs ss ts)
-
--- For use in semigroup instances of `CType` and `Row`
-mergeSigs :: [(PortName, a)] -> [(PortName, a)] -> [(PortName, a)]
-mergeSigs xs ys = aux Set.empty (xs ++ ys)
- where
-  aux :: Set.Set PortName -> [(PortName, a)] -> [(PortName, a)]
-  aux _ [] = []
-  aux seen ((p,ty):rest)
-   | Set.member p seen
-   = let p' = head $ filter (\x -> Set.notMember x seen) (names p) in
-       (p', ty) : aux (Set.insert p' seen) rest
-   | otherwise = (p, ty) : aux (Set.insert p seen) rest
-
-  names :: PortName -> [String]
-  names port
-    = let (prefix, xs) = Rev.span isDigit port
-          ixs = case xs of
-                  [] -> [(1 :: Int)..]
-                  n  -> [(read n :: Int) + 1..]
-      in addIndex prefix <$> ixs
-
-  addIndex :: String -> Int -> String
-  addIndex s n = s ++ show n
+  R ss <> R ts = R (ss <> ts)
 
 data Locality = Extern String | Local deriving (Eq, Show)
 
