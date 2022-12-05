@@ -13,7 +13,7 @@ labelType (Right vty) (p, q) = unwords ["[label ="
                                        ,"]"]
 
 mkEdge :: Wire -> String
-mkEdge ((src, Ex p), ty, (tgt, In q)) = unwords [show (show src), "->", show (show tgt), labelType ty (show p,show q)]
+mkEdge (Ex src p, ty, In tgt q) = unwords [show (show src), "->", show (show tgt), labelType ty (show p,show q)]
 
 dot :: Graph -> String
 dot g

@@ -110,7 +110,7 @@ equalEdges actual expected = do
   actual @?= expected
  where
   dup_wires s _ _ = assertFailure $ "Multiple wires for same source: " ++ (show s)
-  key_by_src :: [Wire] -> IO (M.Map End Wire)
+  key_by_src :: [Wire] -> IO (M.Map OutPort Wire)
   key_by_src ws = do
     let ioVals = M.fromListWithKey dup_wires (map (\w@(src,_,_) -> (src, pure w)) ws)
     M.fromList <$> (sequence $ map (\(k,iov) -> (k,) <$> iov) $ M.assocs ioVals)
@@ -136,15 +136,15 @@ tensorOutputsTests = testCase "tensorOutputs" $ case runEmpty mkTensor of
     (length combo_nodes) @?= 1
     let combo_node = head combo_nodes
     (length outs) @?= 4 -- four wires/ports
-    mapM (@?= combo_node) (map (fst.fst.fst) outs)
-    let actualPorts = M.fromList $ map (\((n,p),ty) -> (p,ty)) outs
+    mapM (@?= combo_node) (map (\(NamedPort (Ex n _) _, _ty) -> n) outs)
+    let actualPorts = M.fromList $ map (\(p,ty) -> (portName p,ty)) outs
     let expectedPorts = M.fromList [("out1", SimpleTy Natural), ("out2", SimpleTy FloatTy), ("out1", SimpleTy IntTy), ("res", SimpleTy TextType)]
     actualPorts @?= expectedPorts
     edges `equalEdges`
-      [((foo,Ex 0), Right (SimpleTy Natural), (combo_node, In 0))
-      ,((foo,Ex 1), Right (SimpleTy FloatTy), (combo_node, In 1))
-      ,((bar,Ex 0), Right (SimpleTy IntTy), (combo_node, In 2))
-      ,((qux,Ex 0), Right (SimpleTy TextType), (combo_node, In 3))]
+      [((Ex foo 0), Right (SimpleTy Natural), (In combo_node 0))
+      ,((Ex foo 1), Right (SimpleTy FloatTy), (In combo_node 1))
+      ,((Ex bar 0), Right (SimpleTy IntTy), (In combo_node 2))
+      ,((Ex qux 0), Right (SimpleTy TextType), (In combo_node 3))]
 
 -- This is just because we have to pass some term into checkOutputs in case it needs to produce an error message.
 -- But our case should never have to produce an error message, so assert false.

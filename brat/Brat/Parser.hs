@@ -3,7 +3,7 @@ module Brat.Parser (parseFile) where
 import Brat.Error
 import Brat.FC
 import Brat.Lexer
-import Brat.Syntax.Common hiding (K)
+import Brat.Syntax.Common hiding (K, end)
 import Brat.Syntax.Raw
 import Brat.UserName
 

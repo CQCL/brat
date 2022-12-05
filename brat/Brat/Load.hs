@@ -50,7 +50,7 @@ addNounsToEnv pre = aux root
   aux namespace (Decl{..}:decls) =
     let (freshName, newNamespace) = fresh fnName namespace
         newKey = PrefixName pre fnName
-        newValue = [ (((freshName, Ex i), port), ty)
+        newValue = [ (NamedPort (Ex freshName i) port, ty)
                    | (i, (port, ty)) <- zip [0..] fnSig ]
     in  M.insert newKey newValue $ aux newNamespace decls
 

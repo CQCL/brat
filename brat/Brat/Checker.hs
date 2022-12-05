@@ -43,7 +43,7 @@ import Brat.FC
 import Brat.Graph
 import Brat.Naming
 import Brat.Search
-import Brat.Syntax.Common
+import Brat.Syntax.Common hiding (end)
 import Brat.Syntax.Core
 import Brat.UserName
 
@@ -67,7 +67,7 @@ vtensor [] ts = pure ts
 vtensor ss ts = do
   let sig = rowToSig ss <> rowToSig ts
   (_, unders, overs) <- anext "tensor" (Combo Row) sig sig
-  mapM (\(((dangling,_),ty), ((hungry, _),_)) -> awire (dangling,ty,hungry))
+  mapM (\((dangling,ty), (hungry,_)) -> awire (dangling,ty,hungry))
        (zip (ss ++ ts) unders)
   pure $ overs
 
@@ -178,7 +178,7 @@ check' (Emb t) (overs, unders) = do
   (outs, (overs, ())) <- check t (overs, ())
   unders <- checkOutputs t unders outs
   pure ((), (overs, unders))
-check' (Th t) ((), u@((hungry,_), ty):unders) = case ?my of
+check' (Th t) ((), u@(hungry, ty):unders) = case ?my of
   Braty -> do
     case ty of
       C (ss :-> ts) -> checkThunk Braty ss ts ty
@@ -198,7 +198,7 @@ check' (Th t) ((), u@((hungry,_), ty):unders) = case ?my of
     ((), (emptyOvers, emptyUnders)) <- check t (thOvers, thUnders)
     ensureEmpty "thunk leftovers" emptyOvers
     ensureEmpty "thunk leftunders" emptyUnders
-    (_, _, [((dangling, _),_)]) <- next "thunk_box" (src :>>: tgt) [] [("fun", thunkTy)]
+    (_, _, [(dangling,_)]) <- next "thunk_box" (src :>>: tgt) [] [("fun", thunkTy)]
     wire (dangling, thunkTy, hungry)
 check' (Force th) (overs, ()) = do
   (outs, ((), ())) <- let ?my = Braty in check th ((), ())
@@ -258,15 +258,15 @@ check' (VHole name) (overs, unders) = do
   pure ((), ([], []))
 check'
   (Con (PrefixName [] "cons") (WC _ (x :|: (WC _ (Con (PrefixName [] "cons") (WC _ (y :|: (WC _ (Con (PrefixName [] "nil") (WC _ Empty))))))))))
-  ((), ((hungry, _), ty):unders) | (Braty, Product a b) <- (?my, ty) = do
-  (_, [first,second], [((dangling,_),_)]) <- anext "DPair" (Constructor DPair)
+  ((), (hungry, ty):unders) | (Braty, Product a b) <- (?my, ty) = do
+  (_, [first,second], [(dangling,_)]) <- anext "DPair" (Constructor DPair)
                                              [("first", a), ("second", b)]
                                              [("value", Product a b)]
   noUnders $ check x ((), [first])
   noUnders $ check y ((), [second])
   awire (dangling, Product a b, hungry)
   pure ((), ((), unders))
-check' pat@(Con (PrefixName [] con) arg) ((), (((hungry, p), ty):unders))
+check' pat@(Con (PrefixName [] con) arg) ((), ((hungry, ty):unders))
   | Just (_, n) <- getVec ?my ty = do
       (_, lenUnders, []) <- next "vec_len" Hypo [("value", SimpleTy Natural)] []
       noUnders $ let ?my = Braty in check' n ((), lenUnders)
@@ -279,24 +279,24 @@ check' pat@(Con (PrefixName [] con) arg) ((), (((hungry, p), ty):unders))
             "cons" -> LongerThan 0) (show pat)
           Just ins -> do
             outerFC <- req AskFC
-            (_, cUnders, [((dangling,_),_)]) <- anext "" (Constructor node) ins [("value", ty)]
+            (_, cUnders, [(dangling,_)]) <- anext "" (Constructor node) ins [("value", ty)]
             noUnders $ wrapError (consError n (show ty) pat outerFC) $ check arg ((), cUnders)
             awire (dangling, ty, hungry)
             pure ((), ((), unders))
   | Just node <- patternToData ?my con ty, Just cins <- conFields ?my node ty = do
-      (_, cUnders, [((dangling,_),_)]) <- anext (show con) (Constructor node)
+      (_, cUnders, [(dangling,_)]) <- anext (show con) (Constructor node)
                                           cins [("value", ty)]
       noUnders $ check arg ((), cUnders)
       awire (dangling, ty, hungry)
       pure ((), ((), unders))
   | Just node <- patternToData ?my con ty, Nothing <- conFields ?my node ty
-  = typeErr $ show pat ++ " not of type " ++ showRow (((hungry, p), ty):|unders)
+  = typeErr $ show pat ++ " not of type " ++ showRow ((hungry, ty):|unders)
 
 check' t c = case (?my, t, c) of -- remaining cases need to split on ?my
   (Kerny, Simple (Bool _), ((), ((_, Bit):unders))) -> pure ((), ((), unders))
-  (Braty, Simple tm, ((), ((hungry, _), SimpleTy ty):unders)) -> do
+  (Braty, Simple tm, ((), (hungry, SimpleTy ty):unders)) -> do
     simpleCheck ty tm
-    (_, [], [((dangling,_),_)]) <- next (show tm) (Const tm) [] [("value", SimpleTy ty)]
+    (_, [], [(dangling,_)]) <- next (show tm) (Const tm) [] [("value", SimpleTy ty)]
     wire (dangling, SimpleTy ty, hungry)
     pure ((), ((), unders))
   _ -> error $ "check this: " ++ show t
@@ -330,7 +330,7 @@ abstract inputs (APull ports abst) = do
   inputs <- pullPorts ports inputs
   abstract inputs abst
 abstract (input:inputs) (APat (Bind x)) = pure (singletonEnv x input, inputs)
-abstract (((dangling,_),ty):inputs) (APat abs) | Just (ety, n) <- getVec ?my ty =
+abstract ((dangling,ty):inputs) (APat abs) | Just (ety, n) <- getVec ?my ty =
   (evalNat n) >>= \n -> (,inputs) <$> case abs of
     PNil -> if n == 0
       then pure emptyEnv
@@ -338,7 +338,7 @@ abstract (((dangling,_),ty):inputs) (APat abs) | Just (ety, n) <- getVec ?my ty 
     PCons x xs -> do
       -- A `cons` pattern on the LHS needs to have exactly two binders
       let tailTy = makeVec ety (Simple (Num (n - 1)))
-      (_, [((hungry,_),_)], [head,tail]) <- anext "PCons (Vec)" (Selector DCons)
+      (_, [(hungry,_)], [head,tail]) <- anext "PCons (Vec)" (Selector DCons)
                                             [("value", ty)] [("head", ety), ("tail", tailTy)]
       awire (dangling, ty, hungry)
       venv <- abstractAll [head] (APat x)
@@ -362,18 +362,18 @@ abstract (((dangling,_),ty):inputs) (APat abs) | Just (ety, n) <- getVec ?my ty 
     patList (PCons x xs) = (x:) <$> patList xs
     patList _ = Nothing
 
-abstract (((dangling,_),ty):inputs) (APat (PCons x (PCons y PNil)))
+abstract ((dangling,ty):inputs) (APat (PCons x (PCons y PNil)))
   | (Braty, Product a b) <- (?my, ty) = do
-  (_, [((hungry, _), _)], overs) <- anext (show DPair) (Selector DPair)
+  (_, [(hungry, _)], overs) <- anext (show DPair) (Selector DPair)
                                     [("value", Product a b)] [("first", a), ("second", b)]
   awire (dangling, Product a b, hungry)
   env <- abstractAll overs (APat x :||: APat y)
   pure (env, inputs)
 
-abstract (((dangling,_),ty):inputs) (APat (PCon con abs))
+abstract ((dangling,ty):inputs) (APat (PCon con abs))
   | Just sel <- patternToData ?my con ty
   , Just outs <- conFields ?my sel ty = do
-      (_,[((hungry,_),_)],overs) <- anext (show sel) (Selector sel) [("value", ty)] outs
+      (_,[(hungry,_)],overs) <- anext (show sel) (Selector sel) [("value", ty)] outs
       awire (dangling, ty, hungry)
       (,inputs) <$> abstractAll overs abs
 abstract ((_, ty):inputs) (APat (Lit tm)) = do

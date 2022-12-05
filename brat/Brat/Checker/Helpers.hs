@@ -44,8 +44,8 @@ simpleCheck ty tm = fail (unwords [show tm, "is not of type", show ty])
 
 pullPorts :: Show ty
           => [PortName]
-          -> [((End, PortName), ty)]
-          -> Checking [((End, PortName), ty)]
+          -> [(NamedPort e, ty)]
+          -> Checking [(NamedPort e, ty)]
 pullPorts [] types = pure types
 pullPorts (p:ports) types = do
   (x, types) <- pull1Port p types
@@ -53,12 +53,12 @@ pullPorts (p:ports) types = do
  where
   pull1Port :: Show ty
             => PortName
-            -> [((End, PortName), ty)]
-            -> Checking (((End, PortName), ty), [((End, PortName), ty)])
+            -> [(NamedPort e, ty)]
+            -> Checking ((NamedPort e, ty), [(NamedPort e, ty)])
   pull1Port p [] = fail $ "Port not found: " ++ p
-  pull1Port p (x@((_, p'), _):xs)
-   | p == p'
-   = if (p `elem` (snd . fst <$> xs))
+  pull1Port p (x@(e,_):xs)
+   | p == portName e
+   = if (p `elem` (portName . fst <$> xs))
      then err (AmbiguousPortPull p (showRow (x :| xs)))
      else pure (x, xs)
    | otherwise = (id *** (x:)) <$> pull1Port p xs
@@ -80,7 +80,7 @@ combineDisjointEnvs l r =
     else typeErr ("Variable(s) defined twice: " ++
       (intercalate "," $ map show $ S.toList commonKeys))
 
-ensureEmpty :: Show ty => String -> [(Src, ty)] -> Checking ()
+ensureEmpty :: Show ty => String -> [(NamedPort e, ty)] -> Checking ()
 ensureEmpty _ [] = pure ()
 ensureEmpty str (x:xs) = err $ InternalError $ "Expected empty " ++ str ++ ", got:\n  " ++ showRow (x :| xs)
 
@@ -90,7 +90,7 @@ noUnders m = do
   pure (outs, overs)
 
 rowToSig :: Traversable t => t (Src, ty) -> t (PortName, ty)
-rowToSig = fmap $ \((_, p),ty) -> (p, ty)
+rowToSig = fmap $ \(p,ty) -> (portName p, ty)
 
 showMode :: Modey m -> String
 showMode Braty = ""
@@ -115,8 +115,8 @@ anext :: (?my :: Modey m)
 anext str th ins outs = do
   node <- req (Fresh str) -- Pick a name for the thunk
   -- Use the new name to generate Ends with which to instantiate types
-  let unders = [ (((node, In i), p), ty) | (i,(p,ty)) <- zip [0..] ins ]
-  let overs  = [ (((node, Ex i), p), ty) | (i,(p,ty)) <- zip [0..] outs ]
+  let unders = [ (NamedPort (In node i) p, ty) | (i,(p,ty)) <- zip [0..] ins ]
+  let overs  = [ (NamedPort (Ex node i) p, ty) | (i,(p,ty)) <- zip [0..] outs ]
   () <- req (AddNode node (mkNode ?my th ins outs))
   pure (node, unders, overs)
  where
@@ -139,10 +139,10 @@ knext :: String -> Thing
       -> Checking (Name, Unders Kernel Chk, Overs Kernel Verb)
 knext = let ?my = Kerny in anext
 
-awire :: (?my :: Modey m) => (End, ValueType m, End) -> Checking ()
-awire (src@(_, Ex _), ty, tgt@(_, In _)) = do
+awire :: (?my :: Modey m) => (Src, ValueType m, Tgt) -> Checking ()
+awire (src, ty, tgt) = do
   ty <- mkT ?my ty
-  req $ Wire (src, ty, tgt)
+  req $ Wire (end src, ty, end tgt)
  where
   mkT :: Modey m -> ValueType m -> Checking (Either SType VType)
   mkT Braty ty = pure $ Right ty
@@ -166,7 +166,7 @@ getThunks :: Modey m
 getThunks _ [] = pure ([], [], [])
 getThunks m ((src, ty):rest)
  | Just (ss, ts) <- isThunkType m ty = do
-  (node, counders, coovers) <- let ?my = m in anext "" (Eval src) ss ts
+  (node, counders, coovers) <- let ?my = m in anext "" (Eval (end src)) ss ts
   (nodes, counders', coovers') <- getThunks m rest
   pure (node:nodes, counders <> counders', coovers <> coovers')
  where
@@ -181,7 +181,7 @@ checkWire :: (Eq (ValueType m), ?my :: Modey m)
           => (Src, ValueType m)
           -> (Tgt, ValueType m)
           -> Checking (Maybe ())
-checkWire ((src,_), oTy) ((tgt,_), uTy) | oTy == uTy = awire (src, oTy, tgt) $> Just ()
+checkWire (src, oTy) (tgt, uTy) | oTy == uTy = awire (src, oTy, tgt) $> Just ()
 checkWire _ _ = pure Nothing
 
 conFields :: Modey m -> DataNode -> ValueType m

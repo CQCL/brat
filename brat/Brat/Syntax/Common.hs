@@ -27,9 +27,9 @@ module Brat.Syntax.Common (PortName,
                            Clause(..),
                            showRow,
                            pattern PSome,
+                           NamedPort(..),
                            Src, Tgt,
-                           End,
-                           Port(..),
+                           OutPort(..), InPort(..),
                            pattern PNone,
                            pattern POnePlus,
                            pattern PTwoTimes,
@@ -45,17 +45,20 @@ import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Kind (Type)
 
-data Port = In Int | Ex Int deriving (Eq, Ord, Show)
 type PortName = String
--- Ends represent wires to/from a specific port on a node
-type End = (Name -- Which node the end is associated with
-           ,Port -- The direction and index of the relevant port
-           ) 
 
--- PortDir had BETTER be Ex!
-type Src = (End, PortName)
--- PortDir had BETTER be In!
-type Tgt = (End, PortName)
+data OutPort = Ex Name Int deriving (Eq, Ord, Show)
+data InPort = In Name Int deriving (Eq, Show)
+
+data NamedPort e = NamedPort {end :: e
+                             ,portName :: PortName
+                             } deriving Show
+
+instance (Eq e) => Eq (NamedPort e) where
+  (NamedPort {end=e1}) == NamedPort {end=e2} = e1 == e2
+
+type Src = NamedPort OutPort
+type Tgt = NamedPort InPort
 
 data Quantum = Qubit | Money deriving (Eq, Show)
 newtype Row' tm q = R [(PortName, SType'' tm q)] deriving (Functor, Foldable, Traversable)
@@ -241,6 +244,6 @@ data Clause (tm :: Dir -> Kind -> Type) (k :: Kind) where
 deriving instance (forall d k. Show (tm d k)) => Show (Clause tm k)
 deriving instance (forall d k. Eq (tm d k)) => Eq (Clause tm k)
 
-showRow :: Show ty => NonEmpty ((a, String), ty) -> String
-showRow (x :| xs) = intercalate ", " [ '(':p ++ " :: " ++ show ty ++ ")"
-                                     | ((_, p), ty) <- x:xs ]
+showRow :: Show ty => NonEmpty (NamedPort e, ty) -> String
+showRow (x :| xs) = intercalate ", " [ '(':(portName p) ++ " :: " ++ show ty ++ ")"
+                                     | (p, ty) <- x:xs]

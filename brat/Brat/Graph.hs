@@ -24,7 +24,7 @@ data ComboType = Row | Thunk deriving (Eq, Show);
 data Thing
   = Prim String  -- Something in the env
   | Const SimpleTerm
-  | Eval Src     -- Something on a wire
+  | Eval OutPort   -- Something on a wire
   | Name :>>: Name -- Graph in a box
   | Source       -- For building..
   | Target       -- ..boxes
@@ -45,8 +45,7 @@ emptyGraph = (M.empty, [])
 instance {-# OVERLAPPING #-} Show Graph where
   show (ns, ws) = unlines (("Nodes:":(show <$> M.toList ns)) ++ ("":"Wires:":(show <$> ws)))
 
--- Ends BETTER be Ex to In!
-type Wire = (End, Either SType VType, End)
+type Wire = (OutPort, Either SType VType, InPort)
 
 toGraph :: Graph -> (G.Graph, G.Vertex -> (Node, Name, [Name]), Name -> Maybe G.Vertex)
 toGraph (ns, ws) = G.graphFromEdges adj
@@ -54,21 +53,21 @@ toGraph (ns, ws) = G.graphFromEdges adj
   -- TODO: Reduce the complexity (O(n^2)) of this function
   adj = [ (node
           ,name
-          ,[ tgt | ((src,_), _, (tgt,_)) <- ws, src == name ]
+          ,[ tgt | (Ex src _, _, In tgt _) <- ws, src == name ]
           )
         | (name, node) <- M.toList ns]
 
 wiresFrom :: Name -> Graph -> [Wire]
-wiresFrom src (_, ws) = [ w | w@((a, _), _, _) <- ws, a == src ]
+wiresFrom src (_, ws) = [ w | w@(Ex a _, _, _) <- ws, a == src ]
 
 lookupNode :: Name -> Graph -> Maybe (Node)
 lookupNode name (ns, _) = M.lookup name ns
 
 wireStart :: Wire -> Name
-wireStart ((x,_), _, _) = x
+wireStart (Ex x _, _, _) = x
 
 wireEnd :: Wire -> Name
-wireEnd (_, _, (x,_)) = x
+wireEnd (_, _, In x _) = x
 
 boxSubgraphs :: Graph -> (Graph, [(String, Graph)])
 boxSubgraphs g@(ns,ws) = let subs = fromJust subGraphs
