@@ -1,9 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Brat.Load (emptyMod
-                 ,loadFilename
+module Brat.Load (loadFilename
                  ,loadFiles
-                 ,checkDecl
                  ,parseFile
                  ,desugarEnv
                  ) where
@@ -14,7 +12,7 @@ import Brat.Checker.Types (ValueType)
 import Brat.Checker
 import Brat.Error
 import Brat.FC
-import Brat.Graph (emptyGraph, Thing(..))
+import Brat.Graph (Thing(..))
 import Brat.Naming
 import Brat.Parser
 import Brat.Syntax.Common
@@ -37,10 +35,10 @@ import Prelude hiding (last)
 
 -- A Module is a node in the dependency graph
 type RawMod = (RawEnv, UserName, [UserName])
-type Mod = (VEnv, [Decl], [TypedHole], Graph)
-
-emptyMod :: Mod
-emptyMod = (M.empty, [], [], (M.empty, []))
+-- Result of checking/compiling a module
+type Mod = (VEnv, [Decl]         -- all symbols from all modules
+           ,[TypedHole]          -- for just the last module
+           ,[(UserName, Graph)]) -- per function, first elem is name
 
 addNounsToEnv :: Prefix -> [Decl] -> VEnv
 addNounsToEnv pre = aux root
@@ -93,26 +91,26 @@ checkDecl pre Decl{..}
                      checkClauses (unWC verb) (overs, unders)
    pure ()
 
-loadStmtsWithEnv :: Mod -> Prefix -> RawEnv -> Either Error Mod
-loadStmtsWithEnv (venv, decls, _, _) pre stmts = do
-  newDecls <- desugarEnv stmts
-  decls <- pure (decls ++ newDecls)
+loadStmtsWithEnv :: (VEnv, [Decl]) -> Prefix -> RawEnv -> Either Error Mod
+loadStmtsWithEnv (venv, decls) pre stmts = do
+  decls <- (decls ++) <$> desugarEnv stmts
   -- hacky mess - cleanup!
   unless (null (duplicates decls)) $
     Left . dumbErr . NameClash $ show (duplicates decls)
-  venv <- pure $ venv <> addNounsToEnv pre decls
-  (holes, graph, _nsp) <- foldM (checkDecl' venv decls pre) ([], emptyGraph, root) decls
+  let venv' = venv <> addNounsToEnv pre decls
+  (holes, graph, _nsp) <- foldM (checkDecl' venv' decls pre) ([], [], root) decls
 
-  pure (venv, decls, holes, graph)
+  pure (venv', decls, holes, graph)
  where
   -- A composable version of `checkDecl`
   checkDecl' :: VEnv -> [Decl] -> Prefix -- static environment, context
-            -> ([TypedHole], Graph, Namespace) -- compiled output + namespace-state
+            -> ([TypedHole], [(UserName, Graph)], Namespace) -- 'fold' state: compiled output + namespace
             -> Decl -- to check
-            -> Either Error ([TypedHole], Graph, Namespace)
-  checkDecl' venv decls pre (holes, graph, nsp) d = do
-    ((), (holes', graph'), nsp') <- run (venv, decls, fnLoc d) nsp (checkDecl pre d)
-    pure (holes ++ holes', graph <> graph', nsp')
+            -> Either Error ([TypedHole], [(UserName, Graph)], Namespace)
+  checkDecl' venv decls pre (holes, graphs, nsp) d = do
+    let (decl_nsp, nsp') = split (fnName d) nsp
+    ((), (holes', graph)) <- run (venv, decls, fnLoc d) decl_nsp (checkDecl pre d)
+    pure (holes ++ holes', (PrefixName pre (fnName d), graph):graphs, nsp')
 
 
 loadFilename :: String -> ExceptT Error IO Mod
@@ -133,16 +131,20 @@ loadFiles path fname contents = do
   let files = G.topSort (G.transposeG g)
   let getStmts v = let (stmts, (PrefixName ps name), _) = (f v) in ((ps ++ [name]), stmts)
   let allStmts = (map getStmts files) :: [(Prefix, RawEnv)]
-  -- the original file should be at the end of the allStmts list:
-  case viewR allStmts of
+  let emptyMod = (M.empty, [], [], [])
+  -- remove the prefix for the starting file
+  allStmts' <- case viewR allStmts of
+    -- the original file should be at the end of the allStmts list
     Just (rest, (prf, mainStmts)) -> do
       unless (prf == [fname]) $
         throwError (dumbErr (InternalError "Top of dependency graph wasn't main file"))
-      env <- liftEither $ foldM
-             (\e (prefix,stmts) -> loadStmtsWithEnv e prefix stmts) emptyMod
-             rest
-      liftEither $ loadStmtsWithEnv env [] mainStmts
+      pure $ rest ++ [([], mainStmts)]
     Nothing -> throwError (dumbErr (InternalError "Empty dependency graph"))
+  -- keep (as we fold) and then return only the graphs from the last file in the list
+  liftEither $ foldM
+    (\(venv, decls, _, _) (prf, stmts) -> loadStmtsWithEnv (venv, decls) prf stmts)
+    emptyMod
+    allStmts'
   where
     depGraph :: [UserName] -> UserName -> String -> ExceptT Error IO [RawMod]
     depGraph chain name cts = case elemIndex name chain of

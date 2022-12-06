@@ -32,4 +32,4 @@ getCheckingTests :: IO TestTree
 getCheckingTests = testGroup "checking" . fmap parseAndCheckXF <$> findByExtension [".brat"] "examples"
 
 runEmpty :: Checking v -> Either Error (v,([TypedHole],Graph))
-runEmpty m = (\(a,b,_) -> (a,b)) <$> run (emptyEnv, [], FC (Pos 0 0) (Pos 0 0)) root m
+runEmpty m = run (emptyEnv, [], FC (Pos 0 0) (Pos 0 0)) root m

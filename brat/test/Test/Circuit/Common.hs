@@ -7,6 +7,7 @@ import Control.Monad.Except (runExceptT)
 import qualified Data.Map as M
 import Data.Tuple.HT
 import Data.String (IsString(..))
+import Data.Foldable (fold)
 import Test.Tasty.HUnit
 
 import Brat.Graph
@@ -212,5 +213,7 @@ extGraph
 runProg :: String -> String -> Graph -> Assertion
 runProg name contents expected = do
   runExceptT (loadFiles "" name contents) >>= \case
-    Right (_, _, _, g) -> g =? expected
+    Right (_, _, _, named_gs) -> let gs = map snd named_gs in
+      -- merge graphs from all functions
+      (fold gs) =? expected
     Left err -> assertFailure (show err)

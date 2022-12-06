@@ -389,8 +389,8 @@ abstract ((_,ty):_) pat = err (PattErr $
 run :: (VEnv, [Decl], FC)
     -> Namespace
     -> Checking a
-    -> Either Error (a, ([TypedHole], Graph), Namespace)
+    -> Either Error (a, ([TypedHole], Graph))
 run (ve, ds, fc) ns m = let ctx = Ctx { venv = ve
                                    , decls = ds
                                    , typeFC = fc
-                                   } in handler m ctx ns
+                                   } in (\(h,g,_) -> (h,g)) <$> handler m ctx ns

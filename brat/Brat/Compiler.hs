@@ -1,9 +1,8 @@
 module Brat.Compiler (printAST, printDeclsHoles, compileFile) where
 
 import Brat.Compile.Circuit
-import Brat.Checker (run)
 import Brat.Syntax.Common (Decl'(..), VType'(..))
-import Brat.Naming (root)
+import Brat.UserName
 import Brat.Error
 import Brat.Load
 import Util
@@ -47,14 +46,15 @@ printAST printRaw printAST file = do
 compileFile :: String -> IO ()
 compileFile file = do
   env <- runExceptT $ loadFilename file
-  (venv, decls, _, _) <- eitherIO env
-  -- all good? Let's just get the graph for `main`
+  (_, decls, _, named_gs) <- eitherIO env
+  -- Check main exists. (Will/should this work if "main" is in an imported module?)
   mn <- eitherIO $
       maybeToRight (dumbErr MainNotFound) $
       lookupBy ((== "main") . fnName) id decls
-  eitherIO $ run (venv, decls, fnLoc mn) root $ checkDecl [] mn
 
-  (_, (_, graph), _) <- eitherIO $ run (venv, [], fnLoc mn) root (checkDecl [] mn)
+  (_name, graph) <- eitherIO $
+      maybeToRight (dumbErr $ InternalError "No graph produced for main") $
+      lookupBy ((== (PrefixName [] "main")) . fst) id named_gs
 
   let outFile = (dropExtension file) <> ".tk"
   case fnSig mn of
