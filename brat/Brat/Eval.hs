@@ -54,7 +54,7 @@ instance Valuable (Term Syn k) where
 addFCToError :: FC -> Eval a -> Eval a
 addFCToError fc m = case runExcept m of
                       Right v -> pure v
-                      Left (Err _ src msg) -> throwError (Err (Just fc) src msg)
+                      Left (Err _ msg) -> throwError (Err (Just fc) msg)
 
 ceval :: [Value] -> WC (Term Chk k) -> Eval Value
 ceval g (WC fc tm) = addFCToError fc (ceval' g tm)

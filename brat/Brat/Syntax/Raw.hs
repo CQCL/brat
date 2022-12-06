@@ -135,7 +135,7 @@ class Desugarable ty where
   desugar (WC fc tm)
     = (WC fc <$> desugar' tm)
       `catchError`
-      (\(Err _ src msg) -> throwError (Err (Just fc) src msg))
+      (\(Err _ msg) -> throwError (Err (Just fc) msg))
 
   desugar' :: ty -> Desugar (Desugared ty)
 
@@ -162,10 +162,10 @@ instance Desugarable RawVType where
     case lookup s aliases of
       Nothing -> let msg = DesugarErr $ "Couldn't find an alias for type "
                            ++ unwords (show s:fmap show args)
-                 in  throwError $ Err Nothing (Just (show s)) msg
+                 in  throwError $ dumbErr msg
       Just (Alias fc _s vars ty) -> do
         unless (length vars == length args)
-          (throwError . Err (Just fc) (Just (show s)) . DesugarErr $
+          (throwError . Err (Just fc) . DesugarErr $
             unwords ("Type alias isn't fully applied:":show s:(show <$> args)))
         let concreteTy = foldr (uncurry instantiateVType) ty (zip [0..] args)
         desugar' concreteTy

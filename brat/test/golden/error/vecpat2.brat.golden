@@ -1,3 +1,6 @@
-Error in fst3@FC {start = Pos {line = 3, col = 5}, end = Pos {line = 3, col = 21}}:
+Error in fst3 (test/golden/error/vecpat2.brat)@FC {start = Pos {line = 3, col = 5}, end = Pos {line = 3, col = 21}}:
+fst3(some(x)) = none
+    ^^^^^^^^^^^^^^^^
+
   Expected some(x) to be a vector pattern when binding type Vec(Int, 3)
 

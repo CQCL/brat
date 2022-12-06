@@ -1,3 +1,10 @@
-Error in f@FC {start = Pos {line = 1, col = 1}, end = Pos {line = 3, col = 9}}:
+Error in f (test/golden/error/inconsistentclauses.brat)@FC {start = Pos {line = 1, col = 1}, end = Pos {line = 3, col = 9}}:
+f(Bool, Nat) -> Nat
+^^^^^^^^^^^^^^^^^^^
+f(b, n) = 1
+^^^^^^^^^^^
+f(b) = 2
+^^^^^^^^
+
   Type error: Clauses had different rightovers
 

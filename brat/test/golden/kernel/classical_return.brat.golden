@@ -1,9 +1,8 @@
-Error in test/golden/kernel/classical_return.brat@FC {start = Pos {line = 4, col = 4}, end = Pos {line = 4, col = 6}}:
-  Parse error test/golden/kernel/classical_return.brat:5:6:
-  |
-5 | f :: { Qubit -o Qubit, Int }
-  |      ^^^^^^^^^^^^^^^^^^^^^^^
-unexpected { Qubit -o Qubit, Int }
+Error in test/golden/kernel/classical_return.brat@FC {start = Pos {line = 5, col = 6}, end = Pos {line = 5, col = 29}}:
+f :: { Qubit -o Qubit, Int }
+     ^^^^^^^^^^^^^^^^^^^^^^^
+
+  Parse error unexpected { Qubit -o Qubit, Int }
 expecting (...), Bit, Bool, Comment, Float, Horizontal space, Int, List, Nat, Option, Pair, String, Type, Unit, Vec, \n, identifier, name, or {...}
 
 

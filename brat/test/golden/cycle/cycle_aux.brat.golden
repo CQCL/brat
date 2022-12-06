@@ -1,3 +1,3 @@
-Error in cycle_aux:
+Error in test/golden/cycle/cycle_aux.brat:
   Cycle detected in imports: cycle_aux is reachable from cycle
 

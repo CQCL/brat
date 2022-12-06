@@ -129,7 +129,7 @@ isCombo _ = False
 
 tensorOutputsTests :: TestTree
 tensorOutputsTests = testCase "tensorOutputs" $ case runEmpty mkTensor of
-  Left err -> assertFailure (show err)
+  Left err -> assertFailure (showError err)
   Right ((foo, bar, qux, outs), (holes, (nodes, edges))) -> do
     (M.size nodes) @=? 4 -- three input nodes and one combo
     let combo_nodes = (M.assocs nodes) >>= (\(name, node) -> if (isCombo $ nodeThing node) then [name] else [])

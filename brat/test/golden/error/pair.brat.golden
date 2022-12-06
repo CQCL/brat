@@ -1,4 +1,7 @@
-Error in pair@FC {start = Pos {line = 5, col = 8}, end = Pos {line = 5, col = 11}}:
+Error in pair (test/golden/error/pair.brat)@FC {start = Pos {line = 5, col = 8}, end = Pos {line = 5, col = 11}}:
+pair = row -- Distinct from a pair
+       ^^^
+
   Type mismatch when checking row
 Expected: (a1 :: Pair(Int, Bool))
 But got:  (a1 :: Int), (b1 :: Bool)

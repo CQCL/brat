@@ -1,3 +1,6 @@
-Error in f@FC {start = Pos {line = 2, col = 5}, end = Pos {line = 2, col = 22}}:
+Error in f (test/golden/error/kbadvec4.brat)@FC {start = Pos {line = 2, col = 5}, end = Pos {line = 2, col = 22}}:
+f = { [1,2] => true }
+    ^^^^^^^^^^^^^^^^^
+
   Type error: 1 is not of type Bool
 

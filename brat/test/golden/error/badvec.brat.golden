@@ -1,4 +1,7 @@
-Error in v3@FC {start = Pos {line = 2, col = 6}, end = Pos {line = 2, col = 9}}:
+Error in v3 (test/golden/error/badvec.brat)@FC {start = Pos {line = 2, col = 6}, end = Pos {line = 2, col = 9}}:
+v3 = [1]
+     ^^^
+
   Expected vector of length 3
 from the type:  Vec(Int, 3)
 but got vector: [1]

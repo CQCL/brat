@@ -1,4 +1,12 @@
-module Brat.Error where
+module Brat.Error (ParseError(..)
+                  ,LengthConstraintF(..), LengthConstraint
+                  ,ErrorMsg(..)
+                  ,Error(..), showError
+                  ,SrcErr(..)
+                  ,addSrcName, addSrcContext
+                  ,eitherIO
+                  ,dumbErr
+                  ) where
 
 import Brat.FC
 
@@ -96,23 +104,57 @@ instance Show ErrorMsg where
   show (InternalError x) = "Internal error: " ++ x
 
 data Error = Err { fc  :: Maybe FC
-                 , src :: Maybe String
                  , msg :: ErrorMsg
                  }
-instance Show Error where
-  show (Err mfc (Just src) msg)
-    = let bonus = maybe "" (\fc -> '@':show fc) mfc in
-        unlines ["Error in " ++ src ++ bonus ++ ":"
-                ,"  " ++ show msg
-                ]
-  show (Err _ Nothing msg) = show msg
+-- We could make this just 'instance Show' but this makes the few cases
+-- where we show an Error (without filename or contents) explicit.
+showError :: Error -> String
+showError (Err _ msg) = show msg
 
-addSrc :: String -> Error -> Error
-addSrc name (Err fc _ msg) = Err fc (Just name) msg
+data SrcErr = SrcErr String Error
 
-eitherIO :: Either Error a -> IO a
+instance Show SrcErr where
+  show (SrcErr prelim Err{msg=msg}) = unlines [prelim, "  " ++ (show msg)]
+
+errHeader :: String -> String
+errHeader name = "Error in " ++ name ++ ":"
+
+addSrcName :: String -> Error -> SrcErr
+addSrcName fname err = SrcErr (errHeader fname) err
+
+addSrcContext :: String -> String -> Either Error t -> Either SrcErr t
+addSrcContext _ _ (Right r) = Right r
+addSrcContext fname cts (Left err@Err{fc=fc}) = Left (SrcErr msg err)
+ where
+  msg = case fc of
+    Just fc -> unlines ((errHeader $ fname ++ '@':(show fc)):
+                        (showFileContext cts fc))
+    Nothing -> errHeader fname
+
+showFileContext :: String -> FC -> [String]
+showFileContext contents fc = let
+    -- taking 1 off to convert 1-indexed user line numbers to 0-indexed list indices
+    startLineN = line (start fc) - 1
+    endLineN = line (end fc) - 1
+    startCol = col (start fc) - 1
+    endCol = col (end fc) - 1 -- exclusive
+    ls = lines contents
+  in if startLineN == endLineN then
+      [ls!!startLineN, highlightSection startCol endCol]
+    else let (first:rest) = drop (startLineN - 1) $ take (endLineN + 1) ls
+             (last:rmid) = reverse rest
+          in [first, highlightSection startCol (length first)]
+            ++ ((reverse rmid) >>= (\l -> [l, highlightSection 0 (length l)]))
+            ++ [last, highlightSection 0 endCol]
+ where
+  highlightSection :: Int -> Int -> String
+  highlightSection start end =
+    (replicate start ' ') ++ (replicate (end - start) '^')
+
+
+eitherIO :: Either SrcErr a -> IO a
 eitherIO (Left e) = die (show e)
 eitherIO (Right a) = pure a
 
 dumbErr :: ErrorMsg -> Error
-dumbErr = Err Nothing Nothing
+dumbErr = Err Nothing

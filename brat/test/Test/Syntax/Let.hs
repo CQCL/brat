@@ -2,6 +2,7 @@
 
 module Test.Syntax.Let where
 
+import Brat.Error (showError)
 import Brat.Checker
 import Brat.FC
 import Brat.Load
@@ -32,6 +33,6 @@ test = testCase "let" $
   in case fst <$> runEmpty (let ?my = Braty in check (wfc tm) conn) of
        Right ([(_, SimpleTy IntTy)], ((), ())) -> pure ()
        Right (outs, ((), ())) -> assertFailure (show outs)
-       x -> assertFailure (show x)
+       Left err -> assertFailure (showError err)
 
 letTests = test

@@ -1,4 +1,7 @@
-Error in rotate@FC {start = Pos {line = 16, col = 17}, end = Pos {line = 16, col = 34}}:
+Error in rotate (test/golden/kernel/kernel_application.brat)@FC {start = Pos {line = 16, col = 17}, end = Pos {line = 16, col = 34}}:
+rotate = { q => maybeRotate(true) }
+                ^^^^^^^^^^^^^^^^^
+
   Expected function to be a (kernel) thunk, but found:
   (thunk :: {[("a1",Bool)] -> [("a1",{R [("a1",Qubit)] -o R [("a1",Qubit)]})]})
 

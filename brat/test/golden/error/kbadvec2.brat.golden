@@ -1,4 +1,7 @@
-Error in triple@FC {start = Pos {line = 2, col = 17}, end = Pos {line = 2, col = 20}}:
+Error in triple (test/golden/error/kbadvec2.brat)@FC {start = Pos {line = 2, col = 17}, end = Pos {line = 2, col = 20}}:
+triple = { b => nil }
+                ^^^
+
   Expected vector of length 3
 from the type:  Vec(Bool, 3)
 but got vector: []

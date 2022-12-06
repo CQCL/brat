@@ -112,16 +112,9 @@ loadVFile state _ msg = do
               liftIO $ putMVar state (updateState (newDecls, holes) old)
               allGood fileName
               logHoles holes fileName
-        Left err -> allGood fileName *> sendError fileName (fixParseError err)
+        Left (SrcErr _ err) -> allGood fileName *> sendError fileName err
     Nothing -> do
       liftIO $ debugM "loadVFile" $ "Couldn't find " ++ show fileName ++ " in VFS"
- where
-  fixParseError err@(Err _ _ (ParseErr _))
-   = case fc err of
-       Just (FC st nd) -> let conv (Pos l c) = Pos (l + 1) (c + 1)
-                          in  err { fc = Just (FC (conv st) (conv nd)) }
-       Nothing -> err
-  fixParseError err = err
 
 handlers :: MVar ProgramState -> Handlers (LspM ())
 handlers state = mconcat

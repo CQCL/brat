@@ -6,8 +6,7 @@ import Control.Monad.State (State, put, get,evalState)
 import Data.Char (isSpace)
 import Data.Functor (($>), (<&>), void)
 import Data.List (intercalate)
-import Data.List.NonEmpty (nonEmpty, NonEmpty(..))
-import Data.Proxy
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Void
 import Text.Megaparsec hiding (Token, Pos, token, State)
 import Text.Megaparsec.Char
@@ -297,40 +296,3 @@ tokLen = length . show
 instance VisualStream [Token] where
   showTokens _ ts = concatMap show ts
   tokensLength _ = sum . fmap (\(Token _ t) -> tokLen t)
-
-instance TraversableStream [Token] where
-  reachOffset o pst@PosState{..} =
-    let pst' = case post of
-                 [] -> pstateSourcePos
-                 (Token (FC (Pos l c) _) _:_) ->
-                   let SourcePos file _ _ = pstateSourcePos
-                   in  SourcePos file (mkPos l) (mkPos c)
-        preLine = showToks . reverse . restOfLine . reverse $ pre
-        prefix = (++preLine) $ if sourceLine pstateSourcePos == sourceLine pst'
-                               then pstateLinePrefix
-                               else []
-        (pre, post) = splitStream (o - pstateOffset) pstateInput
-    in (Just (prefix ++ restOfLineText post)
-       , pst { pstateInput = post
-             , pstateOffset = max pstateOffset o
-             , pstateSourcePos = pst'
-             , pstateLinePrefix = prefix
-             }
-       )
-   where
-    proxy :: Proxy [Token]
-    proxy = Proxy
-
-    restOfLine :: [Token] -> [Token]
-    restOfLine = takeWhile ((/= Newline)._tok)
-
-    showToks :: [Token] -> String
-    showToks = maybe "" (showTokens proxy) . nonEmpty
-
-    restOfLineText :: [Token] -> String
-    restOfLineText = showToks . restOfLine
-
-    splitStream :: Int -> [Token] -> ([Token], [Token])
-    splitStream _ [] = ([], [])
-    splitStream 0 ts = ([], ts)
-    splitStream os (t:ts) = ([t], []) <> splitStream (os - 1) ts

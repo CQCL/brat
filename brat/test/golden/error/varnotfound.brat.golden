@@ -1,3 +1,6 @@
-Error in f@FC {start = Pos {line = 2, col = 8}, end = Pos {line = 2, col = 9}}:
+Error in f (test/golden/error/varnotfound.brat)@FC {start = Pos {line = 2, col = 8}, end = Pos {line = 2, col = 9}}:
+f(x) = g(x)
+       ^
+
   g not found in (value) environment
 

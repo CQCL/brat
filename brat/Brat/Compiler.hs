@@ -41,7 +41,7 @@ printAST printRaw printAST file = do
   (_, env@(decls, _)) <- eitherIO $ parseFile file cts
   when printRaw $ banner "Raw AST" $ mapM_ print decls
   when printAST $
-    banner "desugared AST" (mapM_ print =<< eitherIO (desugarEnv env))
+    banner "desugared AST" (mapM_ print =<< eitherIO (addSrcContext file cts (desugarEnv env)))
 
 compileFile :: String -> IO ()
 compileFile file = do
@@ -49,11 +49,11 @@ compileFile file = do
   (_, decls, _, named_gs) <- eitherIO env
   -- Check main exists. (Will/should this work if "main" is in an imported module?)
   mn <- eitherIO $
-      maybeToRight (dumbErr MainNotFound) $
+      maybeToRight (addSrcName file $ dumbErr MainNotFound) $
       lookupBy ((== "main") . fnName) id decls
 
   (_name, graph) <- eitherIO $
-      maybeToRight (dumbErr $ InternalError "No graph produced for main") $
+      maybeToRight (addSrcName file $ dumbErr $ InternalError "No graph produced for main") $
       lookupBy ((== (PrefixName [] "main")) . fst) id named_gs
 
   let outFile = (dropExtension file) <> ".tk"

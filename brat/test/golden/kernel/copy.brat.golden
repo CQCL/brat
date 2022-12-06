@@ -1,3 +1,6 @@
-Error in copy@FC {start = Pos {line = 2, col = 8}, end = Pos {line = 2, col = 21}}:
+Error in copy (test/golden/kernel/copy.brat)@FC {start = Pos {line = 2, col = 8}, end = Pos {line = 2, col = 21}}:
+copy = { q => q, q }
+       ^^^^^^^^^^^^^
+
   Type error: q has already been used
 

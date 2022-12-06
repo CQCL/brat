@@ -43,9 +43,9 @@ int' :: Int
 int' = idi(1)
 
 port_pull(Nat) -> n :: Nat, i :: Int
-port_pull = { x => i:x, x |> f, idn }
+port_pull = { x => i:(x, x |> f, idn) }
 port_pull' :: { Nat -> nat :: Nat, int :: Int }
-port_pull' = x => int:x, x |> f, idn
+port_pull' = x => int:(x, x |> f, idn)
 
 
 addi(Int, Int) -> Nat

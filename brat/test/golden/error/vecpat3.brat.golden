@@ -1,4 +1,7 @@
-Error in fst3@FC {start = Pos {line = 3, col = 5}, end = Pos {line = 3, col = 19}}:
+Error in fst3 (test/golden/error/vecpat3.brat)@FC {start = Pos {line = 3, col = 5}, end = Pos {line = 3, col = 19}}:
+fst3([a,b]) = none
+    ^^^^^^^^^^^^^^
+
   Pattern: [a,b]
 doesn't match type Vec(Int, 3)
 (because it's the wrong length)

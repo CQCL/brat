@@ -298,7 +298,7 @@ cnoun' = try (letin cnoun) <|> withFC
 
   pull = do
     ports <- some (try (port <* match PortColon))
-    RPull ports <$> cnoun
+    RPull ports <$> cnoun'
 
   emb = REmb <$> snoun'
 
@@ -524,27 +524,38 @@ decl = do
       is_fun_ty (RK _) = True
       is_fun_ty _ = False
 
-parseFile :: String -> String -> Either Error ([UserName], RawEnv)
-parseFile fname contents = do
+class FCStream a where
+  getFC :: Int -> PosState a -> FC
+
+sp_to_fc :: SourcePos -> FC
+sp_to_fc (SourcePos _ line col) = let
+  l = unPos line
+  c = unPos col
+ in FC (Pos l c) (Pos l (c + 1))
+
+instance FCStream String where
+  getFC os pst = let (_, pst') = reachOffset os pst in sp_to_fc $ pstateSourcePos pst'
+
+instance FCStream [Token] where
+  getFC o PosState{..} = case drop (o - pstateOffset) pstateInput of
+    [] -> sp_to_fc pstateSourcePos
+    (Token fc _):_ -> fc
+
+parseFile :: String -> String -> Either SrcErr ([UserName], RawEnv)
+parseFile fname contents = addSrcContext fname contents $ do
   toks <- first (wrapParseErr LexErr) (parse lex fname contents)
   first (wrapParseErr ParseErr) (parse pfile fname toks)
  where
-  wrapParseErr :: (VisualStream t, TraversableStream t, ShowErrorComponent e)
-            => (ParseError -> ErrorMsg) -> ParseErrorBundle t e -> Error
+  wrapParseErr :: (VisualStream t, FCStream t, ShowErrorComponent e)
+               => (ParseError -> ErrorMsg) -> ParseErrorBundle t e -> Error
   wrapParseErr wrapper er = let
-      prettyErr = errorBundlePretty er
-      -- TODO: return all of the errors
-      e :| _errs = bundleErrors er
-      fc = mkFC (errorOffset e) (bundlePosState er)
-    in  Err (Just fc) (Just fname) $ wrapper (PE prettyErr)
-
-  mkFC :: TraversableStream a => Int -> PosState a -> FC
-  mkFC os pst = let (_, pst') = reachOffset os pst
-                    SourcePos _ line col = pstateSourcePos pst'
-                    l = unPos line - 1
-                    c = unPos col - 1
-                    start = Pos l (if c == 0 then 0 else c - 1)
-                in  FC start (Pos l (c + 1))
+      -- TODO: return all of the errors? There is generally only one.
+      e :| errs = bundleErrors er
+      prettyErr = (parseErrorTextPretty e) ++ case errs of
+        [] -> ""
+        xs -> " and " ++ (show $ length xs) ++ " other errors"
+      fc = getFC (errorOffset e) (bundlePosState er)
+    in  Err (Just fc) $ wrapper (PE prettyErr)
 
 clauses :: String -> Parser (Clause Raw Verb)
 clauses declName = try noLhs <|> branches

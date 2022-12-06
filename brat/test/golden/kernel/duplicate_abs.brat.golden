@@ -1,3 +1,6 @@
-Error in h2@FC {start = Pos {line = 5, col = 6}, end = Pos {line = 5, col = 22}}:
+Error in h2 (test/golden/kernel/duplicate_abs.brat)@FC {start = Pos {line = 5, col = 6}, end = Pos {line = 5, col = 22}}:
+h2 = { p, p => f(p) }
+     ^^^^^^^^^^^^^^^^
+
   Type error: Variable(s) defined twice: p
 

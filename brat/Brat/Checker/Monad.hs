@@ -71,8 +71,8 @@ lookupAndUse x kenv = case M.lookup x kenv of
 localKVar :: KEnv -> Free CheckingSig v -> Free CheckingSig v
 localKVar _   (Ret v) = Ret v
 localKVar env (Req (KLup x) k) = case lookupAndUse x env of
-                                   Left err@(Err (Just _) _ _) -> req $ Throw err
-                                   Left (Err Nothing _ msg) -> err msg
+                                   Left err@(Err (Just _) _) -> req $ Throw err
+                                   Left (Err Nothing msg) -> err msg
                                    Right (Just (th, env)) -> localKVar env (k (Just th))
                                    Right Nothing -> Req (KLup x) (localKVar env . k)
 localKVar env (Req KDone k) = case [ x | (x,(One,_)) <- M.assocs env ] of
@@ -120,7 +120,7 @@ type Checking = Free CheckingSig
 err :: ErrorMsg -> Checking a
 err msg = do
   fc <- req AskFC
-  req $ Throw $ Err (Just fc) Nothing msg
+  req $ Throw $ Err (Just fc) msg
 
 typeErr :: String -> Checking a
 typeErr = err . TypeErr

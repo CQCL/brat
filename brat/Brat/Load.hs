@@ -34,7 +34,9 @@ import System.FilePath
 import Prelude hiding (last)
 
 -- A Module is a node in the dependency graph
-type RawMod = (RawEnv, UserName, [UserName])
+type RawMod = ((RawEnv, String) -- data at the node: declarations, and file contents
+              ,UserName -- name of this node
+              ,[UserName]) -- other nodes on which this depends
 -- Result of checking/compiling a module
 type Mod = (VEnv, [Decl]         -- all symbols from all modules
            ,[TypedHole]          -- for just the last module
@@ -56,13 +58,12 @@ checkDecl :: Prefix -> Decl -> Checking ()
 checkDecl pre Decl{..}
   | Local <- fnLocality = do
   fnSig <- case fnSig of
-    [] -> req $ Throw (Err (Just fnLoc) Nothing (EmptyRow fnName))
+    [] -> req $ Throw (Err (Just fnLoc) (EmptyRow fnName))
     (x:xs) -> pure (x :| xs)
   (_, unders, _) <- next fnName Id (toList fnSig) (toList fnSig)
   case fnBody of
     NoLhs body -> do
-      ((), ((), [])) <- wrapError (addSrc fnName) $
-                        let ?my = Braty in check body ((), unders)
+      ((), ((), [])) <- let ?my = Braty in check body ((), unders)
       pure ()
     -- TODO: Unify this with `getThunks` and `check (Th _)` code
     ThunkOf verb -> do
@@ -87,16 +88,15 @@ checkDecl pre Decl{..}
    (tgt, unders, []) <- anext (name <> "/out") Target ts []
    let thunkTy = ("value", mkThunkTy ?my ss ts)
    next (name ++ "_thunk") (src :>>: tgt) [] [thunkTy]
-   ((), ([], [])) <- wrapError (addSrc name) $
-                     checkClauses (unWC verb) (overs, unders)
+   ((), ([], [])) <- checkClauses (unWC verb) (overs, unders)
    pure ()
 
-loadStmtsWithEnv :: (VEnv, [Decl]) -> Prefix -> RawEnv -> Either Error Mod
-loadStmtsWithEnv (venv, decls) pre stmts = do
-  decls <- (decls ++) <$> desugarEnv stmts
+loadStmtsWithEnv :: (VEnv, [Decl]) -> (String, Prefix, RawEnv, String) -> Either SrcErr Mod
+loadStmtsWithEnv (venv, decls) (fname, pre, stmts, cts) = do
+  decls <- (decls ++) <$> addSrcContext fname cts (desugarEnv stmts)
   -- hacky mess - cleanup!
   unless (null (duplicates decls)) $
-    Left . dumbErr . NameClash $ show (duplicates decls)
+    Left (addSrcName fname $ dumbErr $ NameClash $ show (duplicates decls))
   let venv' = venv <> addNounsToEnv pre decls
   (holes, graph, _nsp) <- foldM (checkDecl' venv' decls pre) ([], [], root) decls
 
@@ -106,14 +106,15 @@ loadStmtsWithEnv (venv, decls) pre stmts = do
   checkDecl' :: VEnv -> [Decl] -> Prefix -- static environment, context
             -> ([TypedHole], [(UserName, Graph)], Namespace) -- 'fold' state: compiled output + namespace
             -> Decl -- to check
-            -> Either Error ([TypedHole], [(UserName, Graph)], Namespace)
+            -> Either SrcErr ([TypedHole], [(UserName, Graph)], Namespace)
   checkDecl' venv decls pre (holes, graphs, nsp) d = do
     let (decl_nsp, nsp') = split (fnName d) nsp
-    ((), (holes', graph)) <- run (venv, decls, fnLoc d) decl_nsp (checkDecl pre d)
+    ((), (holes', graph)) <- addSrcContext ((fnName d) ++ " (" ++ fname ++ ")") cts $
+                                run (venv, decls, fnLoc d) decl_nsp (checkDecl pre d)
     pure (holes ++ holes', (PrefixName pre (fnName d), graph):graphs, nsp')
 
 
-loadFilename :: String -> ExceptT Error IO Mod
+loadFilename :: String -> ExceptT SrcErr IO Mod
 loadFilename file = do
   unless (takeExtension file == ".brat") $ fail $ "Filename " ++ file ++ " must end in .brat"
   let (path, fname) = splitFileName $ dropExtension file
@@ -122,43 +123,42 @@ loadFilename file = do
 
 -- Does not read the main file, but does read any imported files
 loadFiles :: FilePath -> String -> String
-         -> ExceptT Error IO Mod
+         -> ExceptT SrcErr IO Mod
 loadFiles path fname contents = do
   let fn = plain fname
   edges <- depGraph [] fn contents
-
   let (g, f, _) = G.graphFromEdges edges
   let files = G.topSort (G.transposeG g)
-  let getStmts v = let (stmts, (PrefixName ps name), _) = (f v) in ((ps ++ [name]), stmts)
-  let allStmts = (map getStmts files) :: [(Prefix, RawEnv)]
-  let emptyMod = (M.empty, [], [], [])
+  let getStmts v = let ((stmts, cts), (PrefixName ps name), _) = f v in ((ps ++ [name]), stmts, cts)
+  let allStmts = (map getStmts files) :: [(Prefix, RawEnv, String)]
   -- remove the prefix for the starting file
   allStmts' <- case viewR allStmts of
     -- the original file should be at the end of the allStmts list
-    Just (rest, (prf, mainStmts)) -> do
-      unless (prf == [fname]) $
-        throwError (dumbErr (InternalError "Top of dependency graph wasn't main file"))
-      pure $ rest ++ [([], mainStmts)]
-    Nothing -> throwError (dumbErr (InternalError "Empty dependency graph"))
-  -- keep (as we fold) and then return only the graphs from the last file in the list
+    Just (rest, (mainPrf, mainStmts, mainCts)) -> do
+      unless (mainPrf == [fname]) $
+        throwError (SrcErr "" $ dumbErr (InternalError "Top of dependency graph wasn't main file"))
+      pure $ [(path </> (foldr1 (</>) prf) ++ ".brat", prf, stmts, cts) | (prf, stmts, cts) <- rest]
+             ++ [(path </> fname ++ ".brat", [], mainStmts, mainCts)]
+    Nothing -> throwError (SrcErr "" $ dumbErr (InternalError "Empty dependency graph"))
+    -- keep (as we fold) and then return only the graphs from the last file in the list
   liftEither $ foldM
-    (\(venv, decls, _, _) (prf, stmts) -> loadStmtsWithEnv (venv, decls) prf stmts)
-    emptyMod
+    (\(venv, decls, _, _) -> loadStmtsWithEnv (venv, decls))
+    (M.empty, [], [], [])
     allStmts'
   where
-    depGraph :: [UserName] -> UserName -> String -> ExceptT Error IO [RawMod]
+    depGraph :: [UserName] -> UserName -> String -> ExceptT SrcErr IO [RawMod]
     depGraph chain name cts = case elemIndex name chain of
-      Just idx -> throwError $ Err Nothing (Just fname) (ImportCycle (show name) $ show $ chain!!(idx-1))
+      Just idx -> throwError $ addSrcName (nameToFile name) $ dumbErr (ImportCycle (show name) $ show $ chain!!(idx-1))
       Nothing -> do
         (imports, env) <- liftEither $ parseFile (nameToFile name) cts
         es <- forM imports $ \name' -> do
           let file = nameToFile name'
           exists <- lift $ doesFileExist file
           unless exists $
-            throwError (Err Nothing (Just (nameToFile name)) (FileNotFound file))
-          cts' <- lift $ readFile (nameToFile name')
+            throwError $ addSrcName (nameToFile name) $ dumbErr (FileNotFound file)
+          cts' <- lift $ readFile file
           depGraph (name:chain) name' cts'
-        pure ((env, name, imports):(concat es))
+        pure (((env, cts), name, imports):(concat es))
 
     nameToFile :: UserName -> String
     nameToFile (PrefixName ps file) = path </> (foldr (</>) file ps) ++ ".brat"
