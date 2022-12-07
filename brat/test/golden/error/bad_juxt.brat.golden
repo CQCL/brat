@@ -1,8 +1,0 @@
-Error in test/golden/error/bad_juxt.brat@FC {start = Pos {line = 7, col = 10}, end = Pos {line = 7, col = 20}}:
-I2_bad = { I, I() }
-         ^^^^^^^^^^
-
-  Parse error unexpected { I, I() }
-expecting (...), <>, Binding(s), Comment, Horizontal space, \n, bool, float, function, hole, let ... in, let binding, name, nat, port pull, string, syn verb, thunk, typed hole, or vector literal
-
-

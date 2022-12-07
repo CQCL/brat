@@ -1,8 +1,8 @@
 Error in test/golden/error/compjuxt_syn_chk.brat@FC {start = Pos {line = 8, col = 11}, end = Pos {line = 8, col = 28}}:
-num_lit = { (1, 2); id2() }
+num_lit = { (1, 2) |> id2 }
           ^^^^^^^^^^^^^^^^^
 
-  Parse error unexpected { (1, 2); id2() }
+  Parse error unexpected { (1, 2) |> id2 }
 expecting (...), <>, Binding(s), Comment, Horizontal space, \n, bool, float, function, hole, let ... in, let binding, name, nat, port pull, string, syn verb, thunk, typed hole, or vector literal
 
 

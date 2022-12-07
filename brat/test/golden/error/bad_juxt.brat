@@ -1,7 +1,0 @@
-I :: { Qubit -o Qubit }
-I = { q => q }
-
--- At one point we parsed this as (I,I)() i.e. forcing both
--- (which typechecks, but doesn't match expectations)
-I2_bad :: { Qubit -o Qubit }
-I2_bad = { I, I() }
