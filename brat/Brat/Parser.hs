@@ -4,8 +4,10 @@ import Brat.Error
 import Brat.FC
 import Brat.Lexer
 import Brat.Syntax.Common hiding (K, end)
+import Brat.Syntax.Concrete
 import Brat.Syntax.Raw
-import Brat.UserName
+import Brat.UserName ( plain, UserName(..) )
+import Brat.Elaborator
 
 import Control.Monad (guard, void)
 import Data.Bifunctor
@@ -22,6 +24,18 @@ type Parser a = Parsec CustomError [Token] a
 
 instance ShowErrorComponent CustomError where
   showErrorComponent (Custom s) = s
+
+
+withFC :: Parser a -> Parser (WC a)
+withFC p = do
+  (Token (FC start _) _) <- nextToken
+  thing <- p
+  eof <- optional eof
+  case eof of
+    Just _ -> pure (WC (FC start start) thing)
+    Nothing -> do (Token (FC end _) _) <- nextToken
+                  pure (WC (FC start end) thing)
+
 
 newline = label "\\n" $ match Newline
 
@@ -111,6 +125,9 @@ string = token0 $ \case
   (Token _ (Quoted txt)) -> Just txt
   _ -> Nothing
 
+var :: Parser Flat
+var = FVar <$> userName
+
 thunk :: (FC -> Thunk -> Maybe a) -> Parser a
 thunk f = label "{...}" $ token0 $ \case
   Token fc (Curly th) -> f fc th
@@ -118,29 +135,22 @@ thunk f = label "{...}" $ token0 $ \case
 
 port = simpleName
 
-comma :: Parser (WC (Raw d k) -> WC (Raw d k) -> WC (Raw d k))
+comma :: Parser (WC Flat -> WC Flat -> WC Flat)
 comma = spaced $ token0 $ \case
   Token _ Comma -> Just $ \a b ->
     let fc = FC (start (fcOf a)) (end (fcOf b))
-    in  WC fc (a ::|:: b)
+    in  WC fc (FJuxt a b)
   _ -> Nothing
 
-semicolon :: Parser (WC (Raw Syn Verb) -> WC (Raw d Verb) -> WC (Raw d Verb))
-semicolon = spaced $ token0 $ \case
-  Token _ Semicolon -> Just $ \a b ->
-    let fc = FC (start (fcOf a)) (end (fcOf b))
-    in  WC fc (a ::-:: b)
-  _ -> Nothing
-
-into :: Parser (WC (Raw Syn Noun) -> WC (Raw d Verb) -> WC (Raw d Noun))
+into :: Parser (WC Flat -> WC Flat -> WC Flat)
 into = spaced $ token0 $ \case
   Token _ Into -> Just $ \a b ->
     let fc = FC (start (fcOf a)) (end (fcOf b))
-    in  WC fc (a ::-:: b)
+    in  WC fc (FInto a b)
   _ -> Nothing
 
-chainl1' :: Parser a -> Parser b -> Parser (a -> b -> a) -> Parser a
-chainl1' start px pf = start >>= rest
+chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a
+chainl1 px pf = px >>= rest
  where
   rhs = do f <- pf
            x <- px
@@ -149,12 +159,6 @@ chainl1' start px pf = start >>= rest
   rest x = optional rhs >>= \case
     Just (f, y) -> rest (f x y)
     Nothing     -> pure x
-
-chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a
-chainl1 px = chainl1' px px
-
-juxtaposition :: Parser (WC (Raw d k)) -> Parser (WC (Raw d k))
-juxtaposition p = p `chainl1` (try comma)
 
 abstractor :: Parser Abstractor
 abstractor = do ps <- many (try $ portPull <* space)
@@ -207,70 +211,6 @@ abstractor = do ps <- many (try $ portPull <* space)
       space
       PTwoTimes <$> round pat
 
-sverb :: Parser (WC (Raw Syn Verb))
-sverb = (juxtaposition sverb') `chainl1` try semicolon
- where
-  sverb' :: Parser (WC (Raw Syn Verb))
-  sverb' = try (letin sverb) <|> round sverb <|> withFC (try (func snoun) <|> force)
-
-  force :: Parser (Raw Syn Verb)
-  force = RForce <$> snoun'  -- Force implicitly
-
-func :: Parser (WC (Raw d Noun)) -> Parser (Raw d Verb)
-func pbody = do
-  xs <- withFC abstractor <?> "Binding(s)"
-  spaced $ match FatArrow
-  body <- pbody
-  pure $ xs ::\:: body
-
-letin :: Parser (WC (Raw d k)) -> Parser (WC (Raw d k))
-letin p = withFC $ do
-  (lhs,rhs) <- inLet $ do
-    abs <- withFC abstractor
-    spaced $ match Equal
-    thing <- snoun
-    pure (abs, thing)
-  space
-  body <- p
-  pure $ RLet lhs rhs body
-
-cverb :: Parser (WC (Raw Chk Verb))
--- try to parse an sverb;cverb first. If that fails to find a semicolon,
--- the sverb can be reparsed as a cverb
-cverb = try (withFC $ compose Semicolon sverb cverb) <|> (juxtaposition cverb')
- where
-  cverb' :: Parser (WC (Raw Chk Verb))
-  cverb' = try (letin cverb <?> "let binding") <|> withFC
-    (try (func cnoun <?> "function")
-    <|> try (RVHole <$> hole <?> "typed hole")
-    <|> (REmb <$> sverb <?> "syn verb")
-    ) <|> round cverb
-
-
-var :: Parser (Raw Syn Noun)
-var = RVar <$> userName
-
-snoun' :: Parser (WC (Raw Syn Noun))
-snoun' = withFC $ do
-  sn <- round snoun <|> letin snoun <|> withFC var
-  try (application sn) <|> pure (unWC sn)
- where
-  application :: WC (Raw Syn Noun) -> Parser (Raw Syn Noun)
-  application fun = do
-    space
-    arg <- round cnoun
-    pure (fun ::$:: arg)
-
-snoun :: Parser (WC (Raw Syn Noun))
-snoun = chainl1' (juxtaposition snoun') sverb (try into)
-
-compose :: Tok -> Parser (WC (Raw Syn k)) -> Parser (WC (Raw d Verb)) -> Parser (Raw d k)
-compose t p1 p2 = do
-  x <- p1
-  spaced (match t) <?> show t
-  y <- p2
-  pure (x ::-:: y)
-
 simpleTerm :: Parser SimpleTerm
 simpleTerm =
   ((Text <$> string <?> "string")
@@ -283,88 +223,9 @@ simpleTerm =
   bool = Bool <$> (matchString "true" $> True
                    <|> matchString "false" $> False)
 
-cnoun' :: Parser (WC (Raw Chk Noun))
-cnoun' = try (letin cnoun) <|> withFC
-  (try (cthunk <?> "thunk")
-  <|> try (pull <?> "port pull")
-  <|> try (vec <?> "vector literal")
-  <|> (nhole <?> "hole")
-  <|> try (RSimple <$> simpleTerm)
-  <|> try emb
-  ) <|> round cnoun
- where
-
-  nhole = RNHole <$> hole
-
-  pull = do
-    ports <- some (try (port <* match PortColon))
-    RPull ports <$> cnoun'
-
-  emb = REmb <$> snoun'
-
-  cthunk :: Parser (Raw Chk Noun)
-  cthunk = thunk $ \fc th -> case th of
-    Thunk n ss -> RTh <$> braceSection fc n ss
-    Lambda ss ts -> let maybeAbs = parseMaybe (spaced (withFC abstractor)) ss
-                        abstr = fromMaybe (WC fc AEmpty) maybeAbs
-        in (RTh . WC fc . (abstr ::\::)) <$> parseMaybe (spaced cnoun) ts
-    _ -> Nothing
-
-  -- Invented variable names look like '1, '2, '3 ...
-  -- which are illegal for the user to use as variables
-  braceSectionAbstractor :: Int -> Abstractor
-  braceSectionAbstractor n = foldr (:||:) AEmpty $
-                             (\x -> APat (Bind ('\'': show x))) <$> [0..n-1]
-
-  braceSection :: FC -> Int -> [Token] -> Maybe (WC (Raw Chk Verb))
-  braceSection _ 0 ts = parseMaybe (spaced cverb) ts
-  braceSection fc n ts = do
-   let abs = WC fc (braceSectionAbstractor n)
-   body <- parseMaybe (spaced cnoun) ts
-   pure (WC fc (abs ::\:: body))
-
-  mkNil :: FC -> Raw Chk Noun
-  mkNil fc = RCon (plain "nil") (WC fc REmpty)
-
-  vec2Cons :: Pos -> [WC (Raw Chk Noun)] -> WC (Raw Chk Noun)
-  -- The nil element gets as FC the closing ']' of the [li,te,ral]
-  vec2Cons end [] = let fc = FC end{col=(col end)-1} end in WC fc (mkNil fc)
-  -- We give each cell of the list an FC which starts with the FC
-  -- of its head element and ends at the end of the list (the closing ']')
-  vec2Cons end (x:xs) = let fc = FC (start $ fcOf x) end in
-    WC fc $ RCon (plain "cons") (WC fc (x ::|:: (vec2Cons end xs)))
-
-  vec :: Parser (Raw Chk Noun)
-  vec = (\(WC fc x) -> unWC $ vec2Cons (end fc) x) <$> withFC (square elems)
-   where
-    elems = (eof $> []) <|> (element `chainl1` (try vecComma))
-    vecComma = spaced (match Comma) $> (++)
-    element = (:[]) <$> cnoun'
-
-cnoun :: Parser (WC (Raw Chk Noun))
-cnoun = try (withFC $ nounIntoVerbs) <|> juxtaposition cnoun'
- where
-  -- Try nounIntoVerbs first: We can accept a chain of |>'s that
-  -- looks like `snoun |> sverb |> sverb |> ... |> cverb`. If we
-  -- fail to find a cverb at the end, we can just reparse the
-  -- previous sverb as a cverb. 
-  nounIntoVerbs :: Parser (Raw Chk Noun)
-  nounIntoVerbs = do 
-    x <- juxtaposition snoun'
-    f <- into
-    nounIntoVerbs' x f
-    
-  nounIntoVerbs' x f =
-    try (do y <- sverb
-            optional into >>= \case
-              Just f' -> nounIntoVerbs' (f x y) f'
-              Nothing -> pure (REmb (f x y)))
-    <|> ((x ::-::) <$> cverb)
-
 
 outputs :: Parser [RawIO]
 outputs = rawIO vtype
-
 
 vtype :: Parser RawVType
 vtype = vtype' []
@@ -393,7 +254,7 @@ vtype' ps = try (round vty) <|> vty
 
   pair = kmatch KPair *> space *> round (RProduct <$> vtype' ps <* spaced comma <*> vtype' ps)
 
-  vec = kmatch KVec *> space *> round (RVector <$> vtype' ps <* spaced comma <*> cnoun)
+  vec = kmatch KVec *> space *> round (RVector <$> vtype' ps <* spaced comma <*> cnoun atomExpr)
 
   list = kmatch KList *> space *> round (RList <$> vtype' ps)
 
@@ -414,7 +275,7 @@ vtype' ps = try (round vty) <|> vty
   thunkType = thunk $ \_ th -> case th of
     -- Don't allow brace sections as types yet
     Kernel ss ts -> RK <$> ((:->) <$> parseMaybe (spaced (rawIO stype)) ss <*> parseMaybe (spaced (rawIO stype)) ts)
-    FunTy  ss ts -> RC <$> ((:->) <$> parseMaybe (spaced (rawIO vtype)) ss <*> parseMaybe (spaced (rawIO vtype)) ts)
+    FunTy  ss ts -> RC <$> ((:->) <$> parseMaybe (spaced (rawIO vtype)) ss <*> parseMaybe (spaced (rawIO vtype)) ts)    
     _ -> Nothing
 
 
@@ -447,7 +308,7 @@ stype = try (Rho <$> round row)
            (ty, n) <- round $ do
              ty <- stype
              spaced (match Comma)
-             n <- unWC <$> cnoun
+             n <- unWC <$> cnoun atomExpr
              pure (ty, n)
            pure $ Of ty n
 
@@ -468,33 +329,138 @@ functionType = try (RC <$> ctype) <|> (RK <$> kernel)
     outs <- rawIO stype
     pure (ins :-> outs)
 
-withFC :: Parser a -> Parser (WC a)
-withFC p = do
-  (Token (FC start _) _) <- nextToken
-  thing <- p
-  eof <- optional eof
-  case eof of
-    Just _ -> pure (WC (FC start start) thing)
-    Nothing -> do (Token (FC end _) _) <- nextToken
-                  pure (WC (FC start end) thing)
 
-{-
-runtime :: Parser Runtime
-runtime = try (char '@' *> aux <* newline) <|> pure RtLocal
+vec :: Parser Flat
+vec = (\(WC fc x) -> unWC $ vec2Cons (end fc) x) <$>  withFC (square elems)
+  where
+    elems = (eof $> []) <|> (element `chainl1` (try vecComma))
+    vecComma = spaced (match Comma) $> (++)
+    element = (:[]) <$> withFC atomExpr
+    mkNil fc = FCon (plain "nil") (WC fc FEmpty)
+
+    vec2Cons :: Pos -> [WC Flat] -> WC Flat
+    -- The nil element gets as FC the closing ']' of the [li,te,ral]
+    vec2Cons end [] = let fc = FC end{col=(col end)-1} end in WC fc (mkNil fc)
+    -- We give each cell of the list an FC which starts with the FC
+    -- of its head element and ends at the end of the list (the closing ']')
+    vec2Cons end (x:xs) = let fc = FC (start $ fcOf x) end in
+      WC fc $ FCon (plain "cons") (WC fc (FJuxt x (vec2Cons end xs)))
+
+
+cthunk :: Parser Flat
+cthunk = thunk $ \fc th -> case th of
+  Thunk n ss -> FThunk <$> braceSection fc n ss
+  Lambda ss ts -> let maybeAbs = parseMaybe (spaced (withFC abstractor)) ss
+                      abs = fromMaybe (WC fc AEmpty) maybeAbs
+      in FThunk . WC fc <$> (FLambda abs <$> parseMaybe (spaced (withFC expr)) ts)
+  _ -> Nothing
  where
-  aux = string "kernel" $> RtKernel
-        <|> string "tk" $> RtTierkreis
+  -- Invented variable names look like '1, '2, '3 ...
+  -- which are illegal for the user to use as variables
+  braceSectionAbstractor :: [Int] -> Abstractor
+  braceSectionAbstractor ns = foldr (:||:) AEmpty $
+                              (\x -> APat (Bind ('\'': show x))) <$> ns
+
+  braceSection :: FC -> Int -> [Token] -> Maybe (WC Flat)
+  braceSection _ 0 ts = parseMaybe (withFC $ spaced expr) ts
+  braceSection fc n ts = do
+    let abs = WC fc (braceSectionAbstractor [0..n-1])
+    body <- parseMaybe (withFC $ spaced expr) ts
+    pure (WC fc (FLambda abs body))
+
+
+-- Expressions that can occur inside juxtapositions and vectors (i.e. everything with a higher
+-- precedence than juxtaposition).
+atomExpr :: Parser Flat
+atomExpr = atomExpr' 0
+ where
+  atomExpr' n = choice $ drop n [
+    try (annotation <?> "type annotation"),
+    try (app <?> "application"),
+    simpleExpr,
+    round expr ]
+
+  annotation = FAnnotation <$> withFC (atomExpr' 1) <* spaced (match TypeColon) <*> rawIO vtype
+
+  app = FApp <$> withFC (atomExpr' 2) <* space <*> withFC (round expr)
+
+  simpleExpr = FHole <$> hole
+            <|> try (FSimple <$> simpleTerm)
+            <|> vec
+            <|> cthunk
+            <|> var
+
+
+{- Infix operator precedence table
+(loosest to tightest binding):
+   =>
+   |> (left-assoc)
+   ;
+   , & port-pull
+   ::
 -}
+expr :: Parser Flat
+expr = expr' 0
+ where
+  expr' :: Int -> Parser Flat
+  expr' n = choice $ drop n [
+    try (letin <?> "let ... in"),
+    try (lambda <?> "abstraction"),
+    try (cinto <?> "into"),
+    try (composition <?> "composition"),
+    try (pull <?> "port pull"),
+    try (juxt <?> "juxtaposition"),
+    atomExpr ]
+  
+  letin = do
+    (lhs,rhs) <- inLet $ do
+      abs <- withFC abstractor
+      spaced $ match Equal
+      thing <- withFC (try letin <|> expr' 1)
+      pure (abs, thing)
+    space
+    body <- withFC (try letin <|> expr' 1)
+    pure $ FLetIn lhs rhs body
 
-nbody :: String -> Parser (Clause Raw Noun)
-nbody nm = do
-  matchString nm
-  spaced $ match Equal
-  body <- cnoun
-  return $ NoLhs body
+  lambda = do
+    abs <- withFC abstractor
+    spaced (match FatArrow)
+    body <- withFC (try lambda <|> expr' 2)
+    pure (FLambda abs body)
+
+  cinto = unWC <$> withFC (expr' 3) `chainl1` try into
+
+  composition = unWC <$> withFC (expr' 4) `chainl1` try semicolon
+
+  pull = do
+    ports <- some (try (port <* match PortColon))
+    FPull ports <$> withFC (expr' 5)
+
+  juxt = unWC <$> withFC (try pull <|> expr' 6) `chainl1` try comma
+
+  semicolon :: Parser (WC Flat -> WC Flat -> WC Flat)
+  semicolon = spaced $ token0 $ \case
+    Token _ Semicolon -> Just $ \a b ->
+      let fc = FC (start (fcOf a)) (end (fcOf b))
+      in  WC fc (FCompose a b)
+    _ -> Nothing
 
 
-decl :: Parser RawDecl
+cnoun :: Parser Flat -> Parser (WC (Raw 'Chk 'Noun))
+cnoun pe = do
+  e <- withFC pe
+  case elaborate e of
+    Left err -> fail (showError err)
+    Right (SomeRaw r) -> case do
+      r <- assertChk r
+      r <- assertNoun r
+      pure r
+     of
+      Left err -> fail (showError err)
+      Right r -> pure r
+
+
+decl :: Parser FDecl
 decl = do
       (WC fc (nm, ty, body, rt)) <- withFC (do
         rt <- pure RtLocal -- runtime
@@ -507,9 +473,8 @@ decl = do
                                  [Named _ t] -> is_fun_ty t
                                  [Anon t] -> is_fun_ty t
                                  _ -> False
-        body <- (if allow_clauses
-          then (ThunkOf <$> (withFC $ clauses nm)) <|> (nbody nm)
-          else (nbody nm))
+        body <- if allow_clauses then (FClauses <$> clauses nm) <|> (FNoLhs <$> nbody nm)
+                else FNoLhs <$> nbody nm
         pure (nm, ty, body, rt))
       pure $ Decl { fnName = nm
                   , fnLoc  = fc
@@ -523,6 +488,13 @@ decl = do
       is_fun_ty (RC _) = True
       is_fun_ty (RK _) = True
       is_fun_ty _ = False
+
+      nbody :: String -> Parser (WC Flat)
+      nbody nm = do
+        label (nm ++ "(...) = ...") $
+          matchString nm
+        spaced $ match Equal
+        withFC expr
 
 class FCStream a where
   getFC :: Int -> PosState a -> FC
@@ -541,7 +513,7 @@ instance FCStream [Token] where
     [] -> sp_to_fc pstateSourcePos
     (Token fc _):_ -> fc
 
-parseFile :: String -> String -> Either SrcErr ([UserName], RawEnv)
+parseFile :: String -> String -> Either SrcErr ([UserName], FEnv)
 parseFile fname contents = addSrcContext fname contents $ do
   toks <- first (wrapParseErr LexErr) (parse lex fname contents)
   first (wrapParseErr ParseErr) (parse pfile fname toks)
@@ -557,36 +529,27 @@ parseFile fname contents = addSrcContext fname contents $ do
       fc = getFC (errorOffset e) (bundlePosState er)
     in  Err (Just fc) $ wrapper (PE prettyErr)
 
-clauses :: String -> Parser (Clause Raw Verb)
-clauses declName = try noLhs <|> branches
+clauses :: String -> Parser (NonEmpty (WC Abstractor, WC Flat))
+clauses declName = label "clauses" $
+                   fmap (fromJust . nonEmpty) $
+                   some (try (vspace *> branch))
  where
-  branches = label "clauses" $
-             fmap (Clauses . fromJust . nonEmpty) $
-             some (try (vspace *> branch))
-
   branch = do
     label (declName ++ "(...) = ...") $
       matchString declName
     space
     lhs <- withFC $ round (abstractor <?> "binder")
     spaced $ match Equal
-    rhs <- cnoun
+    rhs <- withFC expr
     pure (lhs,rhs)
-
-  noLhs = label (declName ++ " = ...") $ do
-    label declName $
-      matchString declName
-    spaced (match Equal)
-    NoLhs <$> cverb
 
 pimport :: Parser UserName
 pimport = kmatch KImport *> space *> userName
 
-pstmt :: Parser RawEnv
+pstmt :: Parser FEnv
 pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
         <|> try ((alias <?> "type alias")        <&> \x -> ([] , [x]))
-        <|> try (extVDecl                        <&> \x -> ([x], []))
-        <|> try (extNDecl                        <&> \x -> ([x], []))
+        <|> try (extDecl                         <&> \x -> ([x], []))
         <|> ((decl <?> "declaration")            <&> \x -> ([x], []))
  where
   alias :: Parser (UserName, TypeAlias)
@@ -613,47 +576,29 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
     guard (name == str)
     pure $ RTypeFree name
 
-  extNDecl :: Parser RawDecl
-  extNDecl = do (WC fc (fnName, ty, symbol)) <- withFC $ do
+  extDecl :: Parser FDecl
+  extDecl = do (WC fc (fnName, ty, symbol)) <- withFC $ do
                   match (K KExt)
                   space
                   symbol <- string
                   space
                   fnName <- simpleName
-                  spaced (match TypeColon)
-                  ty <- outputs
+                  ty <- try nDecl <|> vDecl
                   optional hspace
                   vspace
                   pure (fnName, ty, symbol)
-                pure Decl { fnName = fnName
-                          , fnSig = ty
-                          , fnBody = Undefined
-                          , fnLoc = fc
-                          , fnRT = RtLocal
-                          , fnLocality = Extern symbol
-                          }
+               pure Decl { fnName = fnName
+                         , fnSig = ty
+                         , fnBody = FUndefined
+                         , fnLoc = fc
+                         , fnRT = RtLocal
+                         , fnLocality = Extern symbol
+                         }
+   where
+    nDecl = spaced (match TypeColon) >> outputs
+    vDecl = (:[]) . Named "thunk" <$> (space >> functionType)
 
-  extVDecl :: Parser RawDecl
-  extVDecl = do (WC fc (fnName, ty, symbol)) <- withFC $ do
-                  match (K KExt)
-                  space
-                  symbol <- string
-                  space
-                  fnName <- simpleName
-                  space
-                  ty <- functionType
-                  optional hspace
-                  vspace
-                  pure (fnName, ty, symbol)
-                pure Decl { fnName = fnName
-                          , fnSig = [Named "thunk" ty]
-                          , fnBody = Undefined
-                          , fnLoc = fc
-                          , fnRT = RtLocal
-                          , fnLocality = Extern symbol
-                          }
-
-pfile :: Parser ([UserName], RawEnv)
+pfile :: Parser ([UserName], FEnv)
 pfile = do
   vspace
   imports <- many (pimport <* vspace)

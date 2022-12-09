@@ -49,7 +49,7 @@ type RawKType = CType' (RawIO' (SType' Raw))
 
 data TypeAlias = Alias FC String [UserName] RawVType deriving Show
 
-type RawDecl = Decl' RawIO Raw
+type RawDecl = Decl' RawIO (Clause Raw Noun)
 type RawEnv = ([RawDecl], [(UserName, TypeAlias)])
 
 
@@ -70,6 +70,17 @@ data Raw :: Dir -> Kind -> Type where
   (::-::)   :: WC (Raw Syn k) -> WC (Raw d Verb) -> Raw d k -- vertical juxtaposition (diagrammatic composition)
   (::\::)   :: WC Abstractor -> WC (Raw d Noun) -> Raw d Verb
   RCon      :: UserName -> WC (Raw Chk Noun) -> Raw Chk Noun
+
+class Dirable d where
+  dir :: Raw d k -> Diry d
+
+class Kindable k where
+  kind :: Raw d k -> Kindy k
+
+instance (Dirable Syn) where dir _ = Syny
+instance (Dirable Chk) where dir _ = Chky
+instance (Kindable Noun) where kind _ = Nouny
+instance (Kindable Verb) where kind _ = Verby 
 
 instance Show (Raw d k) where
   show (RLet abs xs body)

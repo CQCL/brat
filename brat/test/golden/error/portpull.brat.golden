@@ -1,6 +1,6 @@
-Error in id2 (test/golden/error/portpull.brat)@FC {start = Pos {line = 6, col = 23}, end = Pos {line = 6, col = 27}}:
+Error in id2 (test/golden/error/portpull.brat)@FC {start = Pos {line = 6, col = 22}, end = Pos {line = 6, col = 31}}:
 id2 = x, y => (id,id)(a1:x, y)
-                      ^^^^
+                     ^^^^^^^^^
 
   Port a1 is ambiguous in (a1 :: Nat), (a1 :: Nat)
 

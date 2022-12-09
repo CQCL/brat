@@ -28,7 +28,7 @@ getInfo ps pos
   pred :: Decl' io raw -> Bool
   pred Decl{..} = pos `inside` fnLoc
 
-  buildContext :: Pos -> Decl' io Term -> Maybe Context
+  buildContext :: Pos -> Decl' io (Clause Term Noun) -> Maybe Context
   buildContext pos Decl{..} = do
     body <- findInClause pos fnBody
     subject <- getThing pos body

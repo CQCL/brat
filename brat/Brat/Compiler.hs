@@ -11,6 +11,7 @@ import Control.Monad.Except
 import qualified Data.ByteString as BS
 import Data.ProtoLens (encodeMessage)
 import System.FilePath (dropExtension)
+import Brat.Elaborator
 
 printDeclsHoles :: String -> IO ()
 printDeclsHoles file = do
@@ -38,10 +39,11 @@ banner s m = putStrLn startText *> m <* putStrLn endText
 printAST :: Bool -> Bool -> String -> IO ()
 printAST printRaw printAST file = do
   cts <- readFile file
-  (_, env@(decls, _)) <- eitherIO $ parseFile file cts
+  (_, env) <- eitherIO $ parseFile file cts
+  env'@(decls, _) <- eitherIO $ addSrcContext file cts (elabEnv env)
   when printRaw $ banner "Raw AST" $ mapM_ print decls
   when printAST $
-    banner "desugared AST" (mapM_ print =<< eitherIO (addSrcContext file cts (desugarEnv env)))
+    banner "desugared AST" (mapM_ print =<< eitherIO (addSrcContext file cts (desugarEnv env')))
 
 compileFile :: String -> IO ()
 compileFile file = do

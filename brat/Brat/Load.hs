@@ -17,6 +17,7 @@ import Brat.Naming
 import Brat.Parser
 import Brat.Syntax.Common
 import Brat.Syntax.Core
+import Brat.Elaborator
 import Brat.Syntax.Raw
 import Brat.UserName
 import Control.Monad.Freer (req)
@@ -158,7 +159,9 @@ loadFiles path fname contents = do
             throwError $ addSrcName (nameToFile name) $ dumbErr (FileNotFound file)
           cts' <- lift $ readFile file
           depGraph (name:chain) name' cts'
-        pure (((env, cts), name, imports):(concat es))
+        case addSrcContext (nameToFile name) cts $ elabEnv env of
+          Left err -> throwError err
+          Right env' -> pure (((env', cts), name, imports):(concat es))
 
     nameToFile :: UserName -> String
     nameToFile (PrefixName ps file) = path </> (foldr (</>) file ps) ++ ".brat"

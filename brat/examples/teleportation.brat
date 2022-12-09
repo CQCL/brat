@@ -48,4 +48,4 @@ tele(Qubit, Qubit, Qubit) -o Qubit, Vec(Money, 2)
 tele =
  lib.kernel.qid,bell00;
  alice, lib.kernel.qid;
- x, y, ms, q => bob(q, x, y), ms
+ (x, y, ms, q => bob(q, x, y), ms)

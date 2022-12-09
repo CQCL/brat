@@ -44,6 +44,7 @@ data ErrorMsg
  | VecEval String
  | ParseErr ParseError
  | LexErr ParseError
+ | ElabErr String
  | DesugarErr String
  | EvalErr String
  | NameClash String
@@ -90,6 +91,7 @@ instance Show ErrorMsg where
   show (PattErr x) = "Type error in pattern: " ++ x
   show (ParseErr x) = "Parse error " ++ show x
   show (LexErr x) = "Lex error " ++ show x
+  show (ElabErr x) = "Elab error " ++ show x
   show (DesugarErr x) = "Desugar error " ++ x
   show (EvalErr x) = "Eval error " ++ x
   show (NameClash x) = "Name clash: " ++ x

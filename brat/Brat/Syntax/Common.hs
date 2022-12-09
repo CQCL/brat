@@ -16,6 +16,8 @@ module Brat.Syntax.Common (PortName,
                            VType'(..),
                            Dir(..),
                            Kind(..),
+                           Diry(..),
+                           Kindy(..),
                            SimpleTerm(..),
                            SimpleType(..),
                            CType'(..),
@@ -131,6 +133,18 @@ instance Show SimpleType where
 data Dir = Syn | Chk deriving (Eq, Show)
 data Kind = Noun | Verb deriving (Eq, Show)
 
+data Diry :: Dir -> Type where
+  Syny :: Diry Syn
+  Chky :: Diry Chk
+
+data Kindy :: Kind -> Type where
+  Nouny :: Kindy Noun
+  Verby :: Kindy Verb
+
+deriving instance Show (Diry d)
+deriving instance Show (Kindy k)
+
+
 data SimpleTerm
   = Num Int
   | Bool Bool
@@ -161,21 +175,24 @@ instance Semigroup (Row' tm q) where
 
 data Locality = Extern String | Local deriving (Eq, Show)
 
-data Decl' (io :: Type) (raw :: Dir -> Kind -> Type)
+data Decl' (io :: Type) (body :: Type)
   = Decl { fnName :: String
          , fnSig  :: [io]
-         , fnBody :: Clause raw Noun
+         , fnBody :: body
          , fnLoc  :: FC
          , fnRT   :: Runtime
          , fnLocality :: Locality
          }
 
 deriving instance
-  forall raw io.
-  (forall d k. Eq (raw d k), Eq io, Eq (Clause raw Noun)) => Eq (Decl' io raw)
---deriving instance (Eq (raw d k), Eq io, Eq (Clause raw k)) => Eq (Decl io raw)
+  forall tm io.
+  (forall d k. Eq (tm d k), Eq io
+  ,Eq (Clause tm Noun)
+  ,Eq (Clause tm Verb)
+  ) => Eq (Decl' io (Clause tm Noun))
 
-instance (Show io, Show (Clause raw Noun)) => Show (Decl' io raw) where
+instance (Show io, Show (Clause tm Noun))
+ => Show (Decl' io (Clause tm Noun)) where
   show Decl{..} = unlines [fnName ++ " :: " ++ show fnSig
                           ,fnName ++ " = " ++ show fnBody]
 

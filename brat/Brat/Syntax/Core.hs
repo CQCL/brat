@@ -21,7 +21,7 @@ type CType = CType' InOut
 -- instance Eq VType => Eq CType where
 --   xs == ys = (snd <$> xs) == (snd <$> ys)
 
-type Decl = Decl' InOut Term
+type Decl = Decl' InOut (Clause Term Noun)
 
 data Term :: Dir -> Kind -> Type where
   Simple   :: SimpleTerm -> Term Chk Noun
