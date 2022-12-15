@@ -22,7 +22,6 @@ data Flat
  | FApp (WC Flat) (WC Flat)
  | FJuxt (WC Flat) (WC Flat)
  | FThunk (WC Flat)
- | FForce (WC Flat)
  | FCompose (WC Flat) (WC Flat)
 -- Keep |> distinct from application to keep track of user's syntax choice.
 -- Note that it's turned into an application during elaboration

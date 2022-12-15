@@ -90,11 +90,6 @@ elaborate' (FThunk a) = do
   a <- assertVerb a  -- Assert verb before chk since force needs to come before emb
   a <- assertChk a
   pure $ SomeRaw' (RTh a)
-elaborate' (FForce a) = do
-  (SomeRaw a) <- elaborate a
-  a <- assertNoun a
-  a <- assertSyn a
-  pure $ SomeRaw' (RForce a)
 elaborate' (FCompose a b) = do
   (SomeRaw a) <- elaborate a
   (SomeRaw b) <- elaborate b
