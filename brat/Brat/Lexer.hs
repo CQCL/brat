@@ -1,4 +1,4 @@
-module Brat.Lexer (Thunk(..), Tok(..), Token(..), Keyword(..), lex) where
+module Brat.Lexer (Tok(..), Token(..), Keyword(..), lex) where
 
 import Prelude hiding (lex)
 import Data.Char (isSpace)
@@ -17,22 +17,6 @@ readL x = case reads x of
             _ -> fail ("readL failed on input " ++ x)
 
 type Lexer a = Parsec Void String a
-
-data Thunk where
-  Kernel :: [Token] -> [Token] -> Thunk
-  Lambda :: [Token] -> [Token] -> Thunk
-  FunTy  :: [Token] -> [Token] -> Thunk
-  -- Int: How many things does the thunk bind?
-  -- The body replaces underscores with synthetic names
-  Thunk  :: Int -> [Token] -> Thunk
-
-deriving instance Eq Thunk
-
-instance Show Thunk where
-  show (Kernel ss ts) = foldMap show ss ++ show Lolly ++ foldMap show ts
-  show (Lambda ss ts) = foldMap show ss ++ show FatArrow ++ foldMap show ts
-  show (FunTy ss ts) = foldMap show ss ++ show Arrow ++ foldMap show ts
-  show (Thunk _ toks) = foldMap show toks
 
 data Tok
  = Ident String
