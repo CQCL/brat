@@ -34,4 +34,5 @@ data Flat
  | FCon UserName (WC Flat)
  | FEmpty
  | FPull [PortName] (WC Flat)
+ | FUnderscore
  deriving Show

@@ -74,7 +74,7 @@ addN = unlines
   ["ext \"N\" N :: (value :: Int)"
   ,"ext \"add\" add(a :: Int, b :: Int) -> (c :: Int)"
   ,""
-  ,"addN(in :: Int) -> (out :: Int)"
+  ,"addN(inp :: Int) -> (out :: Int)"
   ,"addN(n) = add(n, N)"
   ]
 
@@ -82,7 +82,7 @@ addN2 = unlines
   ["ext \"N\" N :: (value :: Int)"
   ,"ext \"add\" add :: {a :: Int, b :: Int -> c :: Int}"
   ,""
-  ,"addN(in :: Int) -> (out :: Int)"
+  ,"addN(inp :: Int) -> (out :: Int)"
   ,"addN(n) = add(n, N)"
   ]
 

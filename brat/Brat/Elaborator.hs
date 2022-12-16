@@ -47,6 +47,9 @@ data SomeRaw' where
   SomeRaw' :: (Dirable d, Kindable k) => Raw d k -> SomeRaw'
 
 elaborate :: WC Flat -> Either Error SomeRaw
+-- All legal underscores should have been replaced with
+-- dummy variables '0, '1, '2 .... by now
+elaborate (WC fc FUnderscore) = Left (Err (Just fc) (ParseErr (PE "unexpected _")))
 elaborate (WC fc x) = do
   SomeRaw' x <- elaborate' x
   pure $ SomeRaw (WC fc x)
@@ -126,6 +129,9 @@ elaborate' (FAnnotation a ts) = do
   a <- assertNoun a
   pure $ SomeRaw' (a ::::: ts)
 elaborate' (FInto a b) = elaborate' (FApp b a)
+-- We catch underscores in the top-level elaborate so this case
+-- should never be triggered
+elaborate' FUnderscore = Left (dumbErr (InternalError "Unexpected '_'"))
 
 
 elabClause :: FClause -> FC -> Either Error (Clause Raw Noun)

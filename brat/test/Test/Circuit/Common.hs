@@ -116,7 +116,7 @@ addNGraph port_name
      ,("add_eval", BratNode (Eval (Ex "add" 0)) [("a", int), ("b", int)] [("c", int)])
      ,("N", BratNode (Prim "N") [] [("value", int)])
      ,("addN_box", BratNode ("addN_src" :>>: "addN_tgt") [] [("value", addN_ty)])
-     ,("addN_src", BratNode Source [] [("in", int)])
+     ,("addN_src", BratNode Source [] [("inp", int)])
      ,("addN_tgt", BratNode Target [("out", int)] [])
      ,("addN", BratNode Id [("thunk", addN_ty)] [("thunk", addN_ty)])
      ]
@@ -126,7 +126,7 @@ addNGraph port_name
      ]
     )
  where
-  addN_ty = C ([("in", int)] :-> [("out", int)])
+  addN_ty = C ([("inp", int)] :-> [("out", int)])
 
 addNmainGraph :: Graph
 addNmainGraph
@@ -134,10 +134,10 @@ addNmainGraph
      [("add", BratNode (Prim "add") [("a", int), ("b", int)] [("c", int)])
      ,("N", BratNode (Prim "N") [] [("value", int)])
      ,("addN_box", BratNode ("addN_src" :>>: "addN_tgt") [] [("value", addN_ty)])
-     ,("addN_src", BratNode Source [("in", int)] [("in", int)])
+     ,("addN_src", BratNode Source [("inp", int)] [("inp", int)])
      ,("addN_tgt", BratNode Target [("out", int)] [("out", int)])
-     ,("addN_eval", BratNode (Eval (Ex "addN_box" 0)) [("value", addN_ty), ("in", int)] [("out", int)])
-     ,("addN", BratNode (Prim "addN") [("in", int)] [("out", int)])
+     ,("addN_eval", BratNode (Eval (Ex "addN_box" 0)) [("value", addN_ty), ("inp", int)] [("out", int)])
+     ,("addN", BratNode (Prim "addN") [("inp", int)] [("out", int)])
      ,("1", BratNode (Const (Num 1)) [] [("value", int)])
      ]
     ,[((Ex "addN_src" 0), Right int, (In "add" 0))
@@ -147,7 +147,7 @@ addNmainGraph
      ]
     )
  where
-  addN_ty = C ([("in", int)] :-> [("out", int)])
+  addN_ty = C ([("inp", int)] :-> [("out", int)])
 
 extGraph :: Graph
 extGraph

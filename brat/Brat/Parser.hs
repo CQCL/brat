@@ -9,14 +9,14 @@ import Brat.Syntax.Raw
 import Brat.UserName ( plain, UserName(..) )
 import Brat.Elaborator
 
-import Control.Monad (guard, void)
+import Control.Monad.State
 import Data.Bifunctor
 import Data.List.NonEmpty (toList, NonEmpty(..), nonEmpty)
 import Data.Functor (($>), (<&>))
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Set (empty)
 import Prelude hiding (lex, round)
-import Text.Megaparsec hiding (Pos, Token, empty, match, ParseError)
+import Text.Megaparsec hiding (Pos, Token, empty, match, ParseError, State)
 
 newtype CustomError = Custom String deriving (Eq, Ord)
 
@@ -91,19 +91,16 @@ userName :: Parser UserName
 userName = (<?> "name") $ try qualifiedName <|> (PrefixName [] <$> simpleName)
 
 round :: Parser a -> Parser a
-round p = label "(...)" $ token0 $ \case
-  Token _ (Round toks) -> parseMaybe (spaced p) toks
-  _ -> Nothing
+round p = label "(...)" $ match LParen *> spaced p <* match RParen
 
 square :: Parser a -> Parser a
-square p = label "[...]" $ token0 $ \case
-  Token _ (Square toks) -> parseMaybe (spaced p) toks
-  _ -> Nothing
+square p = label "[...]" $ match LBracket *> spaced p <* match RBracket
+
+curly :: Parser a -> Parser a
+curly p = label "{...}" $ match LBrace *> spaced p <* match RBrace
 
 inLet :: Parser a -> Parser a
-inLet p = label "let ... in" $ token0 $ \case
-  Token _ (LetIn toks) -> parseMaybe (spaced p) toks
-  _ -> Nothing
+inLet p = label "let ... in" $ kmatch KLet *> spaced p <* kmatch KIn
 
 number :: Parser Int
 number = label "nat" $ token0 $ \case
@@ -127,11 +124,6 @@ string = token0 $ \case
 
 var :: Parser Flat
 var = FVar <$> userName
-
-thunk :: (FC -> Thunk -> Maybe a) -> Parser a
-thunk f = label "{...}" $ token0 $ \case
-  Token fc (Curly th) -> f fc th
-  _ -> Nothing
 
 port = simpleName
 
@@ -233,7 +225,7 @@ vtype = vtype' []
 vtype' :: [Parser RawVType] -> Parser RawVType
 vtype' ps = try (round vty) <|> vty
  where
-  vty = try thunkType
+  vty = thunkType  -- No try here! We commit to thunk if we see a {
     <|> choice (try <$> ps)
     <|> try vec
     <|> simple
@@ -272,11 +264,20 @@ vtype' ps = try (round vty) <|> vty
            <|> try list
            <|> try option
 
-  thunkType = thunk $ \_ th -> case th of
-    -- Don't allow brace sections as types yet
-    Kernel ss ts -> RK <$> ((:->) <$> parseMaybe (spaced (rawIO stype)) ss <*> parseMaybe (spaced (rawIO stype)) ts)
-    FunTy  ss ts -> RC <$> ((:->) <$> parseMaybe (spaced (rawIO vtype)) ss <*> parseMaybe (spaced (rawIO vtype)) ts)    
-    _ -> Nothing
+  -- Don't allow brace sections as types yet
+  thunkType = curly (try kernel <|> funTy)
+   where
+    kernel = do
+      ss <- spaced (rawIO stype)
+      match Lolly
+      ts <- spaced (rawIO stype)
+      pure $ RK (ss :-> ts)
+
+    funTy = do
+      ss <- spaced (rawIO vtype)
+      match Arrow
+      ts <- spaced (rawIO vtype)
+      pure $ RC (ss :-> ts)
 
 
 rawIO :: Parser ty -> Parser [RawIO' ty]
@@ -333,7 +334,7 @@ functionType = try (RC <$> ctype) <|> (RK <$> kernel)
 vec :: Parser Flat
 vec = (\(WC fc x) -> unWC $ vec2Cons (end fc) x) <$>  withFC (square elems)
   where
-    elems = (eof $> []) <|> (element `chainl1` (try vecComma))
+    elems = (element `chainl1` (try vecComma)) <|> pure []
     vecComma = spaced (match Comma) $> (++)
     element = (:[]) <$> withFC atomExpr
     mkNil fc = FCon (plain "nil") (WC fc FEmpty)
@@ -348,25 +349,46 @@ vec = (\(WC fc x) -> unWC $ vec2Cons (end fc) x) <$>  withFC (square elems)
 
 
 cthunk :: Parser Flat
-cthunk = thunk $ \fc th -> case th of
-  Thunk n ss -> FThunk <$> braceSection fc n ss
-  Lambda ss ts -> let maybeAbs = parseMaybe (spaced (withFC abstractor)) ss
-                      abs = fromMaybe (WC fc AEmpty) maybeAbs
-      in FThunk . WC fc <$> (FLambda abs <$> parseMaybe (spaced (withFC expr)) ts)
-  _ -> Nothing
+cthunk = FThunk <$> withFC (curly (try abstracted <|> braceSection))  -- Explicit lambda or brace section
  where
-  -- Invented variable names look like '1, '2, '3 ...
-  -- which are illegal for the user to use as variables
+  abstracted = do
+    abs <- try (spaced (withFC abstractor)) <|> withFC (pure AEmpty)
+    match FatArrow
+    e <- spaced (withFC expr)
+    pure $ FLambda abs e
+
+  braceSection = do
+    e <- withFC expr
+    -- Replace underscores with invented variable names '1, '2, '3 ...
+    -- which are illegal for the user to use as variables
+    case runState (replaceU e) 0 of
+      (e', 0) -> pure (unWC e')
+      (e', n) -> let abs = braceSectionAbstractor [0..n-1] in
+                 pure $ FLambda (WC (fcOf e) abs) e'  -- TODO: Which FC to use for the abstracor?
+
+  replaceU :: WC Flat -> State Int (WC Flat)
+  replaceU (WC fc x) = WC fc <$> replaceU' x
+
+  replaceU' :: Flat -> State Int Flat
+  replaceU' FUnderscore = do
+    n <- get
+    put (n+1)
+    pure $ FVar (PrefixName [] ('\'':show n))
+  replaceU' (FThunk a) = pure $ FThunk a  -- Don't recurse into thunks!
+  replaceU' (FApp a b) = FApp <$> replaceU a <*> replaceU b
+  replaceU' (FJuxt a b) = FJuxt <$> replaceU a <*> replaceU b
+  replaceU' (FCompose a b) = FCompose <$> replaceU a <*> replaceU b
+  replaceU' (FInto a b) = FInto <$> replaceU a <*> replaceU b
+  replaceU' (FLetIn abs a b) = FLetIn abs <$> replaceU a <*> replaceU b
+  replaceU' (FLambda abs a) = FLambda abs <$> replaceU a
+  replaceU' (FAnnotation a t) = (`FAnnotation` t) <$> replaceU a
+  replaceU' (FCon x a) = FCon x <$> replaceU a
+  replaceU' (FPull ps a) = FPull ps <$> replaceU a
+  replaceU' x = pure x
+
   braceSectionAbstractor :: [Int] -> Abstractor
   braceSectionAbstractor ns = foldr (:||:) AEmpty $
                               (\x -> APat (Bind ('\'': show x))) <$> ns
-
-  braceSection :: FC -> Int -> [Token] -> Maybe (WC Flat)
-  braceSection _ 0 ts = parseMaybe (withFC $ spaced expr) ts
-  braceSection fc n ts = do
-    let abs = WC fc (braceSectionAbstractor [0..n-1])
-    body <- parseMaybe (withFC $ spaced expr) ts
-    pure (WC fc (FLambda abs body))
 
 
 -- Expressions that can occur inside juxtapositions and vectors (i.e. everything with a higher
@@ -389,6 +411,7 @@ atomExpr = atomExpr' 0
             <|> vec
             <|> cthunk
             <|> var
+            <|> match Underscore $> FUnderscore
 
 
 {- Infix operator precedence table
@@ -411,7 +434,7 @@ expr = expr' 0
     try (pull <?> "port pull"),
     try (juxt <?> "juxtaposition"),
     atomExpr ]
-  
+
   letin = do
     (lhs,rhs) <- inLet $ do
       abs <- withFC abstractor

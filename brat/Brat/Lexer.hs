@@ -1,8 +1,6 @@
 module Brat.Lexer (Thunk(..), Tok(..), Token(..), Keyword(..), lex) where
 
 import Prelude hiding (lex)
-import Control.Exception (assert)
-import Control.Monad.State (State, put, get,evalState)
 import Data.Char (isSpace)
 import Data.Functor (($>), (<&>), void)
 import Data.List (intercalate)
@@ -12,7 +10,6 @@ import Text.Megaparsec hiding (Token, Pos, token, State)
 import Text.Megaparsec.Char
 
 import Brat.FC
-import Bwd
 
 readL :: Read a => String -> Lexer a
 readL x = case reads x of
@@ -47,9 +44,12 @@ data Tok
  | Arrow
  | FatArrow
  | Lolly
- | Curly Thunk
- | Square [Token]
- | Round [Token]
+ | LParen
+ | RParen
+ | LBrace
+ | RBrace
+ | LBracket
+ | RBracket
  | Semicolon
  | Into
  | Comma
@@ -65,7 +65,6 @@ data Tok
  | Times
  | Underscore
  | UnitElem
- | LetIn [Token]
  deriving Eq
 
 instance Show Tok where
@@ -78,9 +77,12 @@ instance Show Tok where
   show Arrow = "->"
   show FatArrow = "=>"
   show Lolly = "-o"
-  show (Curly th) = '{' : show th ++ "}"
-  show (Square ts) = '[' : concatMap show ts ++ "]"
-  show (Round ts) = '(' : concatMap show ts ++ ")"
+  show LParen = "("
+  show RParen = ")"
+  show LBrace = "{"
+  show RBrace = "}"
+  show LBracket = "["
+  show RBracket = "]"
   show Semicolon = ";"
   show Into = "|>"
   show Comma = ","
@@ -96,7 +98,6 @@ instance Show Tok where
   show Times = "*"
   show Underscore = "_"
   show UnitElem = "<>"
-  show (LetIn xs) = "let" ++ (concat (show <$> xs)) ++ "in"
 
 data Token = Token { fc :: FC
                    , _tok :: Tok
@@ -129,6 +130,8 @@ data Keyword
   | KFloat
   | KOption
   | KImport
+  | KLet
+  | KIn
   deriving Eq
 
 instance Show Keyword where
@@ -149,6 +152,8 @@ instance Show Keyword where
   show KFloat = "Float"
   show KOption = "Option"
   show KImport = "import"
+  show KLet = "let"
+  show KIn = "in"
 
 keyword :: Lexer Keyword
 keyword
@@ -169,6 +174,8 @@ keyword
      <|> string "Option" $> KOption
      <|> string "Unit"  $> KUnit
      <|> string "import" $> KImport
+     <|> string "let" $> KLet
+     <|> string "in" $> KIn
     ) <* notFollowedBy identChar
 
 identChar :: Lexer Char
@@ -192,11 +199,13 @@ comment = string "--" *> ((printChar `manyTill` lookAhead (void newline <|> void
 
 tok :: Lexer Tok
 tok = comment
-      <|> try (between (char '(') (char ')') (Round <$> many token))
-      <|> try (between (char '{') (char '}') (Curly . thunk <$> many token))
-      <|> try (between (char '[') (char ']') (Square <$> many token))
+      <|> try (char '(' $> LParen)
+      <|> try (char ')' $> RParen)
+      <|> try (char '{' $> LBrace)
+      <|> try (char '}' $> RBrace)
+      <|> try (char '[' $> LBracket)
+      <|> try (char ']' $> RBracket)
       <|> try (Underscore <$ string "_")
-      <|> try letIn
       <|> try (Quoted <$> (char '"' *> printChar `manyTill` char '"'))
       <|> try (FloatLit <$> float)
       <|> try (Number <$> number)
@@ -220,39 +229,6 @@ tok = comment
       <|> try qualified
       <|> Ident <$> ident
  where
-  thunk :: [Token] -> Thunk
-  thunk ts = evalState (thunk' B0 ts) 0
-  thunk' :: Bwd Token -> [Token] -> State Int Thunk
-  -- if we've hit the end of the tokens (i.e. }) without an arrow then it's a Thunk
-  thunk' prev [] = get >>= \n -> return $ Thunk n (prev <>> [])
-  thunk' prev (t:ts) = get >>= \n -> case _tok t of
-    Lolly    -> assert (n == 0) $ return $ Kernel (prev <>> []) ts
-    FatArrow -> assert (n == 0) $ return $ Lambda (prev <>> []) ts
-    Arrow    -> assert (n == 0) $ return $ FunTy  (prev <>> []) ts
-    _ -> numberUnderscoresTerm t >>= \numbered -> thunk' (prev :< numbered) ts
-
-  numberUnderscoresTerm :: Token -> State Int Token
-  numberUnderscoresTerm t = let tk = Token (fc t) in case _tok t of
-    Underscore -> do
-      n <- get
-      put (n+1)
-      return $ tk (Ident ('\'':show n))
-    Square ss -> tk . Square <$> numberUnderscoresList ss
-    Round ss  -> tk . Round  <$> numberUnderscoresList ss
-    LetIn ss  -> tk . LetIn  <$> numberUnderscoresList ss
-    _ -> return t
-  numberUnderscoresList :: [Token] -> State Int [Token]
-  numberUnderscoresList = mapM numberUnderscoresTerm
-
-  letIn = do
-    string "let"
-    spc <- whiteSpace
-    lhs <- token `manyTill` (string "in" <* lookAhead whiteSpace)
-    pure $ LetIn (spc <> lhs)
-
-  whiteSpace :: Lexer [Token]
-  whiteSpace = some (try (en hspace') <|> en newline')
-
   newline' :: Lexer Tok
   newline' = newline $> Newline
 

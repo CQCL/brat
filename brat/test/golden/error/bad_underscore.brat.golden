@@ -1,0 +1,6 @@
+Error in test/golden/error/bad_underscore.brat@FC {start = Pos {line = 2, col = 17}, end = Pos {line = 2, col = 18}}:
+uscore = { i => _ }
+                ^
+
+  Parse error unexpected _
+
