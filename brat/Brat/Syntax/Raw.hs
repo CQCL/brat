@@ -14,6 +14,7 @@ import Brat.FC
 import Brat.Naming
 import Brat.Syntax.Common
 import Brat.Syntax.Core
+import Brat.Syntax.Simple
 import Brat.UserName
 import Util (names)
 

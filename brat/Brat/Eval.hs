@@ -7,6 +7,7 @@ import Brat.Error
 import Brat.FC
 import Brat.Syntax.Common
 import Brat.Syntax.Core
+import Brat.Syntax.Simple
 
 import Control.Monad.Except
 

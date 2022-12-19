@@ -5,6 +5,7 @@ import Data.List (transpose)
 import Brat.FC
 import Brat.Syntax.Core
 import Brat.Syntax.Common
+import Brat.Syntax.Simple
 import Brat.UserName
 
 vec :: FC -> [WC (Term Chk Noun)] -> Term Chk Noun

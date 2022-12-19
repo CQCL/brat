@@ -6,6 +6,7 @@ import Brat.Load
 import Brat.Graph
 import Brat.Syntax.Core
 import Brat.Syntax.Common
+import Brat.Syntax.Simple
 
 import Test.Circuit.Common
 

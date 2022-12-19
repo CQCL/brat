@@ -22,6 +22,7 @@ import Brat.Naming (Name)
 import Brat.Graph (DataNode(..), Node(..), Thing(..))
 import Brat.Syntax.Common
 import Brat.Syntax.Core (Term(..), SType, VType)
+import Brat.Syntax.Simple
 import Brat.UserName (UserName(..))
 import Control.Monad.Freer (req, Free(Ret))
 

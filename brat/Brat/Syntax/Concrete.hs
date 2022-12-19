@@ -5,6 +5,7 @@ import Data.List.NonEmpty
 import Brat.FC
 import Brat.Syntax.Common
 import Brat.Syntax.Raw
+import Brat.Syntax.Simple
 import Brat.UserName
 
 

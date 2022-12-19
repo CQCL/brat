@@ -10,6 +10,7 @@ import Test.Circuit.Common
 import Brat.Checker
 import Brat.Checker.Helpers
 import Brat.Syntax.Common
+import Brat.Syntax.Simple
 import Brat.FC
 import Brat.UserName
 import Test.Checking (runEmpty)

@@ -44,6 +44,7 @@ import Brat.Naming
 import Brat.Search
 import Brat.Syntax.Common hiding (end)
 import Brat.Syntax.Core
+import Brat.Syntax.Simple
 import Brat.UserName
 
 mergeEnvs :: [Env a] -> Checking (Env a)

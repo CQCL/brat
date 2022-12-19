@@ -6,6 +6,7 @@ import Brat.Lexer
 import Brat.Syntax.Common hiding (K, end)
 import Brat.Syntax.Concrete
 import Brat.Syntax.Raw
+import Brat.Syntax.Simple
 import Brat.UserName ( plain, UserName(..) )
 import Brat.Elaborator
 

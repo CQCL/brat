@@ -6,6 +6,7 @@ import Brat.UserName (plain)
 import Brat.Syntax.Concrete
 import Brat.Syntax.Common
 import Brat.Syntax.Raw (kind, dir)
+import Brat.Syntax.Simple (SimpleTerm(..))
 import Brat.FC
 
 import Data.Functor ((<&>))

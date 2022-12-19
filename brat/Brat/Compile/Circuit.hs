@@ -21,6 +21,7 @@ import Data.Text (Text, pack)
 import Brat.Graph as BG
 import Brat.Syntax.Core (SType, Term(..))
 import Brat.Syntax.Common
+import Brat.Syntax.Simple
 import Proto.Graph as PG
 import Proto.Graph_Fields as PG
 

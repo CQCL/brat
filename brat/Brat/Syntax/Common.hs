@@ -18,8 +18,6 @@ module Brat.Syntax.Common (PortName,
                            Kind(..),
                            Diry(..),
                            Kindy(..),
-                           SimpleTerm(..),
-                           SimpleType(..),
                            CType'(..),
                            pattern Extern, pattern Local, -- No reason not to export Locality if required
                            Decl'(..),
@@ -41,26 +39,13 @@ module Brat.Syntax.Common (PortName,
                           ) where
 
 import Brat.FC
-import Brat.Naming
+import Brat.Syntax.Abstractor
+import Brat.Syntax.Simple (SimpleType)
+import Brat.Syntax.Port
 
 import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Kind (Type)
-
-type PortName = String
-
-data OutPort = Ex Name Int deriving (Eq, Ord, Show)
-data InPort = In Name Int deriving (Eq, Show)
-
-data NamedPort e = NamedPort {end :: e
-                             ,portName :: PortName
-                             } deriving Show
-
-instance (Eq e) => Eq (NamedPort e) where
-  (NamedPort {end=e1}) == NamedPort {end=e2} = e1 == e2
-
-type Src = NamedPort OutPort
-type Tgt = NamedPort InPort
 
 data Quantum = Qubit | Money deriving (Eq, Show)
 newtype Row' tm q = R [(PortName, SType'' tm q)] deriving (Functor, Foldable, Traversable)
@@ -111,25 +96,6 @@ instance Show (tm Chk Noun) => Show (VType' tm) where
   show (K ins outs) = '{' : show ins ++ " -o " ++ show outs ++ "}"
   show (Option ty) = "Option(" ++ show ty ++ ")"
 
-data SimpleType
-  = Natural
-  | IntTy
-  | Boolean
-  | FloatTy
-  | TextType
-  | UnitTy
-  | Star
-  deriving Eq
-
-instance Show SimpleType where
-  show Natural = "Nat"
-  show IntTy = "Int"
-  show Boolean = "Bool"
-  show FloatTy = "Float"
-  show TextType = "String"
-  show UnitTy = "Unit"
-  show Star = "Type"
-
 -- How to typecheck the *outputs* of a term
 data Dir = Syn -- the node synthesizes (tells us) its outputs
          | Chk -- the node must be told the type of its outputs
@@ -152,21 +118,6 @@ data Kindy :: Kind -> Type where
   UVerby :: Kindy UVerb
   KVerby :: Kindy KVerb
 deriving instance Show (Kindy k)
-
-data SimpleTerm
-  = Num Int
-  | Bool Bool
-  | Text String
-  | Float Double
-  | Unit
-  deriving Eq
-instance Show SimpleTerm where
-  show (Num i) = show i
-  show (Bool True) = "true"
-  show (Bool False) = "false"
-  show (Text txt) = show txt
-  show (Float f) = show f
-  show Unit = "<>"
 
 data CType' io = [io] :-> [io] deriving Functor
 
@@ -207,57 +158,6 @@ instance (Show io, Show (Clause tm Noun))
 -- TODO: allow combinations thereof
 -- default to local
 data Runtime = RtTierkreis | RtLocal | RtKernel deriving (Eq, Show)
-
--- Ways to bind one thing
-data Pattern
- = Bind String
- | PCon String Abstractor
- | Lit SimpleTerm
- | DontCare
- deriving Eq
-
-instance Show Pattern where
-  show (Bind x) = x
-  show (PCon c AEmpty) = c
-  show (PCon c arg) = case prettyPat (PCon c arg) of
-    Just xs -> show xs
-    Nothing -> c ++ "(" ++ show arg ++ ")"
-  show (Lit tm) = show tm
-  show DontCare = "_"
-
-prettyPat :: Pattern -> Maybe [Pattern]
-prettyPat PNil = Just []
-prettyPat (PCons x xs) = (x:) <$> prettyPat xs
-prettyPat _ = Nothing
-
-pattern PNone, PNil :: Pattern
-pattern PNone = PCon "none" AEmpty
-pattern PNil = PCon "nil" AEmpty
-
-pattern PSome, POnePlus, PTwoTimes :: Pattern -> Pattern
-pattern PSome x = PCon "some" (APat x)
-pattern POnePlus x = PCon "succ" (APat x)
-pattern PTwoTimes x = PCon "doub" (APat x)
-
-pattern PCons :: Pattern -> Pattern -> Pattern
-pattern PCons x xs = PCon "cons" (APat x :||: APat xs)
-
--- Ways to bind a row of things
-data Abstractor
- -- There's nothing and that's how we want it
- = AEmpty
- | Abstractor :||: Abstractor
- -- Pull port name being abstracted to the front
- -- b:x, c:y, z -> ...
- | APull [PortName] (Abstractor)
- | APat Pattern
- deriving Eq
-
-instance Show (Abstractor) where
-  show AEmpty = "<empty>"
-  show (x :||: y) = show x ++ ", " ++ show y
-  show (APull ps abs) = concat ((++":") <$> ps) ++ show abs
-  show (APat p) = show p
 
 data Clause (tm :: Dir -> Kind -> Type) (k :: Kind) where
   -- lhs and rhs

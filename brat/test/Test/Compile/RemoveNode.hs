@@ -4,6 +4,7 @@ import Brat.Compile.Simple
 import Brat.Graph
 import Brat.Naming
 import Brat.Syntax.Common
+import Brat.Syntax.Simple
 import Test.Circuit.Common
 
 import qualified Data.Map as M

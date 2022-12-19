@@ -3,6 +3,7 @@ module Brat.Syntax.Skel where
 import Brat.FC
 import Brat.Syntax.Common
 import Brat.Syntax.Core
+import Brat.Syntax.Simple
 import Brat.UserName
 
 -- A version of `Term` which doesn't include directions or kinds for easy

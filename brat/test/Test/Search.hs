@@ -8,6 +8,7 @@ import Brat.Naming
 import Brat.Search (vsearch)
 import Brat.Syntax.Common
 import Brat.Syntax.Core
+import Brat.Syntax.Simple (SimpleTerm(..))
 import Util (names)
 import Test.Checking (runEmpty)
 

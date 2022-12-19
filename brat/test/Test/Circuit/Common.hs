@@ -15,6 +15,7 @@ import Brat.Load (loadFiles)
 import Brat.Naming
 import Brat.Syntax.Core
 import Brat.Syntax.Common
+import Brat.Syntax.Simple
 
 instance IsString Name where
   fromString s = MkName [(s, 0)]

@@ -5,6 +5,7 @@ module Brat.Syntax.Core where
 import Brat.FC
 import Brat.Naming
 import Brat.Syntax.Common
+import Brat.Syntax.Simple
 import Brat.UserName
 
 import Data.Kind (Type)

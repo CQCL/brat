@@ -3,7 +3,8 @@
 module Brat.Graph where
 
 import Brat.Naming
-import Brat.Syntax.Common
+import Brat.Syntax.Port
+import Brat.Syntax.Simple
 
 import qualified Data.Graph as G
 import qualified Data.Map as M
