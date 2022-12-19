@@ -31,8 +31,8 @@ test = testCase "let" $
            (wfc (Var "x"))
       conn = ((), ())
   in case fst <$> runEmpty (let ?my = Braty in check (wfc tm) conn) of
-       Right ([(_, SimpleTy IntTy)], ((), ())) -> pure ()
-       Right (outs, ((), ())) -> assertFailure (show outs)
+       Right (((), [(_, SimpleTy IntTy)]), ((), ())) -> pure ()
+       Right (((), outs), ((), ())) -> assertFailure (show outs)
        Left err -> assertFailure (showError err)
 
 letTests = test

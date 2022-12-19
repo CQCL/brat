@@ -1,4 +1,6 @@
-module Brat.Checker.Types (Overs, Unders, Outputs, Connectors
+module Brat.Checker.Types (Overs, Unders
+                          ,Outputs, Inputs
+                          ,ChkConnectors, SynConnectors
                           ,Mode(..), Modey(..)
                           ,Graph, Node, Wire
                           ,Env, VEnv, KEnv, EnvData
@@ -17,19 +19,30 @@ import Brat.UserName (UserName)
 import Data.Kind (Type)
 import qualified Data.Map as M
 
+-- Inputs against which a term is checked
 type family Overs (m :: Mode) (k :: Kind) :: Type where
   Overs m Noun = ()
-  Overs m Verb = [(Src, ValueType m)]
+  Overs m UVerb = [(Src, ValueType m)]
+  Overs m KVerb = ()
 
+-- Inputs synthesized by the term
+type family Inputs (m:: Mode) (k :: Kind) :: Type where
+  Inputs m Noun = ()
+  Inputs m UVerb = ()
+  Inputs m KVerb = [(Tgt, ValueType m)]
+
+-- Outputs against which a term is checked
 type family Unders (m :: Mode) (d :: Dir) :: Type where
   Unders m Syn = ()
   Unders m Chk = [(Tgt, ValueType m)]
 
+-- Outputs synthesized by the term
 type family Outputs (m :: Mode) (d :: Dir) :: Type where
   Outputs m Syn = [(Src, ValueType m)]
   Outputs m Chk = ()
 
-type Connectors (m :: Mode) (d :: Dir) (k :: Kind) = (Overs m k, Unders m d)
+type ChkConnectors (m :: Mode) (d :: Dir) (k :: Kind) = (Overs m k, Unders m d)
+type SynConnectors (m :: Mode) (d :: Dir) (k :: Kind) = (Inputs m k, Outputs m d)
 
 data Mode = Brat | Kernel
 
@@ -46,10 +59,10 @@ type VEnv = Env (EnvData Brat)
 type KEnv = Env (EnvData Kernel)
 
 data TypedHole
-  = NBHole Name FC [String] (Connectors Brat Chk Noun)
-  | VBHole Name FC (Connectors Brat Chk Verb)
-  | NKHole Name FC (Connectors Kernel Chk Noun)
-  | VKHole Name FC (Connectors Kernel Chk Verb)
+  = NBHole Name FC [String] (ChkConnectors Brat Chk Noun)
+  | VBHole Name FC (ChkConnectors Brat Chk UVerb)
+  | NKHole Name FC (ChkConnectors Kernel Chk Noun)
+  | VKHole Name FC (ChkConnectors Kernel Chk UVerb)
   deriving (Eq, Show)
 
 data Modey :: Mode -> Type where

@@ -6,6 +6,7 @@ import Test.Circuit.Gen
 import Test.Circuit.Graph
 import Test.Compile.RemoveNode
 import Test.Constructors
+import Test.Elaboration
 import Test.Failure
 import Test.Naming
 import Test.Parsing
@@ -26,4 +27,5 @@ main = do
                                 ,searchTests
                                 ,constructorTests
                                 ,removeNodeTests
+                                ,elaborationTests
                                 ]

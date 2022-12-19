@@ -1,6 +1,6 @@
 module Brat.Elaborator where
 
-import Control.Monad.Except (forM)
+import Control.Monad (forM, (>=>))
 
 import Brat.FC
 import Brat.Syntax.Common
@@ -28,13 +28,19 @@ assertChk s@(WC _ r) = case dir r of
 assertNoun :: Kindable k => WC (Raw d k) -> Either Error (WC (Raw d Noun))
 assertNoun s@(WC fc r) = case kind r of
   Nouny -> pure s
-  Verby -> Left $ Err (Just fc) (ElabErr "Noun required at this position")
+  _ -> Left $ Err (Just fc) (ElabErr "Noun required at this position")
 
 -- Note that we don't force holes, instead we directly turn them into verbs
-assertVerb :: (Dirable d, Kindable k) => WC (Raw d k) -> Either Error (WC (Raw d Verb))
-assertVerb (WC fc (RNHole x)) = pure $ WC fc (RVHole x)
-assertVerb s@(WC fc r) = case kind r of
-  Verby -> pure s
+assertUVerb :: (Dirable d, Kindable k) => WC (Raw d k) -> Either Error (WC (Raw d UVerb))
+assertUVerb (WC fc (RNHole x)) = pure $ WC fc (RVHole x)
+assertUVerb s@(WC fc r) = case kind r of
+  UVerby -> pure s
+  _ -> WC fc . RForget <$> assertKVerb s
+
+assertKVerb :: (Dirable d, Kindable k) => WC (Raw d k) -> Either Error (WC (Raw d KVerb))
+assertKVerb s@(WC fc r) = case kind r of
+  UVerby -> Left $ Err (Just fc) (ElabErr "Verb cannot synthesize its argument types")
+  KVerby -> pure s
   Nouny -> case dir r of
     Syny -> pure $ WC fc (RForce s)
     Chky -> Left $ Err (Just fc) (ElabErr "Verb required at this position (cannot force since the type cannot be synthesised)")
@@ -59,25 +65,31 @@ elaborate' (FVar x) = pure $ SomeRaw' (RVar x)
 elaborate' (FApp f a) = do
   (SomeRaw f) <- elaborate f
   (SomeRaw a) <- elaborate a
-  case kind (unWC f) of
-    Nouny -> do -- Traditionally `f(a)`
-      f <- assertSyn f
+  a <- assertNoun a
+  -- There are two ways we could elaborate a KVerb applied to a Syn argument.
+  -- Either we forget the KVerb and use ::-::, or Emb the argument and use ::$::.
+  -- Here we prefer to Emb the argument,
+  -- as this makes it easier to spot applications of constructors in desugaring.
+  case (assertKVerb >=> assertSyn) f of
+    Right f -> do -- traditionally `f(a)`: intermediate type from f
       a <- assertChk a
-      a <- assertNoun a
       pure $ SomeRaw' (f ::$:: a)
-    Verby -> do -- Traditionally `a |> f`
+    Left _ -> do -- traditionally `a |> b`: intermediate type from a
+      f <- assertUVerb f
       a <- assertSyn a
-      a <- assertNoun a
       pure $ SomeRaw' (a ::-:: f)
 elaborate' (FJuxt a b) = do
   (SomeRaw a) <- elaborate a
   (SomeRaw b) <- elaborate b
   case (kind (unWC a), kind (unWC b)) of
     (Nouny, Nouny) -> unifyDir a b
-    _ -> do
-      a <- assertVerb a
-      b <- assertVerb b
-      unifyDir a b
+    _ -> case (assertKVerb a, assertKVerb b) of
+         -- nothing can be coerced to a noun, so try coercing both to the next best thing
+      (Right a, Right b) -> unifyDir a b
+      _ -> do -- at least one cannot be coerced to KVerb
+        a <- assertUVerb a
+        b <- assertUVerb b
+        unifyDir a b
  where
   unifyDir :: (Dirable d1, Dirable d2, Kindable k)
             => WC (Raw d1 k) -> WC (Raw d2 k)
@@ -90,16 +102,18 @@ elaborate' (FJuxt a b) = do
       pure $ SomeRaw' (r1 ::|:: r2)
 elaborate' (FThunk a) = do
   (SomeRaw a) <- elaborate a
-  a <- assertVerb a  -- Assert verb before chk since force needs to come before emb
+  a <- assertUVerb a  -- Assert verb before chk since force needs to come before emb
   a <- assertChk a
   pure $ SomeRaw' (RTh a)
 elaborate' (FCompose a b) = do
   (SomeRaw a) <- elaborate a
   (SomeRaw b) <- elaborate b
   a <- assertSyn a
-  a <- assertVerb a
-  b <- assertVerb b
-  pure $ SomeRaw' (a ::-:: b)
+  b <- assertUVerb b
+  case assertKVerb a of
+    Right a -> pure $ SomeRaw' (a ::-:: b) -- result is a KVerb
+    Left _ -> assertUVerb a >>= \a ->
+      pure $ SomeRaw' (a ::-:: b)  -- result is a UVerb
 elaborate' (FLambda abs a) = do
   (SomeRaw a) <- elaborate a
   a <- assertNoun a
@@ -149,7 +163,7 @@ elabClause (FNoLhs e) _ = do
     e <- assertChk e
     case kind (unWC e) of
       Nouny -> pure $ NoLhs e
-      Verby -> pure $ ThunkOf (WC (fcOf e) (NoLhs e))
+      _ -> (assertUVerb e) >>= \e -> pure $ ThunkOf (WC (fcOf e) (NoLhs e))
 elabClause FUndefined _ = pure Undefined
 
 elabDecl :: FDecl -> Either Error RawDecl

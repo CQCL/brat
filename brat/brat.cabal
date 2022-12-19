@@ -188,6 +188,7 @@ test-suite tests
                        Test.Circuit.Graph,
                        Test.Compile.RemoveNode,
                        Test.Constructors,
+                       Test.Elaboration,
                        Test.Failure,
                        Test.Parsing,
                        Test.Naming,
@@ -207,4 +208,5 @@ test-suite tests
                        silently,
                        text,
                        QuickCheck,
-                       utility-ht
+                       utility-ht,
+                       partial-order

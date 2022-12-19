@@ -53,7 +53,7 @@ tokensTypecheck kty =
     case kernels of
       [] -> False
       (k:_) -> case runEmpty (let ?my = Braty in check (WC fc k) ((), [(NamedPort (In src 0) "fun", kty)])) of
-          Right (((), ((), unders)), _) -> null unders
+          Right ((((), ()), ((), unders)), _) -> null unders
           Left _ -> False
  where
   fc = FC (Pos 0 0) (Pos 0 0)

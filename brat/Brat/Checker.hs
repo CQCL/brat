@@ -8,7 +8,6 @@ module Brat.Checker (check
                     ,run
                     ,VEnv
                     ,Checking
-                    ,Connectors
                     ,Graph
                     ,Modey(..)
                     ,Node
@@ -83,15 +82,28 @@ instance TensorOutputs [(Src, VType)] where
 instance TensorOutputs [(Src, SType)] where
  tensor = let ?my = Kerny in vtensor
 
-type CheckConstraints m =
+class CombineInputs d where
+  combine :: d -> d -> d
+
+instance CombineInputs () where
+  combine () () = ()
+
+instance CombineInputs [(Tgt, a)] where
+  combine = (++)
+
+type CheckConstraints m k =
   (Eq (ValueType m)
   ,Show (ValueType m)
   ,TensorOutputs (Outputs m Syn)
   ,TensorOutputs (Outputs m Chk)
+  ,CombineInputs (Inputs m k)
+  ,CombineInputs (Inputs m Noun)
+  ,CombineInputs (Inputs m UVerb)
+  ,CombineInputs (Inputs m KVerb)
   )
 
-checkInputs :: (CheckConstraints m, ?my :: Modey m)
-            => WC (Term Syn k)
+checkInputs :: (CheckConstraints m KVerb, ?my :: Modey m)
+            => WC (Term d KVerb)
             -> [(Src, ValueType m)]
             -> [(Tgt, ValueType m)]
             -> Checking [(Src, ValueType m)]
@@ -101,7 +113,7 @@ checkInputs tm@(WC fc _) (o:overs) (u:unders) = localFC fc $ checkWire o u >>= \
   Nothing -> err $ TypeMismatch (show tm) (showRow (u :| unders)) (showRow (o :| overs))
 checkInputs tm [] unders = typeErr $ "No overs but unders: " ++ show unders ++ " for " ++ show tm
 
-checkOutputs :: (CheckConstraints m, ?my :: Modey m)
+checkOutputs :: (CheckConstraints m k, ?my :: Modey m)
              => WC (Term Syn k)
              -> [(Tgt, ValueType m)]
              -> [(Src, ValueType m)]
@@ -112,60 +124,61 @@ checkOutputs tm@(WC fc _) (u:unders) (o:overs) = localFC fc $ checkWire o u >>= 
   Nothing -> err $ TypeMismatch (show tm) (showRow (u :| unders)) (showRow (o :| overs))
 checkOutputs tm [] overs = typeErr $ "No unders but overs: " ++ show overs ++ " for " ++ show tm
 
-checkClauses :: (?my :: Modey m, CheckConstraints m)
-             => Clause Term Verb
-             -> Connectors m Chk Verb
+checkClauses :: (?my :: Modey m, CheckConstraints m UVerb)
+             => Clause Term UVerb
+             -> ChkConnectors m Chk UVerb
              -> Checking (Outputs m Chk
-                         ,Connectors m Chk Verb)
+                         ,ChkConnectors m Chk UVerb)
 checkClauses Undefined _ = err (InternalError "Checking undefined clause")
-checkClauses (NoLhs verb) conn = check verb conn
+checkClauses (NoLhs verb) conn = (\((outs, ()), conns) -> (outs, conns)) <$> check verb conn
 checkClauses (Clauses cs) conn = do
-  (res :| results) <- mapM (\c@(lhs, rhs) ->
+  (res@((outs, ()), conns) :| results) <- mapM (\c@(lhs, rhs) ->
     check (WC (clauseFC c) (lhs :\: rhs)) conn) cs
   unless (all (== res) results)
     (fail "Clauses had different rightovers")
-  pure res
+  pure (outs, conns)
  where
   clauseFC (lhs, rhs) = FC (start $ fcOf lhs) (end $ fcOf rhs)
 
-check :: (CheckConstraints m, TensorOutputs (Outputs m d), ?my :: Modey m)
+check :: (CheckConstraints m k, TensorOutputs (Outputs m d), ?my :: Modey m)
       => WC (Term d k)
-      -> Connectors m d k
-      -> Checking (Outputs m d
-                  ,Connectors m d k)
+      -> ChkConnectors m d k
+      -> Checking (SynConnectors m d k
+                  ,ChkConnectors m d k)
 check (WC fc tm) conn = localFC fc (check' tm conn)
 
-check' :: (CheckConstraints m, TensorOutputs (Outputs m d), ?my :: Modey m)
+check' :: (CheckConstraints m k, TensorOutputs (Outputs m d), ?my :: Modey m)
        => Term d k
-       -> Connectors m d k
-       -> Checking (Outputs m d
-                   ,Connectors m d k) -- rightovers
-check' Empty tys = pure ((), tys)
+       -> ChkConnectors m d k
+       -> Checking (SynConnectors m d k
+                   ,ChkConnectors m d k) -- rightovers
+check' Empty tys = pure (((), ()), tys)
 check' (s :|: t) tys = do
   -- in Checking mode, each LHS/RHS removes the wires/types it produces from the Unders remaining,
   -- including components of thunks joined together by (Combo Thunk)s in checkOutputs
-  (outs, tys)  <- check s tys
-  (outs', tys) <- check t tys
+  ((ins, outs), tys)  <- check s tys
+  ((ins', outs'), tys) <- check t tys
   -- in Synthesizing mode, instead we join together the outputs here
   -- with a (Combo Row), although the latter node may not be useful
   outs <- tensor outs outs'
-  pure (outs, tys)
+  pure ((combine ins ins', outs), tys)
 check' (s :-: t) (overs, unders) = do
-  (overs, (rightovers, ())) <- check s (overs, ())
-  (outs,  (emptyOvers, rightunders)) <- check t (overs, unders)
+  -- s is Syn, t is a UVerb
+  ((ins, overs), (rightovers, ())) <- check s (overs, ())
+  (((), outs), (emptyOvers, rightunders)) <- check t (overs, unders)
   ensureEmpty "composition overs" emptyOvers
-  pure (outs, (rightovers, rightunders))
+  pure ((ins, outs), (rightovers, rightunders))
 check' (binder :\: body) (overs, unders) = do
   (ext, overs) <- abstract overs (unWC binder)
-  (outs, ((), unders)) <- localEnv ext $ check body ((), unders)
-  pure (outs, (overs, unders))
+  (sycs, ((), unders)) <- localEnv ext $ check body ((), unders)
+  pure (sycs, (overs, unders))
 check' (Pull ports t) (overs, unders) = do
   unders <- pullPorts ports unders
   check t (overs, unders)
 check' (t ::: outs) (overs, ()) | Braty <- ?my = do
   (unders, dangling) <- mkIds outs
   ((), overs) <- noUnders $ check t (overs, unders)
-  pure (dangling, (overs, ()))
+  pure (((), dangling), (overs, ()))
  where
   mkIds :: [Output] -> Checking ([(Tgt, VType)] -- Hungry wires
                                 ,[(Src, VType)]) -- Dangling wires
@@ -175,19 +188,19 @@ check' (t ::: outs) (overs, ()) | Braty <- ?my = do
     (unders, overs) <- mkIds outs
     pure (under:unders, over:overs)
 check' (Emb t) (overs, unders) = do
-  (outs, (overs, ())) <- check t (overs, ())
+  ((ins, outs), (overs, ())) <- check t (overs, ())
   unders <- checkOutputs t unders outs
-  pure ((), (overs, unders))
+  pure ((ins, ()), (overs, unders))
 check' (Th t) ((), u@(hungry, ty):unders) = case ?my of
   Braty -> do
     case ty of
       C (ss :-> ts) -> checkThunk Braty ss ts ty
       K (R ss) (R ts) -> checkThunk Kerny ss ts ty
       _ -> err $ ExpectedThunk (showMode Braty) (showRow (u :| []))
-    pure ((), ((), unders))
+    pure (((), ()), ((), unders))
   Kerny -> typeErr "no higher order signals! (Th)"
  where
-  checkThunk :: CheckConstraints m
+  checkThunk :: CheckConstraints m Noun
              => Modey m
              -> [(PortName, ValueType m)] -> [(PortName, ValueType m)]
              -> ValueType Brat
@@ -195,40 +208,42 @@ check' (Th t) ((), u@(hungry, ty):unders) = case ?my of
   checkThunk my ss ts thunkTy = let ?my = my in do
     (src, [], thOvers) <- anext "" Source [] ss
     (tgt, thUnders, []) <- anext "" Target ts []
-    ((), (emptyOvers, emptyUnders)) <- check t (thOvers, thUnders)
+    (((), ()), (emptyOvers, emptyUnders)) <- check t (thOvers, thUnders)
     ensureEmpty "thunk leftovers" emptyOvers
     ensureEmpty "thunk leftunders" emptyUnders
     (_, _, [(dangling,_)]) <- next "thunk_box" (src :>>: tgt) [] [("fun", thunkTy)]
     wire (dangling, thunkTy, hungry)
-check' (Force th) (overs, ()) = do
-  (outs, ((), ())) <- let ?my = Braty in check th ((), ())
+check' (Force th) ((), ()) = do
+  (((), outs), ((), ())) <- let ?my = Braty in check th ((), ())
   -- pull a bunch of thunks (only!) out of here
-  (_, thUnders, thOvers) <- getThunks ?my outs
-  overs <- checkInputs th overs thUnders
-  pure (thOvers, (overs, ()))
-
+  (_, thInputs, thOutputs) <- getThunks ?my outs
+  -- Force has no overs, as the result is a KVerb
+  pure ((thInputs, thOutputs), ((), ()))
+check' (Forget kv) (overs, unders) = do
+  ((ins, outs), ((), rightUnders)) <- check kv ((), unders)
+  leftOvers <- checkInputs kv overs ins
+  pure (((), outs), (leftOvers, rightUnders))
 check' (Var x) ((), ()) = case ?my of
-  Braty -> (, ((), ())) <$> vlup x
+  Braty -> vlup x >>= \x -> pure (((), x), ((), ()))
   Kerny -> req (KLup x) >>= \case
-    Just output -> pure ([output], ((), ()))
+    Just output -> pure (((), [output]), ((), ()))
     Nothing -> err $ KVarNotFound (show x)
 check' (fun :$: arg) ((), ()) = do
-  (thunks, ((), ())) <- let ?my = Braty in check fun ((), ())
-  (_, unders, overs) <- getThunks ?my thunks
-  ((), ()) <- noUnders $ check arg ((), unders)
-  pure (overs, ((), ()))
+  ((ins, outputs), ((), ())) <- check fun ((), ())
+  ((), ()) <- noUnders $ check arg ((), ins)
+  pure (((), outputs), ((), ()))
 check' (Let abs x y) conn = do
-  (dangling, ((), ())) <- check x ((), ())
+  (((), dangling), ((), ())) <- check x ((), ())
   env <- abstractAll dangling (unWC abs)
   localEnv env $ check y conn
 check' (NHole name) ((), unders) = req AskFC >>= \fc -> case ?my of
   Kerny -> do
     req $ LogHole $ NKHole name fc ((), unders)
-    pure ((), ((), []))
+    pure (((), ()), ((), []))
   Braty -> do
     suggestions <- getSuggestions fc
     req $ LogHole $ NBHole name fc suggestions ((), unders)
-    pure ((), ((), []))
+    pure (((), ()), ((), []))
    where
     getSuggestions :: FC -> Checking [String]
     getSuggestions fc = do
@@ -255,7 +270,7 @@ check' (VHole name) (overs, unders) = do
   req $ LogHole $ case ?my of
     Braty -> VBHole name fc (overs, unders)
     Kerny -> VKHole name fc (overs, unders)
-  pure ((), ([], []))
+  pure (((), ()), ([], []))
 check'
   (Con (PrefixName [] "cons") (WC _ (x :|: (WC _ (Con (PrefixName [] "cons") (WC _ (y :|: (WC _ (Con (PrefixName [] "nil") (WC _ Empty))))))))))
   ((), (hungry, ty):unders) | (Braty, Product a b) <- (?my, ty) = do
@@ -265,7 +280,7 @@ check'
   noUnders $ check x ((), [first])
   noUnders $ check y ((), [second])
   awire (dangling, Product a b, hungry)
-  pure ((), ((), unders))
+  pure (((), ()), ((), unders))
 check' pat@(Con (PrefixName [] con) arg) ((), ((hungry, ty):unders))
   | Just (_, n) <- getVec ?my ty = do
       (_, lenUnders, []) <- next "vec_len" Hypo [("value", SimpleTy Natural)] []
@@ -282,23 +297,23 @@ check' pat@(Con (PrefixName [] con) arg) ((), ((hungry, ty):unders))
             (_, cUnders, [(dangling,_)]) <- anext "" (Constructor node) ins [("value", ty)]
             noUnders $ wrapError (consError n (show ty) pat outerFC) $ check arg ((), cUnders)
             awire (dangling, ty, hungry)
-            pure ((), ((), unders))
+            pure (((), ()), ((), unders))
   | Just node <- patternToData ?my con ty, Just cins <- conFields ?my node ty = do
       (_, cUnders, [(dangling,_)]) <- anext (show con) (Constructor node)
                                           cins [("value", ty)]
       noUnders $ check arg ((), cUnders)
       awire (dangling, ty, hungry)
-      pure ((), ((), unders))
+      pure (((), ()), ((), unders))
   | Just node <- patternToData ?my con ty, Nothing <- conFields ?my node ty
   = typeErr $ show pat ++ " not of type " ++ showRow ((hungry, ty):|unders)
 
 check' t c = case (?my, t, c) of -- remaining cases need to split on ?my
-  (Kerny, Simple (Bool _), ((), ((_, Bit):unders))) -> pure ((), ((), unders))
+  (Kerny, Simple (Bool _), ((), ((_, Bit):unders))) -> pure (((), ()), ((), unders))
   (Braty, Simple tm, ((), (hungry, SimpleTy ty):unders)) -> do
     simpleCheck ty tm
     (_, [], [(dangling,_)]) <- next (show tm) (Const tm) [] [("value", SimpleTy ty)]
     wire (dangling, SimpleTy ty, hungry)
-    pure ((), ((), unders))
+    pure (((), ()), ((), unders))
   _ -> error $ "check this: " ++ show t
 
 consError :: Int -> String -> Term Chk Noun -> FC -> Error -> Error

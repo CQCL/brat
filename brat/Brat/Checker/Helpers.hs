@@ -85,7 +85,7 @@ ensureEmpty _ [] = pure ()
 ensureEmpty str (x:xs) = err $ InternalError $ "Expected empty " ++ str ++ ", got:\n  " ++ showRow (x :| xs)
 
 noUnders m = do
-  (outs, (overs, unders)) <- m
+  ((outs, ()), (overs, unders)) <- m
   ensureEmpty "unders" unders
   pure (outs, overs)
 
@@ -111,7 +111,7 @@ anext :: (?my :: Modey m)
       => String -> Thing
       -> [(PortName, ValueType m)] -- Inputs and Outputs use deBruijn indices
       -> [(PortName, ValueType m)]
-      -> Checking (Name, Unders m Chk, Overs m Verb)
+      -> Checking (Name, Unders m Chk, Overs m UVerb)
 anext str th ins outs = do
   node <- req (Fresh str) -- Pick a name for the thunk
   -- Use the new name to generate Ends with which to instantiate types
@@ -130,13 +130,13 @@ anext str th ins outs = do
 next :: String -> Thing
      -> [(PortName, ValueType Brat)]
      -> [(PortName, ValueType Brat)]
-     -> Checking (Name, Unders Brat Chk, Overs Brat Verb)
+     -> Checking (Name, Unders Brat Chk, Overs Brat UVerb)
 next = let ?my = Braty in anext
 
 knext :: String -> Thing
       -> [(PortName, ValueType Kernel)]
       -> [(PortName, ValueType Kernel)]
-      -> Checking (Name, Unders Kernel Chk, Overs Kernel Verb)
+      -> Checking (Name, Unders Kernel Chk, Overs Kernel UVerb)
 knext = let ?my = Kerny in anext
 
 awire :: (?my :: Modey m) => (Src, ValueType m, Tgt) -> Checking ()
@@ -161,7 +161,7 @@ getThunks :: Modey m
           -> [(Src, ValueType Brat)]
           -> Checking ([Name]
                       ,Unders m Chk
-                      ,Overs m Verb
+                      ,Overs m UVerb
                       )
 getThunks _ [] = pure ([], [], [])
 getThunks m ((src, ty):rest)

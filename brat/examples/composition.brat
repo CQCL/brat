@@ -18,6 +18,14 @@ compose1a(f, g) = { x => (g(f))(x) }
 compose2({ A -> B }, { B -> C }) -> {A -> C}
 compose2(f, g) = {f ; g}
 
+-- use the result of a composition as LHS of a function application
+compose_apply :: {{A->B}, {B->C}, A -> C}
+compose_apply(f,g,x) = (f;g)(x)
+
+-- with a checkable argument:
+compose_apply_chk :: {{Int -> Nat}, {Nat -> Bool} -> Bool}
+compose_apply_chk(f,g) = (f;g)(2)
+
 -- the following are all just differently-bracketed versions of the same thing
 compose3 :: { { A -> B }, { B -> C } -> {A -> C} }
 compose3(f, g) = { x => (x |> f; g) }

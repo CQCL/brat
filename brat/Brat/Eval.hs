@@ -13,17 +13,17 @@ import Control.Monad.Except
 data Value
  = VSimple SimpleTerm
 -- | ((:|:)  :: Term d k -> Term d k -> Term d k
--- | (Th     :: Term Chk Verb -> Term Chk Noun
+-- | (Th     :: Term Chk UVerb -> Term Chk Noun
 -- | (Emb    :: Term Syn k -> Term Chk k
 -- | (Pull   :: [Port] -> Term Chk k -> Term Chk k
 -- | (Var    :: String -> Term Syn Noun  -- Look up in noun (value) env
 -- | ((:$:)  :: Term Syn Noun -> Term Chk Noun -> Term Syn Noun
 -- | ((:::)  :: Term Chk k -> [Output] -> Term Syn k
--- | ((:-:)  :: Term Syn k -> Term d Verb -> Term d k
--- | ((:\:)  :: Abstractor -> Term d Noun -> Term d Verb
+-- | ((:-:)  :: Term Syn k -> Term d UVerb -> Term d k
+-- | ((:\:)  :: Abstractor -> Term d Noun -> Term d UVerb
  | VVec [Value]
  | VCons Value Value
- | VClos [Value] (Term Chk Verb)
+ | VClos [Value] (Term Chk UVerb)
  | Value :$ [Elim]
  | VSome Value
  | VNone
@@ -62,11 +62,11 @@ ceval g (WC fc tm) = addFCToError fc (ceval' g tm)
 ceval' :: [Value] -> Term Chk k -> Eval Value
 ceval' _ (Simple tm) = pure $ VSimple tm
 -- ceval g ( ((:|:)  :: Term d k -> Term d k -> Term d k
--- ceval g ( (Th     :: Term Chk Verb -> Term Chk Noun
+-- ceval g ( (Th     :: Term Chk UVerb -> Term Chk Noun
 -- ceval g ( (Emb    :: Term Syn k -> Term Chk k
 -- ceval g ( (Pull   :: [Port] -> Term Chk k -> Term Chk k
 -- ceval g ( (Var    :: String -> Term Syn Noun  -- Look up in noun (value) env
--- ceval g ( ((:-:)  :: Term Syn k -> Term d Verb -> Term d k
+-- ceval g ( ((:-:)  :: Term Syn k -> Term d UVerb -> Term d k
 ceval' g (Th f) = pure $ VClos g (unWC f)
 ceval' g (_ :\: body) = eval g body
 ceval' g (Emb tm) = seval g tm

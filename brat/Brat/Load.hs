@@ -64,7 +64,7 @@ checkDecl pre Decl{..}
   (_, unders, _) <- next fnName Id (toList fnSig) (toList fnSig)
   case fnBody of
     NoLhs body -> do
-      ((), ((), [])) <- let ?my = Braty in check body ((), unders)
+      (((), ()), ((), [])) <- let ?my = Braty in check body ((), unders)
       pure ()
     -- TODO: Unify this with `getThunks` and `check (Th _)` code
     ThunkOf verb -> do
@@ -82,8 +82,8 @@ checkDecl pre Decl{..}
  where
   name = show $ PrefixName pre fnName
 
-  checkThunk :: (?my :: Modey m, CheckConstraints m)
-             => WC (Clause Term Verb) -> [(PortName, ValueType m)] -> [(PortName, ValueType m)] -> Checking ()
+  checkThunk :: (?my :: Modey m, CheckConstraints m Noun)
+             => WC (Clause Term UVerb) -> [(PortName, ValueType m)] -> [(PortName, ValueType m)] -> Checking ()
   checkThunk verb ss ts = do
    (src, [], overs) <- anext (name <> "/in") Source [] ss
    (tgt, unders, []) <- anext (name <> "/out") Target ts []

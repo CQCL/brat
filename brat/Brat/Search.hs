@@ -60,7 +60,7 @@ tokenValues fc (Option ty) = (:) (Con (plain "none") (WC fc Empty)) $ do
   [Con (plain "some") (WC fc val)]
 tokenValues _ _ = []
 
-tokenFuncs :: FC -> CType -> [Term Chk Verb]
+tokenFuncs :: FC -> CType -> [Term Chk UVerb]
 tokenFuncs fc (ss :-> ts)
   = case ss of
       [] -> []
@@ -81,5 +81,5 @@ binders xs = foldr1 (:||:) $ zipWith const (binder <$> ['a'..]) xs
 vsearch :: FC -> VType -> [Term Chk Noun]
 vsearch fc = take 5 . tokenValues fc
 
-csearch :: FC -> CType -> [Term Chk Verb]
+csearch :: FC -> CType -> [Term Chk UVerb]
 csearch fc = take 5 . tokenFuncs fc

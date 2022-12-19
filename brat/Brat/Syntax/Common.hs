@@ -130,20 +130,28 @@ instance Show SimpleType where
   show UnitTy = "Unit"
   show Star = "Type"
 
-data Dir = Syn | Chk deriving (Eq, Show)
-data Kind = Noun | Verb deriving (Eq, Show)
+-- How to typecheck the *outputs* of a term
+data Dir = Syn -- the node synthesizes (tells us) its outputs
+         | Chk -- the node must be told the type of its outputs
+   deriving (Eq, Show)
 
 data Diry :: Dir -> Type where
   Syny :: Diry Syn
   Chky :: Diry Chk
+deriving instance Show (Diry d)
+
+
+-- How to typecheck the *inputs* of a term
+data Kind = Noun -- there are no inputs
+          | UVerb -- a verb with unknown inputs, i.e. it must be told the type of its inputs (it knows how many to take)
+          | KVerb -- a verb with known inputs, i.e. it synthesizes (tells us) the number and type of inputs it needs
+   deriving (Eq, Show)
 
 data Kindy :: Kind -> Type where
   Nouny :: Kindy Noun
-  Verby :: Kindy Verb
-
-deriving instance Show (Diry d)
+  UVerby :: Kindy UVerb
+  KVerby :: Kindy KVerb
 deriving instance Show (Kindy k)
-
 
 data SimpleTerm
   = Num Int
@@ -188,7 +196,7 @@ deriving instance
   forall tm io.
   (forall d k. Eq (tm d k), Eq io
   ,Eq (Clause tm Noun)
-  ,Eq (Clause tm Verb)
+  ,Eq (Clause tm UVerb)
   ) => Eq (Decl' io (Clause tm Noun))
 
 instance (Show io, Show (Clause tm Noun))
@@ -253,8 +261,8 @@ instance Show (Abstractor) where
 
 data Clause (tm :: Dir -> Kind -> Type) (k :: Kind) where
   -- lhs and rhs
-  ThunkOf   :: WC (Clause tm Verb) -> Clause tm Noun
-  Clauses   :: NonEmpty (WC Abstractor, WC (tm Chk Noun)) -> Clause tm Verb
+  ThunkOf   :: WC (Clause tm UVerb) -> Clause tm Noun
+  Clauses   :: NonEmpty (WC Abstractor, WC (tm Chk Noun)) -> Clause tm UVerb
   NoLhs     :: (WC (tm Chk k)) -> Clause tm k
   Undefined :: Clause tm k
 

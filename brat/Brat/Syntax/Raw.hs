@@ -19,7 +19,7 @@ import Util (names)
 
 type family TypeOf (k :: Kind) :: Type where
   TypeOf Noun = [InOut]
-  TypeOf Verb = CType
+  TypeOf UVerb = CType
 
 data RawVType
   = RC RawCType
@@ -54,21 +54,22 @@ type RawEnv = ([RawDecl], [(UserName, TypeAlias)])
 
 
 data Raw :: Dir -> Kind -> Type where
+  RSimple   :: SimpleTerm -> Raw Chk Noun
   RLet      :: WC Abstractor -> WC (Raw Syn Noun) -> WC (Raw d k) -> Raw d k
   RNHole    :: String -> Raw Chk Noun
-  RVHole    :: String -> Raw Chk Verb
-  RSimple   :: SimpleTerm -> Raw Chk Noun
+  RVHole    :: String -> Raw Chk UVerb
   REmpty    :: Raw Chk Noun
   (::|::)   :: WC (Raw d k) -> WC (Raw d k) -> Raw d k
-  RTh       :: WC (Raw Chk Verb) -> Raw Chk Noun
-  RForce    :: WC (Raw Syn Noun) -> Raw Syn Verb
+  RTh       :: WC (Raw Chk UVerb) -> Raw Chk Noun
+  RForce    :: WC (Raw Syn Noun) -> Raw Syn KVerb
   REmb      :: WC (Raw Syn k) -> Raw Chk k
+  RForget   :: WC (Raw d KVerb) -> Raw d UVerb
   RPull     :: [PortName] -> WC (Raw Chk k) -> Raw Chk k
   RVar      :: UserName -> Raw Syn Noun
-  (::$::)   :: WC (Raw Syn Noun) -> WC (Raw Chk Noun) -> Raw Syn Noun -- Eval with ChkRaw n argument
   (:::::)   :: WC (Raw Chk Noun) -> [RawIO] -> Raw Syn Noun
-  (::-::)   :: WC (Raw Syn k) -> WC (Raw d Verb) -> Raw d k -- vertical juxtaposition (diagrammatic composition)
-  (::\::)   :: WC Abstractor -> WC (Raw d Noun) -> Raw d Verb
+  (::-::)   :: WC (Raw Syn k) -> WC (Raw d UVerb) -> Raw d k -- vertical juxtaposition (diagrammatic composition)
+  (::$::)   :: WC (Raw Syn KVerb) -> WC (Raw Chk Noun) -> Raw Syn Noun -- Eval with ChkRaw n argument
+  (::\::)   :: WC Abstractor -> WC (Raw d Noun) -> Raw d UVerb
   RCon      :: UserName -> WC (Raw Chk Noun) -> Raw Chk Noun
 
 class Dirable d where
@@ -80,7 +81,8 @@ class Kindable k where
 instance (Dirable Syn) where dir _ = Syny
 instance (Dirable Chk) where dir _ = Chky
 instance (Kindable Noun) where kind _ = Nouny
-instance (Kindable Verb) where kind _ = Verby 
+instance (Kindable UVerb) where kind _ = UVerby
+instance (Kindable KVerb) where kind _ = KVerby
 
 instance Show (Raw d k) where
   show (RLet abs xs body)
@@ -91,6 +93,7 @@ instance Show (Raw d k) where
   show REmpty = "()"
   show (a ::|:: b) = show a ++ ", " ++ show b
   show (RTh comp) = '{' : show comp ++ "}"
+  show (RForget kv) = "(Forget " ++ show kv ++ ")"
   show (RForce comp) = show comp ++ "()"
   show (REmb x) = '「' : show x ++ "」"
   show (RPull [] x) = "[]:" ++ show x
@@ -218,7 +221,7 @@ instance Desugarable (Raw d k) where
   desugar' (RForce v) = Force <$> desugar v
   desugar' (REmb syn) = case unWC syn of
     -- Try to catch constructor applications which have been parsed as applications
-    (WC _ (RVar c)) ::$:: a -> do
+    (WC _ (RForce (WC _ (RVar c)))) ::$:: a -> do
       pure (isConstructor c) >>= \case
         True -> Con c <$> desugar a
         False -> Emb <$> desugar syn
@@ -228,6 +231,7 @@ instance Desugarable (Raw d k) where
         True -> pure $ Con c (WC (fcOf syn) Empty)
         False -> Emb <$> desugar syn
     _ -> Emb <$> desugar syn
+  desugar' (RForget kv) = Forget <$> desugar kv
   desugar' (RPull ps raw) = Pull ps <$> desugar raw
   desugar' (RVar  name) = pure (Var name)
   desugar' (fun ::$:: arg) = (:$:) <$> desugar fun <*> desugar arg
@@ -245,7 +249,7 @@ desugarNClause (ThunkOf clause) = ThunkOf <$> traverse desugarVClause clause
 desugarNClause (NoLhs body) = NoLhs <$> desugar body
 desugarNClause Undefined = pure Undefined
 
-desugarVClause :: Clause Raw Verb -> Desugar (Clause Term Verb)
+desugarVClause :: Clause Raw UVerb -> Desugar (Clause Term UVerb)
 desugarVClause (Clauses cs) = Clauses <$> mapM branch cs
  where
   branch :: (WC Abstractor, WC (Raw Chk Noun)) -> Desugar (WC Abstractor, WC (Term Chk Noun))

@@ -27,23 +27,27 @@ data Term :: Dir -> Kind -> Type where
   Simple   :: SimpleTerm -> Term Chk Noun
   Let      :: WC Abstractor -> WC (Term Syn Noun) -> WC (Term d k) -> Term d k
   NHole    :: Name -> Term Chk Noun
-  VHole    :: Name -> Term Chk Verb
+  VHole    :: Name -> Term Chk UVerb
   Empty    :: Term Chk Noun -- The empty row (monoidal unit of :|:)
   -- Parallel composition, aka juxtaposition
   (:|:)    :: WC (Term d k) -> WC (Term d k) -> Term d k
-  Th       :: WC (Term Chk Verb) -> Term Chk Noun
-  Force    :: WC (Term Syn Noun) -> Term Syn Verb
+  Th       :: WC (Term Chk UVerb) -> Term Chk Noun
+  -- TypedTh  :: WC (Term Syn KVerb) -> Term Syn Noun -- no, later
+  Force    :: WC (Term Syn Noun) -> Term Syn KVerb
   Emb      :: WC (Term Syn k) -> Term Chk k
+  Forget   :: WC (Term d KVerb) -> Term d UVerb
   Pull     :: [PortName] -> WC (Term Chk k) -> Term Chk k
   Var      :: UserName -> Term Syn Noun  -- Look up in noun (value) env
-  -- Function application
-  (:$:)    :: WC (Term Syn Noun) -> WC (Term Chk Noun) -> Term Syn Noun
   -- Type annotations (annotating a term with its outputs)
   -- TODO: Make it possible for Output to be (PortName, SType) when using this in kernels
   (:::)    :: WC (Term Chk Noun) -> [Output] -> Term Syn Noun
-  -- vertical juxtaposition (diagrammatic or sequential composition)
-  (:-:)    :: WC (Term Syn k) -> WC (Term d Verb) -> Term d k
-  (:\:)    :: WC Abstractor -> WC (Term d Noun) -> Term d Verb
+  -- Composition: values fed from source (first) into dest (second),
+  -- of number/type determined by the source
+  (:-:)    :: WC (Term Syn k) -> WC (Term d UVerb) -> Term d k
+  -- Application of function (first) to values coming from argument (second)
+  -- of number/type determined by the function
+  (:$:)    :: WC (Term Syn KVerb) -> WC (Term Chk Noun) -> Term Syn Noun
+  (:\:)    :: WC Abstractor -> WC (Term d Noun) -> Term d UVerb
   -- Type constructors
   Con      :: UserName -> WC (Term Chk Noun) -> Term Chk Noun
 
@@ -61,6 +65,7 @@ instance Show (Term d k) where
   show (a :|: b) = show a ++ ", " ++ show b
   show (Th comp) = '{' : show comp ++ "}"
   show (Force th) = show th ++ "()"
+  show (Forget kv) = "(Forget " ++ show kv ++ ")"
   show (Emb x) = '「' : show x ++ "」"
   show (Pull [] x) = "[]:" ++ show x
   show (Pull ps x) = concat ((++":") <$> ps) ++ show x

@@ -27,7 +27,10 @@ class Juxt k where
 instance Juxt Noun where
   stripJuxt (a :|: b) = SJuxtNoun (stripInfo <$> a) (stripInfo <$> b)
 
-instance Juxt Verb where
+instance Juxt UVerb where
+  stripJuxt (a :|: b) = SJuxtVerb (stripInfo <$> a) (stripInfo <$> b)
+
+instance Juxt KVerb where
   stripJuxt (a :|: b) = SJuxtVerb (stripInfo <$> a) (stripInfo <$> b)
 
 stripInfo :: Juxt k => Term d k -> Skel
