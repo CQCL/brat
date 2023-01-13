@@ -7,7 +7,7 @@
 --       `{Vec Qubit 2 -o Vec Bool 1}`
 
 -- Reality:
---  - Type checking fails due to a missing case in kindCheck
+--  - Type checking fails, as currently arguments to type aliases must all be of kind '*' (these are '#')
 
 type Dist = List(Bool)
 type KCirc(q, b) = { Vec(Qubit, q) -o Vec(Bool, b) }
