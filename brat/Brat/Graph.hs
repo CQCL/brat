@@ -9,18 +9,20 @@ import Brat.Syntax.Simple
 import qualified Data.Graph as G
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
-import Brat.Syntax.Core (Input, Output, SType, VType)
+import Brat.Syntax.Value
+import Brat.UserName
 
 data Node
-  = BratNode Thing [Input] [Output]
-  | KernelNode Thing [(PortName, SType)] [(PortName, SType)]
- deriving (Eq, Show)
+  -- Inputs first, then outputs
+  = BratNode Thing [(PortName, Value)] [(PortName, Value)]
+  | KernelNode Thing [(PortName, SValue)] [(PortName, SValue)]
+ deriving Show
 
 nodeThing :: Node -> Thing
 nodeThing (BratNode t _ _) = t
 nodeThing (KernelNode t _ _) = t
 
-data ComboType = Row | Thunk deriving (Eq, Show);
+data ComboType = Row | Thunk deriving (Eq, Show)
 
 data Thing
   = Prim String  -- Something in the env
@@ -32,12 +34,9 @@ data Thing
   | Id           -- Identity node for convenient wiring
   | Hypo         -- Hypothesis for type checking
   | Combo ComboType -- inputs are wired in later
-  | Constructor DataNode
-  | Selector DataNode
+  | Constructor UserName
+  | Selector UserName
   deriving (Eq, Show)
-
-data DataNode = DCons | DNil | DSome | DNone | DPair | DDoub | DSucc
- deriving (Eq, Show)
 
 type Graph = (M.Map Name Node, [Wire])
 emptyGraph :: Graph
@@ -46,7 +45,7 @@ emptyGraph = (M.empty, [])
 instance {-# OVERLAPPING #-} Show Graph where
   show (ns, ws) = unlines (("Nodes:":(show <$> M.toList ns)) ++ ("":"Wires:":(show <$> ws)))
 
-type Wire = (OutPort, Either SType VType, InPort)
+type Wire = (OutPort, Either SValue Value, InPort)
 
 toGraph :: Graph -> (G.Graph, G.Vertex -> (Node, Name, [Name]), Name -> Maybe G.Vertex)
 toGraph (ns, ws) = G.graphFromEdges adj

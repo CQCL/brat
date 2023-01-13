@@ -27,3 +27,13 @@ names = do
  where
   nums :: [Int]
   nums = [1..]
+
+-- Versions of `Control.Arrow`'s (***) where one arrow is functorial
+(^**) :: Functor f => (a -> f b) -> (a' -> b') -> (a, a') -> f (b, b')
+(f ^** g) (a, a') = (,g a') <$> f a
+
+(**^) :: Functor f => (a -> b) -> (a' -> f b') -> (a, a') -> f (b, b')
+(f **^ g) (a, a') = (f a,) <$> g a'
+
+infixr 3 **^
+infixr 3 ^**

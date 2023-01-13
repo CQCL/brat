@@ -1,4 +1,4 @@
-Error in badBinding (test/golden/binding/let.brat)@FC {start = Pos {line = 7, col = 14}, end = Pos {line = 7, col = 36}}:
+Error in test/golden/binding/let.brat@FC {start = Pos {line = 7, col = 14}, end = Pos {line = 7, col = 36}}:
 badBinding = let x = twoThings in x
              ^^^^^^^^^^^^^^^^^^^^^^
 

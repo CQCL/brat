@@ -1,10 +1,12 @@
 module Brat.Compiler (printAST, printDeclsHoles, compileFile) where
 
 import Brat.Compile.Circuit
-import Brat.Syntax.Common (Decl'(..), VType'(..))
+import Brat.Syntax.Common (Decl'(..), CType'(..), Modey(..), pattern R)
+import Brat.Syntax.Value (Value(..))
 import Brat.UserName
 import Brat.Error
 import Brat.Load
+import Bwd (Bwd(..))
 import Util
 
 import Control.Monad.Except
@@ -39,8 +41,9 @@ banner s m = putStrLn startText *> m <* putStrLn endText
 printAST :: Bool -> Bool -> String -> IO ()
 printAST printRaw printAST file = do
   cts <- readFile file
-  (_, env) <- eitherIO $ parseFile file cts
-  env'@(decls, _) <- eitherIO $ addSrcContext file cts (elabEnv env)
+  (_, env@(decls,_)) <- eitherIO $ parseFile file cts
+  banner "Flat AST" $ mapM_ print decls
+  env'@(decls, _, _) <- eitherIO $ addSrcContext file cts (elabEnv env)
   when printRaw $ banner "Raw AST" $ mapM_ print decls
   when printAST $
     banner "desugared AST" (mapM_ print =<< eitherIO (addSrcContext file cts (desugarEnv env')))
@@ -60,8 +63,8 @@ compileFile file = do
 
   let outFile = (dropExtension file) <> ".tk"
   case fnSig mn of
-    [(_, K ss ts)] -> do
-      let bin = wrapCircuit (compileCircuit graph (ss, ts))
+    [(_, Right (VFun Kerny B0 (ss :-> ts)))] -> do
+      let bin = wrapCircuit (compileCircuit graph (R ss, R ts))
       BS.writeFile outFile (encodeMessage bin)
       putStrLn $ "Wrote to file " ++ outFile
     -- Placeholder while tierkreis output is under development

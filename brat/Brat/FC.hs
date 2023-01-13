@@ -28,5 +28,6 @@ unWC (WC _ a) = a
 fcOf :: WC a -> FC
 fcOf (WC fc _) = fc
 
+-- TODO: Remove this
 dummyFC :: a -> WC a
 dummyFC = WC (FC (Pos 0 0) (Pos 0 0))

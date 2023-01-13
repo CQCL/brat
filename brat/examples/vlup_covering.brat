@@ -9,8 +9,8 @@
 import lib.kernel
 
 maybeRotate(Bool) -> { Qubit -o Qubit }
-maybeRotate(true) = Rx(30.0)
-maybeRotate(false) = qid
+maybeRotate(true) = lib.kernel.Rx(30.0)
+maybeRotate(false) = lib.kernel.qid
 
 rotate :: { Qubit -o Qubit }
 rotate = { q => (maybeRotate(true))(q) }

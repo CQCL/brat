@@ -22,6 +22,7 @@ data Tok
  = Ident String
  | QualifiedId (NonEmpty String) String
  | Equal
+ | KindColon
  | TypeColon
  | PortColon
  | Hole String
@@ -46,15 +47,16 @@ data Tok
  | HSpace Int
  | Quoted String
  | Plus
- | Times
+ | Asterisk
+ | Hash
  | Underscore
- | UnitElem
  deriving Eq
 
 instance Show Tok where
   show (Ident s) = s
   show (QualifiedId (p :| ps) s) = intercalate "." (p:ps ++ [s])
   show Equal = "="
+  show KindColon = "<-"
   show TypeColon = "::"
   show PortColon = ":"
   show (Hole h) = '?':h
@@ -79,9 +81,9 @@ instance Show Tok where
   show (HSpace n) = replicate n ' '
   show (Quoted x) = show x
   show Plus = "+"
-  show Times = "*"
+  show Asterisk = "*"
+  show Hash = "#"
   show Underscore = "_"
-  show UnitElem = "<>"
 
 data Token = Token { fc :: FC
                    , _tok :: Tok
@@ -98,21 +100,11 @@ instance Ord Token where
 
 data Keyword
   = KType
-  | KVec
-  | KList
-  | KNat
-  | KInt
   | KBit
   | KBool
   | KQubit
   | KMoney
-  | KPair
-  | KTypeType
-  | KUnit
   | KExt
-  | KString
-  | KFloat
-  | KOption
   | KImport
   | KLet
   | KIn
@@ -120,21 +112,11 @@ data Keyword
 
 instance Show Keyword where
   show KType = "type"
-  show KVec = "Vec"
-  show KList = "List"
-  show KNat = "Nat"
-  show KInt = "Int"
   show KBit = "Bit"
   show KBool = "Bool"
   show KQubit = "Qubit"
   show KMoney = "Money"
-  show KPair = "Pair"
-  show KTypeType = "Type"
-  show KUnit = "Unit"
   show KExt = "ext"
-  show KString = "String"
-  show KFloat = "Float"
-  show KOption = "Option"
   show KImport = "import"
   show KLet = "let"
   show KIn = "in"
@@ -142,21 +124,11 @@ instance Show Keyword where
 keyword :: Lexer Keyword
 keyword
   = ((try (string "type") $> KType)
-     <|> string "Vec"   $> KVec
-     <|> string "List"  $> KList
      <|> (try (string "Bool")
            <|> string "Bit") $> KBool
-     <|> string "Nat"   $> KNat
-     <|> string "Int"   $> KInt
      <|> string "Qubit" $> KQubit
      <|> string "Money" $> KMoney
-     <|> string "Type"  $> KTypeType
-     <|> string "Pair"  $> KPair
      <|> string "ext"   $> KExt
-     <|> try (string "String" $> KString)
-     <|> string "Float" $> KFloat
-     <|> string "Option" $> KOption
-     <|> string "Unit"  $> KUnit
      <|> string "import" $> KImport
      <|> string "let" $> KLet
      <|> string "in" $> KIn
@@ -194,7 +166,6 @@ tok = comment
       <|> try (FloatLit <$> float)
       <|> try (Number <$> number)
       <|> try (string "+" $> Plus)
-      <|> try (string "*" $> Times)
       <|> try (string "->") $> Arrow
       <|> try (string "=>") $> FatArrow
       <|> try (string "-o") $> Lolly
@@ -206,7 +177,9 @@ tok = comment
       <|> try (string "|>" $> Into)
       <|> try (char ',' $> Comma)
       <|> try (string ".." $> DotDot)
-      <|> try (string "<>" $> UnitElem)
+      <|> try (string "<-" $> KindColon)
+      <|> try (string "#"  $> Hash)
+      <|> try (string "*"  $> Asterisk)
       <|> try (K <$> try keyword)
       <|> try newline'
       <|> try hspace'

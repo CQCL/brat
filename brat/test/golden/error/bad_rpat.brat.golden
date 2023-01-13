@@ -1,6 +1,3 @@
-Error in test (test/golden/error/bad_rpat.brat)@FC {start = Pos {line = 2, col = 8}, end = Pos {line = 2, col = 19}}:
-test = cons(1, [])
-       ^^^^^^^^^^^
-
-  Type error: [1] not of type (a1 :: Bool)
+Error in test/golden/error/bad_rpat.brat:
+  Type constructor not recognised: Bool for "cons"
 

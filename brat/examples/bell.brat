@@ -62,7 +62,8 @@ idq = { q => q }
 
 phasedBell :: { (th :: Float) -> { c :: Qubit, d :: Qubit -o c :: Bit, d :: Bit } }
 phasedBell(th) = {
-  H,idq;
-  Rz(th),idq;
-  M,M
+  lib.kernel.H,lib.kernel.qid;
+  lib.kernel.Rz(th),lib.kernel.qid;
+  lib.kernel.M,lib.kernel.M
 }
+

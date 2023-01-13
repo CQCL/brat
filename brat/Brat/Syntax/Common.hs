@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleContexts, UndecidableInstances #-}
 {-# LANGUAGE RankNTypes, QuantifiedConstraints #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE PatternSynonyms #-}
 
 module Brat.Syntax.Common (PortName,
                            Row,
@@ -13,7 +12,7 @@ module Brat.Syntax.Common (PortName,
                            -- constructors for SType' (do not export SType''):
                            pattern Q, pattern Bit, pattern Of, pattern Rho,
                            copyable,
-                           VType'(..),
+                           smap,
                            Dir(..),
                            Kind(..),
                            Diry(..),
@@ -23,32 +22,43 @@ module Brat.Syntax.Common (PortName,
                            Decl'(..),
                            Runtime(RtLocal), -- No reason not to export others if required
                            Pattern(..),
-                           Abstractor(..),
-                           Clause(..),
+                           Abstractor(..), occursInAbstractor,
+                           FunBody(..),
+                           showSig,
+                           TypeKind(..), KindOr,
                            showRow,
-                           pattern PSome,
                            NamedPort(..),
                            Src, Tgt,
                            OutPort(..), InPort(..),
                            pattern PNone,
+                           pattern PSome,
                            pattern POnePlus,
                            pattern PTwoTimes,
                            pattern PNil,
                            pattern PCons,
-
+                           Mode(..),
+                           Modey(..),
+                           End(..)
                           ) where
 
 import Brat.FC
 import Brat.Syntax.Abstractor
-import Brat.Syntax.Simple (SimpleType)
 import Brat.Syntax.Port
 
+import Data.Bifunctor (second)
 import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Kind (Type)
 
+data Mode = Brat | Kernel
+
+data Modey :: Mode -> Type where
+  Braty :: Modey Brat
+  Kerny :: Modey Kernel
+
 data Quantum = Qubit | Money deriving (Eq, Show)
 newtype Row' tm q = R [(PortName, SType'' tm q)] deriving (Functor, Foldable, Traversable)
+
 type Row tm = Row' tm Quantum
 
 deriving instance Show (SType'' tm q) => Show (Row' tm q)
@@ -58,16 +68,25 @@ instance Eq (SType'' tm q) => Eq (Row' tm q) where
 
 type SType' tm = SType'' tm Quantum
 
+-- N.B. Functor, Foldable, Traversable instances are definined for mapping the
+-- type of qubits, not the type of subterms
 data SType'' tm q
  = Q q
  | Bit
- | Of (SType'' tm q) (tm Chk Noun)
+ | Of (SType'' tm q) tm
  | Rho (Row' tm q)
  deriving (Functor, Foldable, Traversable)
 
-deriving instance Eq (tm Chk Noun) => Eq (SType' tm)
+smap :: (tm -> tm') -> SType'' tm q -> SType'' tm' q
+smap f (Of ty n) = Of (smap f ty) (f n)
+smap f (Rho (R xs)) = Rho (R (second (smap f) <$> xs))
+-- Boring cases
+smap _ (Q q) = Q q
+smap _ Bit = Bit
 
-instance (Show q, Show (tm Chk Noun)) => Show (SType'' tm q) where
+deriving instance Eq tm => Eq (SType' tm)
+
+instance (Show q, Show tm) => Show (SType'' tm q) where
   show (Q q) = show q
   show Bit = "Bool"
   show (Of ty n) = "Vec(" ++ show ty ++ ", " ++ show n ++ ")"
@@ -76,25 +95,14 @@ instance (Show q, Show (tm Chk Noun)) => Show (SType'' tm q) where
 copyable :: SType'' tm q -> Bool
 copyable = null
 
-data VType' tm
-  = C (CType' (PortName, VType' tm))
-  | SimpleTy SimpleType
-  | List (VType' tm)
-  | Product (VType' tm) (VType' tm)
-  | Vector (VType' tm) (tm Chk Noun)
-  | K (Row tm) (Row tm)
-  | Option (VType' tm)
+data TypeKind = Star [(PortName, TypeKind)] | Nat
+  deriving (Eq, Show)
 
-deriving instance Eq (tm Chk Noun) => Eq (VType' tm)
+type KindOr = Either TypeKind
 
-instance Show (tm Chk Noun) => Show (VType' tm) where
-  show (C cty) = '{' : show cty ++ "}"
-  show (SimpleTy ty) = show ty
-  show (List ty) = "List(" ++ show ty ++ ")"
-  show (Product s t) = "Pair(" ++ show s ++ ", " ++ show t ++ ")"
-  show (Vector ty n) = "Vec(" ++ show ty ++ ", " ++ show n ++ ")"
-  show (K ins outs) = '{' : show ins ++ " -o " ++ show outs ++ "}"
-  show (Option ty) = "Option(" ++ show ty ++ ")"
+instance {-# OVERLAPPING #-} Show a => Show (KindOr a) where
+  show (Left k) = show k
+  show (Right ty) = show ty
 
 -- How to typecheck the *outputs* of a term
 data Dir = Syn -- the node synthesizes (tells us) its outputs
@@ -119,12 +127,12 @@ data Kindy :: Kind -> Type where
   KVerby :: Kindy KVerb
 deriving instance Show (Kindy k)
 
-data CType' io = [io] :-> [io] deriving Functor
+data CType' io = [io] :-> [io] deriving (Foldable, Functor, Traversable)
 
 instance Show io => Show (CType' io) where
   show (ss :-> ts) = unwords [show ss, "->", show ts]
 
-deriving instance Eq (VType' tm) => Eq (CType' (PortName, VType' tm))
+deriving instance Eq io => Eq (CType' io)
 
 instance Semigroup (CType' (PortName, ty)) where
   (ss :-> ts) <> (us :-> vs) = (ss <> us) :-> (ts <> vs)
@@ -146,12 +154,12 @@ data Decl' (io :: Type) (body :: Type)
 deriving instance
   forall tm io.
   (forall d k. Eq (tm d k), Eq io
-  ,Eq (Clause tm Noun)
-  ,Eq (Clause tm UVerb)
-  ) => Eq (Decl' io (Clause tm Noun))
+  ,Eq (FunBody tm Noun)
+  ,Eq (FunBody tm UVerb)
+  ) => Eq (Decl' io (FunBody tm Noun))
 
-instance (Show io, Show (Clause tm Noun))
- => Show (Decl' io (Clause tm Noun)) where
+instance (Show io, Show (FunBody tm Noun))
+ => Show (Decl' io (FunBody tm Noun)) where
   show Decl{..} = unlines [fnName ++ " :: " ++ show fnSig
                           ,fnName ++ " = " ++ show fnBody]
 
@@ -159,16 +167,26 @@ instance (Show io, Show (Clause tm Noun))
 -- default to local
 data Runtime = RtTierkreis | RtLocal | RtKernel deriving (Eq, Show)
 
-data Clause (tm :: Dir -> Kind -> Type) (k :: Kind) where
+data FunBody (tm :: Dir -> Kind -> Type) (k :: Kind) where
   -- lhs and rhs
-  ThunkOf   :: WC (Clause tm UVerb) -> Clause tm Noun
-  Clauses   :: NonEmpty (WC Abstractor, WC (tm Chk Noun)) -> Clause tm UVerb
-  NoLhs     :: (WC (tm Chk k)) -> Clause tm k
-  Undefined :: Clause tm k
+  ThunkOf   :: WC (FunBody tm UVerb) -> FunBody tm Noun
+  Clauses   :: NonEmpty (WC Abstractor, WC (tm Chk Noun)) -> FunBody tm UVerb
+  NoLhs     :: (WC (tm Chk k)) -> FunBody tm k
+  Undefined :: FunBody tm k
 
-deriving instance (forall d k. Show (tm d k)) => Show (Clause tm k)
-deriving instance (forall d k. Eq (tm d k)) => Eq (Clause tm k)
+deriving instance (forall d k. Show (tm d k)) => Show (FunBody tm k)
+deriving instance (forall d k. Eq (tm d k)) => Eq (FunBody tm k)
 
-showRow :: Show ty => NonEmpty (NamedPort e, ty) -> String
-showRow (x :| xs) = intercalate ", " [ '(':(portName p) ++ " :: " ++ show ty ++ ")"
-                                     | (p, ty) <- x:xs]
+showSig :: Show ty => [(String, ty)] -> String
+showSig [] = "()"
+showSig (x:xs) = showSig1 (x :| xs)
+ where
+  showSig1 :: Show ty => NonEmpty (String, ty) -> String
+  showSig1 (x :| xs) = intercalate ", "
+                       [ '(':p ++ " :: " ++ show ty ++ ")"
+                       | (p, ty) <- x:xs ]
+
+showRow :: Show ty => [(NamedPort e, ty)] -> String
+showRow [] = "()"
+showRow (x:xs) = intercalate ", " [ '(':(portName p) ++ " :: " ++ show ty ++ ")"
+                                  | (p, ty) <- x:xs]

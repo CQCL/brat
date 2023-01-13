@@ -12,9 +12,10 @@ import Brat.Graph
 import Brat.Naming
 import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Common
+import Brat.Syntax.Value (Value)
 import Test.Circuit.Common
 
-processTest :: Graph -> (Row Term, Row Term) -> [Command] -> Assertion
+processTest :: Graph -> (Row Value, Row Value) -> [Command] -> Assertion
 processTest g io c = commands (process g io) @?= c
 
 testId = testCase "id" $

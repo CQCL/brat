@@ -1,58 +1,59 @@
+{-# LANGUAGE UndecidableInstances #-}
+
 module Brat.Checker.Types (Overs, Unders
                           ,Outputs, Inputs
                           ,ChkConnectors, SynConnectors
                           ,Mode(..), Modey(..)
-                          ,Graph, Node, Wire
                           ,Env, VEnv, KEnv, EnvData
+                          ,Store(..)
                           ,TypedHole(..)
                           ,ValueType
+                          ,initStore
                           ) where
 
 import Brat.Checker.Quantity
-import Brat.Graph (Graph, Node, Wire)
 import Brat.FC (FC)
 import Brat.Naming (Name)
-import Brat.Syntax.Common (Dir(..), Kind(..), Src, Tgt)
-import Brat.Syntax.Core (SType, VType)
+import Brat.Syntax.Common
+import Brat.Syntax.Value
 import Brat.UserName (UserName)
-
 import Data.Kind (Type)
 import qualified Data.Map as M
 
 -- Inputs against which a term is checked
 type family Overs (m :: Mode) (k :: Kind) :: Type where
   Overs m Noun = ()
-  Overs m UVerb = [(Src, ValueType m)]
+  Overs m UVerb = [(Src, BinderType m)]
   Overs m KVerb = ()
 
 -- Inputs synthesized by the term
 type family Inputs (m:: Mode) (k :: Kind) :: Type where
   Inputs m Noun = ()
   Inputs m UVerb = ()
-  Inputs m KVerb = [(Tgt, ValueType m)]
+  Inputs m KVerb = [(Tgt, BinderType m)]
 
 -- Outputs against which a term is checked
 type family Unders (m :: Mode) (d :: Dir) :: Type where
   Unders m Syn = ()
-  Unders m Chk = [(Tgt, ValueType m)]
+  Unders m Chk = [(Tgt, BinderType m)]
 
 -- Outputs synthesized by the term
 type family Outputs (m :: Mode) (d :: Dir) :: Type where
-  Outputs m Syn = [(Src, ValueType m)]
+  Outputs m Syn = [(Src, BinderType m)]
   Outputs m Chk = ()
 
 type ChkConnectors (m :: Mode) (d :: Dir) (k :: Kind) = (Overs m k, Unders m d)
 type SynConnectors (m :: Mode) (d :: Dir) (k :: Kind) = (Inputs m k, Outputs m d)
 
-data Mode = Brat | Kernel
-
 type family ValueType (m :: Mode) where
-  ValueType Brat = VType
-  ValueType Kernel = SType
+  ValueType Brat = Value
+  ValueType Kernel = SValue
 
 type family EnvData (m :: Mode) where
-  EnvData Brat = [(Src, VType)]
-  EnvData Kernel = (Quantity, (Src, SType))
+  -- Brat variables can stand for rows when referring to a top level
+  -- binding. Most of the time, this will be a singleton list
+  EnvData Brat = [(Src, BinderType Brat)]
+  EnvData Kernel = (Quantity, (Src, BinderType Kernel))
 
 type Env e = M.Map UserName e
 type VEnv = Env (EnvData Brat)
@@ -63,8 +64,13 @@ data TypedHole
   | VBHole Name FC (ChkConnectors Brat Chk UVerb)
   | NKHole Name FC (ChkConnectors Kernel Chk Noun)
   | VKHole Name FC (ChkConnectors Kernel Chk UVerb)
-  deriving (Eq, Show)
+ deriving Show
 
-data Modey :: Mode -> Type where
-  Braty :: Modey Brat
-  Kerny :: Modey Kernel
+data Store = Store
+  { kindMap :: M.Map End TypeKind
+  , valueMap :: M.Map End Value
+  }
+  deriving Show
+
+initStore :: Store
+initStore = Store M.empty M.empty

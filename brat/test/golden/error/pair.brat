@@ -1,5 +1,5 @@
 row :: Int, Bool
 row = 4, true
 
-pair :: Pair(Int, Bool)
+pair :: [Int, Bool]
 pair = row -- Distinct from a pair

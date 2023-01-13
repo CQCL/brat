@@ -1,0 +1,81 @@
+ext "" and(Bool, Bool) -> Bool
+ext "" xor(Bool, Bool) -> Bool
+
+id :: { X :: *, x :: X -> x :: X }
+id = { X, x => x }
+
+swap :: {X :: *, Y :: *, x :: X, y :: Y -> y :: Y, x :: X }
+swap = { X, Y, x, y => y, x }
+
+-- Should fail & it does
+-- swapBad :: {X :: *, Y :: *, x :: X, y :: Y -> y :: Y, x :: X }
+-- swapBad = { X, Y, x, y => x, y }
+
+id2 :: { X :: *, x :: X -> Y :: *, y :: Y }
+id2 = { X, x => X, x }
+
+-- Should fail & it does
+-- id2 :: { X :: *, Z :: *, x :: X -> Y :: *, y :: Y }
+-- id2 = { X, Z, x => Z, x }
+
+myCons :: { X :: *, n :: #, x :: X, xs :: Vec(X, n) -> Vec(X, succ(n)) }
+myCons = { X, n, x, xs => cons(x, xs) }
+
+replicate :: { X :: *, n :: #, x :: X -> Vec(X, n) }
+replicate = ?awef
+
+empty :: { X :: * -> Vec(X, 0) }
+empty = { X => nil }
+
+optionTest :: { X :: *, x :: X -> Option(X) }
+optionTest = { X, x => some(x) }
+
+-- TODO: Fix the situation with whether braces are needed
+-- chop :: { X :: *, n :: #, Vec(X, doub(n)) -> Vec(X, n), Vec(X, n) }
+-- -- TODO: Add a pattern for vector halves
+-- chop(X, n, halves(xs, ys)) = xs, ys -- We can get the vector's halves, but they may be nil
+
+hadd(Bool, Bool) -> carry :: Bool, Bool
+hadd(x,y) = and(x,y), xor(x,y)
+
+-- TODO: Fix parsing of ;
+-- TODO: Built in identity, which doesn't need an explicit type passed to it. Allow stretchy identity on the right of a row
+-- TODO: How to port-pull one of these inputs if writing a verb without an abstractor?
+--       - a?b? for pulling inputs, a!b! for pulling outputs
+-- fadd :: Bool, Bool, carryIn :: Bool -> carryOut :: Bool, Bool
+-- fadd = hadd,id; (id, hadd); (xor, id)
+
+-- TODO: Add `halves` pattern
+-- adder :: { n :: #, Vec(Bool, succ(full(n))), Vec(Bool, succ(full(n))), carryIn :: Bool -> carryOut :: Bool, Vec(Bool, succ(full(n))) }
+-- adder(0, [x], [y], carryIn) = let carryOut, result = fadd(x,y,carryIn) in carryOut, [result]
+-- -- TODO: Syntactic sugar for multiple let bindings
+-- adder(succ(n), halves(xs2, xs1), halves(ys2, ys1), carry)
+--   = let carryMid, littleEnd = adder(n, xs1, ys1, carry) in
+--     (let carryOut, bigEnd = adder(n, xs2, ys2, carryMid) in
+--     carryOut, halves(bigEnd, littleEnd))
+
+mySnoc :: { X :: *, n :: #, x :: X, xs :: Vec(X, n) -> Vec(X, succ(n)) }
+mySnoc = { X, n, x, xs => snoc(xs, x) }
+
+-- Not ready yet
+-- head :: { X :: *, n :: #, Vec(X, succ(n)) -> X }
+-- head(X, n, cons(x, xs)) = x
+
+idType :: (HX :: *(X :: *))
+idType = { X => X }
+
+promote(n :: #) -> Nat
+promote(n) = n
+
+-- ALAN is this legal? Shouldn't it be `n :: #`?
+-- in which case, same as `pure` below?
+-- f(X :: *, X, n :: Nat) -> Vec(X, n)
+-- f(_, _, zero) = []
+-- f(X, x, succ(n)) = cons(n, f(X, x, n))
+
+pure(X :: *, x :: X, n :: #) -> Vec(X, n)
+pure(_, x, zero) = []
+pure(X, x, succ(n)) = cons(x, pure(X, x, n))
+
+passingN(n :: #) -> Vec(String, n)
+passingN(n) = pure(String, "a", n)

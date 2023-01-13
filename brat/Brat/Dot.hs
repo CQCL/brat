@@ -1,15 +1,15 @@
 module Brat.Dot where
 
 import Brat.Graph
-import Brat.Syntax.Common
-import Brat.Syntax.Core
+import Brat.Syntax.Common (PortName, OutPort(..), InPort(..))
+import Brat.Syntax.Value
 
 import qualified Data.Map as M
 
-labelType :: Either SType VType -> (PortName, PortName) -> String
+labelType :: Either SValue Value -> (PortName, PortName) -> String
 labelType (Left _) _ = ""
 labelType (Right vty) (p, q) = unwords ["[label ="
-                                       ,show (unwords ["[", p, "--(" ++ show vty ++ ")->", q, "]"])
+                                       ,show (unwords ["[", show p, "--(" ++ show vty ++ ")->", show q, "]"])
                                        ,"]"]
 
 mkEdge :: Wire -> String

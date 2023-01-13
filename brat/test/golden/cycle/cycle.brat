@@ -1,4 +1,4 @@
 import cycle_aux
 
-main :: Unit
-main = <>
+main :: []
+main = []

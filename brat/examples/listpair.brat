@@ -1,7 +1,7 @@
-noun :: List(Pair(Nat, Bool))
+noun :: List([Nat, Bool])
 noun = nil
 
-id(List (Pair(Nat, Float))) -> List (Pair(Nat, Float))
+id(List([Nat, Float])) -> List ([Nat, Float])
 id(x) = x
 
 type Real = Float
@@ -9,11 +9,11 @@ type Real = Float
 idRs :: { List(Real) -> List(Real) }
 idRs(x) = x
 
-idPos' :: { List(Pair(Unit, Real)) -> List (Pair(Unit, Real)) }
+idPos' :: { List([[], Real]) -> List ([[], Real]) }
 idPos' = ?id'
 
-idPos'' :: { (List (Pair(Real, Unit))) -> List (Pair(Real, Unit)) }
+idPos'' :: { (List ([Real, []])) -> List ([Real, []]) }
 idPos'' = ?id''
 
-idPos :: {List (Pair(Real, Real)) -> List (Pair(Real, Real)) }
+idPos :: {List ([Real, Real]) -> List ([Real, Real]) }
 idPos = ?id

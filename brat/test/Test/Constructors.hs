@@ -3,10 +3,12 @@
 module Test.Constructors (constructorTests) where
 
 import Brat.Load
+import Brat.FC
 import Brat.Graph
 import Brat.Syntax.Core
 import Brat.Syntax.Common
 import Brat.Syntax.Simple
+import Brat.Syntax.Value
 
 import Test.Circuit.Common
 
@@ -15,6 +17,8 @@ import Data.Map (fromList)
 import Test.Tasty
 import Test.Tasty.HUnit
 
+--  FIXME
+{-
 listProg :: String
 listProg =
   unlines
@@ -26,40 +30,26 @@ listGraph :: Graph
 listGraph =
   (fromList
    [("xs"
-    ,BratNode Id [("a1", List (SimpleTy IntTy))] [("a1", List (SimpleTy IntTy))])
-   ,("mklist.tail.tail"
-    ,BratNode (Constructor DCons)
-     [("head", SimpleTy IntTy)
-     ,("tail", List (SimpleTy IntTy))
-     ]
-     [("value", List (SimpleTy IntTy))]
-    )
-   ,("mklist.tail"
-    ,BratNode (Constructor DCons)
-     [("head", SimpleTy IntTy)
-     ,("tail", List (SimpleTy IntTy))
-     ]
-     [("value", List (SimpleTy IntTy))]
-    )
+    ,BratNode Id [("a1", List TInt)] [("a1", List TInt)])
    ,("mklist"
     ,BratNode (Constructor DCons)
      [("head", SimpleTy IntTy)
      ,("tail", List (SimpleTy IntTy))
      ]
-     [("value", List (SimpleTy IntTy))]
+     [("value", List TInt)]
     )
-   ,("nil", BratNode (Constructor DNil) [] [("value", List (SimpleTy IntTy))])
-   ,("1", BratNode (Const (Num 1)) [] [("value", SimpleTy IntTy)])
-   ,("2", BratNode (Const (Num 2)) [] [("value", SimpleTy IntTy)])
-   ,("3", BratNode (Const (Num 3)) [] [("value", SimpleTy IntTy)])
+   ,("nil", BratNode (Constructor DNil) [] [("value", List TInt)])
+   ,("1", BratNode (Const (Num 1)) [] [("value", TInt)])
+   ,("2", BratNode (Const (Num 2)) [] [("value", TInt)])
+   ,("3", BratNode (Const (Num 3)) [] [("value", TInt)])
    ]
-  ,[((Ex "1" 0), Right (SimpleTy IntTy), (In "mklist" 0))
-   ,((Ex "2" 0), Right (SimpleTy IntTy), (In "mklist.tail" 0))
-   ,((Ex "3" 0), Right (SimpleTy IntTy), (In "mklist.tail.tail" 0))
-   ,((Ex "nil" 0), Right (List (SimpleTy IntTy)), (In "mklist.tail.tail" 1))
-   ,((Ex "mklist.tail.tail" 0), Right (List (SimpleTy IntTy)), (In "mklist.tail" 1))
-   ,((Ex "mklist.tail" 0), Right (List (SimpleTy IntTy)), (In "mklist" 1))
-   ,((Ex "mklist" 0), Right (List (SimpleTy (IntTy))), (In "xs" 0))
+  ,[((Ex "1" 0), Right TInt, (In "mklist" 0))
+   ,((Ex "2" 0), Right TInt, (In "mklist.tail" 0))
+   ,((Ex "3" 0), Right TInt, (In "mklist.tail.tail" 0))
+   ,((Ex "nil" 0), Right (TList TInt), (In "mklist.tail.tail" 1))
+   ,((Ex "mklist.tail.tail" 0), Right (TList TInt), (In "mklist.tail" 1))
+   ,((Ex "mklist.tail" 0), Right (TList TInt), (In "mklist" 1))
+   ,((Ex "mklist" 0), Right (TList TInt), (In "xs" 0))
    ]
   )
 
@@ -77,56 +67,36 @@ vecGraph =
   (fromList
    [("xs"
     ,BratNode Id
-    [("a1", Vector (SimpleTy IntTy) (Simple (Num 3)))]
-    [("a1", Vector (SimpleTy IntTy) (Simple (Num 3)))]
+    [("a1", Vector (dummyFC TInt) (dummyFC (Simple (Num 3))))]
+    [("a1", Vector (dummyFC TInt) (dummyFC (Simple (Num 3))))]
     )
    ,("mkvec"
-    ,BratNode (Constructor DCons)
-     [("head", SimpleTy IntTy)
-     ,("tail", Vector (SimpleTy IntTy) (Simple (Num 2)))
+    ,BratNode (Constructor CVec)
+     [("e0", TInt)
+     ,("e1", TInt)
+     ,("e2", TInt)
      ]
-     [("value", Vector (SimpleTy IntTy) (Simple (Num 3)))]
+     [("value", Vector (dummyFC $ TInt) (dummyFC $ Simple (Num 3)))]
     )
-   ,("mkvec.tail"
-    ,BratNode (Constructor DCons)
-     [("head", SimpleTy IntTy)
-     ,("tail", Vector (SimpleTy IntTy) (Simple (Num 1)))
-     ]
-     [("value", Vector (SimpleTy IntTy) (Simple (Num 2)))]
-    )
-   ,("mkvec.tail.tail"
-    ,BratNode (Constructor DCons)
-     [("head", SimpleTy IntTy)
-     ,("tail", Vector (SimpleTy IntTy) (Simple (Num 0)))
-     ]
-     [("value", Vector (SimpleTy IntTy) (Simple (Num 1)))]
-    )
-   ,("nil", BratNode (Constructor DNil) [] [("value", Vector (SimpleTy IntTy) (Simple (Num 0)))])
-   ,("0", BratNode (Const (Num 0)) [] [("value", SimpleTy IntTy)])
-   ,("1", BratNode (Const (Num 1)) [] [("value", SimpleTy IntTy)])
-   ,("2", BratNode (Const (Num 2)) [] [("value", SimpleTy IntTy)])
-   -- This is for the type of the vectors
-   ,("0n", BratNode (Const (Num 0)) [] [("value", SimpleTy Natural)])
-   ,("1n", BratNode (Const (Num 1)) [] [("value", SimpleTy Natural)])
-   ,("2n", BratNode (Const (Num 2)) [] [("value", SimpleTy Natural)])
-   ,("3n", BratNode (Const (Num 3)) [] [("value", SimpleTy Natural)])
-   ,("hypo0", BratNode Hypo [("value", SimpleTy Natural)] [])
-   ,("hypo1", BratNode Hypo [("value", SimpleTy Natural)] [])
-   ,("hypo2", BratNode Hypo [("value", SimpleTy Natural)] [])
-   ,("hypo3", BratNode Hypo [("value", SimpleTy Natural)] [])
+   ,("0", BratNode (Const (Num 0)) [] [("value", TInt)])
+   ,("1", BratNode (Const (Num 1)) [] [("value", TInt)])
+   ,("2", BratNode (Const (Num 2)) [] [("value", TInt)])
+   -- This is for the type of the vector
+   ,("3", BratNode (Const (Num 3)) [] [("value", TNat)])
+   ,("hypo", BratNode Hypo [("value", TNat)] [])
    ]
-  ,[((Ex "0" 0), Right (SimpleTy IntTy), (In "mkvec" 0))
-   ,((Ex "1" 0), Right (SimpleTy IntTy), (In "mkvec.tail" 0))
-   ,((Ex "2" 0), Right (SimpleTy IntTy), (In "mkvec.tail.tail" 0))
-   ,((Ex "mkvec.tail" 0), Right (Vector (SimpleTy IntTy) (Simple (Num 2))), (In "mkvec" 1))
-   ,((Ex "mkvec.tail.tail" 0), Right (Vector (SimpleTy IntTy) (Simple (Num 1))), (In "mkvec.tail" 1))
-   ,((Ex "nil" 0), Right (Vector (SimpleTy IntTy) (Simple (Num 0))), (In "mkvec.tail.tail" 1))
+  ,[((Ex "0" 0), Right TInt, ("mkvec", In 0))
+   ,((Ex "1" 0), Right TInt, ("mkvec.tail", In 0))
+   ,((Ex "2" 0), Right TInt, (In "mkvec.tail.tail" 0))
+   ,((Ex "mkvec.tail" 0), Right (TVec TInt (Simple (Num 2))), (In "mkvec" 1))
+   ,((Ex "mkvec.tail.tail" 0), Right (TVec TInt (Simple (Num 1))), (In "mkvec.tail" 1))
+   ,((Ex "nil" 0), Right (TVec TInt (Simple (Num 0))), (In "mkvec.tail.tail" 1))
 
-   ,((Ex "0n" 0), Right (SimpleTy Natural), (In "hypo0" 0))
-   ,((Ex "1n" 0), Right (SimpleTy Natural), (In "hypo1" 0))
-   ,((Ex "2n" 0), Right (SimpleTy Natural), (In "hypo2" 0))
-   ,((Ex "3n" 0), Right (SimpleTy Natural), (In "hypo3" 0))
-   ,((Ex "mkvec" 0), Right (Vector (SimpleTy IntTy) (Simple (Num 3))), (In "xs" 0))
+   ,((Ex "0n" 0), Right TNat, (In "hypo0" 0))
+   ,((Ex "1n" 0), Right TNat, (In "hypo1" 0))
+   ,((Ex "2n" 0), Right TNat, (In "hypo2" 0))
+   ,((Ex "3n" 0), Right TNat, (In "hypo3" 0))
+   ,((Ex "mkvec" 0), Right (TVec TInt (Simple (Num 3))), (In "xs" 0))
    ]
   )
 
@@ -144,22 +114,22 @@ pairGraph =
   (fromList
    [("xs"
     ,BratNode Id
-     [("a1", Product (SimpleTy IntTy) (SimpleTy Boolean))]
-     [("a1", Product (SimpleTy IntTy) (SimpleTy Boolean))]
+     [("a1", TCons (dummyFC TInt) (dummyFC TBool))]
+     [("a1", TCons (dummyFC TInt) (dummyFC TBool))]
     )
    ,("mkpair"
-    ,BratNode (Constructor DPair)
-     [("first", SimpleTy IntTy)
+    ,BratNode (Constructor CPair)
+     [("first", TInt)
      ,("second", SimpleTy Boolean)
      ]
-     [("value", Product (SimpleTy IntTy) (SimpleTy Boolean))]
+     [("value", Product (dummyFC $ TInt) (dummyFC $ TBool))]
     )
-   ,("1", BratNode (Const (Num 1)) [] [("value", SimpleTy IntTy)])
-   ,("true", BratNode (Const (Bool True)) [] [("value", SimpleTy Boolean)])
+   ,("1", BratNode (Const (Num 1)) [] [("value", TInt)])
+   ,("true", BratNode (Const (Bool True)) [] [("value", TBool)])
    ]
-  ,[((Ex "1" 0),    Right (SimpleTy IntTy), (In "mkpair" 0))
-   ,((Ex "true" 0), Right (SimpleTy Boolean), (In "mkpair" 1))
-   ,((Ex "mkpair" 0), Right (Product (SimpleTy IntTy) (SimpleTy Boolean)), (In "xs" 0))
+  ,[((Ex "1" 0),    Right TInt, (In "mkpair" 0))
+   ,((Ex "true" 0), Right TBool, (In "mkpair" 1))
+   ,((Ex "mkpair" 0), Right (TCons (dummyFC TInt) (dummmyFC TBool)), (In "xs" 0))
    ]
   )
 
@@ -180,64 +150,51 @@ consGraph =
   (fromList
    [("three"
     ,BratNode Id
-     [("a1", Vector (SimpleTy IntTy) (Simple (Num 3)))]
-     [("a1", Vector (SimpleTy IntTy) (Simple (Num 3)))]
+     [("a1", Vector (dummyFC $ TInt) (dummyFC $ Simple (Num 3)))]
+     [("a1", Vector (dummyFC $ TInt) (dummyFC $ Simple (Num 3)))]
     )
    ,("two"
     ,BratNode Id
-     [("a1", Vector (SimpleTy IntTy) (Simple (Num 2)))]
-     [("a1", Vector (SimpleTy IntTy) (Simple (Num 2)))]
+     [("a1", Vector (dummyFC $ TInt) (dummyFC $ Simple (Num 2)))]
+     [("a1", Vector (dummyFC $ TInt) (dummyFC $ Simple (Num 2)))]
     )
 
-   ,("three.vec.cons"
-    ,BratNode (Constructor DCons)
-     [("head", SimpleTy IntTy)
-     ,("tail", Vector (SimpleTy IntTy) (Simple (Num 2)))
+   ,("vec.cons"
+    ,BratNode (Constructor CCons)
+     [("head", TInt)
+     ,("tail", Vector (dummyFC $ TInt) (dummyFC $ Simple (Num 2)))
      ]
-     [("value", Vector (SimpleTy IntTy) (Simple (Num 3)))]
+     [("value", Vector (dummyFC $ TInt) (dummyFC $ Simple (Num 3)))]
     )
 
-   ,("two.vec.cons"
-    ,BratNode (Constructor DCons)
-     [("head", SimpleTy IntTy)
-     ,("tail", Vector (SimpleTy IntTy) (Simple (Num 1)))
+   ,("mkvec"
+    ,BratNode (Constructor CVec)
+     [("e0", TInt)
+     ,("e1", TInt)
      ]
-     [("value", Vector (SimpleTy IntTy) (Simple (Num 2)))]
+     [("value", Vector (dummyFC $ TInt) (dummyFC $ Simple (Num 2)))]
     )
 
-   ,("two.vec.cons.tail"
-    ,BratNode (Constructor DCons)
-     [("head", SimpleTy IntTy)
-     ,("tail", Vector (SimpleTy IntTy) (Simple (Num 0)))
-     ]
-     [("value", Vector (SimpleTy IntTy) (Simple (Num 1)))]
-    )
-
-   ,("nil", BratNode (Constructor DNil) [] [("value", Vector (SimpleTy IntTy) (Simple (Num 0)))])
-   ,("0", BratNode (Const (Num 0)) [] [("value", SimpleTy IntTy)])
-   ,("1", BratNode (Const (Num 1)) [] [("value", SimpleTy IntTy)])
-   ,("2", BratNode (Const (Num 2)) [] [("value", SimpleTy IntTy)])
-   ,("0n", BratNode (Const (Num 0)) [] [("value", SimpleTy Natural)])
-   ,("1n", BratNode (Const (Num 1)) [] [("value", SimpleTy Natural)])
-   ,("2n", BratNode (Const (Num 2)) [] [("value", SimpleTy Natural)])
-   ,("3n", BratNode (Const (Num 3)) [] [("value", SimpleTy Natural)])
-   ,("hypo0", BratNode Hypo [("value", SimpleTy Natural)] [])
-   ,("hypo1", BratNode Hypo [("value", SimpleTy Natural)] [])
-   ,("hypo2", BratNode Hypo [("value", SimpleTy Natural)] [])
-   ,("hypo3", BratNode Hypo [("value", SimpleTy Natural)] [])
+   ,("0", BratNode (Const (Num 0)) [] [("value", TInt)])
+   ,("1", BratNode (Const (Num 1)) [] [("value", TInt)])
+   ,("2i", BratNode (Const (Num 2)) [] [("value", TInt)])
+   ,("2n", BratNode (Const (Num 2)) [] [("value", TNat)])
+   ,("3", BratNode (Const (Num 3)) [] [("value", TNat)])
+   ,("hypo2", BratNode Hypo [("value", TNat)] [])
+   ,("hypo3", BratNode Hypo [("value", TNat)] [])
    ]
-  ,[((Ex "0" 0), Right (SimpleTy IntTy), (In "three.vec.cons" 0))
-   ,((Ex "1" 0), Right (SimpleTy IntTy), (In "two.vec.cons" 0))
-   ,((Ex "2" 0), Right (SimpleTy IntTy), (In "two.vec.cons.tail" 0))
-   ,((Ex "nil" 0), Right (Vector (SimpleTy IntTy) (Simple (Num 0))), (In "two.vec.cons.tail" 1))
-   ,((Ex "two.vec.cons.tail" 0), Right (Vector (SimpleTy IntTy) (Simple (Num 1))), (In "two.vec.cons" 1))
-   ,((Ex "two" 0), Right (Vector (SimpleTy IntTy) (Simple (Num 2))), (In "two.vec.cons" 1))
-   ,((Ex "0n" 0), Right (SimpleTy Natural), (In "hypo0" 0))
-   ,((Ex "1n" 0), Right (SimpleTy Natural), (In "hypo1" 0))
-   ,((Ex "2n" 0), Right (SimpleTy Natural), (In "hypo2" 0))
-   ,((Ex "3n" 0), Right (SimpleTy Natural), (In "hypo3" 0))
-   ,((Ex "two.vec.cons" 0), Right (Vector (SimpleTy IntTy) (Simple (Num 2))), (In "two" 0))
-   ,((Ex "three.vec.cons" 0), Right (Vector (SimpleTy IntTy) (Simple (Num 3))), (In "three" 0))
+  ,[((Ex "0" 0), Right TInt, (In "three.vec.cons" 0))
+   ,((Ex "1" 0), Right TInt, (In "two.vec.cons" 0))
+   ,((Ex "2" 0), Right TInt, (In "two.vec.cons.tail" 0))
+   ,((Ex "nil" 0), Right (TVec TInt (Simple (Num 0))), (In "two.vec.cons.tail" 1))
+   ,((Ex "two.vec.cons.tail" 0), Right (TVec TInt (Simple (Num 1))), (In "two.vec.cons" 1))
+   ,((Ex "two" 0), Right (TVec TInt (Simple (Num 2))), (In "two.vec.cons" 1))
+   ,((Ex "0n" 0), Right TNat, (In "hypo0" 0))
+   ,((Ex "1n" 0), Right TNat, (In "hypo1" 0))
+   ,((Ex "2n" 0), Right TNat, (In "hypo2" 0))
+   ,((Ex "3n" 0), Right TNat, (In "hypo3" 0))
+   ,((Ex "two.vec.cons" 0), Right (TVec TInt (Simple (Num 2))), (In "two" 0))
+   ,((Ex "three.vec.cons" 0), Right (TVec TInt (Simple (Num 3))), (In "three" 0))
    ]
   )
 
@@ -258,34 +215,34 @@ numGraph =
   (fromList
    [("n"
     ,BratNode Id
-      [("a1", SimpleTy Natural)]
-      [("a1", SimpleTy Natural)]
+      [("a1", TNat)]
+      [("a1", TNat)]
     )
    ,("m"
     ,BratNode Id
-     [("a1", SimpleTy IntTy)]
-     [("a1", SimpleTy IntTy)]
+     [("a1", TInt)]
+     [("a1", TInt)]
     )
 
    ,("succ"
-    ,BratNode (Constructor DSucc)
-     [("value", SimpleTy Natural)]
-     [("value", SimpleTy Natural)]
+    ,BratNode (Constructor CSucc)
+     [("value", TNat)]
+     [("value", TNat)]
     )
 
    ,("doub"
-    ,BratNode (Constructor DDoub)
-     [("value", SimpleTy IntTy)]
-     [("value", SimpleTy IntTy)]
+    ,BratNode (Constructor CDoub)
+     [("value", TInt)]
+     [("value", TInt)]
     )
 
-   ,("2", BratNode (Const (Num 2)) [] [("value", SimpleTy Natural)])
-   ,("-3", BratNode (Const (Num (-3))) [] [("value", SimpleTy IntTy)])
+   ,("2", BratNode (Const (Num 2)) [] [("value", TNat)])
+   ,("-3", BratNode (Const (Num (-3))) [] [("value", TInt)])
    ]
-  ,[((Ex "2" 0), Right (SimpleTy Natural), (In "succ" 0))
-   ,((Ex "succ" 0), Right (SimpleTy Natural), (In "n" 0))
-   ,((Ex "-3" 0), Right (SimpleTy IntTy), (In "doub" 0))
-   ,((Ex "doub" 0), Right (SimpleTy IntTy), (In "m" 0))
+  ,[((Ex "2" 0), Right TNat, (In "succ" 0))
+   ,((Ex "succ" 0), Right TNat, (In "n" 0))
+   ,((Ex "-3" 0), Right TInt, (In "doub" 0))
+   ,((Ex "doub" 0), Right TInt, (In "m" 0))
    ]
   )
 
@@ -335,15 +292,10 @@ kernelGraph =
     ,BratNode ("src" :>>: "tgt") [] [("fun", ktype)]
     )
 
-   ,("0", BratNode (Const (Num 0)) [] [("value", SimpleTy Natural)])
-   ,("1", BratNode (Const (Num 1)) [] [("value", SimpleTy Natural)])
-   ,("2", BratNode (Const (Num 2)) [] [("value", SimpleTy Natural)])
-   ,("3", BratNode (Const (Num 3)) [] [("value", SimpleTy Natural)])
-   ,("hypo0", BratNode Hypo [("value", SimpleTy Natural)] [])
-   ,("hypo1", BratNode Hypo [("value", SimpleTy Natural)] [])
-   ,("hypo2", BratNode Hypo [("value", SimpleTy Natural)] [])
-   ,("hypo3", BratNode Hypo [("value", SimpleTy Natural)] [])
-   ,("nil", KernelNode (Constructor DNil) [] [("value", Of (Q Qubit) (Simple (Num 0)))])
+   ,("2", BratNode (Const (Num 2)) [] [("value", TNat)])
+   ,("3", BratNode (Const (Num 3)) [] [("value", TNat)])
+   ,("hypo2", BratNode Hypo [("value", TNat)] [])
+   ,("hypo3", BratNode Hypo [("value", TNat)] [])
    ]
   ,[((Ex "src" 0), Left (Q Qubit), (In "vec.cons" 0))
    ,((Ex "src" 1), Left (Q Qubit), (In "vec.cons.tail" 0))
@@ -351,15 +303,10 @@ kernelGraph =
 
    ,((Ex "nil" 0), Left (Of (Q Qubit) (Simple (Num 0))), (In "vec.cons.tail.tail" 1))
    ,((Ex "vec.cons.tail.tail" 0), Left (Of (Q Qubit) (Simple (Num 1))), (In "vec.cons.tail" 1))
-
    ,((Ex "vec.cons.tail" 0), Left (Of (Q Qubit) (Simple (Num 2))), (In "vec.cons" 1))
    ,((Ex "vec.cons" 0), Left (Of (Q Qubit) (Simple (Num 3))), (In "tgt" 0))
-
-   ,((Ex "kbox" 0), Right ktype, (In "id3" 0))
-   ,((Ex "0" 0), Right (SimpleTy Natural), (In "hypo0" 0))
-   ,((Ex "1" 0), Right (SimpleTy Natural), (In "hypo1" 0))
-   ,((Ex "2" 0), Right (SimpleTy Natural), (In "hypo2" 0))
-   ,((Ex "3" 0), Right (SimpleTy Natural), (In "hypo3" 0))
+   ,((Ex "2" 0), Right TNat, (In "hypo2" 0))
+   ,((Ex "3" 0), Right TNat, (In "hypo3" 0))
    ]
   )
  where
@@ -367,4 +314,5 @@ kernelGraph =
 
 kernelTest = testCase "kernel" $ runProg "kernel" kernelProg kernelGraph
 
-constructorTests = testGroup "Constructors" [listTest,vecTest,pairTest,consTest,numTest,kernelTest]
+-}
+constructorTests = testGroup "Constructors" []

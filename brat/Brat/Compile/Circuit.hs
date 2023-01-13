@@ -19,10 +19,12 @@ import qualified Data.Map as M
 import Data.Text (Text, pack)
 
 import Brat.Graph as BG
-import Brat.Syntax.Core (SType, Term(..))
 import Brat.Syntax.Common
-import Brat.Syntax.Simple
-import Proto.Graph as PG
+import Brat.Syntax.Value (Value(..)
+                         ,SValue
+                         ,NumValue(..)
+                         ,Fun00(Constant0))
+import qualified Proto.Graph as PG
 import Proto.Graph_Fields as PG
 
 import Debug.Trace
@@ -65,7 +67,7 @@ data Circuit
             } deriving Show
 
 process :: BG.Graph
-        -> (Row Term, Row Term)
+        -> (Row Value, Row Value)
         -> Circuit
 process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
                              bits  = max (count countB ins) (count countB outs)
@@ -76,23 +78,23 @@ process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
                                      , commands = trace ("graph: " ++show tm) (fromJust (smth tm))
                                      }
  where
-  count :: (SType -> Int) -> Row Term -> Int
+  count :: (SValue -> Int) -> Row Value -> Int
   count f (R r) = sum $ fmap (f . snd) r
 
-  countQ :: SType -> Int
+  countQ :: SValue -> Int
   countQ (Q _) = 1
   countQ Bit = 0
   -- Absolute hack
-  countQ (Of sty (Simple (Num n))) | copyable sty = 0
-                                   | otherwise = n
+  countQ (Of sty (VNum (NumValue n Constant0))) | copyable sty = 0
+                                                | otherwise = n
   countQ (Rho r) = count countQ r
 
-  countB :: SType -> Int
+  countB :: SValue -> Int
   countB (Q _) = 0
   countB Bit = 1
   -- Absolute hack
-  countB (Of sty (Simple (Num _))) | copyable sty = 1
-                                   | otherwise = 0
+  countB (Of sty (VNum _)) | copyable sty = 1
+                           | otherwise = 0
   countB (Rho r) = count countB r
 
   smth :: BG.Graph -> Maybe [Command]
@@ -159,7 +161,7 @@ circuit2Tierkreis Circuit{..} = defMessage & PG.map .~ m
                   defMessage & PG.maybe'struct .- struct
 
 compileCircuit :: BG.Graph
-               -> (Row Term, Row Term)
+               -> (Row Value, Row Value)
                -> PG.Value
 compileCircuit tm tys = defMessage & PG.maybe'struct .- (circuit2Tierkreis $ process tm tys)
 

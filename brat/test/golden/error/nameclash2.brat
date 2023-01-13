@@ -1,0 +1,2 @@
+type A(x) = x
+type A(x,y) = y

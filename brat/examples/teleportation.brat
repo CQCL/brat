@@ -35,7 +35,7 @@ alice = {
  lib.kernel.CX;
  lib.kernel.qid, lib.kernel.H;
  measure2;
- bid,bid,packCash
+ lib.kernel.bid,lib.kernel.bid,packCash
 }
 
 bob :: { Qubit, x :: Bool, y :: Bool -o Qubit }

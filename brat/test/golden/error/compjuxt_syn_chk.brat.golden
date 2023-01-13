@@ -1,0 +1,9 @@
+Error in test/golden/error/compjuxt_syn_chk.brat@FC {start = Pos {line = 7, col = 9}, end = Pos {line = 7, col = 11}}:
+  Parse error test/golden/error/compjuxt_syn_chk.brat:8:11:
+  |
+8 | num_lit = { (1, 2); id2() }
+  |           ^^^^^^^^^^^^^^^^^
+unexpected { (1, 2); id2() }
+expecting (...), Binding(s), Bit, Bool, Comment, Horizontal space, \n, embedding, function, hole, let ... in, let binding, name, port pull, simple term, syn verb, typed hole, or vector literal
+
+

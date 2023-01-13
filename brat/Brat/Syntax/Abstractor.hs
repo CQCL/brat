@@ -4,21 +4,22 @@ module Brat.Syntax.Abstractor where
 
 import Brat.Syntax.Port
 import Brat.Syntax.Simple
+import Brat.UserName
 
 -- Ways to bind one thing
 data Pattern
  = Bind String
- | PCon String Abstractor
+ | PCon UserName Abstractor
  | Lit SimpleTerm
  | DontCare
  deriving Eq
 
 instance Show Pattern where
   show (Bind x) = x
-  show (PCon c AEmpty) = c
+  show (PCon c AEmpty) = show c
   show (PCon c arg) = case patList (PCon c arg) of
     Just xs -> show xs
-    Nothing -> c ++ "(" ++ show arg ++ ")"
+    Nothing -> show c ++ "(" ++ show arg ++ ")"
    where
     patList :: Pattern -> Maybe [Pattern]
     patList (PCons x xs) = (x:) <$> patList xs
@@ -28,16 +29,16 @@ instance Show Pattern where
   show DontCare = "_"
 
 pattern PNone, PNil :: Pattern
-pattern PNone       = PCon "none" AEmpty
-pattern PNil        = PCon "nil"  AEmpty
+pattern PNone       = PCon (PrefixName [] "none") AEmpty
+pattern PNil        = PCon (PrefixName [] "nil")  AEmpty
 
 pattern PSome, POnePlus, PTwoTimes :: Pattern -> Pattern
-pattern PSome x     = PCon "some" (APat x)
-pattern POnePlus x  = PCon "succ" (APat x)
-pattern PTwoTimes x = PCon "doub" (APat x)
+pattern PSome x     = PCon (PrefixName [] "some") (APat x)
+pattern POnePlus x  = PCon (PrefixName [] "succ") (APat x)
+pattern PTwoTimes x = PCon (PrefixName [] "doub") (APat x)
 
 pattern PCons :: Pattern -> Pattern -> Pattern
-pattern PCons x xs  = PCon "cons" (APat x :||: APat xs)
+pattern PCons x xs  = PCon (PrefixName [] "cons") (APat x :||: APat xs)
 
 -- Ways to bind a row of things
 data Abstractor

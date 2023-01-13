@@ -33,3 +33,15 @@ zx <>< (x:xs) = zx :< x <>< xs
 (<>>) :: Bwd a -> [a] -> [a]
 B0 <>> xs = xs
 (zx :< x) <>> xs = zx <>> (x:xs)
+
+findUnder :: Eq a => a -> Bwd a -> Maybe Int
+findUnder needle = search 0 where
+ search _ B0 = Nothing
+ search i (stack :< hay)
+  | needle == hay = Just i
+  | otherwise = search (i + 1) stack
+
+(!<) :: Bwd a -> Int -> a
+B0 !< _ = error "(!<) failed"
+(_ :< x) !< 0 = x
+(zx :< _) !< i = zx !< (i - 1)

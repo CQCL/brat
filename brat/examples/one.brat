@@ -36,7 +36,7 @@ fold(f :: {Nat, Nat -> Nat}, acc :: Nat, List(Nat)) -> (acc :: Nat)
 fold(f, x, nil) = x
 fold(f, x, cons(y, ys)) = fold({ w,z => f(w,z)}, f(x,y), ys)
 
-fold_hole(f :: {Nat, Nat -> Nat}, Vec(Nat, succ(n))) -> Nat
+fold_hole(n :: #, f :: {Nat, Nat -> Nat}, Vec(Nat, succ(n))) -> Nat
 fold_hole = ?unn
 
 fold2(f :: {Nat, Nat -> Nat}, acc :: Nat, List(Nat)) -> (acc :: Nat)

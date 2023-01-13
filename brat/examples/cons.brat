@@ -38,8 +38,8 @@ dup(Int) -> List(Int)
 dup(n) = cons(uncons([1,2,3]))
 
 -- Just like a regular function application:
-pair(Int, Int) -> Pair(Int, Int)
+pair(Int, Int) -> [Int, Int]
 pair(a, b) = [a, b]
 
-test :: Pair(Int, Int)
+test :: [Int, Int]
 test = pair(twoThings)

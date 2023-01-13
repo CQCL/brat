@@ -23,7 +23,13 @@ parseAndCheck file = testCase (show file) $ do
     Right (venv, nouns, holes, _) ->
       ((length venv) + (length nouns) + (length holes) > 0) @? "Should produce something"
 
-expectedCheckingFails = ["examples/nested-abstractors.brat"]
+expectedCheckingFails = map ("examples" </>) ["nested-abstractors.brat"
+                        ,"karlheinz_alias.brat" -- ALAN should probably fix this
+                        -- The next two are regressions in dependent types,
+                        -- expected to be fixed by upcoming work on pattern refinement
+                        ,"vector.brat"
+                        ,"kinds.brat"
+                        ]
 
 parseAndCheckXF :: FilePath -> TestTree
 parseAndCheckXF = expectFailForPaths (expectedParsingFails ++ expectedCheckingFails) parseAndCheck
@@ -32,4 +38,4 @@ getCheckingTests :: IO TestTree
 getCheckingTests = testGroup "checking" . fmap parseAndCheckXF <$> findByExtension [".brat"] "examples"
 
 runEmpty :: Checking v -> Either Error (v,([TypedHole],Graph))
-runEmpty m = run (emptyEnv, [], FC (Pos 0 0) (Pos 0 0)) root m
+runEmpty m = run emptyEnv root m

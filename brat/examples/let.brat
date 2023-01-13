@@ -7,7 +7,7 @@ xs' = let ys = xs in ys
 unsafeHead :: { List(Int) -> Int }
 unsafeHead(xs) = let cons(x, xs) = xs in x
 
-unpair(Pair(Int,Bool)) -> Int, Bool
+unpair([Int,Bool]) -> Int, Bool
 unpair(p) = let [a, b] = p in a, b
 
 -- f :: List(Int) -> List(Int)

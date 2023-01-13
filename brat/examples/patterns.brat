@@ -19,10 +19,10 @@ is_cool :: {String -> Bool}
 is_cool("cool") = true
 is_cool(x) = false
 
-left :: { Pair(Nat, Bool) -> Nat }
+left :: { [Nat, Bool] -> Nat }
 left([nat , bool]) = nat
 
-unpair :: { Pair(Nat, Bool) -> Nat, Bool }
+unpair :: { [Nat, Bool] -> Nat, Bool }
 unpair([l, r]) = l, r
 
 unVec3 :: { Vec(Nat,3) -> Nat, Nat, Nat }

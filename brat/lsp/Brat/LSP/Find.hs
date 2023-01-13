@@ -28,9 +28,9 @@ getInfo ps pos
   pred :: Decl' io raw -> Bool
   pred Decl{..} = pos `inside` fnLoc
 
-  buildContext :: Pos -> Decl' io (Clause Term Noun) -> Maybe Context
+  buildContext :: Pos -> Decl' io (FunBody Term Noun) -> Maybe Context
   buildContext pos Decl{..} = do
-    body <- findInClause pos fnBody
+    body <- findInBody pos fnBody
     subject <- getThing pos body
     pure $ Context { declName = fnName
                    , root = unWC body
@@ -38,18 +38,18 @@ getInfo ps pos
                    , runtime = fnRT
                    }
 
-  findInClause :: Juxt k => Pos -> Clause Term k -> Maybe (WC Skel)
-  findInClause pos (NoLhs (WC fc rhs))
+  findInBody :: Juxt k => Pos -> FunBody Term k -> Maybe (WC Skel)
+  findInBody pos (NoLhs (WC fc rhs))
     | pos `inside` fc = Just (WC fc (stripInfo rhs))
   -- TODO: Doesn't search in LHS
-  findInClause pos (Clauses (c :| cs)) = findInClauses (c:cs)
+  findInBody pos (Clauses (c :| cs)) = findInClauses (c:cs)
    where
     findInClauses :: [(WC Abstractor, WC (Term Chk Noun))] -> Maybe (WC Skel)
     findInClauses [] = Nothing
     findInClauses ((_, rhs):cs)
      | rfc <- fcOf rhs, pos `inside` rfc = Just (stripInfo <$> rhs)
      | otherwise = findInClauses cs
-  findInClause _ _ = Nothing
+  findInBody _ _ = Nothing
 
   getThing :: Pos -> WC Skel -> Maybe Skel
   getThing pos (WC fc x)

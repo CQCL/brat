@@ -1,4 +1,4 @@
-type A(b) = Nat
+type A(x) = Nat
 type B = Bool
 
 head(List(A(B))) -> A(B)

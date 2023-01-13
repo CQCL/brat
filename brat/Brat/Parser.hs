@@ -3,7 +3,7 @@ module Brat.Parser (parseFile) where
 import Brat.Error
 import Brat.FC
 import Brat.Lexer
-import Brat.Syntax.Common hiding (K, end)
+import Brat.Syntax.Common hiding (end)
 import Brat.Syntax.Concrete
 import Brat.Syntax.Raw
 import Brat.Syntax.Simple
@@ -14,7 +14,7 @@ import Control.Monad.State
 import Data.Bifunctor
 import Data.List.NonEmpty (toList, NonEmpty(..), nonEmpty)
 import Data.Functor (($>), (<&>))
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromJust, maybeToList)
 import Data.Set (empty)
 import Prelude hiding (lex, round)
 import Text.Megaparsec hiding (Pos, Token, empty, match, ParseError, State)
@@ -192,7 +192,7 @@ abstractor = do ps <- many (try $ portPull <* space)
     cons = do
       matchString "cons"
       space
-      PCon "cons" <$> round abstractor
+      PCon (plain "cons") <$> round abstractor
 
     onePlus = do
       matchString "succ"
@@ -210,90 +210,65 @@ simpleTerm =
   <|> try (Float <$> float <?> "float")
   <|> (Num <$> number <?> "nat")
   <|> (bool <?> "bool"))
-  <|> (match UnitElem $> Unit)
  where
   bool :: Parser SimpleTerm
   bool = Bool <$> (matchString "true" $> True
                    <|> matchString "false" $> False)
 
-
 outputs :: Parser [RawIO]
-outputs = rawIO vtype
+outputs = rawIO (unWC <$> vtype)
 
-vtype :: Parser RawVType
-vtype = vtype' []
-
-vtype' :: [Parser RawVType] -> Parser RawVType
-vtype' ps = try (round vty) <|> vty
+typekind :: Parser TypeKind
+typekind = try (match Hash $> Nat) <|> ty
  where
-  vty = thunkType  -- No try here! We commit to thunk if we see a {
-    <|> choice (try <$> ps)
-    <|> try vec
-    <|> simple
-    <|> try alias
-    <|> typeVar
-
-  typeVar = RTypeFree <$> userName
-
-  alias = try aliasWithArgs <|> justAlias
-
-  justAlias = RAlias <$> userName <*> pure []
-
-  aliasWithArgs = do
-    alias <- userName
+  ty = do
+    match Asterisk
     space
-    args <- round $ vtype' ps `sepBy` comma
-    pure $ RAlias alias args
+    margs <- optional (round row)
+    pure $ Star (concat $ maybeToList margs)
 
-  pair = kmatch KPair *> space *> round (RProduct <$> vtype' ps <* spaced comma <*> vtype' ps)
+  row = (`sepBy` spaced (match Comma))  $ do
+    p <- port
+    spaced (match TypeColon)
+    (p,) <$> typekind
 
-  vec = kmatch KVec *> space *> round (RVector <$> vtype' ps <* spaced comma <*> cnoun atomExpr)
+vtype :: Parser (WC (Raw Chk Noun))
+vtype = cnoun atomExpr
 
-  list = kmatch KList *> space *> round (RList <$> vtype' ps)
-
-  option = kmatch KOption *> space *> round (ROption <$> vtype' ps)
-
-  simple = (kmatch KTypeType   $> RSimpleTy Star)
-           <|> (kmatch KNat    $> RSimpleTy Natural)
-           <|> (kmatch KBool   $> RSimpleTy Boolean)
-           <|> (kmatch KBit    $> RSimpleTy Boolean)
-           <|> (kmatch KString $> RSimpleTy TextType)
-           <|> (kmatch KFloat  $> RSimpleTy FloatTy)
-           <|> (kmatch KUnit   $> RSimpleTy UnitTy)
-           <|> (kmatch KInt    $> RSimpleTy IntTy)
-           <|> try pair
-           <|> try list
-           <|> try option
-
-  -- Don't allow brace sections as types yet
-  thunkType = curly (try kernel <|> funTy)
-   where
-    kernel = do
-      ss <- spaced (rawIO stype)
-      match Lolly
-      ts <- spaced (rawIO stype)
-      pure $ RK (ss :-> ts)
-
-    funTy = do
-      ss <- spaced (rawIO vtype)
-      match Arrow
-      ts <- spaced (rawIO vtype)
-      pure $ RC (ss :-> ts)
-
-
-rawIO :: Parser ty -> Parser [RawIO' ty]
+-- Parse a row of type and kind parameters
+-- N.B. kinds must be named
+rawIO :: Parser ty -> Parser [RawIO' (KindOr ty)]
 rawIO tyP = rowElem `sepBy` void (try $ spaced comma)
  where
   rowElem = try (round rowElem') <|> rowElem'
-  rowElem' = try named <|> (Anon <$> tyP)
 
-  named = do
+  rowElem' = try namedKind <|> try namedType <|> (Anon . Right <$> tyP)
+
+  namedType = do
     p <- port
     spaced $ match TypeColon
-    ty <- tyP
-    pure $ (Named p ty)
+    Named p . Right <$> tyP
 
-stype :: Parser (SType' Raw)
+  namedKind = do
+    p <- port
+    spaced $ match TypeColon
+    Named p . Left <$> typekind
+
+rawIO' :: Parser ty -> Parser [RawIO' ty]
+rawIO' tyP = rowElem `sepBy` void (try $ spaced comma)
+ where
+  rowElem = try (round rowElem') <|> rowElem'
+
+  -- Look out if we can find ::. If not, backtrack and just do tyP.
+  -- For example, if we get an invalid primitive type (e.g. `Int` in
+  -- a kernel or a misspelled type like `Intt`), we get the better
+  -- error message from tyP instead of complaining about a missing ::
+  -- (since the invalid type can be parsed as a port name)
+  rowElem' = optional (try $ port <* spaced (match TypeColon)) >>= \case
+       Just p -> Named p <$> tyP
+       Nothing -> Anon <$> tyP
+
+stype :: Parser (SType' (Raw Chk Noun))
 stype = try (Rho <$> round row)
         <|> try vec
         <|> match (K KQubit) $> Q Qubit
@@ -305,30 +280,31 @@ stype = try (Rho <$> round row)
     spaced (match TypeColon)
     (p,) <$> stype
 
-  vec :: Parser (SType' Raw)
-  vec = do match (K KVec)
-           (ty, n) <- round $ do
-             ty <- stype
-             spaced (match Comma)
-             n <- unWC <$> cnoun atomExpr
-             pure (ty, n)
-           pure $ Of ty n
-
+  vec :: Parser (SType' (Raw Chk Noun))
+  vec = label "Vec" $ do
+    ident (\x -> if x == "Vec" then Just () else Nothing)
+    (ty, n) <- round $ do
+      ty <- stype
+      spaced (match Comma)
+      n <- unWC <$> cnoun atomExpr
+      pure (ty, n)
+    pure $ Of ty n
 
 functionType :: Parser RawVType
-functionType = try (RC <$> ctype) <|> (RK <$> kernel)
+functionType = try (RFn <$> ctype) <|> (RKernel <$> kernel)
  where
+  ctype :: Parser RawCType
   ctype = do
-    ins <- round $ rawIO vtype
+    ins <- round $ rawIO (unWC <$> vtype)
     spaced (match Arrow)
-    outs <- rawIO vtype
+    outs <- rawIO (unWC <$> vtype)
     pure (ins :-> outs)
-
+  
   kernel :: Parser RawKType
   kernel = do
-    ins <- round $ rawIO stype
+    ins <- round $ rawIO' stype
     spaced (match Lolly)
-    outs <- rawIO stype
+    outs <- rawIO' stype
     pure (ins :-> outs)
 
 
@@ -350,8 +326,24 @@ vec = (\(WC fc x) -> unWC $ vec2Cons (end fc) x) <$>  withFC (square elems)
 
 
 cthunk :: Parser Flat
-cthunk = FThunk <$> withFC (curly (try abstracted <|> braceSection))  -- Explicit lambda or brace section
+cthunk = try bratFn <|> try kernel <|> thunk
  where
+  bratFn = curly $ do
+    ss <- rawIO (unWC <$> vtype)
+    spaced (match Arrow)
+    ts <- rawIO (unWC <$> vtype)
+    pure $ FFn (ss :-> ts)
+
+  kernel = curly $ do
+    ss <- rawIO' stype
+    spaced (match Lolly)
+    ts <- rawIO' stype
+    pure $ FKernel (ss :-> ts)
+
+  -- Explicit lambda or brace section
+  thunk = FThunk <$> withFC (curly (try abstracted
+                                    <|> braceSection))
+
   abstracted = do
     abs <- try (spaced (withFC abstractor)) <|> withFC (pure AEmpty)
     match FatArrow
@@ -403,7 +395,7 @@ atomExpr = atomExpr' 0
     simpleExpr,
     round expr ]
 
-  annotation = FAnnotation <$> withFC (atomExpr' 1) <* spaced (match TypeColon) <*> rawIO vtype
+  annotation = FAnnotation <$> withFC (atomExpr' 1) <* spaced (match TypeColon) <*> rawIO (unWC <$> vtype)
 
   app = FApp <$> withFC (atomExpr' 2) <* space <*> withFC (round expr)
 
@@ -411,6 +403,7 @@ atomExpr = atomExpr' 0
             <|> try (FSimple <$> simpleTerm)
             <|> vec
             <|> cthunk
+            <|> (withFC (kmatch KBool) <&> \(WC fc _) -> FCon (plain "Bool") (WC fc FEmpty))
             <|> var
             <|> match Underscore $> FUnderscore
 
@@ -469,7 +462,6 @@ expr = expr' 0
       in  WC fc (FCompose a b)
     _ -> Nothing
 
-
 cnoun :: Parser Flat -> Parser (WC (Raw 'Chk 'Noun))
 cnoun pe = do
   e <- withFC pe
@@ -490,12 +482,12 @@ decl = do
         rt <- pure RtLocal -- runtime
         nm <- simpleName
         space
-        ty <- try (functionType <&> \ty -> [Named "thunk" ty])
+        ty <- try (functionType <&> \ty -> [Named "thunk" (Right ty)])
               <|> (spaced (match TypeColon) >> outputs)
         vspace
         let allow_clauses = case ty of
-                                 [Named _ t] -> is_fun_ty t
-                                 [Anon t] -> is_fun_ty t
+                                 [Named _ (Right t)] -> is_fun_ty t
+                                 [Anon (Right t)] -> is_fun_ty t
                                  _ -> False
         body <- if allow_clauses then (FClauses <$> clauses nm) <|> (FNoLhs <$> nbody nm)
                 else FNoLhs <$> nbody nm
@@ -509,8 +501,8 @@ decl = do
                   }
     where
       is_fun_ty :: RawVType -> Bool
-      is_fun_ty (RC _) = True
-      is_fun_ty (RK _) = True
+      is_fun_ty (RFn _) = True
+      is_fun_ty (RKernel _) = True
       is_fun_ty _ = False
 
       nbody :: String -> Parser (WC Flat)
@@ -576,29 +568,32 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
         <|> try (extDecl                         <&> \x -> ([x], []))
         <|> ((decl <?> "declaration")            <&> \x -> ([x], []))
  where
-  alias :: Parser (UserName, TypeAlias)
+  alias :: Parser RawAlias
   alias = withFC aliasContents <&>
-          \(WC fc (alias, args, ty)) -> (plain alias, Alias fc alias args ty)
+          \(WC fc (name, args, ty)) -> (TypeAlias fc name args ty)
 
-
-  aliasContents :: Parser (String, [UserName], RawVType)
+  aliasContents :: Parser (UserName, [(String, TypeKind)], RawVType)
   aliasContents = do
     match (K KType)
     hspace
-    alias <- simpleName
+    alias <- userName
     optional hspace
-    args  <- fromMaybe [] <$> (optional . round $ (userName <* space) `sepBy` comma)
+    args <- option [] $ round $ (simpleName `sepBy` (spaced (match Comma)))
+{- future stuff 
+    args <- option [] $ round $ (`sepBy` (spaced (match Comma))) $ do
+      port <- port
+      spaced (match TypeColon)
+      (port,) <$> typekind
+-}
     spaced (match Equal)
-    ty <- vtype' (mkParser <$> args)
-    vspace
-    let abstractTy = foldr (uncurry abstractVType) ty (zip args [0..])
-    pure (alias, args, abstractTy)
-
-  mkParser :: UserName -> Parser RawVType
-  mkParser str = do
-    name <- userName
-    guard (name == str)
-    pure $ RTypeFree name
+    ty <- vtype
+    let ty' = foldl (\ty (i, x) -> abstractRaw (plain x) i ty) (unWC ty) (zip [0..] (reverse args))
+    -- TODO: Right now we restrict the variables in a type alias to being of
+    -- kind `Star []` (i.e. the type of simple types). In future we should allow
+    -- users to specify the kinds of variables in type aliases, like:
+    --   type X(a :: *, b :: #, c :: *(x :: *, y :: #)) = ...
+    -- See KARL-325
+    pure (alias, (,Star []) <$> args, ty')
 
   extDecl :: Parser FDecl
   extDecl = do (WC fc (fnName, ty, symbol)) <- withFC $ do
@@ -620,7 +615,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
                          }
    where
     nDecl = spaced (match TypeColon) >> outputs
-    vDecl = (:[]) . Named "thunk" <$> (space >> functionType)
+    vDecl = (:[]) . Named "thunk" . Right <$> (space >> functionType)
 
 pfile :: Parser ([UserName], FEnv)
 pfile = do

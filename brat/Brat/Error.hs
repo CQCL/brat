@@ -26,16 +26,19 @@ type LengthConstraint = LengthConstraintF Int
 
 data ErrorMsg
  = TypeErr String
+ -- Term, Expected type, Actual type
  | TypeMismatch String String String
+ -- Term, Expected kind, Actual kind
+ | KindMismatch String String String
  | ExpectedThunk String String
  | PattErr String
  | VarNotFound String
  | KVarNotFound String
  | NothingToBind String
- -- Expected Length, Type, Actual Length, Actual term
- | VecLength Int String LengthConstraint String
- -- Binder, Type
- | VecPatLength String String
+ -- Term, Type, Expected Length, Actual Length
+ | VecLength String String String LengthConstraint
+ -- Binder, Type, Expected Length, Actual Length
+ | VecPatLength String String String LengthConstraint
  -- Term, Type
  | NotVecPat String String
 
@@ -54,8 +57,19 @@ data ErrorMsg
  | Unimplemented String [String]
  | ImportCycle String String
  | FileNotFound String
- | AmbiguousPortPull String String
  | InternalError String
+ | AmbiguousPortPull String String
+ | BadPortPull String
+ | VConNotFound String
+ | TyConNotFound String String
+ | MatchingOnTypes
+ | ThunkInKernel String
+ | InvalidThunkType String
+ -- Expected, Actual
+ | NumMatchFail String String
+ | ValMatchFail String String
+ -- Constructor, Type
+ | UnrecognisedConstructor String String
 
 instance Show ErrorMsg where
   show (TypeErr x) = "Type error: " ++ x
@@ -64,19 +78,26 @@ instance Show ErrorMsg where
               ,"Expected: " ++ exp
               ,"But got:  " ++ act
               ]
+  show (KindMismatch tm exp act)
+    = unlines ["Kind mismatch when checking " ++ tm
+              ,"Expected: " ++ exp
+              ,"But got:  " ++ act
+              ]
+
   show (ExpectedThunk m row)
     = unlines ["Expected function to be a " ++ m ++ "thunk, but found:"
               ,"  " ++ row
               ]
   show (NothingToBind x) = "Nothing to bind to: " ++ x
-  show (VecLength m ty l tm) = unlines ["Expected vector of length " ++ show m
+  show (VecLength tm ty exp act) = unlines ["Expected vector of length " ++ exp
                                        ,"from the type:  " ++ ty
                                        ,"but got vector: " ++ tm
-                                       ,"of length " ++ show l
+                                       ,"of length " ++ show act
                                        ]
-  show (VecPatLength abs ty) = unlines ["Pattern: " ++ abs
+  show (VecPatLength abs ty exp act) = unlines ["Pattern: " ++ abs
                                        ,"doesn't match type " ++ ty
-                                       ,"(because it's the wrong length)"
+                                       ,"(expected vector pattern of length " ++ exp ++
+                                        " but got vector pattern of length " ++ show act ++ ")"
                                        ]
   show (NotVecPat tm ty)= unwords ["Expected", tm
                                   ,"to be a vector pattern when binding type", ty]
@@ -102,8 +123,25 @@ instance Show ErrorMsg where
   show (Unimplemented f args) = unwords ("Unimplemented, sorry! --":f:args)
   show (ImportCycle a b) = unwords ["Cycle detected in imports:", a, "is reachable from", b]
   show (FileNotFound f) = "File not found: " ++ show f
-  show (AmbiguousPortPull p row) = "Port " ++ p ++ " is ambiguous in " ++ row
   show (InternalError x) = "Internal error: " ++ x
+  show (AmbiguousPortPull p row) = "Port " ++ p ++ " is ambiguous in " ++ row
+  show (BadPortPull x) = "Port " ++ x ++ " can't be pulled because it depends on a previous port"
+  show (VConNotFound x) = "Value constructor not recognised: " ++ x
+  show (TyConNotFound ty v) = "Type constructor not recognised: " ++ ty ++ " for " ++ show v
+  show MatchingOnTypes = "Trying to pattern match on a type"
+  show (ThunkInKernel tm) = "Thunks not allowed in kernels: " ++ tm
+  show (InvalidThunkType ty) = "Invalid thunk type: " ++ ty
+  show (NumMatchFail exp act) = unlines ["Failed matching number pattern"
+                                        ,"  Expected: " ++ exp
+                                        ,"  Got:      " ++ act
+                                        ]
+  show (ValMatchFail exp act) = unlines ["Failed matching pattern"
+                                        ,"  Expected: " ++ exp
+                                        ,"  Got:      " ++ act
+                                        ]
+  show (UnrecognisedConstructor c ty) = unlines ["Unrecognised constructor: " ++ c
+                                                ,"For type: " ++ ty
+                                                ]
 
 data Error = Err { fc  :: Maybe FC
                  , msg :: ErrorMsg

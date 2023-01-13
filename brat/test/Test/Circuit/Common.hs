@@ -6,24 +6,34 @@ import Control.Arrow ((&&&))
 import Control.Monad.Except (runExceptT)
 import qualified Data.Map as M
 import Data.Tuple.HT
+import Data.List (intercalate)
 import Data.String (IsString(..))
 import Data.Foldable (fold)
+import Data.Functor ((<&>))
 import Test.Tasty.HUnit
 
 import Brat.Graph
+import Brat.Checker.Helpers (kindType)
 import Brat.Load (loadFiles)
 import Brat.Naming
 import Brat.Syntax.Core
 import Brat.Syntax.Common
 import Brat.Syntax.Simple
+import Brat.Syntax.Value
+import Brat.UserName (plain)
+import Bwd
 
 instance IsString Name where
   fromString s = MkName [(s, 0)]
 
+kernel cty = VFun Kerny B0 cty
+
 idGraph :: Graph
 idGraph = (M.fromList
-           [("main_box", BratNode ("src" :>>: "tgt") [] [("fun", kty)])
+           [("main_box", BratNode ("src" :>>: "tgt") [] [("thunk", kty)])
            ,("main", BratNode Id [("a1", kty)] [("a1", kty)])
+           ,("main_hyp", BratNode Hypo [("a1", kty)] [])
+           ,("main_k", BratNode (Prim "main") [] [("a1", kty)])
            ,("src", KernelNode Source [] [("a", Q Qubit)])
            ,("tgt", KernelNode Target [("b", Q Qubit)] [])
            ]
@@ -32,12 +42,14 @@ idGraph = (M.fromList
            ]
           )
  where
-  kty = K (R [("a", Q Qubit)]) (R [("b", Q Qubit)])
+  kty = kernel ([("a", Q Qubit)] :-> [("b", Q Qubit)])
 
 swapGraph :: Graph
 swapGraph = (M.fromList
-             [("main_box", BratNode ("src" :>>: "tgt") [] [("fun", kty)])
+             [("main_box", BratNode ("src" :>>: "tgt") [] [("thunk", kty)])
+             ,("main_hyp", BratNode Hypo [("a1", kty)] [])
              ,("main", BratNode Id [("a1", kty)] [("a1", kty)])
+             ,("main_k", BratNode (Prim "main") [] [("a1", kty)])
              ,("src", KernelNode Source [] [("a", Q Qubit), ("b", Q Qubit)])
              ,("tgt", KernelNode Target [("b", Q Qubit), ("a", Q Qubit)] [])
              ]
@@ -47,16 +59,19 @@ swapGraph = (M.fromList
              ]
             )
  where
-  kty = K
-        (R [("a", Q Qubit),  ("b", Q Qubit)])
-        (R [("b", Q Qubit), ("a", Q Qubit)])
+  kty = kernel
+        ([("a", Q Qubit),  ("b", Q Qubit)] :-> [("b", Q Qubit), ("a", Q Qubit)])
 
 xGraph :: Graph
 xGraph = (M.fromList
           [("tket.X", BratNode (Prim "tket.X") [] [("a1", xTy)])
-          ,("main_box", BratNode ("src" :>>: "tgt") [] [("fun", mainTy)])
+          ,("tket.X_hyp", BratNode Hypo [("a1", xTy)] [])
           ,("X", KernelNode (Eval (Ex "tket.X" 0)) [("xa", Q Qubit)] [("xb", Q Qubit)])
+          ,("X_k", BratNode (Prim "X") [] [("a1", xTy)])
+          ,("main_box", BratNode ("src" :>>: "tgt") [] [("thunk", mainTy)])
+          ,("main_hyp", BratNode Hypo [("a1", mainTy)] [])
           ,("main", BratNode Id [("a1", mainTy)] [("a1", mainTy)])
+          ,("main_k", BratNode (Prim "main") [] [("a1", mainTy)])
           ,("src", KernelNode Source [] [("a", Q Qubit)])
           ,("tgt", KernelNode Target [("b", Q Qubit)] [])
           ]
@@ -66,68 +81,104 @@ xGraph = (M.fromList
           ]
          )
  where
-  xTy = K (R [("xa", Q Qubit)]) (R [("xb", Q Qubit)])
-  mainTy = K (R [("a", Q Qubit)]) (R [("b", Q Qubit)])
+  xTy = kernel ([("xa", Q Qubit)] :-> [("xb", Q Qubit)])
+  mainTy = kernel ([("a", Q Qubit)] :-> [("b", Q Qubit)])
 
 -- TODO:
 rxGraph :: Graph
 rxGraph = (M.fromList
            [("id", BratNode (Prim "Rx")
-            [("th", SimpleTy FloatTy)]
-            [("kernel", K (R [("a", Q Qubit)]) (R [("b", Q Qubit)]))])
-           ,("angle", BratNode (Const (Float 30.0)) [("th", SimpleTy FloatTy)] [])
+            [("th", TFloat)]
+            [("kernel", kernel ([("a", Q Qubit)] :-> [("b", Q Qubit)]))])
+           ,("angle", BratNode (Const (Float 30.0)) [("th", TFloat)] [])
            --,KernelNode (Eval "") testProcess
-           ,("main", BratNode ("src" :>>: "tgt") [] [("fun", K (R [("a", Q Qubit)]) (R [("b", Q Qubit)]))])
+           ,("main", BratNode ("src" :>>: "tgt") [] [("thunk", kernel ([("a", Q Qubit)] :-> [("b", Q Qubit)]))])
            ,("src", KernelNode Source [] [("a", Q Qubit)])
            ,("tgt", KernelNode Target [("b", Q Qubit)] [])
            ]
           ,[]
           )
 
-int = SimpleTy IntTy
+int = TInt
 
 twoGraph :: Graph
-twoGraph = (M.fromList
-            [("add", BratNode (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))])
+twoGraph = (M.fromList (
+            [("add", BratNode (Prim "add") [] [("thunk", add_ty)])
+            ,("add_hyp2", BratNode Hypo [("a", int), ("b", int), ("c", int)] [])
+            ,("add_hyp", BratNode Hypo [("thunk", add_ty)] [])
             ,("add_eval", BratNode (Eval (Ex "add" 0)) [("a", int), ("b", int)] [("c", int)])
             ,("1a", BratNode (Const (Num 1)) [] [("value", int)])
             ,("1b", BratNode (Const (Num 1)) [] [("value", int)])
+            ,("one_hyp", BratNode Hypo [("n", int)] [])
             ,("one", BratNode Id [("n", int)] [("n", int)])
+            ,("one_decl", BratNode (Prim "one") [] [("n", int)])
+            ,("two_hyp", BratNode Hypo [("a1", int)] [])
             ,("two", BratNode Id [("a1", int)] [("a1", int)])
-            ]
+            ,("two_decl", BratNode (Prim "two") [] [("a1", int)])
+            ] ++ ints 5)
            ,[((Ex "1a" 0), Right int, (In "one" 0))
             ,((Ex "1b" 0), Right int, (In "add_eval" 0))
             ,((Ex "one" 0), Right int, (In "add_eval" 1))
             ,((Ex "add_eval" 0), Right int, (In "two" 0))
+            ,(Ex "int_1" 0, star_wire_t, In "add" 0)
+            ,(Ex "int_2" 0, star_wire_t, In "add" 1)
+            ,(Ex "int_3" 0, star_wire_t, In "add" 2)
+            ,(Ex "int_4" 0, star_wire_t, In "one_decl" 0)
+            ,(Ex "int_5" 0, star_wire_t, In "two_decl" 0)
             ]
            )
+  where
+    add_ty = VFun Braty B0 ([("a", Right int), ("b", Right int)] :-> [("c", Right int)])
 
 oneGraph :: Graph
 oneGraph = (M.fromList
             [("1", BratNode (Const (Num 1)) [] [("value", int)])
+            ,("one_hyp", BratNode Hypo [("n", int)] [])
             ,("one", BratNode Id [("n", int)] [("n", int)])
+            ,("one_k", BratNode (Prim "one") [] [("n", int)])
+            ,let [x] = ints 1 in x
             ]
-           ,[((Ex "1" 0), Right int, (In "one" 0))]
+           ,[((Ex "1" 0), Right int, (In "one" 0))
+            ,(Ex "int_1" 0, star_wire_t, In "1" 0)
+            ]
            )
+
+star_wire_t :: Either SValue Value
+star_wire_t = Right (kindType $ Star [])
+ints :: Int -> [(Name, Node)]
+ints n = [fromString ("int_" ++ show x) | x <- [1..n]] <&> (, BratNode (Constructor $ plain "Int") [] [("value", kindType (Star []))])
 
 addNGraph :: String -> Graph
 addNGraph port_name
-  = (M.fromList
-     [("add", BratNode (Prim "add") [] [(port_name, C ([("a", int), ("b", int)] :-> [("c", int)]))])
+  = (M.fromList (
+     [("add", BratNode (Prim "add") [] [(port_name, add_ty)])
+     ,("add_hyp2", BratNode Hypo [("a", int), ("b", int), ("c", int)] [])
+     ,("add_hyp", BratNode Hypo [(port_name, add_ty)] [])
      ,("add_eval", BratNode (Eval (Ex "add" 0)) [("a", int), ("b", int)] [("c", int)])
      ,("N", BratNode (Prim "N") [] [("value", int)])
-     ,("addN_box", BratNode ("addN_src" :>>: "addN_tgt") [] [("value", addN_ty)])
+     ,("N_hyp", BratNode Hypo [("value", int)] [])
+     ,("addN_box", BratNode ("addN_src" :>>: "addN_tgt") [] [("thunk", addN_ty)])
      ,("addN_src", BratNode Source [] [("inp", int)])
      ,("addN_tgt", BratNode Target [("out", int)] [])
+     ,("addN_decl", BratNode (Prim "addN") [] [("thunk", addN_ty)])
+     ,("addN_hyp2", BratNode Hypo [("inp", int), ("out", int)] [])
+     ,("addN_hyp", BratNode Hypo [("thunk", addN_ty)] [])
      ,("addN", BratNode Id [("thunk", addN_ty)] [("thunk", addN_ty)])
-     ]
+     ] ++ ints 6)
     ,[((Ex "addN_src" 0), Right int, (In "add_eval" 1))
      ,((Ex "N" 0), Right int, (In "add_eval" 0))
      ,((Ex "add" 0), Right int, (In "addN_tgt" 0))
+     ,(Ex "int_1" 0, star_wire_t, In "N" 0)
+     ,(Ex "int_2" 0, star_wire_t, In "addN_decl" 0)
+     ,(Ex "int_3" 0, star_wire_t, In "addN_decl" 1)
+     ,(Ex "int_4" 0, star_wire_t, In "add" 0)
+     ,(Ex "int_5" 0, star_wire_t, In "add" 1)
+     ,(Ex "int_6" 0, star_wire_t, In "add" 2)
      ]
     )
  where
-  addN_ty = C ([("inp", int)] :-> [("out", int)])
+  add_ty = VFun Braty B0 ([("a", Right int), ("b", Right int)] :-> [("c", Right int)])
+  addN_ty = VFun Braty B0 ([("inp", Right int)] :-> [("out", Right int)])
 
 addNmainGraph :: Graph
 addNmainGraph
@@ -143,18 +194,26 @@ addNmainGraph
      ]
     ,[((Ex "addN_src" 0), Right int, (In "add" 0))
      ,((Ex "N" 0), Right int, (In "add" 1))
-     ,((Ex "add" 0), Right int, (In "addN_tgt" 0))
-     ,((Ex "addN_box" 0), Right addN_ty, (In "addN_eval" 0))
+     ,((Ex "add" 2), Right int, (In "addN_tgt" 0))
      ]
     )
  where
-  addN_ty = C ([("inp", int)] :-> [("out", int)])
+  addN_ty = VFun Braty B0 ([("inp", Right TInt)] :-> [("out", Right TInt)])
 
 extGraph :: Graph
 extGraph
- = (M.fromList [("add", BratNode (Prim "add") [] [("thunk", C ([("a", int), ("b", int)] :-> [("c", int)]))])]
-   ,[]
+ = (M.fromList
+    ([("add_decl", BratNode (Prim "add") [] [("thunk", thunkTy)])
+     ,("add_hyp2", BratNode Hypo [("a", int), ("b", int), ("c", int)] [])
+     ,("add_hyp", BratNode Hypo [("thunk", thunkTy)] [])
+     ] ++ ints 3)
+   ,[(Ex "int_1" 0, star_wire_t, In "add_decl" 0)
+    ,(Ex "int_2" 0, star_wire_t, In "add_decl" 1)
+    ,(Ex "int_3" 0, star_wire_t, In "add_decl" 2)
+    ]
    )
+  where
+   thunkTy = VFun Braty B0 ([("a", Right TInt), ("b", Right TInt)] :-> [("c", Right TInt)])
 
 -- Test the "close-enough" "equality" of two graphs
 (=?) :: Graph -- Actual
@@ -201,14 +260,17 @@ extGraph
 
   -- `M.difference a b` finds things that are in `a` but not in `b`
   assertNoDifference :: String -> M.Map String Int -> M.Map String Int -> Assertion -- Actual vs Expected
-  assertNoDifference msg act exp = case (M.difference act exp, M.difference exp act) of
-    -- Extra wires in actual and expected maps
-    (mAct, mExp)
-      | M.null mAct, M.null mExp -> pure ()
-      | M.null mAct -> assertFailure $ msg ++ " expected but not found: " ++ show mExp
-      | M.null mExp -> assertFailure $ msg ++ " found but not expected: " ++ show mAct
-      | otherwise -> assertFailure $ unlines [msg ++ "expected: " ++ show mExp
-                                             ," but found: " ++ show mAct
+  assertNoDifference msg act exp = let
+      (mAct, mExp) = (M.difference act exp, M.difference exp act)
+      sAct = intercalate "\n" (map show $ M.toList mAct)
+      sExp = intercalate "\n" (map show $ M.toList mExp)
+    in case (mAct, mExp) of
+      (mAct, mExp)
+        | M.null mAct, M.null mExp -> pure ()
+        | M.null mAct -> assertFailure $ msg ++ " expected but not found: " ++ sExp
+        | M.null mExp -> assertFailure $ msg ++ " found but not expected: " ++ sAct
+        | otherwise -> assertFailure $ unlines [msg ++ " expected: " ++ sExp
+                                             ," but found: " ++ sAct
                                              ]
 
 runProg :: String -> String -> Graph -> Assertion

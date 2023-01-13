@@ -1,6 +1,6 @@
 type A = Nat
 type B = Bool
-type C = Unit
+type C = []
 
 -- Like the ; operator, but produces a thunk
 -- (noun) with known argument type, rather than a verb

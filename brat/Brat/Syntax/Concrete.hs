@@ -8,14 +8,18 @@ import Brat.Syntax.Raw
 import Brat.Syntax.Simple
 import Brat.UserName
 
+type FlatCType = CType' (RawIO' (WC (KindOr Flat)))
+type FlatKType = CType' (RawIO' (SType' (WC Flat)))
 
-data FClause
+data FBody
   = FClauses (NonEmpty (WC Abstractor, WC Flat))
   | FNoLhs (WC Flat)
   | FUndefined
+ deriving Show
 
-type FDecl = Decl' RawIO FClause
-type FEnv = ([FDecl], [(UserName, TypeAlias)])
+type FDecl = Decl' RawIO FBody
+deriving instance Show FDecl
+type FEnv = ([FDecl], [RawAlias])
 
 
 data Flat
@@ -35,5 +39,8 @@ data Flat
  | FCon UserName (WC Flat)
  | FEmpty
  | FPull [PortName] (WC Flat)
+ -- We can get away with not elaborating type signatures in the short term
+ | FFn RawCType
+ | FKernel RawKType
  | FUnderscore
  deriving Show

@@ -1,6 +1,6 @@
 type A = Nat
 type B = Bool
-type C = Unit
+type C = []
 
 test1(A, {A -> B}, {B -> C}) -> C
 test1(x,f,g) = x |> f |> g

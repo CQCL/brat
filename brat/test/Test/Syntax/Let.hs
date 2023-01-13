@@ -10,10 +10,12 @@ import Brat.Naming
 import Brat.Syntax.Common
 import Brat.Syntax.Core
 import Brat.Syntax.Simple
+import Brat.Syntax.Value
 import Brat.UserName
 import Test.Checking (runEmpty)
 
 import Data.String
+import Test.Tasty
 import Test.Tasty.HUnit
 
 instance IsString UserName where
@@ -23,16 +25,20 @@ instance IsString Abstractor where
   fromString = APat . Bind
 
 fc = FC (Pos 0 0) (Pos 0 0)
-wfc = WC fc
 
 test = testCase "let" $
-  let num = wfc . Simple . Num
-      tm = Let (wfc ("x" :||: "y")) (wfc (wfc (num 1 :|: num 2)
-                                     ::: [("a", SimpleTy IntTy), ("b", SimpleTy IntTy)]))
-           (wfc (Var "x"))
+  let num = dummyFC . Simple . Num
+      tm = Let
+        (dummyFC ("x" :||: "y"))
+        (dummyFC (dummyFC (num 1 :|: num 2)
+               ::: [("a", Right (Con (plain "Int") (dummyFC Empty)))
+                   ,("b", Right (Con (plain "Int") (dummyFC Empty)))
+                   ])
+        )
+        (dummyFC (Var "x"))
       conn = ((), ())
-  in case fst <$> runEmpty (let ?my = Braty in check (wfc tm) conn) of
-       Right (((), [(_, SimpleTy IntTy)]), ((), ())) -> pure ()
+  in case fst <$> runEmpty (let ?my = Braty in check (dummyFC tm) conn) of
+       Right (((), [(_, Right TInt)]), ((), ())) -> pure ()
        Right (((), outs), ((), ())) -> assertFailure (show outs)
        Left err -> assertFailure (showError err)
 

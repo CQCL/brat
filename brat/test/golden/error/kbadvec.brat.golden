@@ -1,4 +1,4 @@
-Error in triple (test/golden/error/kbadvec.brat)@FC {start = Pos {line = 2, col = 17}, end = Pos {line = 2, col = 20}}:
+Error in test/golden/error/kbadvec.brat@FC {start = Pos {line = 2, col = 17}, end = Pos {line = 2, col = 20}}:
 triple = { b => [b] }
                 ^^^
 

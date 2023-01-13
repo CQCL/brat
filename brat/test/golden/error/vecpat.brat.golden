@@ -1,9 +1,9 @@
-Error in fst3 (test/golden/error/vecpat.brat)@FC {start = Pos {line = 3, col = 5}, end = Pos {line = 3, col = 17}}:
+Error in test/golden/error/vecpat.brat@FC {start = Pos {line = 3, col = 5}, end = Pos {line = 3, col = 17}}:
 fst3(nil) = none
     ^^^^^^^^^^^^
 
   Pattern: nil
 doesn't match type Vec(Int, 3)
-(because it's the wrong length)
+(expected vector pattern of length 3 but got vector pattern of length 0)
 
 

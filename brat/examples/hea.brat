@@ -10,7 +10,7 @@ import lib.kernel
 
 type Real = Nat -- Temporary hack
 
-type Operator = Pair(Pair(Nat, Nat),Real)
+type Operator = [[Nat, Nat],Real]
 
 type Pauli = Vec(Nat, 0)
 

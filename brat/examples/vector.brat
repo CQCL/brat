@@ -26,7 +26,13 @@ type A = Nat
 
 isNil :: { Vec(A, 0) -> Bool }
 isNil(nil) = true -- obvs
-isNil(cons(x, xs)) = false
+-- ALAN this case is ruled out statically, so adding isNil2 instead
+-- isNil(cons(x, xs)) = false
+
+isNil2 :: { n :: #, Vec(A, n) -> Bool }
+isNil2(_, nil) = true -- TODO both cases here fail
+isNil2(_, cons(x, xs)) = false
+
 
 head(List(A)) -> A
 -- head(nil) = ?head

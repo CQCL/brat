@@ -1,5 +1,5 @@
-Error in f (test/golden/error/noovers.brat)@FC {start = Pos {line = 2, col = 2}, end = Pos {line = 2, col = 13}}:
-f(a, b) = <>
+Error in test/golden/error/noovers.brat@FC {start = Pos {line = 2, col = 2}, end = Pos {line = 2, col = 13}}:
+f(a, b) = []
  ^^^^^^^^^^^
 
   Nothing to bind to: b

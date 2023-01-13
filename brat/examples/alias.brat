@@ -1,4 +1,4 @@
-type Pos(n) = Pair(n, n)
+type Pos(n) = [n, n]
 
 origin :: Pos(Nat)
 origin = [0, 0]
@@ -11,7 +11,7 @@ origin' = [0, 0]
 add :: { Nat,Nat -> Nat }
 add = x, y => x
 
-type SwapPair(a, b) = Pair(b, a)
+type SwapPair(a, b) = [b, a]
 
 g :: Nat
 g = 4
@@ -33,16 +33,16 @@ alias2 = [1, true]
 test'(a :: Nat, b :: Nat) -> c :: Nat
 test' = x, y => add(x, y)
 
-zero :: Nat
-zero = 0
+zero_ :: Nat
+zero_ = 0
 
 number :: Nat
-number = zero
+number = zero_
 
 fun :: (adder :: { Nat, Nat -> Nat })
 fun = { x, y => add(x, y) }
 
-type Deep(a,b) = Pair(a, b)
+type Deep(a, b) = [a, b]
 type X(a,b) = Deep(SwapPair(a, b), IdPair(a, b))
 
 deep :: X(Nat, Bool)

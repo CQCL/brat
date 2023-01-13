@@ -16,48 +16,49 @@ import Data.Either (isRight)
 import Data.Functor ((<&>))
 import Test.QuickCheck
 import Test.Tasty.QuickCheck (testProperty)
+import Test.Tasty
+import Brat.Syntax.Value
+import Bwd
+
 
 -- Bounds for row lengths
 bounds = (1,5)
 -- Max depth of recursive types
 maxDepth = 5
 
-instance Arbitrary (Row Term) where
-  arbitrary = chooseInt bounds >>= \n -> row n maxDepth
+row :: Int -> Int -> Gen [(PortName, SValue)]
+row d n = sequence [ (name,) <$> arbitrarySValue d | name <- take n names ]
 
-row :: Int -> Int -> Gen (Row Term)
-row d n = R <$> sequence [ (name,) <$> arbitrarySType d | name <- take n names ]
-
-arbitrarySType :: Int -> Gen SType
-arbitrarySType d = case d of
+arbitrarySValue :: Int -> Gen SValue
+arbitrarySValue d = case d of
   1 -> cheap
   d -> oneof [cheap, vec (d - 1)]
-
  where
   cheap = pure Bit
 
   vec d = do
     n <- chooseInt bounds
-    ty <- arbitrarySType d
-    pure (Of ty (Simple (Num n))) -- Only the simplest values of `n`
+    ty <- arbitrarySValue d
+    pure (Of ty (VNum (NumValue n Constant0))) -- Only the simplest values of `n`
 
 
-instance Arbitrary SType where
-  arbitrary = arbitrarySType maxDepth
+instance Arbitrary SValue where
+  arbitrary = arbitrarySValue maxDepth
       
-instance Arbitrary VType where
-  arbitrary = chooseInt bounds >>= \n -> row n maxDepth <&> \r -> K r r
+instance Arbitrary Value where
+  arbitrary = chooseInt bounds >>= \n -> row n maxDepth <&> \r -> VFun Kerny B0 (r :-> r)
 
-tokensTypecheck :: VType -> Bool
+tokensTypecheck :: Value -> Bool
 tokensTypecheck kty =
   let kernels = vsearch fc kty in
     case kernels of
       [] -> False
-      (k:_) -> case runEmpty (let ?my = Braty in check (WC fc k) ((), [(NamedPort (In src 0) "fun", kty)])) of
+      (k:_) -> case runEmpty (let ?my = Braty in check (WC fc k) ((), [(NamedPort (In src 0) "fun", Right kty)])) of
           Right ((((), ()), ((), unders)), _) -> null unders
           Left _ -> False
  where
   fc = FC (Pos 0 0) (Pos 0 0)
   src = MkName [("src", 0)]
+
   
 searchTests = testProperty "Token Values Typecheck" tokensTypecheck

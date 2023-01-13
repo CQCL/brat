@@ -1,16 +1,24 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module Brat.Syntax.Raw where
 
+import Control.Applicative
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
+import Data.Bifunctor
 import Data.Kind (Type)
+import Data.Map (disjoint, member, union)
+import qualified Data.Map as M
+import Data.Tuple.HT (thd3)
 
+import Bwd
+import Brat.Constructors
 import Brat.Error
-import Brat.FC
+import Brat.FC hiding (end)
 import Brat.Naming
 import Brat.Syntax.Common
 import Brat.Syntax.Core
@@ -22,20 +30,9 @@ type family TypeOf (k :: Kind) :: Type where
   TypeOf Noun = [InOut]
   TypeOf UVerb = CType
 
-data RawVType
-  = RC RawCType
-  | RK RawKType
-  | RSimpleTy SimpleType
-  | RList RawVType
-  | RProduct RawVType RawVType
-  | RAlias UserName [RawVType]
-  | RTypeFree UserName
-  | RTypeVar Int
-  | RVector RawVType (WC (Raw Chk Noun))
-  | ROption RawVType
-  deriving Show
+type RawVType = Raw Chk Noun
 
-data RawIO' ty = Named PortName ty | Anon ty deriving (Functor, Show)
+data RawIO' ty = Named PortName ty | Anon ty deriving (Foldable, Functor, Show, Traversable)
 
 instance Eq ty => Eq (RawIO' ty) where
   Named _ ty == Named _ ty' = ty == ty'
@@ -43,18 +40,29 @@ instance Eq ty => Eq (RawIO' ty) where
   Named _ ty == Anon ty' = ty == ty'
   Anon ty == Anon ty' = ty == ty'
 
-type RawIO = RawIO' RawVType
+type RawIO = RawIO' (KindOr RawVType)
 
 type RawCType = CType' RawIO
-type RawKType = CType' (RawIO' (SType' Raw))
+type RawKType = CType' (RawIO' (SType' (Raw Chk Noun)))
 
-data TypeAlias = Alias FC String [UserName] RawVType deriving Show
+data TypeAliasF tm = TypeAlias FC UserName [(PortName,TypeKind)] tm deriving Show
+type RawAlias = TypeAliasF (Raw Chk Noun)
+type TypeAlias = TypeAliasF (Term Chk Noun)
 
-type RawDecl = Decl' RawIO (Clause Raw Noun)
-type RawEnv = ([RawDecl], [(UserName, TypeAlias)])
+type TypeAliasTable = M.Map UserName TypeAlias
 
+type RawDecl = Decl' RawIO (FunBody Raw Noun)
+type RawEnv = ([RawDecl], [RawAlias], TypeAliasTable)
+
+addNames :: [RawIO' ty] -> [(PortName, ty)]
+addNames tms = aux names tms
+ where
+  aux (n:ns) ((Anon tm):tms) = (n, tm) : aux ns tms
+  aux ns ((Named n tm):tms)  = (n, tm) : aux ns tms
+  aux _ [] = []
 
 data Raw :: Dir -> Kind -> Type where
+  RBound    :: Int -> Raw Syn Noun
   RSimple   :: SimpleTerm -> Raw Chk Noun
   RLet      :: WC Abstractor -> WC (Raw Syn Noun) -> WC (Raw d k) -> Raw d k
   RNHole    :: String -> Raw Chk Noun
@@ -72,6 +80,10 @@ data Raw :: Dir -> Kind -> Type where
   (::$::)   :: WC (Raw Syn KVerb) -> WC (Raw Chk Noun) -> Raw Syn Noun -- Eval with ChkRaw n argument
   (::\::)   :: WC Abstractor -> WC (Raw d Noun) -> Raw d UVerb
   RCon      :: UserName -> WC (Raw Chk Noun) -> Raw Chk Noun
+  -- Function types
+  RFn       :: RawCType -> Raw Chk Noun
+  -- Kernel types
+  RKernel   :: RawKType -> Raw Chk Noun
 
 class Dirable d where
   dir :: Raw d k -> Diry d
@@ -86,6 +98,7 @@ instance (Kindable UVerb) where kind _ = UVerby
 instance (Kindable KVerb) where kind _ = KVerby
 
 instance Show (Raw d k) where
+  show (RBound i) = '^' : show i
   show (RLet abs xs body)
     = unwords ["let", show abs, "=", show xs, "in", show body]
   show (RNHole name) = '?':name
@@ -94,8 +107,8 @@ instance Show (Raw d k) where
   show REmpty = "()"
   show (a ::|:: b) = show a ++ ", " ++ show b
   show (RTh comp) = '{' : show comp ++ "}"
+  show (RForce comp) = "Force " ++ show comp
   show (RForget kv) = "(Forget " ++ show kv ++ ")"
-  show (RForce comp) = show comp ++ "()"
   show (REmb x) = '「' : show x ++ "」"
   show (RPull [] x) = "[]:" ++ show x
   show (RPull ps x) = concat ((++":") <$> ps) ++ show x
@@ -105,9 +118,12 @@ instance Show (Raw d k) where
   show (a ::-:: b) = show a ++ "; " ++ show b
   show (xs ::\:: bod) = show xs ++ " => " ++ show bod
   show (RCon c xs) = "Con(" ++ show c ++ "(" ++ show xs ++ "))"
+  show (RFn cty) = show cty
+  show (RKernel cty) = show cty
 
-type Desugar = StateT Namespace (ReaderT RawEnv (Except Error))
+type Desugar = StateT Namespace (ReaderT (RawEnv, Bwd UserName) (Except Error))
 
+-- instance {-# OVERLAPPING #-} MonadFail Desugar where
 instance {-# OVERLAPPING #-} MonadFail Desugar where
   fail = throwError . desugarErr
 
@@ -117,6 +133,24 @@ freshM str = do
   let (name, ns') = fresh str ns
   put ns'
   pure name
+
+splitM :: String -> Desugar Namespace
+splitM s = do
+  ns <- get
+  let (ns', newRoot) = split s ns
+  put newRoot
+  pure ns'
+
+isConstructor :: UserName -> Desugar Bool
+isConstructor c = pure (c `member` defaultConstructors
+                        || c `member` defaultTypeConstructors
+                        || c `member` natConstructors)
+
+isAlias :: UserName -> Desugar Bool
+isAlias name = do
+  aliases <- asks (thd3 . fst)
+  pure $ M.member name aliases
+
 
 {-
 findDuplicates :: Env -> Desugar ()
@@ -138,12 +172,6 @@ findDuplicates (ndecls, vdecls, aliases)
 desugarErr :: String -> Error
 desugarErr = dumbErr . DesugarErr
 
-isConstructor :: UserName -> Bool
-isConstructor (PrefixName [] c) = c `elem` constructors
- where
-  constructors = ["cons", "nil", "succ", "doub", "some", "none"]
-isConstructor _ = False
-
 class Desugarable ty where
   type Desugared ty
   desugar :: WC ty -> Desugar (WC (Desugared ty))
@@ -154,54 +182,20 @@ class Desugarable ty where
 
   desugar' :: ty -> Desugar (Desugared ty)
 
-instance Desugarable (SType' Raw) where
-  type Desugared (SType' Raw) = SType
+instance Desugarable (SType' (Raw Chk Noun)) where
+  type Desugared (SType' (Raw Chk Noun)) = SType
   desugar' (Q q) = pure $ Q q
   desugar' Bit = pure Bit
   desugar' (Of sty tm) = Of <$> desugar' sty <*> desugar' tm
   desugar' (Rho row) = Rho <$> desugar' row
 
-instance Desugarable (Row Raw) where
-  type Desugared (Row Raw) = Row Term
+instance Desugarable (Row (Raw Chk Noun)) where
+  type Desugared (Row (Raw Chk Noun)) = Row (Term Chk Noun)
   desugar' (R r) = R <$> mapM (traverse desugar') r
 
-instance Desugarable RawVType where
-  type Desugared RawVType = VType
-  desugar' (RK raw) = desugar' raw
-  desugar' (RC raw) = C <$> desugar' raw
-  desugar' (RSimpleTy simp) = pure $ SimpleTy simp
-  desugar' (RList raw) = List <$> desugar' raw
-  desugar' (RProduct raw raw') = Product <$> desugar' raw <*> desugar' raw'
-  desugar' (RAlias s args) = do
-    (_, aliases) <- ask
-    case lookup s aliases of
-      Nothing -> let msg = DesugarErr $ "Couldn't find an alias for type "
-                           ++ unwords (show s:fmap show args)
-                 in  throwError $ dumbErr msg
-      Just (Alias fc _s vars ty) -> do
-        unless (length vars == length args)
-          (throwError . Err (Just fc) . DesugarErr $
-            unwords ("Type alias isn't fully applied:":show s:(show <$> args)))
-        let concreteTy = foldr (uncurry instantiateVType) ty (zip [0..] args)
-        desugar' concreteTy
-  desugar' (RTypeFree f) = throwError $
-                             desugarErr ("Trying to desugar free type var: " ++ show f)
-  desugar' (RTypeVar x) = throwError $
-                            desugarErr ("Trying to desugar bound type var: " ++ show x)
-  desugar' (RVector vty n)
-    = Vector <$> desugar' vty <*> (unWC <$> desugar n)
-  desugar' (ROption rty) = Option <$> desugar' rty
-
-instance Desugarable RawCType where
-  type Desugared RawCType = CType' InOut
-  desugar' (ss :-> ts) = (:->) <$> desugar' ss <*> desugar' ts
-
-instance Desugarable RawKType where
-  type Desugared RawKType = VType
-  desugar' (ss :-> ts) = do
-    ss <- desugar' ss
-    ts <- desugar' ts
-    pure (K (R ss) (R ts))
+instance Desugarable ty => Desugarable (PortName, KindOr ty) where
+  type Desugared (PortName, KindOr ty) = (PortName, Desugared (KindOr ty))
+  desugar' (p, ty) = (p,) <$> desugar' ty
 
 instance Desugarable ty => Desugarable [RawIO' ty] where
   type Desugared [RawIO' ty] = [(PortName, Desugared ty)]
@@ -213,95 +207,189 @@ instance Desugarable ty => Desugarable [RawIO' ty] where
 instance Desugarable (Raw d k) where
   type Desugared (Raw d k) = Term d k
   -- TODO: holes need to know their arity for type checking
+  -- hmm.....
+  desugar' (RBound i) = pure $ Inx i
   desugar' (RNHole name) = NHole <$> freshM name
   desugar' (RVHole name) = VHole <$> freshM name
   desugar' (RSimple simp) = pure $ Simple simp
   desugar' REmpty = pure Empty
   desugar' (a ::|:: b) = (:|:) <$> desugar a <*> desugar b
   desugar' (RTh v) = Th <$> desugar v
-  desugar' (RForce v) = Force <$> desugar v
-  desugar' (REmb syn) = case unWC syn of
-    -- Try to catch constructor applications which have been parsed as applications
+  {- As well as geniune embeddings of variables and applications, we have two
+  other cases which will show up here:
+   1. Constructors - either nullary or fully applied
+   2. Type Aliases - either nullary or fully applied
+  We check for both of these cases by looking up the variable in the relevant
+  table of either known constructors or known type aliases. We must transform
+  these into `Con c arg` when desugaring.
+  -}
+  desugar' (REmb syn) = case (unWC syn) of
     (WC _ (RForce (WC _ (RVar c)))) ::$:: a -> do
-      pure (isConstructor c) >>= \case
+      isConOrAlias c >>= \case
         True -> Con c <$> desugar a
         False -> Emb <$> desugar syn
-    -- Try to catch nullary constructors
     (RVar c) -> do
-      pure (isConstructor c) >>= \case
+      isConOrAlias c >>= \case
         True -> pure $ Con c (WC (fcOf syn) Empty)
         False -> Emb <$> desugar syn
     _ -> Emb <$> desugar syn
+   where
+    isConOrAlias :: UserName -> Desugar Bool
+    isConOrAlias c = do
+      con <- isConstructor c
+      ali <- isAlias c
+      xor con ali
+
+    -- Double check that we don't have name clashes. This should never
+    -- happen since we already detect them in `desugarAliases` before
+    -- this function is called.
+    xor :: Bool -> Bool -> Desugar Bool
+    xor True True = throwError $
+                    dumbErr $
+                    InternalError "Name clash between type constructor and type alias"
+    xor a b = pure (a || b)
+  desugar' (RForce v) = Force <$> desugar v
   desugar' (RForget kv) = Forget <$> desugar kv
   desugar' (RPull ps raw) = Pull ps <$> desugar raw
-  desugar' (RVar  name) = pure (Var name)
+  desugar' (RVar name) = do
+    sc <- asks snd
+    pure $ case findUnder name sc of
+      Just i -> Inx i
+      Nothing -> Var name
   desugar' (fun ::$:: arg) = (:$:) <$> desugar fun <*> desugar arg
+{- FIXME
+    aliases <- asks (snd . fst)
+    case fun of
+      RVar x
+        | Just r <- lookup x aliases -> case arg of
+            (a ::|:: b) -> instantiateVType [0..] (a ::::: (RCon "Type" REmpty))
+            
+      _ -> (:$:) <$> desugar fun <*> desugar arg
+   where
+    instantiateVType :: [Int] -> Raw Chk Noun -> Raw Syn Noun -> Raw Syn Noun
+    instantiateVType (n:ns) (a ::|:: b) f = instantiateRaw n a $ instantiateVType ns b f
+    instantiateVType (n:ns) a f = instantiateRaw n a f
+-}
   desugar' (tm ::::: outputs) = do
     tm <- desugar tm
-    ty <- desugar' outputs
-    pure (tm ::: ty)
+    (tys, ()) <- desugarBind outputs $ pure ()
+    pure (tm ::: tys)
   desugar' (syn ::-:: verb) = (:-:) <$> desugar syn <*> desugar verb
   desugar' (abst ::\:: raw) = (abst :\:) <$> desugar raw
   desugar' (RLet abs thing body) = Let abs <$> desugar thing <*> desugar body
-  desugar' (RCon name args) = Con name <$> desugar args
+  desugar' (RCon c arg) = Con c <$> desugar arg
+  desugar' (RFn cty) = C <$> desugar' cty
+  desugar' (RKernel (ss :-> ts)) = K <$> (R <$> desugar' ss) <*> (R <$> desugar' ts)
 
-desugarNClause :: Clause Raw Noun -> Desugar (Clause Term Noun)
-desugarNClause (ThunkOf clause) = ThunkOf <$> traverse desugarVClause clause
-desugarNClause (NoLhs body) = NoLhs <$> desugar body
-desugarNClause Undefined = pure Undefined
+instance Desugarable ty => Desugarable (KindOr ty) where
+  type Desugared (Either TypeKind ty) = Either TypeKind (Desugared ty)
+  desugar' (Left k) = pure (Left k)
+  desugar' (Right ty) = Right <$> desugar' ty
 
-desugarVClause :: Clause Raw UVerb -> Desugar (Clause Term UVerb)
-desugarVClause (Clauses cs) = Clauses <$> mapM branch cs
+desugarBind :: forall t. [RawIO]
+            -> Desugar t
+            -> Desugar ([(PortName, KindOr (Term Chk Noun))], t)
+desugarBind tys m = worker (addNames tys)
+ where
+  worker :: [(PortName, KindOr (Raw Chk Noun))]
+         -> Desugar ([(PortName, KindOr (Term Chk Noun))], t)
+  worker ((p, Left k):ns) = do
+    (ns, t) <- local (second (:< PrefixName [] p)) $ worker ns
+    pure ((p, Left k):ns, t)
+  worker ((p, Right ty):ns) = do
+    ty <- desugar' ty
+    (ns, t) <- worker ns
+    pure ((p, Right ty):ns, t)
+  worker [] = ([],) <$> m
+
+instance Desugarable (CType'  RawIO) where
+  type Desugared (CType' RawIO) = CType' (PortName, KindOr (Term Chk Noun))
+  desugar' (ss :-> ts) = do
+    (ss, (ts, ())) <- desugarBind ss $ desugarBind ts $ pure ()
+    pure $ ss :-> ts
+
+instance Desugarable RawAlias where
+  type Desugared RawAlias = TypeAlias
+  desugar' (TypeAlias fc name args def) = TypeAlias fc name args <$> desugar' def
+
+desugarNBody :: FunBody Raw Noun -> Desugar (FunBody Term Noun)
+desugarNBody (ThunkOf clause)
+  = ThunkOf <$> traverse desugarVBody clause
+desugarNBody (NoLhs body) = NoLhs <$> desugar body
+desugarNBody Undefined = pure Undefined
+
+desugarVBody :: FunBody Raw UVerb -> Desugar (FunBody Term UVerb)
+desugarVBody (Clauses cs) = Clauses <$> mapM branch cs
  where
   branch :: (WC Abstractor, WC (Raw Chk Noun)) -> Desugar (WC Abstractor, WC (Term Chk Noun))
   branch (lhs, rhs) = (lhs,) <$> desugar rhs
-desugarVClause (NoLhs rhs) = NoLhs <$> desugar rhs
-desugarVClause Undefined = pure Undefined
+desugarVBody (NoLhs rhs) = NoLhs <$> desugar rhs
+desugarVBody Undefined = pure Undefined
 
 instance Desugarable RawDecl where
   type Desugared RawDecl = Decl
   desugar' d@Decl{..} = do
     tys  <- desugar' fnSig
-    noun <- desugarNClause fnBody
+    noun <- desugarNBody fnBody
     pure $ d { fnBody = noun
              , fnSig  = tys
              }
 
-desugarEnv :: RawEnv -> Either Error [Decl]
-desugarEnv env@(decls, _)
+mkAliasTbl :: [TypeAlias] -> TypeAliasTable
+mkAliasTbl [] = M.empty
+mkAliasTbl (a@(TypeAlias _ name _ _):as) = M.insert name a (mkAliasTbl as)
+
+desugarAliases :: [RawAlias] -> Desugar [TypeAlias]
+desugarAliases [] = pure []
+desugarAliases (a@(TypeAlias fc name _ _):as) = do
+  nameExists <- liftA2 (||) (isConstructor name) (isAlias name)
+  when nameExists (throwError (Err (Just fc) (NameClash $ "Identifier `" ++ show name ++ "` is already used")))
+  a@(TypeAlias _ name _ _) <- desugar' a
+  local (\((decls, aliases, aliasTbl), uz) -> ((decls, aliases, M.insert name a aliasTbl), uz)) $
+    (a :) <$> desugarAliases as
+
+desugarEnv :: RawEnv -> Either Error ([Decl], [TypeAlias])
+desugarEnv env@(decls, aliases, aliasTbl)
+-- desugarEnv env@(decls, aliases)
   = fmap fst
     . runExcept
-    . flip runReaderT env
+    . flip runReaderT (env, B0)
     . flip runStateT root
-    $ mapM desugar' decls
+    $ do
+  -- Desugar aliases
+  aliases <- desugarAliases aliases
+  let newAliasTbl = mkAliasTbl aliases
+  unless (disjoint aliasTbl newAliasTbl) $ fail "illegally named alias"
+  decls <- local (\((decls, aliases, aliasTbl), uz) -> ((decls, aliases, newAliasTbl `union` aliasTbl),uz)) $
+              traverse desugar' decls
+  pure (decls, aliases)
 
-abstractVType :: UserName -> Int -> RawVType -> RawVType
-abstractVType x n (RC ctype) = RC (fmap (abstractVType x n) <$> ctype)
-abstractVType _ _ (RK ctype) = RK ctype
--- All of our simple types are first order for now
-abstractVType _ _ ty@(RSimpleTy _) = ty
-abstractVType x n (RList ty) = RList (abstractVType x n ty)
-abstractVType x n (RProduct a b) = RProduct
-                                     (abstractVType x n a)
-                                     (abstractVType x n b)
-abstractVType x n (RAlias name args) = RAlias name (abstractVType x n <$> args)
-abstractVType x n free@(RTypeFree y) | x == y = RTypeVar n
-                                     | otherwise = free
-abstractVType _ _ ty@(RTypeVar _) = ty
-abstractVType x n (RVector ty size) = RVector (abstractVType x n ty) size
-abstractVType _ _ (ROption ty) = ROption ty
+abstractRaw :: UserName -> Int -> Raw d k -> Raw d k
+abstractRaw from to (RVar x)
+  | x == from = RBound to
+  | otherwise = RVar x
+abstractRaw from to (a ::|:: b) = (abstractRaw from to <$> a) ::|:: (abstractRaw from to <$> b)
+abstractRaw from to (RLet abs x y)
+  | not (occursInAbstractor (show from) (unWC abs))
+  = RLet abs (abstractRaw from to <$> x) (abstractRaw from to <$> y)
+abstractRaw from to (RTh tm) = RTh $ abstractRaw from to <$> tm
+abstractRaw from to (REmb tm) = REmb $ abstractRaw from to <$> tm
+abstractRaw from to (RPull ps tm) = RPull ps (abstractRaw from to <$> tm)
+abstractRaw from to (f ::$:: a)
+  = (abstractRaw from to <$> f) ::$:: (abstractRaw from to <$> a)
+abstractRaw from to (tm ::::: ty) = (abstractRaw from to <$> tm) ::::: ty -- shold we do the type too?
+abstractRaw from to (a ::-:: b)
+  = (abstractRaw from to <$> a) ::-:: (abstractRaw from to <$> b)
+abstractRaw from to (abs ::\:: tm)
+  | not (occursInAbstractor (show from) (unWC abs))
+  = abs ::\:: (abstractRaw from to <$> tm)
+abstractRaw from to (RCon c tm) = RCon c (abstractRaw from to <$> tm)
+abstractRaw from to (RFn (ss :-> ts))
+  = let ss' = abstRow ss
+        ts' = abstRow ts
+    in RFn $ ss' :-> ts'
+ where
+  abstRow :: [RawIO' (KindOr (Raw Chk Noun))] -> [RawIO' (KindOr (Raw Chk Noun))]
+  abstRow = fmap (fmap (fmap (abstractRaw from to)))
+abstractRaw _ _ tm = tm
 
-instantiateVType :: Int -> RawVType -> RawVType -> RawVType
-instantiateVType n to (RC ctype) = RC (fmap (instantiateVType n to) <$> ctype)
-instantiateVType _ _  (RK ctype) = RK ctype
-instantiateVType _ _  ty@(RSimpleTy _) = ty
-instantiateVType n to (RList ty) = RList (instantiateVType n to ty)
-instantiateVType n to (RProduct a b) = RProduct
-                                       (instantiateVType n to a)
-                                       (instantiateVType n to b)
-instantiateVType n to (RAlias name args) = RAlias name (instantiateVType n to <$> args)
-instantiateVType _ _  ty@(RTypeFree _) = ty
-instantiateVType n to ty@(RTypeVar m) | n == m = to
-                                      | otherwise = ty
-instantiateVType n to (RVector ty m) = RVector (instantiateVType n to ty) m
-instantiateVType n to (ROption ty) = ROption $ instantiateVType n to ty

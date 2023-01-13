@@ -1,0 +1,2 @@
+simple :: Nat
+simple = true

@@ -1,6 +1,7 @@
 module Brat.Elaborator where
 
 import Control.Monad (forM, (>=>))
+import Data.Map (empty)
 
 import Brat.FC
 import Brat.Syntax.Common
@@ -45,6 +46,11 @@ assertKVerb s@(WC fc r) = case kind r of
     Syny -> pure $ WC fc (RForce s)
     Chky -> Left $ Err (Just fc) (ElabErr "Verb required at this position (cannot force since the type cannot be synthesised)")
 
+elaborateType :: WC Flat -> Either Error (WC (Raw Chk Noun))
+elaborateType = elaborateChkNoun
+
+elaborateChkNoun :: WC Flat -> Either Error (WC (Raw Chk Noun))
+elaborateChkNoun = elaborate >=> (\(SomeRaw raw) -> assertNoun raw >>= assertChk)
 
 data SomeRaw where
   SomeRaw :: (Dirable d, Kindable k) => WC (Raw d k) -> SomeRaw
@@ -143,13 +149,15 @@ elaborate' (FAnnotation a ts) = do
   a <- assertNoun a
   pure $ SomeRaw' (a ::::: ts)
 elaborate' (FInto a b) = elaborate' (FApp b a)
+-- Traverse the RawIO' within the CType'
+elaborate' (FFn cty) = pure $ SomeRaw' (RFn cty)
+elaborate' (FKernel sty) = pure $ SomeRaw' (RKernel sty)
 -- We catch underscores in the top-level elaborate so this case
 -- should never be triggered
 elaborate' FUnderscore = Left (dumbErr (InternalError "Unexpected '_'"))
 
-
-elabClause :: FClause -> FC -> Either Error (Clause Raw Noun)
-elabClause (FClauses cs) fc = ThunkOf . WC fc . Clauses <$> traverse elab1Clause cs
+elabBody :: FBody -> FC -> Either Error (FunBody Raw Noun)
+elabBody (FClauses cs) fc = ThunkOf . WC fc . Clauses <$> traverse elab1Clause cs
  where
   elab1Clause :: (WC Abstractor, WC Flat)
               -> Either Error (WC Abstractor, WC (Raw Chk Noun))
@@ -158,17 +166,17 @@ elabClause (FClauses cs) fc = ThunkOf . WC fc . Clauses <$> traverse elab1Clause
     tm <- assertNoun tm
     tm <- assertChk tm
     pure (abs, tm)
-elabClause (FNoLhs e) _ = do
+elabBody (FNoLhs e) _ = do
     SomeRaw e <- elaborate e
     e <- assertChk e
     case kind (unWC e) of
       Nouny -> pure $ NoLhs e
       _ -> (assertUVerb e) >>= \e -> pure $ ThunkOf (WC (fcOf e) (NoLhs e))
-elabClause FUndefined _ = pure Undefined
+elabBody FUndefined _ = pure Undefined
 
 elabDecl :: FDecl -> Either Error RawDecl
 elabDecl d = do
-  rc <- elabClause (fnBody d) (fnLoc d)
+  rc <- elabBody (fnBody d) (fnLoc d)
   pure $ Decl { fnName = fnName d
               , fnLoc = fnLoc d
               , fnSig = fnSig d
@@ -178,4 +186,4 @@ elabDecl d = do
               }
 
 elabEnv :: FEnv -> Either Error RawEnv
-elabEnv (ds, x) = (,x) <$> forM ds elabDecl
+elabEnv (ds, x) = (,x,empty) <$> forM ds elabDecl

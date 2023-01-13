@@ -7,7 +7,7 @@
 --       `{Vec Qubit 2 -o Vec Bool 1}`
 
 -- Reality:
---  - The parser is confused by arguments to PCirc and KCirc
+--  - Type checking fails due to a missing case in kindCheck
 
 type Dist = List(Bool)
 type KCirc(q, b) = { Vec(Qubit, q) -o Vec(Bool, b) }

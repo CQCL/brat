@@ -1,5 +1,4 @@
 module Brat.Syntax.Simple (SimpleTerm(..)
-                          ,SimpleType(..)
                           ) where
 
 data SimpleTerm
@@ -16,21 +15,3 @@ instance Show SimpleTerm where
   show (Bool False) = "false"
   show (Text txt) = show txt
   show (Float f) = show f
-
-data SimpleType
-  = Natural
-  | IntTy
-  | Boolean
-  | FloatTy
-  | TextType
-  | UnitTy
-  | Star
-  deriving Eq
-
-instance Show SimpleType where
-  show Natural = "Nat"
-  show IntTy = "Int"
-  show Boolean = "Bool"
-  show FloatTy = "Float"
-  show TextType = "String"
-

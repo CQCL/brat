@@ -1,4 +1,4 @@
 import cycle
 
-unit :: Unit
-unit = <>
+unit :: []
+unit = []

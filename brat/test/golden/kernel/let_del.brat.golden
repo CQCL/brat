@@ -1,4 +1,4 @@
-Error in f (test/golden/kernel/let_del.brat)@FC {start = Pos {line = 4, col = 12}, end = Pos {line = 4, col = 33}}:
+Error in test/golden/kernel/let_del.brat@FC {start = Pos {line = 4, col = 12}, end = Pos {line = 4, col = 33}}:
 f = { q => let q' = X(q) in true }
            ^^^^^^^^^^^^^^^^^^^^^
 

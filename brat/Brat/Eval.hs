@@ -1,99 +1,83 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE PatternSynonyms #-}
+module Brat.Eval (apply, Eval(..)) where
 
-module Brat.Eval (evalTerm, Value(..)) where
-
-import Brat.Error
-import Brat.FC
+import Brat.Syntax.Value
 import Brat.Syntax.Common
-import Brat.Syntax.Core
-import Brat.Syntax.Simple
+import Util
+import Bwd
 
-import Control.Monad.Except
+import Control.Monad (foldM)
 
-data Value
- = VSimple SimpleTerm
--- | ((:|:)  :: Term d k -> Term d k -> Term d k
--- | (Th     :: Term Chk UVerb -> Term Chk Noun
--- | (Emb    :: Term Syn k -> Term Chk k
--- | (Pull   :: [Port] -> Term Chk k -> Term Chk k
--- | (Var    :: String -> Term Syn Noun  -- Look up in noun (value) env
--- | ((:$:)  :: Term Syn Noun -> Term Chk Noun -> Term Syn Noun
--- | ((:::)  :: Term Chk k -> [Output] -> Term Syn k
--- | ((:-:)  :: Term Syn k -> Term d UVerb -> Term d k
--- | ((:\:)  :: Abstractor -> Term d Noun -> Term d UVerb
- | VVec [Value]
- | VCons Value Value
- | VClos [Value] (Term Chk UVerb)
- | Value :$ [Elim]
- | VSome Value
- | VNone
- deriving (Eq, Show)
 
-data Elim
- = EApp Value
- | EThin Value
- | ESelect Value
- | EPlus Value
- | ETimes Value
- deriving (Eq, Show)
+class Eval t where
+  type ValOf t
+  eval :: Monad m
+       => (End -> m (Maybe (Value {- 0 -}))) -- A way to fetch Pars from the store
+       -> Bwd {- length: n -} (Value {- 0 -}) -- Context
+       -> t {- n -}
+       -> m (ValOf t {- 0 -}) -- Inx-closed
 
-type Eval = Except Error
+instance Eval VVar where
+  type ValOf VVar = Maybe Value
+  eval g l (VPar e) = g e >>= \case
+    Nothing -> pure Nothing
+    -- if the End is defined, then evaluate again; it might be another End!
+    Just v -> Just <$> eval g l v -- eval g l (v :: Value) -> Value, not Maybe
+  eval _ l (VInx i) = pure $ Just (l !< i)
+  eval _ _ (VLvl _ _) = pure Nothing
 
-class Valuable x where
-  eval :: [Value] -> WC x -> Eval Value
-  eval' :: [Value] -> x -> Eval Value
+instance Eval Value where
+  type ValOf Value = Value
+  eval g l (VNum n) = VNum <$> eval g l n
+  eval g l (VCon c vs) = VCon c <$> traverse (eval g l) vs
+  eval g l (VApp v ss) = do
+    ss <- traverse (eval g l) ss
+    eval g l v >>= \case
+      Nothing -> pure $ VApp v ss
+      Just v  -> foldM (apply g) v ss
+   where
+  eval _ l (VLam ctx v) = pure $ VLam (l <> ctx) v
+  eval _ l (VFun m ctx cty) = pure $ VFun m (l <> ctx) cty
 
-instance Valuable (Term Chk k) where
-  eval = ceval
-  eval' = ceval'
+apply :: Monad m
+      => (End -> m (Maybe (Value {- 0 -})))
+      -> Value {- 0 -} -> Value {- 0 -} -> m (Value {- 0 -})
+apply g (VLam ctx v) a = eval g (ctx :< a) v
+apply _ (VApp v ss) a = pure $ VApp v (ss :< a)
+apply _ _ _ = error "apply misused"
 
-instance Valuable (Term Syn k) where
-  eval = seval
-  eval' = seval'
+instance Eval NumValue where
+  type ValOf NumValue = NumValue
+  eval g l (NumValue up grow) = nPlus up <$> eval g l grow
 
-addFCToError :: FC -> Eval a -> Eval a
-addFCToError fc m = case runExcept m of
-                      Right v -> pure v
-                      Left (Err _ msg) -> throwError (Err (Just fc) msg)
+instance Eval Fun00 where
+  type ValOf Fun00 = NumValue
+  eval _ _ Constant0 = pure (nConstant 0)
+  eval g l (StrictMonoFun sm) = eval g l sm
 
-ceval :: [Value] -> WC (Term Chk k) -> Eval Value
-ceval g (WC fc tm) = addFCToError fc (ceval' g tm)
+instance Eval StrictMono where
+  type ValOf StrictMono = NumValue
+  eval g l (StrictMono pow mono) = n2PowTimes pow <$> eval g l mono
 
-ceval' :: [Value] -> Term Chk k -> Eval Value
-ceval' _ (Simple tm) = pure $ VSimple tm
--- ceval g ( ((:|:)  :: Term d k -> Term d k -> Term d k
--- ceval g ( (Th     :: Term Chk UVerb -> Term Chk Noun
--- ceval g ( (Emb    :: Term Syn k -> Term Chk k
--- ceval g ( (Pull   :: [Port] -> Term Chk k -> Term Chk k
--- ceval g ( (Var    :: String -> Term Syn Noun  -- Look up in noun (value) env
--- ceval g ( ((:-:)  :: Term Syn k -> Term d UVerb -> Term d k
-ceval' g (Th f) = pure $ VClos g (unWC f)
-ceval' g (_ :\: body) = eval g body
-ceval' g (Emb tm) = seval g tm
--- eval g (Closure [Value] (Term d k)
-ceval' _ tm = throwError $ dumbErr (Unimplemented "ceval" [show tm])
+instance Eval Monotone where
+  type ValOf Monotone = NumValue
+  eval g l (Linear v) = eval g l v >>= \case
+    Just (VNum v) -> eval g l v
+    Just _ -> error $ "Evaluating ill-kinded var: " ++ show v
+    Nothing -> pure $ nVar v
+  eval g l (Full sm) = nFull <$> eval g l sm
 
-seval :: [Value] -> WC (Term Syn k) -> Eval Value
-seval g (WC fc tm) = addFCToError fc (seval' g tm)
+instance (Eval s, Eval t) => Eval (Either s t) where
+  type ValOf (Either s t) = Either (ValOf s) (ValOf t)
+  eval g l (Left s) = Left <$> eval g l s
+  eval g l (Right t) = Right <$> eval g l t
 
-seval' :: [Value] -> Term Syn k -> Eval Value
-seval' g (tm ::: _) = ceval g tm
-seval' g (fun :$: arg) = do
-  fun <- seval g fun
-  arg <- ceval g arg
-  apply fun [EApp arg]
-seval' g (_ :\: body) = eval g body
-seval' _ tm = throwError $ dumbErr (Unimplemented "seval" [show tm])
+instance Eval TypeKind where
+  type ValOf TypeKind = TypeKind
+  eval _ _ = pure
 
-pattern VNat n = VSimple (Num n)
-
-apply :: Value -> [Elim] -> Eval Value
-apply (VClos g v) (EApp v':es) = eval' (v':g) v >>= flip apply es
-apply (VNat m) ((EPlus (VNat n)):es) = apply (VNat (m + n)) es
-apply (VNat m) ((ETimes (VNat n)):es) = apply (VNat (m + n)) es
-apply v [] = pure v
-apply v es = pure $ v :$ es
-
-evalTerm :: Valuable (Term d k) => [Decl] -> WC (Term d k) -> Either Error Value
-evalTerm env = runExcept . eval [] . fmap (expandDecls env)
+instance Eval v => Eval (SType' v) where
+  type ValOf (SType' v) = SType' (ValOf v)
+  eval g l (Rho (R row)) = Rho . R <$> traverse (id **^ eval g l) row
+  eval g l (Of sty n) = Of <$> eval g l sty <*> eval g l n
+  eval _ _ Bit = pure Bit
+  eval _ _ (Q q) = pure (Q q)

@@ -6,6 +6,8 @@ import Brat.Syntax.Core
 import Brat.Syntax.Simple
 import Brat.UserName
 
+import Data.Bifunctor
+
 -- A version of `Term` which doesn't include directions or kinds for easy
 -- manipulation in the LSP mode (for now). This should be produced by forgetting
 -- this info, when looking at `Term`s which have already been checked.
@@ -45,7 +47,7 @@ stripInfo (Emb x) = stripInfo (unWC x)
 stripInfo (Pull ps x) = SPull ps (stripInfo <$> x)
 stripInfo (Var x) = SVar x
 stripInfo (fun :$: arg) = SApp (stripInfo <$> fun) (stripInfo <$> arg)
-stripInfo (tm ::: ty) = SAnn (stripInfo <$> tm) ty
+stripInfo (tm ::: ty) = SAnn (stripInfo <$> tm) (second (fmap stripInfo) <$> ty)
 stripInfo (a :-: b) = SComp (stripInfo <$> a) (stripInfo <$> b)
 stripInfo (xs :\: bod) = SLam xs (stripInfo <$> bod)
 stripInfo (Let abs x y) = SLet abs (stripInfo <$> x) (stripInfo <$> y)
@@ -62,7 +64,7 @@ data Skel where
   SVar      :: UserName -> Skel
   SBound    :: Int -> Skel
   SApp      :: WC Skel -> WC Skel -> Skel
-  SAnn      :: WC Skel -> [Output] -> Skel
+  SAnn      :: WC Skel -> [(PortName, KindOr Skel)] -> Skel
   SComp     :: WC Skel -> WC Skel -> Skel
   SLam      :: WC Abstractor -> WC Skel -> Skel
   SLet      :: WC Abstractor -> WC Skel -> WC Skel -> Skel

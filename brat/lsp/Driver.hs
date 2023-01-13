@@ -104,14 +104,10 @@ loadVFile state _ msg = do
       env <- liftIO . runExceptT $ loadFiles cwd (show fileName) file
       case env of
         Right (_,newDecls,holes,_) -> do
-          old@(PS oldDecls _ oldHoles) <- liftIO $ takeMVar state
-          if (oldDecls, oldHoles) == (newDecls, holes)
-            then liftIO (putMVar state old) >> allGood fileName
-            else do
-              liftIO $ debugM "loadVFile" $ "Updated ProgramState"
-              liftIO $ putMVar state (updateState (newDecls, holes) old)
-              allGood fileName
-              logHoles holes fileName
+          old <- liftIO $ takeMVar state
+          liftIO $ putMVar state (updateState (newDecls, holes) old)
+          allGood fileName
+          logHoles holes fileName
         Left (SrcErr _ err) -> allGood fileName *> sendError fileName err
     Nothing -> do
       liftIO $ debugM "loadVFile" $ "Couldn't find " ++ show fileName ++ " in VFS"

@@ -20,7 +20,6 @@ testParse file = testCase (show file) $ do
 expectedParsingFails = map ("examples" </>) [
     "compjuxt2.brat",
     "karlheinz.brat",
-    "karlheinz_alias.brat",
     "thin.brat",
     "hea.brat"]
 

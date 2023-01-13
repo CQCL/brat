@@ -8,7 +8,6 @@
 -- Reality:
 --  - The body of execute_n fails to parse as a thunk (see composition.brat)
 --  - The semicolon operator doesn't parse right in composeCirc (see composition.brat)
---  - No instance of List (Pair A B) seems to parse right (see listpair.brat)
 --  - There's no way to write the body of var loop
 --  - Aliasing types to kernels doesn't work (see karlheinz_alias.brat)
 
@@ -25,7 +24,7 @@ type MCirc(q,b) = { Vec(Qubit,q) -o Vec(Bool, b) }
 
 type Real = Float
 
---sample :: Pair N D(X) -> List X
+--sample :: [N, D(X)] -> List X
 --sample = ?sample
 
 -- We should be able to define D(X)
@@ -54,10 +53,10 @@ get_shots = ?get_shots
 
 -- ideally we want n quantified?
 -- [P-circ] * [M-circ] ~~> [ P-circ * M-circ ] ~~> [K-circ]
--- genericComposition :: List (Pair PCirc MCirc) -> List KCirc
+-- genericComposition :: List([PCirc, MCirc]) -> List KCirc
 -- genericComposition = ?gc
 
--- compilationPass :: forall X Y. (ins :: (Pair X Circ)) -> (outs :: Pair Circ Y)
+-- compilationPass :: forall X Y. (ins :: [X, Circ]) -> (outs :: [Circ, Y])
 -- compilationPass = ?cp
 -- 
 -- synthesise :: forall (X :: *) -> Circ
@@ -69,7 +68,7 @@ ansatz(params :: List(Real)) -> PCirc
 ansatz = ?ans
 
 -- [R * M-circ]
-observable :: List (Pair(Real, Circ))
+observable :: List([Real, Circ])
 observable = ?obs
 
 quant(List (List(Bool))) -> Real

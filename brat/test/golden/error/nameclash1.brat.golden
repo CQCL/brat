@@ -1,0 +1,6 @@
+Error in test/golden/error/nameclash1.brat@FC {start = Pos {line = 1, col = 1}, end = Pos {line = 1, col = 16}}:
+type Nat(x) = x
+^^^^^^^^^^^^^^^
+
+  Name clash: Identifier `Nat` is already used
+

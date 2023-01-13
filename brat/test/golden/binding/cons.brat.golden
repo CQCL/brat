@@ -1,4 +1,4 @@
-Error in badUncons (test/golden/binding/cons.brat)@FC {start = Pos {line = 7, col = 10}, end = Pos {line = 7, col = 31}}:
+Error in test/golden/binding/cons.brat@FC {start = Pos {line = 7, col = 10}, end = Pos {line = 7, col = 31}}:
 badUncons(cons(stuff)) = stuff
          ^^^^^^^^^^^^^^^^^^^^^
 

@@ -11,6 +11,7 @@ import Test.Failure
 import Test.Naming
 import Test.Parsing
 import Test.Search
+import Test.Substitution
 import Test.Syntax.Let
 
 main = do
@@ -28,4 +29,5 @@ main = do
                                 ,constructorTests
                                 ,removeNodeTests
                                 ,elaborationTests
+                                ,substitutionTests
                                 ]

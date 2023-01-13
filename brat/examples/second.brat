@@ -13,7 +13,7 @@ empty_spaced = [ ]
 vec :: Vec(Nat, 3)
 vec = [ 0, 1, 2 ]
 
-hello3 :: Pair(Nat, Nat)
+hello3 :: [Nat,Nat]
 hello3 = [1 , 2]
  
 -- goog :: Nat

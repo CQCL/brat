@@ -1,0 +1,9 @@
+Error in test/golden/error/bad_juxt.brat@FC {start = Pos {line = 6, col = 8}, end = Pos {line = 6, col = 10}}:
+  Parse error test/golden/error/bad_juxt.brat:7:10:
+  |
+7 | I2_bad = { I, I() }
+  |          ^^^^^^^^^^
+unexpected { I, I() }
+expecting (...), Binding(s), Bit, Bool, Comment, Horizontal space, \n, embedding, function, hole, let ... in, let binding, name, port pull, simple term, syn verb, typed hole, or vector literal
+
+

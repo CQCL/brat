@@ -1,0 +1,6 @@
+Error in test/golden/error/nameclash2.brat@FC {start = Pos {line = 2, col = 1}, end = Pos {line = 2, col = 16}}:
+type A(x,y) = y
+^^^^^^^^^^^^^^^
+
+  Name clash: Identifier `A` is already used
+

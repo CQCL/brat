@@ -1,20 +1,20 @@
 -- This file tests some basics
 
 -- this is a test comment
-copy(value :: Type) -> (left :: Type), (right :: Type)
-copy = x => x, x
+copy(Ty :: *, value :: Ty) -> (left :: Ty), (right :: Ty)
+copy = Ty, x => x, x
 
-swap :: { agneta :: Type, bjorn :: Type -> (benny :: Type), (annefried :: Type) }
-swap = a, b => b, a
+swap(Ty :: *, agneta :: Ty, bjorn :: Ty) -> (benny :: Ty), (annefried :: Ty)
+swap = Ty, a, b => b, a
 
-discardNat(value :: Nat) -> Unit
-discardNat = x => <>
+discardNat(value :: Nat) -> []
+discardNat = x => []
 
-id(value :: Type) -> (value :: Type)
-id = x => x
+id(Ty :: *, value :: Ty) -> (value :: Ty)
+id = Ty, x => x
 
-testy :: { x :: Type -> x :: Type }
-testy = x => id(x)
+testy(Ty :: *, x :: Ty) -> (x :: Ty)
+testy = Ty, x => id(Ty, x)
 
-noun :: (id :: { (x :: Type) -> (x :: Type) })
-noun = { x => testy(x) }
+noun :: (id :: { Ty :: *, x :: Ty -> x :: Ty })
+noun = { Ty, x => testy(Ty, x) }
