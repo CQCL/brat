@@ -147,32 +147,6 @@ mkTensor = do
   let outs = tensor foos [bar, qux]
   pure (fooNode, barNode, quxNode, outs)
 
-isCombo :: Thing -> Bool
-isCombo (Combo _) = True
-isCombo _ = False
-
--- FIXME
-{-
-tensorOutputsTests :: TestTree
-tensorOutputsTests = testCase "tensorOutputs" $ case runEmpty mkTensor of
-  Left err -> assertFailure (showError err)
-  Right ((foo, bar, qux, outs), (holes, (nodes, edges))) -> do
-    (M.size nodes) @=? 4 -- three input nodes and one combo
-    let combo_nodes = (M.assocs nodes) >>= (\(name, node) -> if (isCombo $ nodeThing node) then [name] else [])
-    (length combo_nodes) @?= 1
-    let combo_node = head combo_nodes
-    (length outs) @?= 4 -- four wires/ports
-    mapM (@?= combo_node) (map (\(NamedPort (Ex n _) _, _ty) -> n) outs)
-    let actualPorts = M.fromList $ map (\(p,ty) -> (portName p,ty)) outs
-    let expectedPorts = M.fromList [("out1", SimpleTy Natural), ("out2", SimpleTy FloatTy), ("out1", SimpleTy IntTy), ("res", SimpleTy TextType)]
-    actualPorts @?= expectedPorts
-    edges `equalEdges`
-      [((Ex foo 0), Right (SimpleTy Natural), (In combo_node 0))
-      ,((Ex foo 1), Right (SimpleTy FloatTy), (In combo_node 1))
-      ,((Ex bar 0), Right (SimpleTy IntTy), (In combo_node 2))
-      ,((Ex qux 0), Right (SimpleTy TextType), (In combo_node 3))]
--}
-
 -- This is just because we have to pass some term into checkOutputs in case it needs to produce an error message.
 -- But our case should never have to produce an error message, so assert false.
 dummyTerm = CE.assert False (dummyFC $ Var (PrefixName [] ""))
