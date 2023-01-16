@@ -2,12 +2,12 @@ module Brat.Lexer (Tok(..), Token(..), Keyword(..), lex) where
 
 import Prelude hiding (lex)
 import Data.Char (isSpace)
-import Data.Functor (($>), (<&>), void)
+import Data.Functor (($>), void)
 import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Void
-import Text.Megaparsec hiding (Token, Pos, token, State)
-import Text.Megaparsec.Char
+import Text.Megaparsec hiding (Token, Pos, token, State, between)
+import Text.Megaparsec.Char hiding (space)
 
 import Brat.FC
 
@@ -44,7 +44,6 @@ data Tok
  | FloatLit Double
  | Comment String
  | Newline
- | HSpace Int
  | Quoted String
  | Plus
  | Asterisk
@@ -78,7 +77,6 @@ instance Show Tok where
   show (FloatLit n) = show n
   show (Comment c) = "--" ++ c
   show Newline = "\n"
-  show (HSpace n) = replicate n ' '
   show (Quoted x) = show x
   show Plus = "+"
   show Asterisk = "*"
@@ -92,7 +90,7 @@ instance Eq Token where
   (Token fc t) == (Token fc' t') = t == t' && fc == fc'
 
 instance Show Token where
-  show (Token _ t) = show t
+  show (Token _ t) = (show t) ++ " "
 instance Ord Token where
   compare (Token (FC st nd) _) (Token (FC st' nd') _) = if st == st'
                                                         then compare nd nd'
@@ -150,12 +148,14 @@ qualified = (<?> "qualified name") $ do
   last  <- ident
   pure (QualifiedId (first :| rest) last)
 
-comment :: Lexer Tok
-comment = string "--" *> ((printChar `manyTill` lookAhead (void newline <|> void eof)) <&> Comment)
+space :: Lexer ()
+space = (many $ (satisfy isSpace >> return ()) <|> comment) >> return ()
+ where
+  comment :: Lexer ()
+  comment = string "--" *> ((printChar `manyTill` lookAhead (void newline <|> void eof)) >> return ())
 
 tok :: Lexer Tok
-tok = comment
-      <|> try (char '(' $> LParen)
+tok = (   try (char '(' $> LParen)
       <|> try (char ')' $> RParen)
       <|> try (char '{' $> LBrace)
       <|> try (char '}' $> RBrace)
@@ -181,18 +181,10 @@ tok = comment
       <|> try (string "#"  $> Hash)
       <|> try (string "*"  $> Asterisk)
       <|> try (K <$> try keyword)
-      <|> try newline'
-      <|> try hspace'
       <|> try qualified
       <|> Ident <$> ident
+      )
  where
-  newline' :: Lexer Tok
-  newline' = newline $> Newline
-
-  hspace' :: Lexer Tok
-  hspace' = do xs <- some $ satisfy $ \ x -> isSpace x && x `notElem` ['\n','\r']
-               pure $ HSpace (length xs)
-
   float :: Lexer Double
   float = label "float literal" $ do
     msign <- optional (char '-')
@@ -215,13 +207,13 @@ en l = do st <- convPos <$> getSourcePos
           pure $ Token (FC st nd) x
 
 token :: Lexer Token
-token = en tok
+token = space >> en tok
 
 convPos :: SourcePos -> Pos
 convPos (SourcePos _ l c) = Pos (unPos l) (unPos c)
 
 lex :: Lexer [Token]
-lex = token `manyTill` eof
+lex = token `manyTill` (try $ space >> eof)
 
 tokLen :: Tok -> Int
 tokLen = length . show

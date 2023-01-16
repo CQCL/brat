@@ -2,7 +2,7 @@ Error in test/golden/kernel/classical_return.brat@FC {start = Pos {line = 5, col
 f :: { Qubit -o Qubit, Int }
                        ^^^
 
-  Parse error unexpected Int
-expecting (...), Bool, Comment, Horizontal space, Money, Qubit, Vec, \n, or whitespace
+  Parse error unexpected Int 
+expecting (...), Bool, Money, Qubit, or Vec
 
 
