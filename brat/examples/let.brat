@@ -26,3 +26,6 @@ nums = let xs = map(inc, xs) in xs
 
 nums' :: List(Int)
 nums' = let xs = map(inc, [0,2,3]) in xs
+
+nums'' :: List(Int)
+nums'' = let i2 = {inc; inc} in map(i2, xs)

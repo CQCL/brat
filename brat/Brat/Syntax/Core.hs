@@ -30,7 +30,7 @@ data Term :: Dir -> Kind -> Type where
   -- Parallel composition, aka juxtaposition
   (:|:)    :: WC (Term d k) -> WC (Term d k) -> Term d k
   Th       :: WC (Term Chk UVerb) -> Term Chk Noun
-  -- TypedTh  :: WC (Term Syn KVerb) -> Term Syn Noun -- no, later
+  TypedTh  :: WC (Term Syn KVerb) -> Term Syn Noun
   Force    :: WC (Term Syn Noun) -> Term Syn KVerb
   Emb      :: WC (Term Syn k) -> Term Chk k
   Forget   :: WC (Term d KVerb) -> Term d UVerb
@@ -70,6 +70,7 @@ instance Show (Term d k) where
   show Empty = "()"
   show (a :|: b) = show a ++ ", " ++ show b
   show (Th comp) = '{' : show comp ++ "}"
+  show (TypedTh comp) = "{:" ++ show comp ++ ":}"
   show (Force th) = show th ++ "()"
   show (Forget kv) = "(Forget " ++ show kv ++ ")"
   show (Emb x) = '「' : show x ++ "」"

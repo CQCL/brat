@@ -1,0 +1,5 @@
+id :: { Qubit -o Qubit }
+id = x => x
+
+id2 :: { Qubit, Qubit -o Qubit, Qubit }
+id2 = { let f = {id;id} in q,q' => f(q),f(q') }

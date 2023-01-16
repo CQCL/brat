@@ -70,6 +70,7 @@ data Raw :: Dir -> Kind -> Type where
   REmpty    :: Raw Chk Noun
   (::|::)   :: WC (Raw d k) -> WC (Raw d k) -> Raw d k
   RTh       :: WC (Raw Chk UVerb) -> Raw Chk Noun
+  RTypedTh  :: WC (Raw Syn KVerb) -> Raw Syn Noun
   RForce    :: WC (Raw Syn Noun) -> Raw Syn KVerb
   REmb      :: WC (Raw Syn k) -> Raw Chk k
   RForget   :: WC (Raw d KVerb) -> Raw d UVerb
@@ -107,6 +108,7 @@ instance Show (Raw d k) where
   show REmpty = "()"
   show (a ::|:: b) = show a ++ ", " ++ show b
   show (RTh comp) = '{' : show comp ++ "}"
+  show (RTypedTh comp) = "{:" ++ show comp ++ ":}"
   show (RForce comp) = "Force " ++ show comp
   show (RForget kv) = "(Forget " ++ show kv ++ ")"
   show (REmb x) = '「' : show x ++ "」"
@@ -215,6 +217,7 @@ instance (Kindable k) => Desugarable (Raw d k) where
   desugar' REmpty = pure Empty
   desugar' (a ::|:: b) = (:|:) <$> desugar a <*> desugar b
   desugar' (RTh v) = Th <$> desugar v
+  desugar' (RTypedTh v) = TypedTh <$> desugar v
   {- As well as geniune embeddings of variables and applications, we have two
   other cases which will show up here:
    1. Constructors - either nullary or fully applied

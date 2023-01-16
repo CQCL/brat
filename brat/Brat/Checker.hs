@@ -169,7 +169,7 @@ checkThunk :: (?my :: Modey m, CheckConstraints m UVerb)
            -> WC (Term Chk UVerb)
            -> Checking Src
 checkThunk name vctx ss ts tm = do
-  (dangling, thUnders, thOvers) <- makeBox name vctx ss ts
+  ((dangling, _), thUnders, thOvers) <- makeBox name vctx ss ts
   (((), ()), (emptyOvers, emptyUnders)) <- check tm (thOvers, thUnders)
   ensureEmpty "thunk leftovers" emptyOvers
   ensureEmpty "thunk leftunders" emptyUnders
@@ -227,8 +227,33 @@ check' (Th t) ((), u@(hungry, ty):unders) = case ?my of
       Left (Star args) -> kindCheck [(hungry, Star args)] (Th t) $> ()
       _ -> err . ExpectedThunk "" $ showRow (u:unders)
     pure (((), ()), ((), unders))
-
   Kerny -> err . ThunkInKernel $ show (Th t)
+check' (TypedTh t) ((), ()) = case ?my of
+  -- the thunk itself must be Braty
+  Kerny -> err . ThunkInKernel $ show (TypedTh t)
+  Braty -> do
+    -- but the computation in it could be either Brat or Kern
+    brat <- catchErr $ check t ((), ())
+    kern <- catchErr $ let ?my = Kerny in check t ((), ())
+    case (brat, kern) of
+      (Left e, Left _) -> req $ Throw e -- pick an error arbitrarily
+      -- I don't believe that there is any syntax that could synthesize
+      -- both a classical type and a kernel type, but just in case:
+      -- (pushing down Emb(TypedTh(v)) to Thunk(Emb+Forget(v)) would help in Checkable cases)
+      (Right _, Right _) -> typeErr "TypedTh could be either Brat or Kernel"
+      (Left _, Right (conns, ((), ()))) -> let ?my = Kerny in createThunk conns
+      (Right (conns, ((), ())), Left _) -> createThunk conns
+ where
+  createThunk :: (CheckConstraints m Noun, ?my :: Modey m)
+              => SynConnectors m Syn KVerb
+              -> Checking (SynConnectors Brat Syn Noun
+                          ,ChkConnectors Brat Syn Noun)
+  createThunk (ins, outs) = do
+    (thunkOut, thUnders, thOvers) <- makeBox "thunk" B0 (rowToSig ins) (rowToSig outs)
+    -- if these ensureEmpty's fail then its a bug!
+    () <- checkInputs t thOvers ins >>= ensureEmpty "TypedTh inputs"
+    () <- checkOutputs t thUnders outs >>= ensureEmpty "TypedTh outputs"
+    pure (((), [thunkOut]), ((), ()))
 check' (Force th) ((), ()) = do
   (((), outs), ((), ())) <- let ?my = Braty in check th ((), ())
   -- pull a bunch of thunks (only!) out of here

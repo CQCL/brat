@@ -113,9 +113,12 @@ elaborate' (FJuxt a b) = do
       pure $ SomeRaw' (r1 ::|:: r2)
 elaborate' (FThunk a) = do
   (SomeRaw a) <- elaborate a
-  a <- assertUVerb a  -- Assert verb before chk since force needs to come before emb
-  a <- assertChk a
-  pure $ SomeRaw' (RTh a)
+  case (assertKVerb >=> assertSyn) a of
+    Right a -> pure $ SomeRaw' (RTypedTh a)
+    Left _ -> do -- Assert verb before chk since force needs to come before emb
+      a <- assertUVerb a
+      a <- assertChk a
+      pure $ SomeRaw' (RTh a)
 elaborate' (FCompose a b) = do
   (SomeRaw a) <- elaborate a
   (SomeRaw b) <- elaborate b

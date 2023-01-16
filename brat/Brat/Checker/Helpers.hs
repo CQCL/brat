@@ -281,9 +281,9 @@ makeBox :: (?my :: Modey m, DeBruijn (BinderType m))
         -> Bwd Value -- Stuff that the function type can depend on
         -> [(PortName, BinderType m)] -- Inputs
         -> [(PortName, BinderType m)] -- Outputs
-        -> Checking (Src, Unders m Chk, Overs m UVerb)
+        -> Checking ((Src, BinderType Brat), Unders m Chk, Overs m UVerb)
 makeBox name vctx ss ts = do
   (src, _, overs, ctx) <- anext (name ++ "/in") Source (vctx, B0) [] ss
   (tgt, unders, _, _) <- anext (name ++ "/out") Target ctx ts []
-  (_,_,[(thunk,_)],_)<- next (name ++ "_thunk") (src :>>: tgt) (vctx,B0) [] [("thunk", Right (VFun ?my B0 (ss :-> ts)))]
+  (_,_,[thunk],_)<- next (name ++ "_thunk") (src :>>: tgt) (vctx,B0) [] [("thunk", Right (VFun ?my B0 (ss :-> ts)))]
   pure (thunk, unders, overs)
