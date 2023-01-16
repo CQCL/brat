@@ -110,8 +110,8 @@ checkWire Braty _ outputs (dangling, Left ok) (hungry, Left uk) = do
   defineTgt hungry (endVal ok (ExEnd (end dangling)))
   wire (dangling, kindType ok, hungry)
 checkWire Braty (WC fc tm) outputs (dangling, o) (hungry, u) = localFC fc $ do
-  let ot = binderToValue o
-  let ut = binderToValue u
+  let ot = binderToValue Braty o
+  let ut = binderToValue Braty u
   if outputs
     then typeEq (show tm) (Star []) ot ut
     else typeEq (show tm) (Star []) ut ot

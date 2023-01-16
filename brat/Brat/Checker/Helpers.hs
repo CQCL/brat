@@ -11,14 +11,15 @@ module Brat.Checker.Helpers (pullPorts
                             ,stypeEq, typeEq, kindEq
                             ,next, knext, anext
                             ,kindType, getThunks
-                            ,binderToValue
+                            ,binderToValue, valueToBinder
                             ,conFields
                             ,defineSrc, defineTgt
                             ,declareSrc, declareTgt
                             ,makeBox
                             ) where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr, evTy, stypeEq, typeEq, kindEq)
+import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr, evTy
+                          ,stypeEq, typeEq, kindEq)
 import Brat.Checker.Types {-(ValueType, eval, DeBruijn(..)
                           ,Overs, Unders
                           ,VarChanger(..)
@@ -260,9 +261,14 @@ conFields Braty "doub" ty = pure [("value", ty)]
 conFields Braty "succ" ty = pure [("value", ty)]
 conFields _ c ty = Left $ UnrecognisedConstructor c (show ty)
 
-binderToValue :: KindOr Value -> Value
-binderToValue (Left k) = kindType k
-binderToValue (Right ty) = ty
+binderToValue :: Modey m -> BinderType m -> ValueType m
+binderToValue Braty (Left k) = kindType k
+binderToValue Braty (Right ty) = ty
+binderToValue Kerny v = v
+
+valueToBinder :: Modey m -> ValueType m -> BinderType m
+valueToBinder Braty = Right
+valueToBinder Kerny = id
 
 defineSrc :: Src -> Value -> Checking ()
 defineSrc src v = req (Define (ExEnd (end src)) v)
