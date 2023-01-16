@@ -77,7 +77,7 @@ data Raw :: Dir -> Kind -> Type where
   RVar      :: UserName -> Raw Syn Noun
   (:::::)   :: WC (Raw Chk Noun) -> [RawIO] -> Raw Syn Noun
   (::-::)   :: WC (Raw Syn k) -> WC (Raw d UVerb) -> Raw d k -- vertical juxtaposition (diagrammatic composition)
-  (::$::)   :: WC (Raw Syn KVerb) -> WC (Raw Chk Noun) -> Raw Syn Noun -- Eval with ChkRaw n argument
+  (::$::)   :: WC (Raw d KVerb) -> WC (Raw Chk k) -> Raw d k -- Eval with ChkRaw n argument
   (::\::)   :: WC Abstractor -> WC (Raw d Noun) -> Raw d UVerb
   RCon      :: UserName -> WC (Raw Chk Noun) -> Raw Chk Noun
   -- Function types
@@ -204,7 +204,7 @@ instance Desugarable ty => Desugarable [RawIO' ty] where
     aux _ (Named port ty) = (port,) <$> desugar' ty
     aux port (Anon ty)    = (port,) <$> desugar' ty
 
-instance Desugarable (Raw d k) where
+instance (Kindable k) => Desugarable (Raw d k) where
   type Desugared (Raw d k) = Term d k
   -- TODO: holes need to know their arity for type checking
   -- hmm.....
@@ -226,7 +226,9 @@ instance Desugarable (Raw d k) where
   desugar' (REmb syn) = case (unWC syn) of
     (WC _ (RForce (WC _ (RVar c)))) ::$:: a -> do
       isConOrAlias c >>= \case
-        True -> Con c <$> desugar a
+        True -> case (kind $ unWC a) of
+          Nouny -> Con c <$> desugar a
+          _ -> throwError $ desugarErr ("Constructor applied to something that isn't a noun")
         False -> Emb <$> desugar syn
     (RVar c) -> do
       isConOrAlias c >>= \case

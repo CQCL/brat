@@ -26,6 +26,12 @@ compose_apply(f,g,x) = (f;g)(x)
 compose_apply_chk :: {{Int -> Nat}, {Nat -> Bool} -> Bool}
 compose_apply_chk(f,g) = (f;g)(2)
 
+-- here the LHS of the apply, (f; (y => [y])) must be a UVerb
+-- so that it can be applied to checkable argument 1.
+-- however the [y] means that we must check against type List.
+compose_lambda_apply_chk({A->B}) -> List(B)
+compose_lambda_apply_chk(f) = (f; (y => [y]))(1)
+
 -- the following are all just differently-bracketed versions of the same thing
 compose3 :: { { A -> B }, { B -> C } -> {A -> C} }
 compose3(f, g) = { x => (x |> f; g) }
@@ -38,3 +44,8 @@ compose3b(f, g) = { x => (x |> (f; g)) }
 
 compose3c({ A -> B }, { B -> C }) -> {A -> C}
 compose3c(f, g) = { x => x |> (f; g) }
+
+-- composition where the type of intermediate value is determined by the RHS
+-- (the [x] makes the closure (x => [x]) only checkable.)
+apply_singleton({List(A) -> B}) -> {A -> B}
+apply_singleton(f) = {(x => [x]); f}

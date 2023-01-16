@@ -47,8 +47,8 @@ data Term :: Dir -> Kind -> Type where
   -- of number/type determined by the source
   (:-:)    :: WC (Term Syn k) -> WC (Term d UVerb) -> Term d k
   -- Application of function (first) to values coming from argument (second)
-  -- of number/type determined by the function
-  (:$:)    :: WC (Term Syn KVerb) -> WC (Term Chk Noun) -> Term Syn Noun
+  -- of number/type determined by the function. (aka, Reverse Composition)
+  (:$:) :: WC (Term d KVerb) -> WC (Term Chk k) -> Term d k
   (:\:)    :: WC Abstractor -> WC (Term d Noun) -> Term d UVerb
   -- Type constructors
   Con      :: UserName -> WC (Term Chk Noun) -> Term Chk Noun

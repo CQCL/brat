@@ -243,10 +243,11 @@ check' (Var x) ((), ()) = (, ((), ())) . ((),) <$> case ?my of
   Kerny -> req (KLup x) >>= \case
     Just (p, ty) -> pure [(p, ty)]
     Nothing -> err $ KVarNotFound (show x)
-check' (fun :$: arg) ((), ()) = do
-  ((ins, outputs), ((), ())) <- check fun ((), ())
-  ((), ()) <- noUnders $ check arg ((), ins)
-  pure (((), outputs), ((), ()))
+check' (fun :$: arg) (overs, unders) = do
+  ((ins, outputs), ((), leftUnders)) <- check fun ((), unders)
+  ((argIns, ()), (leftOvers, argUnders)) <- check arg (overs, ins)
+  ensureEmpty "leftover function args" argUnders
+  pure ((argIns, outputs), (leftOvers, leftUnders))
 check' (Let abs x y) conn = do
   (((), dangling), ((), ())) <- check x ((), ())
   env <- abstractAll dangling (unWC abs)
