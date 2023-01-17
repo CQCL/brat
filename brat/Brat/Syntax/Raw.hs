@@ -262,19 +262,6 @@ instance (Kindable k) => Desugarable (Raw d k) where
       Just i -> Inx i
       Nothing -> Var name
   desugar' (fun ::$:: arg) = (:$:) <$> desugar fun <*> desugar arg
-{- FIXME
-    aliases <- asks (snd . fst)
-    case fun of
-      RVar x
-        | Just r <- lookup x aliases -> case arg of
-            (a ::|:: b) -> instantiateVType [0..] (a ::::: (RCon "Type" REmpty))
-            
-      _ -> (:$:) <$> desugar fun <*> desugar arg
-   where
-    instantiateVType :: [Int] -> Raw Chk Noun -> Raw Syn Noun -> Raw Syn Noun
-    instantiateVType (n:ns) (a ::|:: b) f = instantiateRaw n a $ instantiateVType ns b f
-    instantiateVType (n:ns) a f = instantiateRaw n a f
--}
   desugar' (tm ::::: outputs) = do
     tm <- desugar tm
     (tys, ()) <- desugarBind outputs $ pure ()
