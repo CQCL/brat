@@ -42,7 +42,8 @@ data CheckingSig ty where
   -- Lookup type constructors
   TLup    :: TypeKind -> UserName -> CheckingSig (Maybe [(PortName, TypeKind)])
   -- Lookup term constructor - ask whether a constructor builds a certain type
-  CLup    :: UserName -- Value constructor
+  CLup    :: FC -- File context for error reporting
+          -> UserName -- Value constructor
           -> UserName  -- Type constructor
           -> CheckingSig ([ValPat]
                          ,[(PortName, BinderType Brat)])
@@ -102,6 +103,13 @@ alup s = do
   req (ALup s) >>= \case
     Just vty -> pure vty
     Nothing -> err $ VarNotFound (show s)
+
+clup :: UserName -- Value constructor
+     -> UserName  -- Type constructor
+     -> Checking ([ValPat]
+                 ,[(PortName, BinderType Brat)])
+clup vcon tycon = req AskFC >>= \fc -> req (CLup fc vcon tycon)
+
 
 lookupAndUse :: UserName -> KEnv
              -> Either Error (Maybe ((Src, BinderType Kernel), KEnv))
@@ -186,10 +194,10 @@ handler (Req s k) ctx ns
           Nothing -> pure Nothing
         handler (k args) ctx ns
 
-      CLup vcon tycon -> do
-        tbl <- maybeToRight (dumbErr $ VConNotFound $ show vcon) $
+      CLup fc vcon tycon -> do
+        tbl <- maybeToRight (Err (Just fc) $ VConNotFound $ show vcon) $
                M.lookup vcon (constructors ctx)
-        args <- maybeToRight (dumbErr $ TyConNotFound (show tycon) (show vcon)) $
+        args <- maybeToRight (Err (Just fc) $ TyConNotFound (show tycon) (show vcon)) $
                 M.lookup tycon tbl
         handler (k args) ctx ns
 

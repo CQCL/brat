@@ -337,7 +337,7 @@ check' tm@(Con vcon arg) ((), ((hungry, ty):unders)) = case (?my, ty) of
     pure (((), ()), ((), unders))
   (Braty, Right ty) -> do
     VCon tycon tyargs <- evTy ty
-    (pats, args) <- req (CLup vcon tycon)
+    (pats, args) <- clup vcon tycon
     -- Look for vectors to produce better error messages for mismatched lengths
     wrap <- detectVecErrors vcon tycon tyargs pats ty (Left tm)
     env <- throwLeft $ valMatches tyargs pats
@@ -689,7 +689,7 @@ abstractPattern Braty ends (_, Left Nat) (Lit tm) = simpleCheck Braty TNat tm $>
 abstractPattern Braty ends (_, Right ty) (Lit tm) = simpleCheck Braty ty tm $> (emptyEnv, ends)
 abstractPattern Kerny ends (_, ty) (Lit tm) = simpleCheck Kerny ty tm $> (emptyEnv, ends)
 abstractPattern Braty (ends, i) (dangling, Right ty@(VCon tycon tyargs)) pat@(PCon pcon abst) = do
-  (vps,unders) <- req (CLup pcon tycon)
+  (vps,unders) <- clup pcon tycon
   -- Look for vectors to produce better error messages for mismatched lengths
   wrap <- detectVecErrors pcon tycon tyargs vps ty (Right pat)
   zv <- throwLeft $ valMatches tyargs vps
