@@ -1,6 +1,7 @@
 import Test.Tasty  (testGroup)
 import Test.Tasty.Silver.Interactive (defaultMain)
 
+import Test.Abstractor
 import Test.Checking
 import Test.Circuit.Gen
 import Test.Circuit.Graph
@@ -30,4 +31,5 @@ main = do
                                 ,removeNodeTests
                                 ,elaborationTests
                                 ,substitutionTests
+                                ,abstractorTests
                                 ]

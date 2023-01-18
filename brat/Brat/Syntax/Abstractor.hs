@@ -68,3 +68,33 @@ occursInAbstractor s (APat p) = occursInPat s p
   occursInPat x (Bind y) = x == y
   occursInPat s (PCon _ xs) = occursInAbstractor s xs
   occursInPat _ DontCare = False
+
+newtype NormalisedAbstractor = NA Abstractor
+
+-- Concatenate normalised abstractors, making them right nested
+cat :: NormalisedAbstractor -> NormalisedAbstractor -> NormalisedAbstractor
+cat (NA a) (NA b) = NA $ aux a b
+ where
+  aux AEmpty b = b
+  aux a AEmpty = a
+  aux (a :||: b) c = a :||: aux b c
+  aux a b = a :||: b
+
+normaliseAbstractor :: Abstractor -> NormalisedAbstractor
+normaliseAbstractor (a :||: b) = cat (normaliseAbstractor a) (normaliseAbstractor b)
+normaliseAbstractor (APat p) = NA $ APat (normalisePatterns p)
+ where
+  normalisePatterns :: Pattern -> Pattern
+  normalisePatterns (POnePlus a) = case normalisePatterns a of
+    Lit (Num n) -> Lit (Num (n + 1))
+    a -> POnePlus a
+  normalisePatterns (PTwoTimes a) = case normalisePatterns a of
+    Lit (Num n) -> Lit (Num (2 * n))
+    a -> PTwoTimes a
+  normalisePatterns (PCon c abs)
+    = let (NA arg) = normaliseAbstractor abs in
+        PCon c arg
+  normalisePatterns x = x
+normaliseAbstractor (APull ps abs) = let NA abs' = normaliseAbstractor abs in
+                                       NA (APull ps abs')
+normaliseAbstractor AEmpty = NA AEmpty
