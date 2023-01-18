@@ -171,6 +171,7 @@ abstractor = do ps <- many (try portPull)
     <|> try (Lit <$> simpleTerm)
     <|> try onePlus
     <|> try twoTimes
+    <|> try (matchString "zero" $> PZero)
     <|> try (matchString "nil" $> PNil)
     <|> try cons
     <|> try (matchString "none" $> PNone)

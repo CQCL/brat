@@ -32,6 +32,10 @@ defaultConstructors = M.fromList
      [(plain "Nat", ([], [("value", Right TNat)]))
      ,(plain "Int", ([], [("value", Right TInt)]))
      ])
+  ,(plain "zero", M.fromList
+     [(plain "Nat", ([], []))
+     ,(plain "Int", ([], []))
+     ])
   ,(plain "nil", M.fromList
      [(plain "List", ([VPVar], []))
      ,(plain "Vec", ([VPVar, VPNum NP0], []))

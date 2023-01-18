@@ -28,9 +28,10 @@ instance Show Pattern where
   show (Lit tm) = show tm
   show DontCare = "_"
 
-pattern PNone, PNil :: Pattern
-pattern PNone       = PCon (PrefixName [] "none") AEmpty
-pattern PNil        = PCon (PrefixName [] "nil")  AEmpty
+pattern PNone, PNil, PZero :: Pattern
+pattern PNone = PCon (PrefixName [] "none") AEmpty
+pattern PNil  = PCon (PrefixName [] "nil")  AEmpty
+pattern PZero = PCon (PrefixName [] "zero") AEmpty
 
 pattern PSome, POnePlus, PTwoTimes :: Pattern -> Pattern
 pattern PSome x     = PCon (PrefixName [] "some") (APat x)

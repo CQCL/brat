@@ -3,7 +3,8 @@ module Brat.Syntax.Value (VDecl
                          ,NumValue(..)
                          ,Fun00(..)
                          ,StrictMono(..), Monotone(..)
-                         ,nVar, nConstant, nPlus, n2PowTimes, nFull
+                         ,nZero, nVar, nConstant
+                         ,nPlus, n2PowTimes, nFull
                          ,pattern TNat, pattern TInt
                          ,pattern TFloat, pattern TBool
                          ,pattern TText, pattern TOption
