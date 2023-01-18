@@ -1,29 +1,100 @@
-module Brat.Dot where
+module Brat.Dot (toDotString) where
 
+import Brat.Naming
 import Brat.Graph
-import Brat.Syntax.Common (PortName, OutPort(..), InPort(..))
+import Brat.Syntax.Common
 import Brat.Syntax.Value
 
+import qualified Data.GraphViz as GV
+import qualified Data.GraphViz.Printing as GV
+import qualified Data.GraphViz.Attributes.Complete as GV
+
 import qualified Data.Map as M
+import Data.Text.Lazy (pack, unpack)
+import Data.Bifunctor (first)
+import Data.List (intersect)
+import Data.Graph (reachable, transposeG)
+import Data.Maybe (fromJust)
+import Data.Tuple.HT (snd3)
 
-labelType :: Either SValue Value -> (PortName, PortName) -> String
-labelType (Left _) _ = ""
-labelType (Right vty) (p, q) = unwords ["[label ="
-                                       ,show (unwords ["[", show p, "--(" ++ show vty ++ ")->", show q, "]"])
-                                       ,"]"]
 
-mkEdge :: Wire -> String
-mkEdge (Ex src p, ty, In tgt q) = unwords [show (show src), "->", show (show tgt), labelType ty (show p,show q)]
+-- Wrap Name into a new type to avoid orphan instance 
+newtype Name' = Name' Name deriving (Eq, Ord, Show)
 
-dot :: Graph -> String
-dot g
-  = let ((ns, es), subs) = boxSubgraphs g
-        subs' = (\(lbl, s) -> ("subgraph cluster_" ++ lbl) ++ subGraph lbl s) <$> subs
-        -- Note: `show . show` adds an extra set of quotes so
-        -- that Dot will parse the name as a single string
-        -- even if it contains spaces
-    in  unlines ("digraph {":subs' ++ (show . show <$> M.keys ns) ++ (mkEdge <$> es) ++ ["}"])
+instance (GV.PrintDot Name') where
+  unqtDot (Name' name) = GV.text . pack . show $ name
+  toDot  (Name' name) =  GV.text . pack $ "\"" ++ show name ++ "\""
+
+
+data EdgeType = EvalEdge | SrcEdge | GraphEdge (Either SValue Value)
+
+instance Show EdgeType where
+  show EvalEdge = ""
+  show SrcEdge = ""
+  show (GraphEdge (Left ty)) = show ty
+  show (GraphEdge (Right ty)) = show ty
+
+
+toDotString :: Graph -> String
+toDotString (ns,ws) = unpack . GV.printDotGraph $ GV.graphElemsToDot params verts edges
  where
-  subGraph :: String -> Graph -> String
-  subGraph lbl (ns, es) = unlines ("{":("label="++lbl):(show . show <$> M.keys ns) ++ (mkEdge <$> es) ++ ["}"])
+  verts :: [(Name', Node)]
+  verts = first Name' <$> M.toList ns
+
+  edges :: [(Name', Name', EdgeType)]
+  edges =
+    -- Normal edges
+    [ (Name' v1, Name' v2, GraphEdge ty) | (Ex v1 _, ty, In v2 _) <- ws ] ++
+    -- New edges denoting references in nodes
+    [ edge | (x, node) <- verts, edge <- getRefEdge x (nodeThing node) ]
+
+  getRefEdge :: Name' -> Thing -> [(Name', Name', EdgeType)]
+  getRefEdge x (Eval (Ex y _)) = [(Name' y, x, EvalEdge)]
+  getRefEdge x (y :>>: _) = [(x, Name' y, SrcEdge)]
+  getRefEdge _ _ = []
+
+  -- Map all nodes in a `src :>>: tgt` block to the src node
+  clusterMap :: M.Map Name' Name'
+  clusterMap = foldr f M.empty verts
+   where
+    (g, toNode, toVert) = toGraph (ns, ws)
+    f (_, node) m = case nodeThing node of
+      (src :>>: tgt) ->
+        -- Find all nodes in the box spanned by src and tgt, i.e. all nodes
+        -- reachable from src that can reach tgt
+        let srcReaches = reachable g (fromJust (toVert src))
+            reachesTgt = reachable (transposeG g) (fromJust (toVert tgt))
+            box = Name' . snd3 . toNode <$> (srcReaches `intersect` reachesTgt) in
+        foldr (`M.insert` Name' src) m box
+      _ -> m
+
+  -- GV.GraphVisParams vertexType vertexLabelType edgeLabelType clusterType clusterLabelType
+  params :: GV.GraphvizParams Name' Node EdgeType Name' Node
+  params = GV.defaultParams {
+    GV.fmtNode = \(Name' name, node) -> [
+      GV.textLabel (pack $ show name ++ ":\\n" ++ show (nodeThing node)),
+      GV.Color $ GV.toColorList [ color node ],
+      GV.Shape GV.BoxShape
+    ],
+    GV.fmtEdge = \(_, _, label) -> [
+      -- It looks better of we add two spaces before label to move it
+      -- a bit to the right
+      GV.textLabel (pack $ "  " ++ show label),
+      GV.Style [style label],
+      GV.arrowTo (arrow label)
+    ],
+    GV.clusterBy = \n@(name, _) -> case clusterMap M.!? name of
+        Just parent -> GV.C parent $ GV.N n
+        Nothing -> GV.N n,
+    GV.clusterID = \(Name' name) -> GV.Str (pack $ show name)
+  }
+
+  color BratNode {} = GV.RGB 255 0 0
+  color KernelNode {} = GV.RGB 0 0 255
+
+  style (GraphEdge _) = GV.solid
+  style _ = GV.dashed
+
+  arrow EvalEdge = GV.oDot
+  arrow _ = GV.vee
 

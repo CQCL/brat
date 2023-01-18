@@ -1,4 +1,4 @@
-module Brat.Compiler (printAST, printDeclsHoles, compileFile) where
+module Brat.Compiler (printAST, printDeclsHoles, writeDot, compileFile) where
 
 import Brat.Compile.Circuit
 import Brat.Syntax.Common (Decl'(..), CType'(..), Modey(..), pattern R)
@@ -14,6 +14,7 @@ import qualified Data.ByteString as BS
 import Data.ProtoLens (encodeMessage)
 import System.FilePath (dropExtension)
 import Brat.Elaborator
+import Brat.Dot (toDotString)
 
 printDeclsHoles :: String -> IO ()
 printDeclsHoles file = do
@@ -47,6 +48,18 @@ printAST printRaw printAST file = do
   when printRaw $ banner "Raw AST" $ mapM_ print decls
   when printAST $
     banner "desugared AST" (mapM_ print =<< eitherIO (addSrcContext file cts (desugarEnv env')))
+
+writeDot :: String -> String -> IO ()
+writeDot file out = do
+  env <- runExceptT $ loadFilename file
+  (_, _, _, graphs) <- eitherIO env
+  case filter isMain graphs of
+    [(_, g)] -> writeFile out (toDotString g)
+    [] -> error "No main graph found!"
+    _ -> error "More than one main graph found!"
+ where
+  isMain (PrefixName [] "main", _) = True
+  isMain _ = False
 
 compileFile :: String -> IO ()
 compileFile file = do

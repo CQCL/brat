@@ -8,7 +8,6 @@ import Brat.Syntax.Simple
 
 import qualified Data.Graph as G
 import qualified Data.Map as M
-import Data.Maybe (fromJust)
 import Brat.Syntax.Value
 import Brat.UserName
 
@@ -68,39 +67,3 @@ wireStart (Ex x _, _, _) = x
 
 wireEnd :: Wire -> Name
 wireEnd (_, _, In x _) = x
-
-boxSubgraphs :: Graph -> (Graph, [(String, Graph)])
-boxSubgraphs g@(ns,ws) = let subs = fromJust subGraphs
-                             (subNodes, subWires) = mconcat $ snd <$> subs
-                         in  ((ns M.\\ subNodes, deleteAll wireEq subWires ws)
-                             ,subs)
- where
-  wireEq :: Wire -> Wire -> Bool
-  wireEq (a0, _, b0) (a1, _, b1) = (a0 == a1) || (b0 == b1)
-
-  elemBy :: (a -> a -> Bool) -> a -> [a] -> Bool
-  elemBy f a xs = any (f a) xs
-
-  deleteAll :: (a -> a -> Bool) -> [a] -> [a] -> [a]
-  deleteAll _ _ [] = []
-  deleteAll f as (x:xs) | elemBy f x as = deleteAll f as xs
-                        | otherwise = x : deleteAll f as xs
-
-  box :: (Name, Node) -> [(String, (Name, Name))]
-  box (nm,n)
-    | src :>>: tgt <- nodeThing n = [(show nm, (src,tgt))]
-    | otherwise = []
-
-  subGraphs :: Maybe [(String, Graph)]
-  subGraphs = traverse (\(lbl, x) -> (lbl,) <$> boxInsides x) (M.toList ns >>= box)
-
-  boxInsides :: (Name, Name) -> Maybe (Graph)
-  boxInsides (srcId, tgtId) = do
-    let wires = wiresFrom srcId g
-    case wires of
-      [w] | wireEnd w == tgtId -> do
-              src <- lookupNode srcId g
-              tgt <- lookupNode tgtId g
-              pure (M.fromList [(srcId, src),(tgtId, tgt)], wires)
-      _ -> mconcat <$> traverse boxInsides ((\w -> (wireEnd w, tgtId)) <$> wires)
-

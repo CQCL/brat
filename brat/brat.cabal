@@ -120,7 +120,8 @@ library
                        array,
                        filepath,
                        directory,
-                       utility-ht
+                       utility-ht,
+                       graphviz
 
 executable brat
   import:              haskell, ghc-perf, warning-flags
@@ -140,7 +141,8 @@ executable brat
                        bytestring,
                        array,
                        directory,
-                       utility-ht
+                       utility-ht,
+                       graphviz
 
   other-modules:       Brat.Checker,
                        Brat.Checker.Clauses,
