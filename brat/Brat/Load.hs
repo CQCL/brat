@@ -22,6 +22,7 @@ import Brat.Syntax.Core
 import Brat.Syntax.Raw
 import Brat.Syntax.Value
 import Brat.UserName
+import Util (duplicates)
 import Bwd
 import Control.Monad.Freer (req)
 
@@ -100,10 +101,10 @@ loadStmtsWithEnv :: (VEnv, [VDecl]) -> (String, Prefix, FEnv, String) -> Either 
 loadStmtsWithEnv (venv, oldDecls) (fname, pre, stmts, cts) = addSrcContext fname cts $ do
   -- hacky mess - cleanup!
   (decls, aliases) <- desugarEnv =<< elabEnv stmts
-  {-
-  unless (null (duplicates decls)) $
-    Left (addSrcName fname $ dumbErr $ NameClash $ show (duplicates decls))
-  -}
+  -- Note the duplicates here works for anything Eq, but is O(n^2).
+  -- TODO Since decl names can be ordered/hashed, we could be much faster.
+  let dups = duplicates (map fnName decls) in unless (null dups) $
+    Left $ dumbErr $ NameClash $ show dups
   ((venv', vdecls), (holes, graphs)) <- run venv root
                                         $ withAliases aliases $ do
     (venv, vdecls) <- addNounsToEnv pre decls

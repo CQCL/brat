@@ -1,0 +1,3 @@
+Error in test/golden/error/duplicate_decl.brat:
+  Name clash: ["inc"]
+

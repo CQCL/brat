@@ -1,0 +1,5 @@
+inc(Int) -> Int
+inc(x) = succ(x)
+
+inc(Int) -> Int
+inc(x) = succ(succ(x))

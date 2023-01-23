@@ -52,8 +52,8 @@ addi(Int, Int) -> Nat
 addi = { g, g; addn }
 
 
-f :: { Nat, Nat, Int -> Int, Nat, Int}
-f = { f,f,idi ; idi,g,idi }
+juxt_in_comp2 :: { Nat, Nat, Int -> Int, Nat, Int}
+juxt_in_comp2 = { f,f,idi ; idi,g,idi }
 
 sverb_cverb :: { Int -> Nat }
 sverb_cverb = { idi; (z => 4) }
@@ -64,5 +64,5 @@ sverb_sverb_cverb = { idi; idi; (z => 4) }
 num_lit :: { -> Nat, Nat }
 num_lit = { => (1, 2) |> id2 }
 
-f :: { Nat -> Nat }
-f = { x => (1, x) |> addn }
+into_in_lambda :: { Nat -> Nat }
+into_in_lambda = { x => (1, x) |> addn }
