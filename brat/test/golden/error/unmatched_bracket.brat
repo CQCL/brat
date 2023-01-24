@@ -1,0 +1,3 @@
+f(n, Vec([], n) -> Vec([], n) -- First bracket never closed
+f(_, nil) = nil
+f(_, cons(x,xs)) = cons(x, f(0, xs))
