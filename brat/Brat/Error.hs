@@ -10,6 +10,7 @@ module Brat.Error (ParseError(..)
 
 import Brat.FC
 
+import Data.List (intercalate)
 import System.Exit
 
 newtype ParseError = PE { pretty :: String }
@@ -55,7 +56,7 @@ data ErrorMsg
  | BadCons String
  -- function, [argument]
  | Unimplemented String [String]
- | ImportCycle String String
+ | ImportCycle [String]
  | FileNotFound String
  | InternalError String
  | AmbiguousPortPull String String
@@ -121,7 +122,8 @@ instance Show ErrorMsg where
   show MainNotFound = "No function found called \"main\""
   show (BadCons x) = "Expected two arguments to `cons` but got: " ++ x
   show (Unimplemented f args) = unwords ("Unimplemented, sorry! --":f:args)
-  show (ImportCycle a b) = unwords ["Cycle detected in imports:", a, "is reachable from", b]
+  show (ImportCycle mods) = unwords ["Cyclic imports: modules all transitively import each other:"
+                                    ,intercalate ", " mods]
   show (FileNotFound f) = "File not found: " ++ show f
   show (InternalError x) = "Internal error: " ++ x
   show (AmbiguousPortPull p row) = "Port " ++ p ++ " is ambiguous in " ++ row

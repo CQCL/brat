@@ -1,3 +1,3 @@
-Error in test/golden/cycle/c.brat:
-  Cycle detected in imports: c is reachable from a
+Error in c:
+  Cyclic imports: modules all transitively import each other: c, a, b
 

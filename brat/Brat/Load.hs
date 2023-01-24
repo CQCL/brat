@@ -27,7 +27,7 @@ import Bwd
 import Control.Monad.Freer (req)
 
 import Control.Monad.Except
-import Data.List (elemIndex)
+import Data.List (sort)
 import Data.List.HT (viewR)
 import qualified Data.Graph as G
 import qualified Data.Map as M
@@ -139,8 +139,10 @@ loadFiles :: FilePath -> String -> String
          -> ExceptT SrcErr IO VMod
 loadFiles path fname contents = do
   let fn = plain fname
-  edges <- depGraph [] fn contents
-  let (g, f, _) = G.graphFromEdges edges
+  idx_mods <- map snd <$> M.toList <$> depGraph M.empty fn contents
+  liftEither $ checkNoCycles idx_mods
+  let (g, f, _) = G.graphFromEdges (map snd idx_mods) -- discard indices
+
   let files = G.topSort (G.transposeG g)
   let getStmts v = let ((stmts, cts), (PrefixName ps name), _) = f v in ((ps ++ [name]), stmts, cts)
   let allStmts = (map getStmts files) :: [(Prefix, FEnv, String)]
@@ -160,19 +162,35 @@ loadFiles path fname contents = do
 --     (fname, [], M.empty, contents)
     allStmts'
   where
-    depGraph :: [UserName] -> UserName -> String -> ExceptT SrcErr IO [FlatMod]
-    depGraph chain name cts = case elemIndex name chain of
-      Just idx -> throwError $ addSrcName (nameToFile name) $ dumbErr (ImportCycle (show name) $ show $ chain!!(idx-1))
+    -- builds a map from username to (index in which discovered, module)
+    depGraph :: (M.Map UserName (Int, FlatMod)) -- input map to which to add
+             -> UserName -> String
+             -> ExceptT SrcErr IO (M.Map UserName (Int, FlatMod))
+    depGraph visited name cts = case M.lookup name visited of
+      Just _ -> pure visited
       Nothing -> do
         (imports, env) <- liftEither $ parseFile (nameToFile name) cts
-        es <- forM imports $ \name' -> do
-          let file = nameToFile name'
-          exists <- lift $ doesFileExist file
-          unless exists $
-            throwError $ addSrcName (nameToFile name) $ dumbErr (FileNotFound file)
-          cts' <- lift $ readFile file
-          depGraph (name:chain) name' cts'
-        pure (((env, cts), name, imports):(concat es))
+        let with_mod = M.insert name (M.size visited,((env, cts), name, imports)) visited
+        foldM visit with_mod imports
+     where
+      visit visited' name' = do
+        let file = nameToFile name'
+        exists <- lift $ doesFileExist file
+        unless exists $
+          throwError $ addSrcName file $ dumbErr (FileNotFound file)
+        cts <- lift $ readFile file
+        depGraph visited' name' cts
 
     nameToFile :: UserName -> String
     nameToFile (PrefixName ps file) = path </> (foldr (</>) file ps) ++ ".brat"
+
+checkNoCycles :: [(Int, FlatMod)] -> Either SrcErr ()
+checkNoCycles mods =
+  let idxAndNames = [(i, n, ns) | (i, (_, n, ns)) <- mods]
+      justName (_, n, _) = show n
+  in case [verts | G.CyclicSCC verts <- G.stronglyConnCompR idxAndNames] of
+    [] -> Right ()
+    -- Report just the first SCC. Would be great to reduce to a single smallest cycle,
+    -- but Data.Graph doesn't offer anything useful (e.g. Dijkstra's algorithm!)
+    scc:_ -> Left $ let scc' = map justName (sort scc) -- sort by indices, then discard
+                    in addSrcName (head scc') $ dumbErr $ ImportCycle scc'
