@@ -32,7 +32,6 @@ data Thing
   | Target       -- ..boxes
   | Id           -- Identity node for convenient wiring
   | Hypo         -- Hypothesis for type checking
-  | Combo ComboType -- inputs are wired in later
   | Constructor UserName
   | Selector UserName
   deriving (Eq, Show)

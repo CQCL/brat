@@ -189,10 +189,10 @@ check' :: (CheckConstraints m k, TensorOutputs (Outputs m d), ?my :: Modey m)
                    ,ChkConnectors m d k) -- rightovers
 check' Empty tys = pure (((), ()), tys)
 check' (s :|: t) tys = do
-  -- in Checking mode, each LHS/RHS removes the wires/types it produces from the Unders remaining,
-  -- including components of thunks joined together by (Combo Thunk)s in checkOutputs
+  -- in Checking mode, each LHS/RHS removes its wires+types from the ChkConnectors remaining
   ((ins, outs), tys)  <- check s tys
   ((ins', outs'), tys) <- check t tys
+  -- in Synthesizing mode, instead here we join together the outputs, and the inputs
   pure ((combine ins ins', tensor outs outs'), tys)
 check' (s :-: t) (overs, unders) = do
   -- s is Syn, t is a UVerb
