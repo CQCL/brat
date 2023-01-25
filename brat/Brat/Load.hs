@@ -47,15 +47,13 @@ type VMod = (VEnv, [VDecl]        -- all symbols from all modules
 emptyMod :: VMod
 emptyMod = (M.empty, [], [], [])
 
--- kind check the signature of a function and add it to the environment
-addNounsToEnv :: Prefix -> [Decl] -> Checking (VEnv, [VDecl])
-addNounsToEnv _ [] = pure (M.empty, [])
-addNounsToEnv pre (d@Decl{..}:decls) = do
+-- kind check the signature of a function and return an environment for just that
+envForNoun :: Prefix -> Decl -> Checking (VEnv, [VDecl])
+envForNoun pre d@Decl{..} = do
   let newKey = PrefixName pre fnName
   sig <- kindCheckRow fnSig
-  (venv, vdecls) <- addNounsToEnv pre decls
   (_, _, row, _) <- next fnName (Prim fnName) (B0,B0) [] sig
-  pure (M.insert newKey row venv, d { fnSig = sig } : vdecls)
+  pure (M.singleton newKey row, [d { fnSig = sig }])
 
 checkDecl :: Prefix -> VDecl -> Checking ()
 checkDecl pre Decl{..}
@@ -105,13 +103,15 @@ loadStmtsWithEnv (venv, oldDecls) (fname, pre, stmts, cts) = addSrcContext fname
   -- TODO Since decl names can be ordered/hashed, we could be much faster.
   let dups = duplicates (map fnName decls) in unless (null dups) $
     Left $ dumbErr $ NameClash $ show dups
-  ((venv', vdecls), (holes, graphs)) <- run venv root
-                                        $ withAliases aliases $ do
-    (venv, vdecls) <- addNounsToEnv pre decls
-    localVEnv venv $ traverse (checkDecl pre) vdecls
-    pure (venv, vdecls)
+  ((venv', vdecls), (holes, _graphs)) <- run venv root $
+    withAliases aliases $ mconcat <$> mapM (envForNoun pre) (reverse decls)
+  -- note we discard the _graphs from envForNoun
+  unless (length holes == 0) $ Left $ dumbErr $ InternalError "Decl sigs generated holes"
+  venv <- pure (venv <> venv')
+  (_, (holes, graph)) <- run venv root $
+    withAliases aliases $ traverse (checkDecl pre) vdecls
   
-  pure (venv <> venv', oldDecls <> vdecls, holes, [(PrefixName [] "main", graphs)])
+  pure (venv, oldDecls <> vdecls, holes, [(PrefixName [] "main", graph)])
  where
   -- A composable version of `checkDecl`
   {-
