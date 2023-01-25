@@ -4,7 +4,7 @@ name:                brat
 version:             0.1.0.0
 maintainer:          craig.roy@cambridgequantum.com
 build-type:          Custom
-extra-source-files:  emacs/brat-mode.el, emacs/lsp-brat.el, proto/*.proto
+extra-source-files:  emacs/brat-mode.el, emacs/lsp-brat.el, proto/v1alpha/*.proto
 
 
 custom-setup
@@ -98,12 +98,12 @@ library
                        Brat.UserName,
                        Bwd,
                        Control.Monad.Freer,
-                       Proto.Graph, Proto.Graph_Fields,
-                       Proto.Signature, Proto.Signature_Fields,
+                       Proto.V1alpha.Graph, Proto.V1alpha.Graph_Fields,
+                       Proto.V1alpha.Signature, Proto.V1alpha.Signature_Fields,
                        Util
 
-  autogen-modules:     Proto.Graph, Proto.Graph_Fields,
-                       Proto.Signature, Proto.Signature_Fields
+  autogen-modules:     Proto.V1alpha.Graph, Proto.V1alpha.Graph_Fields,
+                       Proto.V1alpha.Signature, Proto.V1alpha.Signature_Fields
 
   build-depends:       base < 5,
                        bytestring,
@@ -177,8 +177,8 @@ executable brat
                        Brat.UserName,
                        Bwd,
                        Control.Monad.Freer,
-                       Proto.Graph,
-                       Proto.Graph_Fields,
+                       Proto.V1alpha.Graph,
+                       Proto.V1alpha.Graph_Fields,
                        Util
 
 

@@ -24,5 +24,5 @@ installEmacsMode = do
   putStrLn $ "Copied emacs files to " ++ show dest
 
 
-main = installEmacsMode *> defaultMainGeneratingProtos "proto"
+main = installEmacsMode *> defaultMainGeneratingProtos "proto/"
 

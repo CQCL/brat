@@ -24,8 +24,8 @@ import Brat.Syntax.Value (Value(..)
                          ,SValue
                          ,NumValue(..)
                          ,Fun00(Constant0))
-import qualified Proto.Graph as PG
-import Proto.Graph_Fields as PG
+import qualified Proto.V1alpha.Graph as PG
+import Proto.V1alpha.Graph_Fields as PG
 
 import Debug.Trace
 
@@ -65,6 +65,10 @@ data Circuit
             , permutation :: ()
             , commands :: [Command]
             } deriving Show
+
+-- Commented out so haskell doesn't complain it's unused
+-- input_node = 0
+output_node = 1
 
 process :: BG.Graph
         -> (Row Value, Row Value)
@@ -109,8 +113,7 @@ process tm (ins, outs) = let qbits = max (count countQ ins) (count countQ outs)
     pure []
 
 none :: PG.Value
-none = let nothing :: PG.OptionValue = defMessage & PG.maybe'inner .~ Nothing in
-         defMessage & PG.maybe'option .- nothing
+none = defMessage & PG.maybe'value .~ Nothing
          
 -- Shortcut for setting a `maybe` field
 (.-) :: ASetter s t k (Maybe v) -> v -> s -> t
@@ -165,20 +168,17 @@ compileCircuit :: BG.Graph
                -> PG.Value
 compileCircuit tm tys = defMessage & PG.maybe'struct .- (circuit2Tierkreis $ process tm tys)
 
-empty :: PG.Empty
-empty = defMessage
+-- N.B. this is how to create an instance of the Empty type:
+-- empty :: PG.Empty
+-- empty = defMessage
 
 wrapCircuit :: PG.Value -> PG.Graph
 wrapCircuit v = let node :: PG.Node = defMessage & PG.maybe'const .~ (_Just # v) in
                    defMessage
-                   & PG.nodes .~ (M.fromList
-                                 [("circuit", node)
-                                 ,("output", defMessage
-                                             & PG.maybe'output .~ (_Just # empty))
-                                 ])
+                   & PG.nodes .~ [node] -- Input node is 0, Output node is 1, so this node gets the index 2
                    & PG.edges .~ [defMessage
                                  & PG.portFrom .~ "value"
                                  & PG.portTo   .~ "value"
-                                 & PG.nodeFrom .~ "circuit"
-                                 & PG.nodeTo   .~ "output"
+                                 & PG.nodeFrom .~ 2
+                                 & PG.nodeTo   .~ output_node
                                 ]
