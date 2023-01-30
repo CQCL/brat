@@ -135,7 +135,8 @@ addNGraph port_name
      ,("addN_tgt", BratNode Target [("out", int)] [])
      ,("addN", BratNode Id [("thunk", addN_ty)] [("thunk", addN_ty)])
      ])
-    ,[((Ex "addN_src" 0), Right int, (In "add_eval" 1))
+    ,[(Ex "addN_box" 0, Right addN_ty, In "addN" 0)
+     ,((Ex "addN_src" 0), Right int, (In "add_eval" 1))
      ,((Ex "N" 0), Right int, (In "add_eval" 0))
      ,((Ex "add" 0), Right int, (In "addN_tgt" 0))
      ]
@@ -145,20 +146,17 @@ addNGraph port_name
   addN_ty = VFun Braty B0 ([("inp", Right int)] :-> [("out", Right int)])
 
 addNmainGraph :: Graph
-addNmainGraph
-  = (M.fromList
-     [("add", BratNode (Prim "add") [("a", int), ("b", int)] [("c", int)])
-     ,("N", BratNode (Prim "N") [] [("value", int)])
-     ,("addN_box", BratNode ("addN_src" :>>: "addN_tgt") [] [("value", addN_ty)])
-     ,("addN_src", BratNode Source [("inp", int)] [("inp", int)])
-     ,("addN_tgt", BratNode Target [("out", int)] [("out", int)])
-     ,("addN_eval", BratNode (Eval (Ex "addN_box" 0)) [("value", addN_ty), ("inp", int)] [("out", int)])
-     ,("addN", BratNode (Prim "addN") [("inp", int)] [("out", int)])
+addNmainGraph =
+  let (ns, ws) = addNGraph "thunk"
+  in (M.fromList (
+     (M.toList ns) ++
+     [("addN_eval", BratNode (Eval (Ex "addN" 0)) [("inp", int)] [("out", int)])
      ,("1", BratNode (Const (Num 1)) [] [("value", int)])
-     ]
-    ,[((Ex "addN_src" 0), Right int, (In "add" 0))
-     ,((Ex "N" 0), Right int, (In "add" 1))
-     ,((Ex "add" 2), Right int, (In "addN_tgt" 0))
+     ,("main", BratNode Id [("a1", int)] [("a1", int)])
+     ])
+    ,ws ++ [
+      (Ex "1" 0, Right int, In "addN_eval" 0)
+     ,(Ex "addN_eval" 0, Right int, In "main" 0)
      ]
     )
  where
@@ -216,7 +214,8 @@ extGraph
   -- `M.difference a b` finds things that are in `a` but not in `b`
   assertNoDifference :: String -> M.Map String Int -> M.Map String Int -> Assertion -- Actual vs Expected
   assertNoDifference msg act exp = let
-      (mAct, mExp) = (M.difference act exp, M.difference exp act)
+      sub = \a b -> if a <= b then Nothing else Just (a - b)
+      (mAct, mExp) = (M.differenceWith sub act exp, M.differenceWith sub exp act)
       sAct = intercalate "\n" (map show $ M.toList mAct)
       sExp = intercalate "\n" (map show $ M.toList mExp)
     in case (mAct, mExp) of

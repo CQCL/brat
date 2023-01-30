@@ -7,8 +7,9 @@ module Brat.Load (loadFilename
                  ) where
 
 import Brat.Checker.Clauses
-import Brat.Checker.Helpers (ensureEmpty)
+import Brat.Checker.Helpers (ensureEmpty, wire)
 import Brat.Checker.Monad
+import Brat.Checker.Types (EnvData)
 import Brat.Checker
 import Brat.Elaborator (elabEnv)
 import Brat.Error
@@ -26,7 +27,9 @@ import Util (duplicates)
 import Bwd
 import Control.Monad.Freer (req)
 
+import Control.Exception (assert)
 import Control.Monad.Except
+import Data.Functor ((<&>), ($>))
 import Data.List (sort)
 import Data.List.HT (viewR)
 import qualified Data.Graph as G
@@ -47,36 +50,30 @@ type VMod = (VEnv, [VDecl]        -- all symbols from all modules
 emptyMod :: VMod
 emptyMod = (M.empty, [], [], [])
 
--- kind check the signature of a function and return an environment for just that
-envForNoun :: Prefix -> Decl -> Checking (VEnv, [VDecl])
-envForNoun pre d@Decl{..} = do
-  let newKey = PrefixName pre fnName
-  sig <- kindCheckRow fnSig
-  (_, _, row, _) <- next fnName (Prim fnName) (B0,B0) [] sig
-  pure (M.singleton newKey row, [d { fnSig = sig }])
-
-checkDecl :: Prefix -> VDecl -> Checking ()
-checkDecl pre Decl{..}
-  | Local <- fnLocality = localFC fnLoc $ do
-  (_, unders, _, _) <- next fnName Id (B0, B0) fnSig fnSig
-  case fnBody of
-    NoLhs body -> do
-      (((), ()), ((), [])) <- let ?my = Braty in check body ((), unders)
-      pure ()
-    -- TODO: Unify this with `getThunks` and `check (Th _)` code
-    ThunkOf (WC _ verb) -> case fnSig of
-      -- Seems like it should be important to not drop the context here
-      [(_, Right (VFun m@Braty ctx (ss :-> ts)))] -> let ?my = m in checkBody fnName verb (ctx, ss, ts)
-      [(_, Right (VFun m@Kerny ctx (ss :-> ts)))] -> let ?my = m in checkBody fnName verb (ctx, ss, ts)
-      [u] -> req $ Throw (dumbErr $ ExpectedThunk "" (show u))
-      [] -> err $ EmptyRow name
-      (_:_) -> err $ MultipleOutputsForThunk name
-
-    Undefined -> error "No body in `checkDecl`"
-
-  | Extern sym <- fnLocality = () <$ next (show $ PrefixName pre fnName) (Prim sym) (B0,B0) [] fnSig
+checkDecl :: Prefix -> VDecl -> Maybe [(Tgt, BinderType Brat)] -> Checking ()
+checkDecl pre Decl{..} to_define = case (fnLocality, to_define) of
+  (Local, Just decl_defines) -> localFC fnLoc $ do
+    case fnBody of
+      NoLhs body -> do
+        (((), ()), ((), [])) <- let ?my = Braty in check body ((), decl_defines)
+        pure ()
+      -- TODO: Unify this with `getThunks` and `check (Th _)` code
+      ThunkOf (WC _ verb) -> do
+        (ty, box_out) <- case fnSig of
+          -- Seems like it should be important to not drop the context here
+          [(_, Right ty@(VFun m@Braty ctx (ss :-> ts)))] -> (ty,) <$> let ?my = m in checkBody fnName verb (ctx, ss, ts)
+          [(_, Right ty@(VFun m@Kerny ctx (ss :-> ts)))] -> (ty,) <$> let ?my = m in checkBody fnName verb (ctx, ss, ts)
+          [u] -> req $ Throw (dumbErr $ ExpectedThunk "" (show u))
+          [] -> err $ EmptyRow name
+          (_:_) -> err $ MultipleOutputsForThunk name
+        let [(thunk_in, _)] = decl_defines
+        wire (box_out, ty, thunk_in)
+      Undefined -> error "No body in `checkDecl`"
+    pure ()
+  (Extern _, Nothing) -> pure () -- no body to check; all sigs kindCheck'd already
  where
-  name = show $ PrefixName pre fnName
+  uname = PrefixName pre fnName
+  name = show uname
 
 loadAlias :: TypeAlias -> Checking (UserName, [(PortName, TypeKind)], [ValPat], Value)
 loadAlias (TypeAlias fc name args body) = localFC fc $ do
@@ -103,29 +100,38 @@ loadStmtsWithEnv (venv, oldDecls) (fname, pre, stmts, cts) = addSrcContext fname
   -- TODO Since decl names can be ordered/hashed, we could be much faster.
   let dups = duplicates (map fnName decls) in unless (null dups) $
     Left $ dumbErr $ NameClash $ show dups
-  ((venv', vdecls), (holes, _graphs)) <- run venv root $
-    withAliases aliases $ mconcat <$> mapM (envForNoun pre) (reverse decls)
-  -- note we discard the _graphs from envForNoun
+  -- kindCheck the declaration signatures, but throw away the graph
+  (vdecls, (holes, _graph)) <- run venv root $ withAliases aliases $ forM decls $ \d ->
+    kindCheckRow (fnSig d) <&> \sig -> (d{fnSig=sig} :: VDecl)
   unless (length holes == 0) $ Left $ dumbErr $ InternalError "Decl sigs generated holes"
-  venv <- pure (venv <> venv')
-  (_, (holes, graph)) <- run venv root $
-    withAliases aliases $ traverse (checkDecl pre) vdecls
   
-  pure (venv, oldDecls <> vdecls, holes, [(PrefixName [] "main", graph)])
- where
-  -- A composable version of `checkDecl`
-  {-
-  checkDecl' :: VEnv -> [VDecl] -> Prefix -- static environment, context
-            -> ([TypedHole], [(UserName, Graph)], Namespace) -- 'fold' state: compiled output + namespace
-            -> VDecl -- to check
-            -> Either SrcErr ([TypedHole], [(UserName, Graph)], Namespace)
-  checkDecl' venv decls pre (holes, graphs, nsp) d = do
-    let (decl_nsp, nsp') = split (fnName d) nsp
-    ((), (holes', graph)) <- addSrcContext ((fnName d) ++ " (" ++ fname ++ ")") cts $
-                             venv decl_nsp (checkDecl pre d)
-    pure (holes ++ holes', (PrefixName pre (fnName d), graph):graphs, nsp')
-  -}
+  (venv', (holes, graph)) <- run venv root $ withAliases aliases $ do
+      -- Generate environment mapping usernames to nodes in the graph
+      entries <- mapM declNode vdecls
+      let env = M.fromList [(name, overs) | (name, _, overs) <- entries]
+      localVEnv env $ do
+        let to_define = M.fromList [(name, unders) | (name, unders, _) <- entries, (length unders) > 0]
+        remaining <- foldM checkDecl' to_define vdecls
+        pure $ assert (M.null remaining) -- all to_define were defined
+      pure env
 
+  pure (venv <> venv', oldDecls <> vdecls, holes, [(PrefixName [] "main", graph)])
+ where
+  declNode :: VDecl -> Checking (UserName, [(Tgt, BinderType Brat)], EnvData Brat)
+  declNode Decl{..} = let
+      name = PrefixName pre fnName
+      (ins, thing) = case fnLocality of
+        Local -> (fnSig, Id) -- Compilation will probably want these to be flagged with the name
+        Extern sym -> ([], Prim sym)
+      in next (show name) thing (B0, B0) ins fnSig <&> (\(_, unders, outs, _) -> (name, unders,outs))
+
+  checkDecl' :: M.Map UserName [(Tgt, BinderType Brat)]
+             -> VDecl
+             -> Checking (M.Map UserName [(Tgt, BinderType Brat)])
+  checkDecl' to_define decl@Decl{fnName=fnName} =
+    let name = PrefixName pre fnName
+        (decl_defines, remaining) = M.updateLookupWithKey (\_ _ -> Nothing) name to_define
+    in checkDecl pre decl decl_defines $> remaining
 
 loadFilename :: String -> ExceptT SrcErr IO VMod
 loadFilename file = do

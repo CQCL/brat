@@ -1,4 +1,4 @@
-ext "" display(s :: String) -> (u :: [])
+ext "printf" display(s :: String) -> (u :: [])
 
 main(String) -> []
 main = s => display(s)
