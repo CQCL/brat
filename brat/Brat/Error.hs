@@ -71,6 +71,7 @@ data ErrorMsg
  | ValMatchFail String String
  -- Constructor, Type
  | UnrecognisedConstructor String String
+ | UnreachableBranch
 
 instance Show ErrorMsg where
   show (TypeErr x) = "Type error: " ++ x
@@ -144,6 +145,7 @@ instance Show ErrorMsg where
   show (UnrecognisedConstructor c ty) = unlines ["Unrecognised constructor: " ++ c
                                                 ,"For type: " ++ ty
                                                 ]
+  show UnreachableBranch = "Unreachable branch"
 
 data Error = Err { fc  :: Maybe FC
                  , msg :: ErrorMsg

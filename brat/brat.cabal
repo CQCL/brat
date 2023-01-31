@@ -71,7 +71,9 @@ library
 
   exposed-modules:     Brat.Checker,
                        Brat.Checker.Clauses,
+                       Brat.Checker.Clauses.Refinements,
                        Brat.Checker.Helpers,
+                       Brat.Checker.Helpers.Nodes,
                        Brat.Checker.Monad,
                        Brat.Checker.Types,
                        Brat.Compiler,
@@ -146,7 +148,9 @@ executable brat
 
   other-modules:       Brat.Checker,
                        Brat.Checker.Clauses,
+                       Brat.Checker.Clauses.Refinements,
                        Brat.Checker.Helpers,
+                       Brat.Checker.Helpers.Nodes,
                        Brat.Checker.Quantity,
                        Brat.Checker.Monad,
                        Brat.Checker.Types,
@@ -208,9 +212,11 @@ test-suite tests
                        Test.Failure,
                        Test.Parsing,
                        Test.Naming,
+                       Test.Refinements,
                        Test.Search,
                        Test.Substitution,
-                       Test.Syntax.Let
+                       Test.Syntax.Let,
+                       Test.Util
 
   build-depends:       base <5,
                        brat,

@@ -17,7 +17,7 @@ module Brat.Checker (check
                     ,next, knext
                     ,localFC
                     ,emptyEnv
-                    ,checkOutputs, checkThunk
+                    ,checkInputs, checkOutputs, checkThunk
                     ,CheckConstraints
                     ,TensorOutputs(..)
                     ,kindCheck, kindCheckRow
@@ -685,7 +685,8 @@ abstractPattern m (ends, i) (src, ty) (Bind x)
                 Just _ -> (ends :< ExEnd (end src), i + 1)
                 Nothing ->  (ends, i)
     in pure (let ?my = m in singletonEnv x (src, ty), ctx)
-abstractPattern Braty ends (_, Left Nat) (Lit tm) = simpleCheck Braty TNat tm $> (emptyEnv, ends)
+abstractPattern Braty (ends, i) (src, Left Nat) (Lit tm)
+  = simpleCheck Braty TNat tm $> (emptyEnv, (ends :< ExEnd (end src), i + 1))
 abstractPattern Braty ends (_, Right ty) (Lit tm) = simpleCheck Braty ty tm $> (emptyEnv, ends)
 abstractPattern Kerny ends (_, ty) (Lit tm) = simpleCheck Kerny ty tm $> (emptyEnv, ends)
 abstractPattern Braty (ends, i) (dangling, Right ty@(VCon tycon tyargs)) pat@(PCon pcon abst) = do
@@ -709,17 +710,18 @@ abstractPattern Kerny (ends, i) (dangling, sty) (PCon (PrefixName [] c) abs) = d
       kwire (dangling, sty, hungry)
       let ?my = Kerny in (,(ends, i)) <$> abstractAll overs abs
 abstractPattern Kerny ends (_, Of _ _) PNil = pure (emptyEnv, ends)
-abstractPattern Braty (ends, i) src@(NamedPort dangling _, Left k) pat
+abstractPattern Braty (ends, i) (src@(NamedPort dangling _), Left k) pat
   = abstractKind Braty k pat
  where
   abstractKind :: Modey m -> TypeKind -> Pattern -> Checking (Env (EnvData m), (Bwd End, Int))
   abstractKind Braty _ (Bind x) = let ?my = Braty
-                                  in pure (singletonEnv x src, (ends :< (ExEnd dangling), i + 1))
+                                  in pure (singletonEnv x (src, Left k), (ends :< (ExEnd dangling), i + 1))
   abstractKind _ _ (DontCare) = pure (emptyEnv, (ends, i))
   abstractKind _ k (Lit x) = case (k, x) of
     (Nat, Num n) -> req (Define (ExEnd dangling) (VNum (nConstant n))) $> (emptyEnv, (ends, i))
     (Star _, _) -> err MatchingOnTypes
     _ -> err (PattErr $ "Couldn't resolve pattern " ++ show pat ++ " with kind " ++ show k)
+  abstractKind Braty Nat p = abstractPattern Braty (ends :< ExEnd (end src), i + 1) (src, Right TNat) p
 {- FIXME - looking up nat constructors for `#` is sorely needed
   abstractKind _ Nat (PCon c arg) = do
     case M.lookup c natConstructors of

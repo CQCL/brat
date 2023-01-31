@@ -11,7 +11,6 @@ module Brat.Syntax.Value (VDecl
                          ,pattern TUnit, pattern TNil, pattern TCons
                          ,pattern TList, pattern TVec
                          ,Value(..),SValue
-                         ,FunVal(..), value
                          ,BinderType
                          ,ValPat(..), valMatch, valMatches
                          ,NumPat(..), numMatch
@@ -30,7 +29,6 @@ import Data.List (intercalate, minimumBy)
 import Data.Ord (comparing)
 import Control.Monad.State
 import Control.Arrow (Arrow(second))
-import Data.Kind (Type)
 import Data.Maybe (isJust)
 
 type VDecl = Decl' (PortName, KindOr Value) (FunBody Term Noun)
@@ -268,7 +266,7 @@ valMatch' zv (VCon u args) (VPCon u' vps)
   | u == u' = valMatches' zv args vps
   | otherwise = Left $ ValMatchFail (show u') (show u)
 valMatch' zv (VNum n) (VPNum np) = numMatch zv n np
-valMatch' _ _ _ = error "valMatch failed"
+valMatch' _ v vp = error $ "valMatch called on " ++ show v ++ " " ++ show vp
 
 valMatches' :: Bwd Value -> [Value] -> [ValPat] -> Either ErrorMsg (Bwd Value)
 valMatches' zv [] [] = pure zv
@@ -392,17 +390,9 @@ doesItBind :: Modey m -> BinderType m -> Maybe TypeKind
 doesItBind Braty (Left k) = Just k
 doesItBind _ _ = Nothing
 
-
 endVal :: TypeKind -> End -> Value
 endVal k e = varVal k (VPar e)
 
 varVal :: TypeKind -> VVar -> Value
 varVal Nat v = VNum (nVar v)
 varVal _ v = VApp v B0
-
--- An unpacked version of a VFun, where we can see the Mode of the function from the type
-data FunVal :: Mode -> Type where
-  FV :: Bwd Value -> [(PortName, BinderType m)] -> [(PortName, BinderType m)] -> FunVal m
-
-value :: Modey m -> FunVal m -> Value
-value m (FV ctx ss ts) = VFun m ctx (ss :-> ts)

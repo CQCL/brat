@@ -16,9 +16,11 @@ module Brat.Checker.Helpers (pullPorts
                             ,defineSrc, defineTgt
                             ,declareSrc, declareTgt
                             ,makeBox
+                            ,uncons
+                            ,evBi
                             ) where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr, evTy
+import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr, evTy, evSTy
                           ,stypeEq, typeEq, kindEq)
 import Brat.Checker.Types {-(ValueType, eval, DeBruijn(..)
                           ,Overs, Unders
@@ -293,3 +295,19 @@ makeBox name vctx ss ts = do
   (tgt, unders, _, _) <- anext (name ++ "/out") Target ctx ts []
   (_,_,[thunk],_)<- next (name ++ "_thunk") (src :>>: tgt) (vctx,B0) [] [("thunk", Right (VFun ?my B0 (ss :-> ts)))]
   pure (thunk, unders, overs)
+
+uncons :: Modey m -> ValueType m -> Maybe (ValueType m, ValueType m)
+uncons Kerny (Of ty n) = case valMatch n (VPNum (NP1Plus NPVar)) of
+  Right (B0 :< m) -> pure (ty, Of ty m)
+  _ -> Nothing
+uncons Braty (TList ty) = Just (ty, TList ty)
+uncons Braty (TVec ty n) = case valMatch n (VPNum (NP1Plus NPVar)) of
+  Right (B0 :< m) -> pure (ty, TVec ty m)
+  _ -> Nothing
+uncons Braty (TCons x xs) = Just (x, xs)
+uncons _ _ = Nothing
+
+evBi :: Modey m -> BinderType m -> Checking (BinderType m)
+evBi Kerny sty = evSTy sty
+evBi Braty (Right ty) = Right <$> evTy ty
+evBi Braty (Left k) = pure (Left k)

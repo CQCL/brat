@@ -241,73 +241,75 @@ typeEq :: String -> TypeKind
 typeEq tm k s t = do
   s <- evTy s
   t <- evTy t
-  eq 0 k s t
- where
-  -- All of these functions assume that normalisation has already happened
-  -- Int arg is the next de Bruijn level
-  eq :: Int -> TypeKind
-     -> Value -- Expected
-     -> Value -- Actual
-     -> Checking ()
-  eq _ Nat (VNum n) (VNum m) | n == m = pure ()
-  eq _ Nat (VApp v B0) (VApp v' B0)
-   | v == v' = kindOf v >>= \k -> throwLeft (kindEq Nat k) $> ()
-  eq l (Star ((_, k):ks)) f g = do
-   let x = varVal k (VLvl l k)
-   f <- apply (req . ELup) f x
-   g <- apply (req . ELup) g x
-   eq (l + 1) (Star ks) f g
-  eq l (Star []) (VCon c vs) (VCon c' vs') | c == c' = do
-    req (TLup (Star []) c) >>= \case
-      Just ks -> eqs l (snd <$> ks) vs vs'
-      Nothing -> typeErr $ "Type constructor " ++ show c ++ " undefined"
-  eq l k@(Star []) (VApp v ss) (VApp v' ss') | v == v' = do
-    kindOf v >>= \case
-      Star ks -> eqs l (snd <$> ks) (ss <>> []) (ss' <>> [])
-      k' -> err (KindMismatch (show tm) (show k) (show k'))
-  eq l (Star []) (VFun Braty _ cty) (VFun Braty _ cty')
-    = eqCType l Braty cty cty'
-  eq l (Star []) (VFun Kerny _ cty) (VFun Kerny _ cty')
-    = eqCType l Kerny cty cty'
-  eq _ _ s t = err $ TypeMismatch tm (show s) (show t)
+  eq tm 0 k s t
 
-  kindOf :: VVar -> Checking TypeKind
-  kindOf (VLvl _ k) = pure k
-  kindOf (VPar e) = req (EndKind e) >>= \case
-    Just k -> pure k
-    Nothing -> typeErr "Kind not found"
-  kindOf (VInx _) = error "kindOf used on de Bruijn index"
+kindOf :: VVar -> Checking TypeKind
+kindOf (VLvl _ k) = pure k
+kindOf (VPar e) = req (EndKind e) >>= \case
+  Just k -> pure k
+  Nothing -> typeErr "Kind not found"
+kindOf (VInx _) = error "kindOf used on de Bruijn index"
 
-  eqs :: Int -> [TypeKind] -> [Value] -> [Value] -> Checking ()
-  eqs _ [] [] [] = pure ()
-  eqs l (k:ks) (u:us) (v:vs) = eq l k u v *> eqs l ks us vs
-  eqs _ _ us vs = typeErr $ "Arity mismatch in type constructor arguments:\n  "
-              ++ show us ++ "\n  " ++ show vs
+-- All of these functions assume that normalisation has already happened
+-- Int arg is the next de Bruijn level
+eq :: String -> Int -> TypeKind
+   -> Value -- Expected
+   -> Value -- Actual
+   -> Checking ()
+eq _ _ Nat (VNum n) (VNum m) | n == m = pure ()
+eq _ _ Nat (VApp v B0) (VApp v' B0)
+ | v == v' = kindOf v >>= \k -> throwLeft (kindEq Nat k) $> ()
+eq tm l (Star ((_, k):ks)) f g = do
+ let x = varVal k (VLvl l k)
+ f <- apply (req . ELup) f x
+ g <- apply (req . ELup) g x
+ eq tm (l + 1) (Star ks) f g
+eq tm l (Star []) (VCon c vs) (VCon c' vs') | c == c' = do
+  req (TLup (Star []) c) >>= \case
+    Just ks -> eqs tm l (snd <$> ks) vs vs'
+    Nothing -> typeErr $ "Type constructor " ++ show c ++ " undefined"
+eq tm l k@(Star []) (VApp v ss) (VApp v' ss') | v == v' = do
+  kindOf v >>= \case
+    Star ks -> eqs tm l (snd <$> ks) (ss <>> []) (ss' <>> [])
+    k' -> err (KindMismatch (show tm) (show k) (show k'))
+eq tm l (Star []) (VFun Braty _ cty) (VFun Braty _ cty')
+  = eqCType tm l Braty cty cty'
+eq tm l (Star []) (VFun Kerny _ cty) (VFun Kerny _ cty')
+  = eqCType tm l Kerny cty cty'
+eq tm _ _ s t = err $ TypeMismatch tm (show s) (show t)
 
-  eqCType :: Show (BinderType m)
-          => Int -> Modey m -> CType' (PortName, BinderType m)
-          -> CType' (PortName, BinderType m) -> Checking ()
-  eqCType l m (ss :-> ts) (ss' :-> ts') = do
-    acc <- eqRow m (B0, l) ss ss'
-    eqRow m acc ts ts'
-    pure ()
+eqs :: String -> Int -> [TypeKind] -> [Value] -> [Value] -> Checking ()
+eqs _ _ [] [] [] = pure ()
+eqs tm l (k:ks) (u:us) (v:vs) = eq tm l k u v *> eqs tm l ks us vs
+eqs _ _ _ us vs = typeErr $ "Arity mismatch in type constructor arguments:\n  "
+                   ++ show us ++ "\n  " ++ show vs
 
-  eqRow :: Show (BinderType m)
-        => Modey m
-        -> (Bwd (Int, TypeKind), Int)
-        -> [(PortName, BinderType m)] -> [(PortName, BinderType m)]
-        -> Checking (Bwd (Int, TypeKind), Int)
-  eqRow _ acc [] [] = pure acc
-  eqRow Braty (lvls, l) ((_, Left k):ks) ((_, Left k'):ks') = do
-    throwLeft $ kindEq k k'
-    eqRow Braty (lvls :< (l, k), l + 1) ks ks'
-  eqRow Braty acc@(lvls, l) ((_, Right t):ks) ((_, Right t'):ks') = do
-    eq l (Star []) (changeVar (InxToLvl lvls) 0 t) (changeVar (InxToLvl lvls) 0 t')
-    eqRow Braty acc ks ks'
-  eqRow Kerny acc ((_, t):ts) ((_, t'):ts') = stypeEq tm t t' *> eqRow Kerny acc ts ts'
-  eqRow _ _ (t:_) (t':_) = err $ TypeMismatch (show tm) (show t) (show t')
-  eqRow _ _ ss [] = typeErr $ "eqRow: Ragged rows " ++ show ss ++ " and []"
-  eqRow _ _ [] ts = typeErr $ "eqRow: Ragged rows [] and " ++ show ts
+eqCType :: Show (BinderType m)
+        => String -> Int -> Modey m -> CType' (PortName, BinderType m)
+        -> CType' (PortName, BinderType m) -> Checking ()
+eqCType tm l m (ss :-> ts) (ss' :-> ts') = do
+  acc <- eqRow tm m (B0, l) ss ss'
+  eqRow tm m acc ts ts'
+  pure ()
+
+eqRow :: Show (BinderType m)
+      => String
+      -> Modey m
+      -> (Bwd (Int, TypeKind), Int)
+      -> [(PortName, BinderType m)] -- Expected
+      -> [(PortName, BinderType m)] -- Actual
+      -> Checking (Bwd (Int, TypeKind), Int)
+eqRow _ _ acc [] [] = pure acc
+eqRow tm Braty (lvls, l) ((_, Left k):ks) ((_, Left k'):ks') = do
+  throwLeft $ kindEq k k'
+  eqRow tm Braty (lvls :< (l, k), l + 1) ks ks'
+eqRow tm Braty acc@(lvls, l) ((_, Right t):ks) ((_, Right t'):ks') = do
+  eq tm l (Star []) (changeVar (InxToLvl lvls) 0 t) (changeVar (InxToLvl lvls) 0 t')
+  eqRow tm Braty acc ks ks'
+eqRow tm Kerny acc ((_, t):ts) ((_, t'):ts') = stypeEq tm t t' *> eqRow tm Kerny acc ts ts'
+eqRow tm _ _ (t:_) (t':_) = err $ TypeMismatch (show tm) (show t) (show t')
+eqRow _ _ _ ss [] = typeErr $ "eqRow: Ragged rows " ++ show ss ++ " and []"
+eqRow _ _ _ [] ts = typeErr $ "eqRow: Ragged rows [] and " ++ show ts
 
 stypeEq :: String -> SValue -> SValue -> Checking ()
 stypeEq tm (Of sty n) (Of sty' n') = do
