@@ -71,7 +71,7 @@ refTest m ref input (expAbs, expOvers, expUnders)
                                    typeEqRow m "" expUnders unders >>
                                    pure abs
       Nothing -> err $ InternalError "Branch is unreachable"
-  
+
 
 testZero = testCase "zero" $
            refTest Braty (refinementZero (Left Nat)) (0, abs, overs, []) (expAbs, expOvers, [])

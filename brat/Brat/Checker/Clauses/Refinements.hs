@@ -2,6 +2,7 @@
 
 module Brat.Checker.Clauses.Refinements where
 
+import Brat.Checker.Types (EnvData)
 import Brat.Error
 import Brat.Graph (Thing(..))
 import Brat.Syntax.Abstractor
@@ -11,15 +12,17 @@ import Brat.Syntax.Value
 import Brat.Checker.Helpers
 import Brat.Checker.Helpers.Nodes
 import Brat.Checker.Monad
+import Brat.Checker.Quantity
 import Brat.Checker.Types (ValueType)
 import Brat.UserName
 import Bwd
 
 import Data.Functor ((<&>), ($>))
 
-type Subst = [(String, Src)] -- Pattern variables which stand for sources
+-- Pattern variables which stand for sources
+type Subst m = [(String, EnvData m)]
 
-type PatRefinement = Pattern -> Checking (Maybe (Subst, NormalisedAbstractor))
+type PatRefinement m = Pattern -> Checking (Maybe (Subst m, NormalisedAbstractor))
 type TypeRefinement m = Bwd End
                      -> (PortName, BinderType m)
                      -> [(PortName, BinderType m)] -- Overs
@@ -42,23 +45,27 @@ type Refinement m
  -> (PortName, BinderType m) -- input that matches the pattern we're refining
  -> [(PortName, BinderType m)] -- The rest of the inputs after the current one
  -> [(PortName, BinderType m)] -- The outputs from the function
- -> Checking (Maybe (Subst
+ -> Checking (Maybe (Subst m
                     , NormalisedAbstractor
                     ,[(PortName, BinderType m)]   -- Overs
                     ,[(PortName, BinderType m)])) -- Unders
 
 -- Combine independent pattern and type refinements
-ref :: Modey m -> PatRefinement -> TypeRefinement m -> Refinement m
+ref :: Modey m -> PatRefinement m -> TypeRefinement m -> Refinement m
 ref _m patRef typeRef pat ends over overs unders = do
   (overs,unders) <- typeRef ends over overs unders
   patRef pat <&> \case
     Just (sg, na) -> Just (sg, na, overs, unders)
     Nothing -> Nothing
 
+quantize :: Modey m -> (Src, BinderType m) -> EnvData m
+quantize Braty = (:[])
+quantize Kerny = (One,)
+
 refinementZero :: BinderType Brat -> Refinement Brat
 refinementZero ty = ref Braty (patRefinementZero ty) (typeRefinementZero ty)
  where
-  patRefinementZero :: BinderType Brat -> PatRefinement
+  patRefinementZero :: BinderType Brat -> PatRefinement Brat
   patRefinementZero _ DontCare = pure $ Just ([], NA (APat DontCare))
   patRefinementZero _ (Lit (Num 0)) = pure (Just ([], NA (APat DontCare)))
   patRefinementZero _ PZero = pure (Just ([], NA (APat DontCare)))
@@ -67,7 +74,7 @@ refinementZero ty = ref Braty (patRefinementZero ty) (typeRefinementZero ty)
    case ty of
      Left Nat -> defineSrc const0 (VNum nZero)
      _ -> pure ()
-   pure $ Just ([(x, const0)], NA (APat DontCare))
+   pure $ Just ([(x, [(const0, ty)])], NA $ APat DontCare)
   -- doub(0) = 0, so keep going
   patRefinementZero _ (PTwoTimes n) = pure $ Just ([], NA (APat n))
   patRefinementZero _ _ = pure Nothing
@@ -95,7 +102,7 @@ refinementSucc pat ends (p,ty) overs unders = do
     _ -> pure (overs :-> unders)
   stuff <- case pat of
     DontCare -> pure $ Just ([], NA (APat DontCare))
-    Bind x -> pure $ Just ([(x,nPlus1)], NA (APat DontCare))
+    Bind x -> pure $ Just ([(x,[(nPlus1, ty)])], NA (APat DontCare))
     POnePlus p -> pure $ Just ([], NA (APat p))
     _ -> pure Nothing
   pure $ (\(sg, abs) -> (sg, abs, (p,ty):overs, unders)) <$> stuff
@@ -103,14 +110,15 @@ refinementSucc pat ends (p,ty) overs unders = do
 refinementNil :: Modey m -> Refinement m
 refinementNil m pat ends (p,ty) overs unders = ref m (patRefinementNil m ty) (refineType m) pat ends (p,ty) overs unders
  where
-  patRefinementNil :: Modey m -> BinderType m -> PatRefinement
+  patRefinementNil :: Modey m -> BinderType m -> PatRefinement m
   patRefinementNil _ _ DontCare = pure $ Just ([], NA $ APat DontCare)
   patRefinementNil _ _ PNil = pure $ Just ([], NA $ APat DontCare)
   patRefinementNil Kerny (Of elTy _n) (Bind x) = do
-    (_,_,[(nil,_)],_) <- knext "" (Constructor (plain "nil")) (B0,B0) [] [("value", Of elTy (VNum nZero))]
-    pure $ Just ([(x, nil)], NA $ APat DontCare)
+    let refinedTy = Of elTy (VNum nZero)
+    (_,_,[nil],_) <- knext "" (Constructor (plain "nil")) (B0,B0) [] [("value", refinedTy)]
+    pure $ Just ([(x, (One, nil))], NA $ APat DontCare)
   patRefinementNil Braty (Right ty) (Bind x) | Just (elTy, _n) <- getVec Braty ty = do
-    (_,_,[(nil,_)],_) <- next "" (Constructor (plain "nil")) (B0,B0) [] [("value", Right (TVec elTy (VNum nZero)))]
+    (_,_,nil,_) <- next "" (Constructor (plain "nil")) (B0,B0) [] [("value", Right (TVec elTy (VNum nZero)))]
     pure $ Just ([(x, nil)], NA $ APat DontCare)
   patRefinementNil _ _ _ = pure Nothing
 
@@ -144,13 +152,13 @@ refinementNil m pat ends (p,ty) overs unders = ref m (patRefinementNil m ty) (re
 -- The type `Vec(X, succ(n))` becomes `Vec(X, succ(n)), X, Vec(X, n)`
 -- The pattern   `cons(x,xs)` becomes `_, x, xs`
 refinementCons :: DeBruijn (BinderType m) => Modey m -> Refinement m
-refinementCons m = ref m patRefinementCons (typeRefinementCons m)
+refinementCons m = ref m (patRefinementCons m) (typeRefinementCons m)
  where
-  patRefinementCons :: PatRefinement
-  patRefinementCons DontCare = pure $ Just ([], NA $ APat DontCare :||: (APat DontCare :||: APat DontCare))
-  patRefinementCons (PCon (PrefixName [] "cons") abs) = pure $ Just ([], normaliseAbstractor (APat DontCare :||: abs))
-  patRefinementCons (Bind x) = pure $ Just ([], NA (APat (Bind x) :||: (APat DontCare :||: APat DontCare)))
-  patRefinementCons _ = pure Nothing
+  patRefinementCons :: Modey m -> PatRefinement m
+  patRefinementCons _ DontCare = pure $ Just ([], NA $ APat DontCare :||: (APat DontCare :||: APat DontCare))
+  patRefinementCons _ (PCon (PrefixName [] "cons") abs) = pure $ Just ([], normaliseAbstractor (APat DontCare :||: abs))
+  patRefinementCons _ (Bind x) = pure $ Just ([], NA (APat (Bind x) :||: (APat DontCare :||: APat DontCare)))
+  patRefinementCons _ _ = pure Nothing
 
   typeRefinementCons :: DeBruijn (BinderType m) => Modey m -> TypeRefinement m
   typeRefinementCons Braty _ (p, ty@(Right (TCons x ys))) overs unders
@@ -213,7 +221,7 @@ refinementBool m b = refinement
     = fmap (\(sg,a) -> (sg,a,(p,ty):overs,unders)) <$> case pat of
     Bind x -> do
       bool <- constNode m ty (Bool b)
-      pure (Just ([(x, bool)], NA (APat DontCare)))
+      pure (Just ([(x, quantize m (bool, ty))], NA (APat DontCare)))
     DontCare -> pure (Just ([], NA (APat DontCare)))
     Lit (Bool b') -> pure $ if b == b'
                             then (Just ([], NA (APat DontCare)))
@@ -226,7 +234,7 @@ refinementNone pat _ (p,ty) overs unders
   DontCare -> pure (Just ([], NA (APat DontCare)))
   PNone -> pure (Just ([], NA (APat DontCare)))
   Bind x -> do
-    (_, [], [(value,_)], _) <- next "" (Constructor (plain "none")) (B0,B0)
+    (_, [], value, _) <- next "" (Constructor (plain "none")) (B0,B0)
                                [] [("value", ty)]
     pure (Just ([(x, value)], NA (APat DontCare)))
   _ -> pure Nothing
@@ -253,7 +261,7 @@ refinementExactly tm pat _ (p,ty) overs unders
   = fmap (\(sg,abs) -> (sg,abs,(p,ty):overs,unders)) <$> case pat of
   Bind x -> do
     tm <- constNode Braty ty tm
-    pure (Just ([(x,tm)], NA (APat DontCare)))
+    pure (Just ([(x, [(tm,ty)])], NA (APat DontCare)))
   DontCare -> pure (Just ([], NA (APat DontCare)))
   Lit tm' | tm == tm' -> pure (Just ([], NA (APat DontCare)))
   _ -> pure Nothing
@@ -285,7 +293,7 @@ refinementEven pat ends (p,ty) overs unders = case patRefinementEven pat of
       Left Nat -> defineSrc nTimes2 (VNum (n2PowTimes 1 (nVar (VPar (ExEnd (end n)))))) $>
                   changeVars (InxToPar (ends :< ExEnd (end nTimes2))) 0 (doesItBind Braty) (overs :-> unders)
       _ -> pure (overs :-> unders)
-    pure (Just (maybe [] (\x -> [(x,nTimes2)]) msg, na, (p,ty):overs, unders))
+    pure (Just (maybe [] (\x -> [(x,[(nTimes2, ty)])]) msg, na, (p,ty):overs, unders))
 
 -- We're refining the pattern from `1+(2*n)` to `n` (the rounded down half)
 -- So we need to change n to 1+(2* some end)
@@ -303,6 +311,6 @@ refinementOdd pat ends (p,ty) overs unders = do
     _ -> pure $ overs :-> unders
   pure . fmap (\(sg,abs) -> (sg,abs,(p,ty):overs,unders)) $ case pat of
     DontCare -> Just ([], NA (APat DontCare))
-    Bind x -> Just ([(x,n)], NA (APat DontCare))
-    POnePlus (PTwoTimes p) -> patRefinementEven p <&> \(msg,p) -> (maybe [] (\x -> [(x,nPred)]) msg, p)
+    Bind x -> Just ([(x,[(n,ty)])], NA (APat DontCare))
+    POnePlus (PTwoTimes p) -> patRefinementEven p <&> \(msg,p) -> (maybe [] (\x -> [(x,[(nPred,ty)])]) msg, p)
     _ -> Nothing
