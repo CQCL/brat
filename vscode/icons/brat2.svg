@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="16.0px"
+   height="16.0px"
+   viewBox="0 0 16.0 16.0"
+   version="1.1"
+   id="SVGRoot"
+   sodipodi:docname="brat3.svg"
+   inkscape:export-filename="brat.png"
+   inkscape:export-xdpi="384"
+   inkscape:export-ydpi="384"
+   inkscape:version="1.2.2 (b0a84865, 2022-12-01)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview2426"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="px"
+     showgrid="true"
+     inkscape:zoom="64"
+     inkscape:cx="7.3046875"
+     inkscape:cy="9.5"
+     inkscape:window-width="2560"
+     inkscape:window-height="1312"
+     inkscape:window-x="0"
+     inkscape:window-y="25"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1">
+    <inkscape:grid
+       type="xygrid"
+       id="grid2432" />
+  </sodipodi:namedview>
+  <defs
+     id="defs2421" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <g
+       aria-label="br"
+       id="text219-5-7"
+       style="fill:#d96e26;stroke-width:0.876091">
+      <path
+         d="m 5.8391827,11.171364 c 0.5046288,0.231289 1.0933623,0.378472 2.0710806,0.378472 1.9764627,0 3.0382857,-1.377216 3.0382857,-3.1854692 0,-2.1867247 -0.9987444,-2.9226417 -2.3444211,-2.9226417 -0.4941157,0 -0.9251528,0.1682096 -1.156441,0.3259061 H 7.4056345 V 3.4757755 H 5.8391827 Z m 2.1867247,-0.8831 c -0.2207751,0 -0.420524,-0.02103 -0.5992467,-0.0841 V 7.0607424 C 7.5738441,6.8925329 7.8576978,6.7453495 8.2256563,6.7453495 c 0.6833515,0 1.1459279,0.4205239 1.1459279,1.7451745 0,1.261572 -0.5046288,1.79774 -1.3456768,1.79774 z"
+         id="path4663" />
+      <path
+         d="m 15.710973,5.431212 c -0.13667,-0.031539 -0.336419,-0.052566 -0.504629,-0.052566 -0.777969,0 -1.293111,0.420524 -1.534912,0.9987445 h -0.04205 L 13.303473,5.5048037 h -1.240545 v 5.9399013 h 1.576964 V 7.4181878 c 0.346933,-0.2838537 0.893614,-0.4730894 1.38773,-0.4730894 0.210262,0 0.473089,0.010513 0.683351,0.052565 z"
+         id="path4665" />
+    </g>
+  </g>
+</svg>

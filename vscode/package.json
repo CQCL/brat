@@ -1,0 +1,67 @@
+{
+  "name": "brat",
+  "displayName": "Brat",
+  "description": "Brat language support",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.73.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./client/out/extension",
+  "activationEvents": [],
+  "contributes": {
+    "languages": [
+      {
+        "id": "brat",
+        "aliases": [
+          "Brat",
+          "brat",
+          "BRAT",
+          "<bra|t>"
+        ],
+        "extensions": [
+          ".brat"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/brat2.svg",
+          "dark": "./icons/brat2.svg"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "brat",
+        "scopeName": "source.brat",
+        "path": "./syntaxes/brat.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Brat Configuration",
+      "properties": {
+        "brat.lspPath": {
+          "scope": "resource",
+          "type": "string",
+          "default": "~/.local/bin/lsp-brat",
+          "description": "Location of the lsp-brat binary"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npx js-yaml syntaxes/brat.yaml > syntaxes/brat.json && npm run compile",
+    "compile": "tsc -b",
+    "watch": "tsc -b -w",
+    "postinstall": "cd client && npm install && cd ..",
+    "publish": "echo \"y\\ny\" | vsce package -o brat.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^16.11.7",
+    "@vscode/vsce": "^2.15.0",
+    "js-yaml": "^4.1.0",
+    "typescript": "^4.8.4"
+  }
+}

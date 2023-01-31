@@ -1,0 +1,4 @@
+*.vsix
+syntaxes/brat.json
+node_modules
+client/out

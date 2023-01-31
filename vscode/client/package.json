@@ -1,0 +1,14 @@
+{
+	"name": "brat-lsp",
+	"description": "VSCode client for Brat LSP",
+	"version": "0.0.1",
+	"engines": {
+		"vscode": "^1.73.0"
+	},
+	"dependencies": {
+		"vscode-languageclient": "^7.0.0"
+	},
+	"devDependencies": {
+		"@types/vscode": "^1.63.0"
+	}
+}

@@ -1,0 +1,116 @@
+fileTypes:
+    - brat
+name: Brat
+scopeName: "source.brat"
+
+patterns:
+  - include: '#comment'
+  - include: '#fun_decl'
+  - include: '#keyword'
+  - include: '#reserved_symbol'
+  - include: '#string_literal'
+  - include: '#integer_literal'
+  - include: '#type_annotation'
+  - include: '#port_pull'
+
+repository:
+  comment:
+    patterns:
+      - begin: '--'
+        beginCaptures:
+          '0': {name: punctuation.definition.comment.brat}
+        end: \n
+        name: comment.line.double-dash.brat
+  
+  keyword:
+    patterns:
+      - match: '\b(let|in|import|ext|type)\b'
+        name: 'keyword.control.brat'
+
+  reserved_symbol:
+    match: '(=>)|(\|>)|(;)|(->)|(-o)'
+    name: keyword.control.brat
+
+  string_literal:
+    begin: '"'
+    end: '"'
+    name: string.quoted.double.brat
+    patterns:
+      - match: '\\.'
+        name: constant.character.escape.control.brat
+
+  integer_literal:
+    match: '\b[0-9][0-9]*\b'
+    name: constant.numeric.integral.decimal.brat
+
+  fun_decl:
+    patterns:
+      # Normal declaration, i.e. `fun :: {A, B -> C}`
+      - begin: >-
+          (?x)^(\s*)
+            # Function name
+            (?<fn>(?:\p{Letter}[\p{Letter}|0-9|_|']*))
+            # Double colon
+            \s(?<dc>(::))
+        beginCaptures:
+          '0': {name: entity.name.function.brat}
+          '3': {name: keyword.operator.double-colon.brat}
+        name: meta.funtion-declaration.brat
+        patterns:
+          - include: '#type'
+        end: '\n'
+
+      # Syntactic sugar: `fun(A, B) -> C`
+      - match: >-
+          (?x)^(\s*)
+            # Function name
+            (?<fn>(?:\p{Letter}[\p{Letter}|0-9|_|']*))
+            # Opening parenthesis
+            (\()\s*
+            # Arbitrary stuff
+            (?<args>(.*))
+            # Closing parenthesis
+            (\))\s*
+            # Arrow or lollipop
+            (?<arw>((->)|(-o)))
+            # Arbitrary stuff
+            (?<typ>(.*))
+        captures:
+          '2': {name: entity.name.function.brat}
+          '4': 
+            patterns:
+              - include: '#type'
+          '8': {name: keyword.control.arrow.brat}
+          '11':
+            patterns:
+              - include: '#type'
+
+  type:
+    patterns:
+      # Builtin types
+      - match: '\b(Vec|Nat|Int|List|Bool|Bit|Qubit|Pair|Type|String|Float|Option|Money)\b'
+        name: storage.type.brat
+      # Port name
+      - match: >-
+          (\p{Letter}[\p{Letter}|0-9|_|']*)\s*(::)
+        captures:
+          '1': {name: variable.other.port.brat}
+          '0': {name: keyword.operator.double-colon.brat}
+      # Arrow and Lollipop
+      - match: '(->)|(-o)'
+        name: keyword.control.arrow.brat
+
+  type_annotation:
+    begin: '::'
+    end: '[],\)\n]'
+    patterns: 
+      - include: '#type'
+
+  port_pull:
+    match: >-
+      (?x)
+        (\p{Letter}[\p{Letter}|0-9|_|']*)(:)
+    name: meta.port-pull.brat
+    captures:
+      '1': {name: variable.other.port.brat}
+      '0': {name: keyword.control.colon.brat}
