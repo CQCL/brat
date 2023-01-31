@@ -1,0 +1,4 @@
+import lib (x, a)
+
+main :: Nat
+main = x

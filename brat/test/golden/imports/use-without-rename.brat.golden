@@ -1,0 +1,6 @@
+Error in test/golden/imports/use-without-rename.brat@FC {start = Pos {line = 4, col = 8}, end = Pos {line = 4, col = 13}}:
+main = lib.x
+       ^^^^^
+
+  lib.x not found in (value) environment
+

@@ -1,0 +1,4 @@
+open import lib hiding (z)
+
+main :: Nat, Int, Bool
+main = x, y, z

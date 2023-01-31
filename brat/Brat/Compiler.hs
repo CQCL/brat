@@ -38,7 +38,7 @@ banner s m = putStrLn startText *> m <* putStrLn endText
   dashes = replicate (39 - hlen) '-'
   len = length s + 2
   hlen = len `div` 2
-  
+
 printAST :: Bool -> Bool -> String -> IO ()
 printAST printRaw printAST file = do
   cts <- readFile file
@@ -68,7 +68,7 @@ compileFile file = do
   -- Check main exists. (Will/should this work if "main" is in an imported module?)
   mn <- eitherIO $
       maybeToRight (addSrcName file $ dumbErr MainNotFound) $
-      lookupBy ((== "main") . fnName) id decls
+      lookup (plain "main") decls
 
   (_name, graph) <- eitherIO $
       maybeToRight (addSrcName file $ dumbErr $ InternalError "No graph produced for main") $

@@ -1,0 +1,6 @@
+Error in test/golden/imports/use-illegal-z4.brat@FC {start = Pos {line = 4, col = 22}, end = Pos {line = 4, col = 27}}:
+main = lib.x, lib.y, lib.z
+                     ^^^^^
+
+  lib.z not found in (value) environment
+

@@ -288,7 +288,7 @@ functionType = try (RFn <$> ctype) <|> (RKernel <$> kernel)
     match Arrow
     outs <- rawIO (unWC <$> vtype)
     pure (ins :-> outs)
-  
+
   kernel :: Parser RawKType
   kernel = do
     ins <- round $ rawIO' stype
@@ -514,7 +514,7 @@ instance FCStream [Token] where
     [] -> sp_to_fc pstateSourcePos
     (Token fc _):_ -> fc
 
-parseFile :: String -> String -> Either SrcErr ([UserName], FEnv)
+parseFile :: String -> String -> Either SrcErr ([Import], FEnv)
 parseFile fname contents = addSrcContext fname contents $ do
   toks <- first (wrapParseErr LexErr) (M.parse lex fname contents)
   first (wrapParseErr ParseErr) (parse pfile fname toks)
@@ -543,8 +543,34 @@ clauses declName = label "clauses" $
     rhs <- withFC expr
     pure (lhs,rhs)
 
-pimport :: Parser UserName
-pimport = kmatch KImport *> userName
+pimport :: Parser Import
+pimport = do
+  o <- open
+  kmatch KImport
+  x <- withFC userName
+  a <- alias
+  s <- selection
+  pure (Import x (not o) a s)
+ where
+  open :: Parser Bool
+  open = optional (matchString "open") >>= \case
+     Nothing -> pure False
+     Just _ -> pure True
+
+  alias :: Parser (Maybe (WC String))
+  alias = optional (matchString "as") >>= \case
+     Nothing -> pure Nothing
+     Just _ -> Just <$> withFC (ident Just)
+
+  selection :: Parser ImportSelection
+  selection = optional (try $ matchString "hiding") >>= \case
+    Just _ -> ImportHiding <$> list
+    Nothing -> optional list >>= \case
+       Nothing -> pure ImportAll
+       Just ss -> pure (ImportPartial ss)
+
+  list :: Parser [WC String]
+  list = round $ ((:[]) <$> withFC (ident Just)) `chainl1` try (match Comma $> (++))
 
 pstmt :: Parser FEnv
 pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
@@ -561,7 +587,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
     match (K KType)
     alias <- userName
     args <- option [] $ round $ (simpleName `sepBy` (match Comma))
-{- future stuff 
+{- future stuff
     args <- option [] $ round $ (`sepBy` (match Comma)) $ do
       port <- port
       match TypeColon
@@ -595,7 +621,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
     nDecl = match TypeColon >> outputs
     vDecl = (:[]) . Named "thunk" . Right <$> functionType
 
-pfile :: Parser ([UserName], FEnv)
+pfile :: Parser ([Import], FEnv)
 pfile = do
   imports <- many pimport
   env     <- foldr (<>) ([], []) <$> (pstmt `manyTill` eof)

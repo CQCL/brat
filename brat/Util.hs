@@ -9,13 +9,15 @@ maybeToRight :: e -> Maybe a -> Either e a
 maybeToRight e Nothing = Left e
 maybeToRight _ (Just a) = Right a
 
-duplicates :: Eq a => [a] -> [a]
-duplicates xs = let (_, dups, _) = aux ([], [], xs) in dups
+duplicatesWith :: Eq b => (a -> b) -> [a] -> [a]
+duplicatesWith f xs = let (_, dups, _) = aux ([], [], xs) in dups
  where
-  aux :: Eq a => ([a], [a], [a]) -> ([a], [a], [a])
   aux (visited, dups, []) = (visited, dups, [])
-  aux (visited, dups, (x:xs)) | x `elem` visited = aux (visited, x:dups, xs)
-                              | otherwise = aux (x:visited, dups, xs)
+  aux (visited, dups, (x:xs)) | f x `elem` visited = aux (visited, x:dups, xs)
+                              | otherwise = aux (f x:visited, dups, xs)
+
+duplicates :: Eq a => [a] -> [a]
+duplicates = duplicatesWith id
 
 -- An infinite list of strings for names:
 -- a,b,c,...,a2,b2,c2,...,aN,bN,cN

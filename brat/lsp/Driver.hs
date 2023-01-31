@@ -105,7 +105,7 @@ loadVFile state _ msg = do
       case env of
         Right (_,newDecls,holes,_) -> do
           old <- liftIO $ takeMVar state
-          liftIO $ putMVar state (updateState (newDecls, holes) old)
+          liftIO $ putMVar state (updateState (snd <$> newDecls, holes) old)
           allGood fileName
           logHoles holes fileName
         Left (SrcErr _ err) -> allGood fileName *> sendError fileName err

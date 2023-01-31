@@ -1,0 +1,8 @@
+import lib as A
+import lib as B
+import lib
+open import lib
+import lib (y)
+
+main :: Nat, Int, Bool
+main = x, y, z

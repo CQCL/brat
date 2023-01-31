@@ -10,12 +10,12 @@ instance Ord Pos where
 
 data FC = FC { start :: Pos
              , end   :: Pos
-             } deriving (Eq, Show)
+             } deriving (Eq, Show, Ord)
 
 inside :: Pos -> FC -> Bool
 inside pos (FC start end) = (pos >= start) && (pos <= end)
 
-data WC a = WC FC a deriving (Foldable, Functor, Traversable)
+data WC a = WC FC a deriving (Foldable, Functor, Traversable, Ord)
 instance Show a => Show (WC a) where
   show (WC _ a) = show a
 

@@ -1,17 +1,11 @@
-import lib.kernel
+open import lib.kernel
 
 type A = Bool
 type B = Nat
 type C = Bool
 
-Rx(Float) -> { Qubit -o Qubit }
-Rx(th) = lib.kernel.Rx(th)
-
-H :: { Qubit -o Qubit }
-H = lib.kernel.H
-
 M2 :: { Qubit, Qubit -o Bit, Bit }
-M2 = { lib.kernel.M, lib.kernel.M }
+M2 = { M, M }
 
 id(A) -> A
 id = a => a
@@ -62,8 +56,7 @@ idq = { q => q }
 
 phasedBell :: { (th :: Float) -> { c :: Qubit, d :: Qubit -o c :: Bit, d :: Bit } }
 phasedBell(th) = {
-  lib.kernel.H,lib.kernel.qid;
-  lib.kernel.Rz(th),lib.kernel.qid;
-  lib.kernel.M,lib.kernel.M
+  H,qid;
+  Rz(th),qid;
+  M,M
 }
-

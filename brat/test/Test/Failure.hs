@@ -20,6 +20,13 @@ getKernelTests = testGroup "kernel" . fmap goldenTest <$> findByExtension [".bra
 getCycleTests :: IO TestTree
 getCycleTests = testGroup "cycle" . fmap goldenTest <$> findByExtension [".brat"] "test/golden/cycle"
 
+getImportTests :: IO TestTree
+getImportTests = testGroup "imports"
+                 . fmap goldenTest
+                 . filter ((`notElem` ignored) . takeBaseName)
+                 <$> findByExtension [".brat"] "test/golden/imports"
+ where ignored = ["lib"]
+
 getBindingTests :: IO TestTree
 getBindingTests = testGroup "binding" . fmap goldenTest <$> findByExtension [".brat"] "test/golden/binding"
 
@@ -36,6 +43,7 @@ runGetStderr name action = do
 getFailureTests = do
   bindingTests <- getBindingTests
   cycleTests   <- getCycleTests
+  importTests  <- getImportTests
   kernelTests  <- getKernelTests
   errTests     <- getErrorTests
-  pure $ testGroup "Failure" [bindingTests, cycleTests, kernelTests, errTests]
+  pure $ testGroup "Failure" [bindingTests, cycleTests, importTests, kernelTests, errTests]

@@ -1,0 +1,6 @@
+Error in test/golden/imports/use-illegal-z.brat@FC {start = Pos {line = 4, col = 14}, end = Pos {line = 4, col = 15}}:
+main = x, y, z
+             ^
+
+  z not found in (value) environment
+

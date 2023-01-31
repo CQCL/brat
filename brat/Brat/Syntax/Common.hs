@@ -20,6 +20,8 @@ module Brat.Syntax.Common (PortName,
                            CType'(..),
                            pattern Extern, pattern Local, -- No reason not to export Locality if required
                            Decl'(..),
+                           Import(..),
+                           ImportSelection(..),
                            Runtime(RtLocal), -- No reason not to export others if required
                            Pattern(..),
                            Abstractor(..), occursInAbstractor,
@@ -45,6 +47,7 @@ module Brat.Syntax.Common (PortName,
 import Brat.FC
 import Brat.Syntax.Abstractor
 import Brat.Syntax.Port
+import Brat.UserName
 
 import Data.Bifunctor (second)
 import Data.List (intercalate)
@@ -152,12 +155,37 @@ data Decl' (io :: Type) (body :: Type)
          , fnLocality :: Locality
          }
 
+data Import
+  = Import { importName :: WC UserName
+           , importQualified :: Bool
+           , importAlias :: Maybe (WC String)
+           , importSelection :: ImportSelection
+           }
+  deriving (Eq, Ord)
+
+data ImportSelection
+  = ImportAll
+  | ImportPartial [WC String]
+  | ImportHiding [WC String]
+  deriving (Eq, Ord)
+
 deriving instance
   forall tm io.
   (forall d k. Eq (tm d k), Eq io
   ,Eq (FunBody tm Noun)
   ,Eq (FunBody tm UVerb)
   ) => Eq (Decl' io (FunBody tm Noun))
+
+instance Show Import where
+  show Import{..} =
+    let prefix = if importQualified then [] else ["open"]
+        alias = maybe [] (\x -> ["as",unWC x]) importAlias
+    in  unwords . concat $ [prefix,[show (unWC importName)],alias,showSelection importSelection]
+   where
+    showSelection ImportAll = []
+    showSelection (ImportPartial fns) = "(":(unWC <$> fns) ++ [")"]
+    showSelection (ImportHiding fns) = "hiding (":(unWC <$> fns) ++ [")"]
+
 
 instance (Show io, Show (FunBody tm Noun))
  => Show (Decl' io (FunBody tm Noun)) where

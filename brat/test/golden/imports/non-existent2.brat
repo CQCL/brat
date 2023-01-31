@@ -1,0 +1,4 @@
+import lib hiding (y, a)
+
+main :: Nat
+main = x

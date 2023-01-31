@@ -1,0 +1,6 @@
+Error in non-existent2@FC {start = Pos {line = 1, col = 23}, end = Pos {line = 1, col = 24}}:
+import lib hiding (y, a)
+                      ^
+
+  Symbol `a` not found in `lib`
+

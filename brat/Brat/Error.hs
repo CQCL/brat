@@ -58,6 +58,7 @@ data ErrorMsg
  | Unimplemented String [String]
  | ImportCycle [String]
  | FileNotFound String
+ | SymbolNotFound String String
  | InternalError String
  | AmbiguousPortPull String String
  | BadPortPull String
@@ -126,6 +127,7 @@ instance Show ErrorMsg where
   show (ImportCycle mods) = unwords ["Cyclic imports: modules all transitively import each other:"
                                     ,intercalate ", " mods]
   show (FileNotFound f) = "File not found: " ++ show f
+  show (SymbolNotFound s i) = "Symbol `" ++ s ++ "` not found in `" ++ i ++ "`"
   show (InternalError x) = "Internal error: " ++ x
   show (AmbiguousPortPull p row) = "Port " ++ p ++ " is ambiguous in " ++ row
   show (BadPortPull x) = "Port " ++ x ++ " can't be pulled because it depends on a previous port"

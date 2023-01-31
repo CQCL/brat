@@ -1,0 +1,4 @@
+import lib (x, y)
+
+main :: Nat, Int, Bool
+main = lib.x, lib.y, lib.z

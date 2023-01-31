@@ -6,7 +6,7 @@
 -- Reality:
 --  - the parser is struggling with variables being plugged into the end of vectors
 
-import lib.kernel
+open import lib.kernel
 
 type Real = Nat -- Temporary hack
 

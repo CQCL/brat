@@ -1,0 +1,6 @@
+Error in alias-clash@FC {start = Pos {line = 2, col = 15}, end = Pos {line = 2, col = 16}}:
+import lib as A (z)
+              ^
+
+  Name clash: Alias not unique: "A"
+

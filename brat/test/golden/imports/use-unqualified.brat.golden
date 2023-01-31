@@ -1,0 +1,6 @@
+Error in test/golden/imports/use-unqualified.brat@FC {start = Pos {line = 4, col = 8}, end = Pos {line = 4, col = 9}}:
+main = x
+       ^
+
+  x not found in (value) environment
+

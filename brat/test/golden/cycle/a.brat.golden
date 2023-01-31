@@ -1,3 +1,3 @@
-Error in a:
-  Cyclic imports: modules all transitively import each other: a, b, c
+Error in b:
+  Cyclic imports: modules all transitively import each other: b, c, a
 

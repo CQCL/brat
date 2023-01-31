@@ -1,0 +1,5 @@
+open import lib
+open import lib (x, y)
+
+main :: Nat, Int, Bool
+main = x, y, z
