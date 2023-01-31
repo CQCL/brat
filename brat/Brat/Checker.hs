@@ -217,8 +217,9 @@ check' (Emb t) (overs, unders) = do
   ((ins, outs), (overs, ())) <- check t (overs, ())
   unders <- checkOutputs t unders outs
   pure ((ins, ()), (overs, unders))
-check' (Th t) ((), u@(hungry, ty):unders) = case ?my of
-  Braty -> do
+check' (Th t) ((), u@(hungry, ty):unders) = ((?my,) <$> evalBinder ?my ty) >>= \case
+  (Braty, ty) -> do
+    ty <- evalBinder Braty ty
     case ty of
       Right ty@(VFun Braty ctx (ss :-> ts)) -> let ?my = Braty in
         checkThunk "thunk" ctx ss ts t >>= wire . (,ty, hungry)
@@ -227,7 +228,7 @@ check' (Th t) ((), u@(hungry, ty):unders) = case ?my of
       Left (Star args) -> kindCheck [(hungry, Star args)] (Th t) $> ()
       _ -> err . ExpectedThunk "" $ showRow (u:unders)
     pure (((), ()), ((), unders))
-  Kerny -> err . ThunkInKernel $ show (Th t)
+  (Kerny, _) -> err . ThunkInKernel $ show (Th t)
 check' (TypedTh t) ((), ()) = case ?my of
   -- the thunk itself must be Braty
   Kerny -> err . ThunkInKernel $ show (TypedTh t)
@@ -321,15 +322,6 @@ check' (VHole name) (overs, unders) = do
   pure (((), ()), ([], []))
 -- TODO: Better error message
 check' tm@(Con _ _) ((), []) = typeErr $ "No type to check " ++ show tm ++ " against"
-{- note for Con. There was a conflict with branch main where
-   "hypo" nodes for length were added, the two extra lines here:
-  check' pat@(Con (PrefixName [] con) arg) ((), (((hungry, p), ty):unders))
-    | Just (_, n) <- getVec ?my ty = do
-HERE>   (_, lenUnders, []) <- next "vec_len" Hypo [("value", SimpleTy Natural)] []
-HERE>   noUnders $ let ?my = Braty in check' n ((), lenUnders)
-        n <- evalNat n
-        case patternToData ?my con ty of
--}
 check' tm@(Con vcon arg) ((), ((hungry, ty):unders)) = case (?my, ty) of
   (Braty, Left k) -> do
     (_, leftOvers) <- kindCheck [(hungry, k)] (Con vcon arg)
@@ -376,21 +368,17 @@ check' (C cty) ((), ((hungry, ty):unders)) = case (?my, ty) of
     ensureEmpty "kindCheck leftovers" leftOvers
     pure (((), ()), ((), unders))
   _ -> typeErr $ "Ill-kinded function type: " ++ show cty
-check' (Simple tm) ((), ((hungry, bty):unders))
-  | Braty <- ?my
-  , Right ty@(VCon (PrefixName [] c) []) <- bty
-  , valid tm c
-  = do
+check' (Simple tm) ((), ((hungry, ty):unders)) = ((?my,tm,) <$> evalBinder ?my ty) >>= \case
+  (Braty, tm, Right ty@(VCon (PrefixName [] c) []))
+   | valid tm c -> do
       (_, _, [(dangling, _)], _) <- next "" (Const tm) (B0,B0) [] [("value", Right ty)]
       wire (dangling, ty, hungry)
       pure (((), ()), ((), unders))
-  | Kerny <- ?my
-  , Bit <- bty
-  , Bool _ <- tm
-  = do
-      (_,_,[(dangling, _)],_) <- knext "" (Const tm) (B0,B0) [] [("value", bty)]
-      kwire (dangling, bty, hungry)
-      pure (((), ()), ((), unders))
+  (Kerny, Bool _, Bit) -> do
+    (_,_,[(dangling, _)],_) <- knext "" (Const tm) (B0,B0) [] [("value", Bit)]
+    kwire (dangling, Bit, hungry)
+    pure (((), ()), ((), unders))
+  _ -> typeErr $ "Expected something of type `" ++ show ty ++ "` but got `" ++ show tm ++ "`"
  where
   valid :: SimpleTerm -> String -> Bool
   valid (Bool _) "Bool" = True
@@ -399,7 +387,6 @@ check' (Simple tm) ((), ((hungry, bty):unders))
   valid (Text _) "String" = True
   valid (Float _) "Float" = True
   valid _ _ = False
-check' (Simple tm) ((), (_, bty):_) = typeErr $ "Expected something of type `" ++ show bty ++ "` but got `" ++ show tm ++ "`"
 check' tm _ = error $ "check' " ++ show tm
 
 -- Check a type against a row of kinds, and evaluate it

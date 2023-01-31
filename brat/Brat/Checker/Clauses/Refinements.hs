@@ -166,7 +166,7 @@ refinementCons m = ref m patRefinementCons (typeRefinementCons m)
     -- the signature (before the point we started refining)
     -- We only inspect this evaluated type (ty') and give back ty instead,
     -- because we want to give back a type with Inx variables
-    ty' <- evBi m (changeVar (InxToPar ends) 0 ty)
+    ty' <- evalBinder m (changeVar (InxToPar ends) 0 ty)
     case uncons m (binderToValue m ty') of
       Just (head, tail) -> pure $
                            ((p,ty)

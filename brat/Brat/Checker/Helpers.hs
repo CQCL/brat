@@ -17,10 +17,10 @@ module Brat.Checker.Helpers (pullPorts
                             ,declareSrc, declareTgt
                             ,makeBox
                             ,uncons
-                            ,evBi
+                            ,evalBinder
                             ) where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr, evTy, evSTy
+import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr, evSTy, evTy
                           ,stypeEq, typeEq, kindEq)
 import Brat.Checker.Types {-(ValueType, eval, DeBruijn(..)
                           ,Overs, Unders
@@ -307,7 +307,8 @@ uncons Braty (TVec ty n) = case valMatch n (VPNum (NP1Plus NPVar)) of
 uncons Braty (TCons x xs) = Just (x, xs)
 uncons _ _ = Nothing
 
-evBi :: Modey m -> BinderType m -> Checking (BinderType m)
-evBi Kerny sty = evSTy sty
-evBi Braty (Right ty) = Right <$> evTy ty
-evBi Braty (Left k) = pure (Left k)
+-- Evaluate either mode's BinderType
+evalBinder :: Modey m -> BinderType m -> Checking (BinderType m)
+evalBinder Kerny sty = evSTy sty
+evalBinder Braty (Right ty) = Right <$> evTy ty
+evalBinder Braty (Left k) = pure (Left k)
