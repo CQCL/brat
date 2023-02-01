@@ -100,12 +100,21 @@ refinementSucc pat ends (p,ty) overs unders = do
                 (changeVars (InxToPar (ends :< ExEnd (end nPlus1))) 0 (doesItBind Braty) $
                 (overs :-> unders))
     _ -> pure (overs :-> unders)
-  stuff <- case pat of
-    DontCare -> pure $ Just ([], NA (APat DontCare))
-    Bind x -> pure $ Just ([(x,[(nPlus1, ty)])], NA (APat DontCare))
-    POnePlus p -> pure $ Just ([], NA (APat p))
-    _ -> pure Nothing
-  pure $ (\(sg, abs) -> (sg, abs, (p,ty):overs, unders)) <$> stuff
+  refinedPat <- pure $ case pat of
+    Bind x -> Just ([(x,[(nPlus1,ty)])], NA (APat DontCare))
+    _ -> ([],) <$> refinePat pat
+  pure $ (\(sg, abs) -> (sg, abs, (p,ty):overs, unders)) <$> refinedPat
+ where
+  refinePat :: Pattern -> Maybe NormalisedAbstractor
+  refinePat = \case
+    DontCare -> Just (NA (APat DontCare))
+    POnePlus p -> Just (NA (APat p))
+    -- 2*n-1 = 1 + 2*(n - 1)
+    PTwoTimes p -> case p of
+      Bind x -> Just (NA (APat (POnePlus (PTwoTimes (Bind x)))))
+      p -> refinePat p <&> \(NA (APat pat)) -> (NA (APat (POnePlus (PTwoTimes pat))))
+    _ -> Nothing
+
 
 refinementNil :: Modey m -> Refinement m
 refinementNil m pat ends (p,ty) overs unders = ref m (patRefinementNil m ty) (refineType m) pat ends (p,ty) overs unders
