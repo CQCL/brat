@@ -18,7 +18,6 @@ testParse file = testCase (show file) $ do
     Right _ -> return () -- OK
 
 expectedParsingFails = map ("examples" </>) [
-    "compjuxt2.brat",
     "karlheinz.brat",
     "thin.brat",
     "hea.brat"]

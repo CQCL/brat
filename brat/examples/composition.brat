@@ -6,21 +6,25 @@ type C = []
 -- (noun) with known argument type, rather than a verb
 compose :: {{ A -> B }, { B -> C } -> {A -> C}}
 compose(f, g) = { x => g(f(x)) }
-
-
+-- equivalent to
 compose1( {A -> B}, { {A -> B} -> {A -> C}} ) -> {A -> C}
 compose1(f, g) = { x => (f |> g)(x) }
--- equivalent to
-compose1a :: { { A -> B }, { {A -> B} -> {A -> C} } -> {A -> C} }
-compose1a(f, g) = { x => (g(f))(x) }
-
 
 compose2({ A -> B }, { B -> C }) -> {A -> C}
 compose2(f, g) = {f ; g}
+-- equivalent to
+compose2a :: {{A -> B}, {B -> C} -> {A -> C}}
+compose2a(f,g) = {x => (f;g)(x)}
+-- or as brace section
+compose2c :: {{A -> B}, {B -> C} -> {A -> C}}
+compose2c(f,g) = { (f; g)(_) }
 
 -- use the result of a composition as LHS of a function application
 compose_apply :: {{A->B}, {B->C}, A -> C}
 compose_apply(f,g,x) = (f;g)(x)
+-- equivalent to:
+compose_apply2 :: {{A -> B}, {B->C}, A -> C}
+compose_apply2 = f,g,x => (f;g)(x)
 
 -- with a checkable argument:
 compose_apply_chk :: {{Int -> Nat}, {Nat -> Bool} -> Bool}
