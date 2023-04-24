@@ -24,6 +24,7 @@ assertChk s@(WC _ r) = case dir r of
   deepEmb (WC fc (a ::|:: b)) = WC fc (deepEmb a ::|:: deepEmb b)
   deepEmb (WC fc (a ::-:: b)) = WC fc (a ::-:: deepEmb b)
   deepEmb (WC fc (abs ::\:: a)) = WC fc (abs ::\:: deepEmb a)
+  deepEmb (WC fc  (RLet abs a b)) = WC fc (RLet abs a (deepEmb b))
   deepEmb (WC fc a) = WC fc (REmb (WC fc a))
 
 assertNoun :: Kindable k => WC (Raw d k) -> Either Error (WC (Raw d Noun))

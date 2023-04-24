@@ -19,6 +19,9 @@ triple(z) = let x, y = z, z in x, y, z
 inc(Int) -> Int
 inc(n) = succ(n)
 
+inc2(Int) -> Int
+inc2(x) = let y = x in succ(y)
+
 ext "" map({Int -> Int}, List(Int)) -> List(Int)
 
 nums :: List(Int)
