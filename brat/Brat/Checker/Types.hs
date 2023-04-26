@@ -70,7 +70,14 @@ data Store = Store
   { kindMap :: M.Map End TypeKind
   , valueMap :: M.Map End Value
   }
-  deriving Show
+
+instance Show Store where
+  show (Store km vm) = unlines $
+                       ("Kinds:":(showKind <$> M.toList km))
+                       ++ ("\nValues:":(showVal <$> M.toList vm))
+   where
+    showKind (key, kind) = show key ++ " :: " ++ show kind
+    showVal (key, val) = show key ++ " = " ++ show val
 
 initStore :: Store
 initStore = Store M.empty M.empty

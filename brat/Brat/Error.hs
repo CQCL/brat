@@ -147,7 +147,7 @@ instance Show ErrorMsg where
   show (UnrecognisedConstructor c ty) = unlines ["Unrecognised constructor: " ++ c
                                                 ,"For type: " ++ ty
                                                 ]
-  show UnreachableBranch = "Unreachable branch"
+  show UnreachableBranch = "Branch cannot be reached"
 
 data Error = Err { fc  :: Maybe FC
                  , msg :: ErrorMsg

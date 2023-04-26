@@ -2,5 +2,5 @@ Error in test/golden/error/vecpat2.brat@FC {start = Pos {line = 3, col = 5}, end
 fst3(some(x)) = none
     ^^^^^^^^^^^^^^^^
 
-  Type constructor not recognised: Vec for "some"
+  Branch cannot be reached
 

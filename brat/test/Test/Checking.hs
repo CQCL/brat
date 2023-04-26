@@ -25,9 +25,8 @@ parseAndCheck file = testCase (show file) $ do
 
 expectedCheckingFails = map ("examples" </>) ["nested-abstractors.brat"
                                              ,"karlheinz_alias.brat"
-                                             -- The next two are regressions in dependent types,
+                                             -- The next is a regression in dependent types,
                                              -- expected to be fixed by upcoming work on pattern refinement
-                                             ,"vector.brat"
                                              ,"kinds.brat"
                                              ]
 

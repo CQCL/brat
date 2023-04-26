@@ -169,7 +169,7 @@ checkThunk :: (?my :: Modey m, CheckConstraints m UVerb)
            -> WC (Term Chk UVerb)
            -> Checking Src
 checkThunk name vctx ss ts tm = do
-  ((dangling, _), thUnders, thOvers) <- makeBox name vctx ss ts
+  ((dangling,_), thOvers, thUnders) <- makeBox name vctx ss ts
   (((), ()), (emptyOvers, emptyUnders)) <- check tm (thOvers, thUnders)
   ensureEmpty "thunk leftovers" emptyOvers
   ensureEmpty "thunk leftunders" emptyUnders
@@ -205,7 +205,7 @@ check' (binder :\: body) (overs, unders) = do
   (sycs, ((), unders)) <- localEnv ext $ check body ((), unders)
   pure (sycs, (overs, unders))
 check' (Pull ports t) (overs, unders) = do
-  unders <- pullPorts ports unders
+  unders <- pullPortsRow ports unders
   check t (overs, unders)
 check' (t ::: outs) (overs, ()) | Braty <- ?my = do
   -- Check that the annotation is a valid row
@@ -250,7 +250,7 @@ check' (TypedTh t) ((), ()) = case ?my of
               -> Checking (SynConnectors Brat Syn Noun
                           ,ChkConnectors Brat Syn Noun)
   createThunk (ins, outs) = do
-    (thunkOut, thUnders, thOvers) <- makeBox "thunk" B0 (rowToSig ins) (rowToSig outs)
+    (thunkOut, thOvers, thUnders) <- makeBox "thunk" B0 (rowToSig ins) (rowToSig outs)
     -- if these ensureEmpty's fail then its a bug!
     () <- checkInputs t thOvers ins >>= ensureEmpty "TypedTh inputs"
     () <- checkOutputs t thUnders outs >>= ensureEmpty "TypedTh outputs"
@@ -643,7 +643,7 @@ abstract ends inputs (x :||: y) = do
   (venv', inputs, ends) <- abstract ends inputs y
   (,inputs, ends) <$> mergeEnvs [venv, venv']
 abstract ends inputs (APull ports abst) = do
-  inputs <- pullPorts ports inputs
+  inputs <- pullPortsRow ports inputs
   abstract ends inputs abst
 abstract (ends, i) ((src, ty):inputs) (APat p) = do
   (env, acc) <- case (?my, ty) of

@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleContexts, UndecidableInstances #-}
+
 module Brat.Syntax.Value (VDecl
                          ,VVar(..)
                          ,NumValue(..)
@@ -17,6 +19,7 @@ module Brat.Syntax.Value (VDecl
                          ,DeBruijn(..), VarChanger(..), changeVars
                          ,doesItBind, doesItBind2
                          ,endVal, varVal
+                         ,FunVal(..), value
                          ) where
 
 import Brat.Error
@@ -29,6 +32,7 @@ import Data.List (intercalate, minimumBy)
 import Data.Ord (comparing)
 import Control.Monad.State
 import Control.Arrow (Arrow(second))
+import Data.Kind (Type)
 import Data.Maybe (isJust)
 
 type VDecl = Decl' (PortName, KindOr Value) (FunBody Term Noun)
@@ -396,3 +400,12 @@ endVal k e = varVal k (VPar e)
 varVal :: TypeKind -> VVar -> Value
 varVal Nat v = VNum (nVar v)
 varVal _ v = VApp v B0
+
+-- An unpacked version of a VFun, where we can see the Mode of the function from the type
+data FunVal :: Mode -> Type where
+  FV :: Bwd Value -> [(PortName, BinderType m)] -> [(PortName, BinderType m)] -> FunVal m
+
+deriving instance Show (BinderType m) => Show (FunVal m)
+
+value :: Modey m -> FunVal m -> Value
+value m (FV ctx ss ts) = VFun m ctx (ss :-> ts)

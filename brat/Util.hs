@@ -1,5 +1,10 @@
 module Util where
 
+nth :: [a] -> Int -> Maybe a
+nth [] _ = Nothing
+nth (a:_) 0 = Just a
+nth (_:as) n = as `nth` (n - 1)
+
 lookupBy :: (a -> Bool) -> (a -> b) -> [a] -> Maybe b
 lookupBy _ _ [] = Nothing
 lookupBy p f (x:xs) | p x = Just (f x)

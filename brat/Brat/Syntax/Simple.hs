@@ -15,3 +15,4 @@ instance Show SimpleTerm where
   show (Bool False) = "false"
   show (Text txt) = show txt
   show (Float f) = show f
+  show Unit = "[]"

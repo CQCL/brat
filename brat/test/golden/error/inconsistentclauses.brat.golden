@@ -1,11 +1,11 @@
 Error in test/golden/error/inconsistentclauses.brat@FC {start = Pos {line = 1, col = 1}, end = Pos {line = 3, col = 9}}:
 f(Bool, Nat) -> Nat
 ^^^^^^^^^^^^^^^^^^^
-f(b, n) = 1
-^^^^^^^^^^^
+f(true, n) = 1
+^^^^^^^^^^^^^^
 f(b) = 2
 ^^^^^^^^
 
-  Internal error: Expected empty thunk leftovers, got:
+  Internal error: Expected empty build leftovers, got:
   (b1 :: Nat)
 

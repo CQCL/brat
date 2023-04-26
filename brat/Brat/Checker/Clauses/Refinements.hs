@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, UndecidableInstances #-}
 
 module Brat.Checker.Clauses.Refinements where
 
@@ -45,17 +45,22 @@ type Refinement m
  -> (PortName, BinderType m) -- input that matches the pattern we're refining
  -> [(PortName, BinderType m)] -- The rest of the inputs after the current one
  -> [(PortName, BinderType m)] -- The outputs from the function
- -> Checking (Maybe (Subst m
-                    , NormalisedAbstractor
-                    ,[(PortName, BinderType m)]   -- Overs
-                    ,[(PortName, BinderType m)])) -- Unders
+ -> Checking (Maybe (Subst m, Case m))
+
+data Case m = Case
+  { lhs :: NormalisedAbstractor       -- LHS
+  , covers :: [(PortName, BinderType m)] -- Overs
+  , cunders :: [(PortName, BinderType m)] -- Unders
+  }
+
+deriving instance Show (BinderType m) => Show (Case m)
 
 -- Combine independent pattern and type refinements
 ref :: Modey m -> PatRefinement m -> TypeRefinement m -> Refinement m
 ref _m patRef typeRef pat ends over overs unders = do
   (overs,unders) <- typeRef ends over overs unders
   patRef pat <&> \case
-    Just (sg, na) -> Just (sg, na, overs, unders)
+    Just (sg, na) -> Just (sg, Case na overs unders)
     Nothing -> Nothing
 
 quantize :: Modey m -> (Src, BinderType m) -> EnvData m
@@ -103,7 +108,7 @@ refinementSucc pat ends (p,ty) overs unders = do
   refinedPat <- pure $ case pat of
     Bind x -> Just ([(x,[(nPlus1,ty)])], NA (APat DontCare))
     _ -> ([],) <$> refinePat pat
-  pure $ (\(sg, abs) -> (sg, abs, (p,ty):overs, unders)) <$> refinedPat
+  pure $ (\(sg, abs) -> (sg, (Case abs ((p,ty):overs) unders))) <$> refinedPat
  where
   refinePat :: Pattern -> Maybe NormalisedAbstractor
   refinePat = \case
@@ -227,7 +232,7 @@ refinementBool :: DeBruijn (BinderType m) => Modey m -> Bool -> Refinement m
 refinementBool m b = refinement
  where
   refinement pat _ (p,ty) overs unders
-    = fmap (\(sg,a) -> (sg,a,(p,ty):overs,unders)) <$> case pat of
+    = fmap (\(sg,a) -> (sg,(Case a ((p,ty):overs) unders))) <$> case pat of
     Bind x -> do
       bool <- constNode m ty (Bool b)
       pure (Just ([(x, quantize m (bool, ty))], NA (APat DontCare)))
@@ -239,7 +244,7 @@ refinementBool m b = refinement
 
 refinementNone :: Refinement Brat
 refinementNone pat _ (p,ty) overs unders
-  = fmap (\(sg,abs) -> (sg,abs,(p,ty):overs,unders)) <$> case pat of
+  = fmap (\(sg,abs) -> (sg,(Case abs ((p,ty):overs) unders))) <$> case pat of
   DontCare -> pure (Just ([], NA (APat DontCare)))
   PNone -> pure (Just ([], NA (APat DontCare)))
   Bind x -> do
@@ -255,7 +260,7 @@ refinementNone pat _ (p,ty) overs unders
 refinementSome :: Refinement Brat
 refinementSome pat _ o@(p,Right (TOption ty)) overs unders
   = let overs' = o:(p++".value",Right ty):overs in
-  fmap (\(sg,abs) -> (sg,abs,overs',unders)) <$>
+  fmap (\(sg,abs) -> (sg,(Case abs overs' unders))) <$>
     case pat of
       DontCare -> pure (Just ([], NA (APat DontCare :||: APat DontCare)))
       PSome p -> pure (Just ([]
@@ -267,7 +272,7 @@ refinementSome pat _ o@(p,Right (TOption ty)) overs unders
 
 refinementExactly :: SimpleTerm -> Refinement Brat
 refinementExactly tm pat _ (p,ty) overs unders
-  = fmap (\(sg,abs) -> (sg,abs,(p,ty):overs,unders)) <$> case pat of
+  = fmap (\(sg,abs) -> (sg,(Case abs ((p,ty):overs) unders))) <$> case pat of
   Bind x -> do
     tm <- constNode Braty ty tm
     pure (Just ([(x, [(tm,ty)])], NA (APat DontCare)))
@@ -278,7 +283,7 @@ refinementExactly tm pat _ (p,ty) overs unders
 -- The opposite of refinementExactly
 refinementNot :: SimpleTerm -> Refinement Brat
 refinementNot tm pat _ (p,ty) overs unders
-  = fmap (\(sg,abs) -> (sg,abs,(p,ty):overs,unders)) <$> case pat of
+  = fmap (\(sg,abs) -> (sg,(Case abs ((p,ty):overs) unders))) <$> case pat of
   Bind _ -> pure (Just ([], NA (APat pat)))
   DontCare -> pure (Just ([], NA (APat pat)))
   Lit tm' | tm /= tm' -> pure (Just ([], NA (APat pat)))
@@ -302,7 +307,7 @@ refinementEven pat ends (p,ty) overs unders = case patRefinementEven pat of
       Left Nat -> defineSrc nTimes2 (VNum (n2PowTimes 1 (nVar (VPar (ExEnd (end n)))))) $>
                   changeVars (InxToPar (ends :< ExEnd (end nTimes2))) 0 (doesItBind Braty) (overs :-> unders)
       _ -> pure (overs :-> unders)
-    pure (Just (maybe [] (\x -> [(x,[(nTimes2, ty)])]) msg, na, (p,ty):overs, unders))
+    pure (Just (maybe [] (\x -> [(x,[(nTimes2, ty)])]) msg, (Case na ((p,ty):overs) unders)))
 
 -- We're refining the pattern from `1+(2*n)` to `n` (the rounded down half)
 -- So we need to change n to 1+(2* some end)
@@ -318,7 +323,7 @@ refinementOdd pat ends (p,ty) overs unders = do
   (overs :-> unders) <- case ty of
     Left Nat -> pure $ changeVars (InxToPar (ends :< nEnd)) 0 (doesItBind Braty) (overs :-> unders)
     _ -> pure $ overs :-> unders
-  pure . fmap (\(sg,abs) -> (sg,abs,(p,ty):overs,unders)) $ case pat of
+  pure . fmap (\(sg,abs) -> (sg,(Case abs ((p,ty):overs) unders))) $ case pat of
     DontCare -> Just ([], NA (APat DontCare))
     Bind x -> Just ([(x,[(n,ty)])], NA (APat DontCare))
     POnePlus (PTwoTimes p) -> patRefinementEven p <&> \(msg,p) -> (maybe [] (\x -> [(x,[(nPred,ty)])]) msg, p)

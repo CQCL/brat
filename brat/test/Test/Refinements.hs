@@ -31,7 +31,7 @@ refine :: (DeBruijn (BinderType m), Show (BinderType m)) => Modey m -> Bwd End -
 refine m ends ref (0, abs, (over:overs), unders) = let (pat, rest) = absUncons abs in
   ref pat ends over overs unders <&> fmap (helper rest)
  where
-  helper rest (_, NA head, overs, unders)
+  helper rest (_, (Case (NA head) overs unders))
     = let NA abs = normaliseAbstractor (head :||: rest)
           (overs' :-> unders') = changeVars (ParToInx ends) 0 (doesItBind m) (overs :-> unders)
       in (abs, overs', unders')
@@ -70,8 +70,7 @@ refTest m ref input (expAbs, expOvers, expUnders)
       Just (abs, overs, unders) -> typeEqRow m "" expOvers overs (B0,0) >>=
                                    typeEqRow m "" expUnders unders >>
                                    pure abs
-      Nothing -> err $ InternalError "Branch is unreachable"
-
+      Nothing -> err $ UnreachableBranch
 
 testZero = testCase "zero" $
            refTest Braty (refinementZero (Left Nat)) (0, abs, overs, []) (expAbs, expOvers, [])

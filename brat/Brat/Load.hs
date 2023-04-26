@@ -63,8 +63,8 @@ checkDecl pre Decl{..} to_define = case (fnLocality, to_define) of
       ThunkOf (WC _ verb) -> do
         (ty, box_out) <- case fnSig of
           -- Seems like it should be important to not drop the context here
-          [(_, Right ty@(VFun m@Braty ctx (ss :-> ts)))] -> (ty,) <$> let ?my = m in checkBody fnName verb (ctx, ss, ts)
-          [(_, Right ty@(VFun m@Kerny ctx (ss :-> ts)))] -> (ty,) <$> let ?my = m in checkBody fnName verb (ctx, ss, ts)
+          [(_, Right ty@(VFun m@Braty ctx (ss :-> ts)))] -> (ty,) <$> let ?my = m in checkBody fnName verb (FV ctx ss ts)
+          [(_, Right ty@(VFun m@Kerny ctx (ss :-> ts)))] -> (ty,) <$> let ?my = m in checkBody fnName verb (FV ctx ss ts)
           [u] -> req $ Throw (dumbErr $ ExpectedThunk "" (show u))
           [] -> err $ EmptyRow name
           (_:_) -> err $ MultipleOutputsForThunk name

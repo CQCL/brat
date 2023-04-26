@@ -71,6 +71,9 @@ occursInAbstractor s (APat p) = occursInPat s p
 
 newtype NormalisedAbstractor = NA Abstractor
 
+instance Show NormalisedAbstractor where
+  show (NA a) = show a
+
 -- Concatenate normalised abstractors, making them right nested
 cat :: NormalisedAbstractor -> NormalisedAbstractor -> NormalisedAbstractor
 cat (NA a) (NA b) = NA $ aux a b
@@ -98,3 +101,6 @@ normaliseAbstractor (APat p) = NA $ APat (normalisePatterns p)
 normaliseAbstractor (APull ps abs) = let NA abs' = normaliseAbstractor abs in
                                        NA (APull ps abs')
 normaliseAbstractor AEmpty = NA AEmpty
+
+unNA :: NormalisedAbstractor -> Abstractor
+unNA (NA a) = a
