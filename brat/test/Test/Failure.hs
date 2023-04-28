@@ -12,7 +12,7 @@ import Data.Text (pack)
 
 import Brat.Compiler
 
-goldenTest file = goldenVsAction (takeBaseName file) (file <.> "golden") (runGetStderr file $ compileFile file) pack
+goldenTest file = goldenVsAction (takeBaseName file) (file <.> "golden") (runGetStderr file $ compileFile [] file) pack
 
 getKernelTests :: IO TestTree
 getKernelTests = testGroup "kernel" . fmap goldenTest <$> findByExtension [".brat"] "test/golden/kernel"

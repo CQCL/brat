@@ -45,3 +45,7 @@ findUnder needle = search 0 where
 B0 !< _ = error "(!<) failed"
 (_ :< x) !< 0 = x
 (zx :< _) !< i = zx !< (i - 1)
+
+(<+) :: Bwd a -> Bwd a -> Bwd a
+zx <+ (zy :< y) = (zx <+ zy) :< y
+zx <+ B0 = zx

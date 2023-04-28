@@ -9,6 +9,7 @@ import Test.Compile.RemoveNode
 import Test.Constructors
 import Test.Elaboration
 import Test.Failure
+import Test.Libs
 import Test.Naming
 import Test.Parsing
 import Test.Refinements
@@ -25,6 +26,7 @@ main = do
                                 ,checkingTests
                                 ,letTests
                                  -- ,circuitTests
+                                ,libDirTests
                                 ,nameTests
                                 ,parsingTests
                                 ,searchTests

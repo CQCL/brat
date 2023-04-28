@@ -32,8 +32,10 @@ import Control.Monad.Except
 import Data.Functor ((<&>), ($>))
 import Data.List (sort)
 import Data.List.HT (viewR)
+import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Graph as G
 import qualified Data.Map as M
+import Data.Traversable (for)
 import System.Directory (doesFileExist)
 import System.FilePath
 
@@ -94,7 +96,7 @@ withAliases :: [TypeAlias] -> Checking a -> Checking a
 withAliases [] m = m
 withAliases (a:as) m = loadAlias a >>= \a -> localAlias a $ withAliases as m
 
-loadStmtsWithEnv :: (VEnv, [(UserName, VDecl)]) -> (String, Prefix, FEnv, String) -> Either SrcErr VMod
+loadStmtsWithEnv :: (VEnv, [(UserName, VDecl)]) -> (FilePath, Prefix, FEnv, String) -> Either SrcErr VMod
 loadStmtsWithEnv (venv, oldDecls) (fname, pre, stmts, cts) = addSrcContext fname cts $ do
   -- hacky mess - cleanup!
   (decls, aliases) <- desugarEnv =<< elabEnv stmts
@@ -134,17 +136,17 @@ loadStmtsWithEnv (venv, oldDecls) (fname, pre, stmts, cts) = addSrcContext fname
     let (decl_defines, remaining) = M.updateLookupWithKey (\_ _ -> Nothing) name to_define
     in checkDecl pre decl decl_defines $> remaining
 
-loadFilename :: String -> ExceptT SrcErr IO VMod
-loadFilename file = do
+loadFilename :: [FilePath] -> String -> ExceptT SrcErr IO VMod
+loadFilename libDirs file = do
   unless (takeExtension file == ".brat") $ fail $ "Filename " ++ file ++ " must end in .brat"
   let (path, fname) = splitFileName $ dropExtension file
   contents <- lift $ readFile file
-  loadFiles path fname contents
+  loadFiles (path :| libDirs) fname contents
 
 -- Does not read the main file, but does read any imported files
-loadFiles :: FilePath -> String -> String
+loadFiles :: NonEmpty FilePath -> String -> String
          -> ExceptT SrcErr IO VMod
-loadFiles path fname contents = do
+loadFiles (cwd :| extraDirs) fname contents = do
   let mainImport = Import { importName = dummyFC (plain fname)
                           , importQualified = True
                           , importAlias = Nothing
@@ -163,8 +165,9 @@ loadFiles path fname contents = do
     Just (rest, (_, mainPrf, mainStmts, mainCts)) -> do
       unless (mainPrf == [fname]) $
         throwError (SrcErr "" $ dumbErr (InternalError "Top of dependency graph wasn't main file"))
-      pure $ [(path </> (foldr1 (</>) (pre ++ [name])), prf, stmts, cts) | (PrefixName pre name, prf, stmts, cts) <- rest]
-             ++ [(path </> fname ++ ".brat", [], mainStmts, mainCts)]
+      deps <- for rest $ \(uname,b,c,d) -> findFile uname >>= pure . (,b,c,d)
+      let main = (cwd </> fname ++ ".brat", [], mainStmts, mainCts)
+      pure (deps ++ [main])
     Nothing -> throwError (SrcErr "" $ dumbErr (InternalError "Empty dependency graph"))
     -- keep (as we fold) and then return only the graphs from the last file in the list
   liftEither $ foldM
@@ -173,7 +176,7 @@ loadFiles path fname contents = do
 --     (fname, [], M.empty, contents)
     allStmts'
   where
-    -- builds a map from username to (index in which discovered, module)
+    -- builds a map from Import to (index in which discovered, module)
     depGraph :: (M.Map Import (Int, FlatMod)) -- input map to which to add
              -> Import -> String
              -> ExceptT SrcErr IO (M.Map Import (Int, FlatMod))
@@ -181,16 +184,13 @@ loadFiles path fname contents = do
       case M.lookup imp visited of
         Just _ -> pure visited
         Nothing -> do
-          (imports, env) <- liftEither $ parseFile (nameToFile name) cts
+          (imports, env) <- liftEither $ parseFile (nameToFile cwd name) cts
           let with_mod = M.insert imp (M.size visited,((env, cts), imp, imports)) visited
           foldM visit with_mod imports
      where
       visit :: M.Map Import (Int, FlatMod) -> Import -> ExceptT SrcErr IO (M.Map Import (Int, FlatMod))
       visit visited' imp' = do
-        let file = nameToFile (unWC (importName imp'))
-        exists <- lift $ doesFileExist file
-        unless exists $
-          throwError $ addSrcName file $ dumbErr (FileNotFound file)
+        file <- findFile (unWC (importName imp'))
         cts <- lift $ readFile file
         depGraph visited' imp' cts
 
@@ -219,8 +219,14 @@ loadFiles path fname contents = do
         (WC fc dupl:_) -> throwError $ Err (Just fc) (NameClash ("Alias not unique: " ++ show dupl))
         [] -> pure ()
 
-    nameToFile :: UserName -> String
-    nameToFile (PrefixName ps file) = path </> (foldr (</>) file ps) ++ ".brat"
+    findFile :: UserName -> ExceptT SrcErr IO String
+    findFile uname = let possibleLocations = [nameToFile dir uname | dir <- cwd:extraDirs] in
+                       filterM (lift . doesFileExist) possibleLocations >>= \case
+      [] -> throwError $ addSrcName (show uname) $ dumbErr (FileNotFound (show uname) possibleLocations)
+      (x:_) -> pure x
+
+    nameToFile :: FilePath -> UserName -> String
+    nameToFile dir (PrefixName ps file) = dir </> (foldr (</>) file ps) ++ ".brat"
 
 checkNoCycles :: [(Int, FlatMod)] -> Either SrcErr ()
 checkNoCycles mods =

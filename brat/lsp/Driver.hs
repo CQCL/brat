@@ -5,6 +5,7 @@
 import Control.Concurrent.MVar
 import Control.Lens hiding (Iso)
 import Control.Monad.Except
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe (fromMaybe)
 import Data.Rope.UTF16 (toString)
 import Data.Text (pack)
@@ -101,7 +102,11 @@ loadVFile state _ msg = do
     Just (VirtualFile _version str rope) -> do
       let file = toString rope
       liftIO $ debugM "loadVFile" $ "Found file: " ++ show str
-      env <- liftIO . runExceptT $ loadFiles cwd (show fileName) file
+      -- N.B. The lsp server will never look for libraries file outside of the
+      -- current working directory because of this argument!
+      --                                             ||
+      --                                             vv
+      env <- liftIO . runExceptT $ loadFiles (cwd :| []) (show fileName) file
       case env of
         Right (_,newDecls,holes,_) -> do
           old <- liftIO $ takeMVar state

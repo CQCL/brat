@@ -7,6 +7,7 @@ import Control.Monad.Except (runExceptT)
 import qualified Data.Map as M
 import Data.Tuple.HT
 import Data.List (intercalate)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.String (IsString(..))
 import Data.Foldable (fold)
 import Data.Functor ((<&>))
@@ -164,7 +165,7 @@ addNmainGraph =
 
 extGraph :: Graph
 extGraph
- = (M.singleton "add_decl" (BratNode (Prim "add") [] [("thunk", 
+ = (M.singleton "add_decl" (BratNode (Prim "add") [] [("thunk",
         VFun Braty B0 ([("a", Right TInt), ("b", Right TInt)] :-> [("c", Right TInt)]))])
    ,[]
    )
@@ -229,7 +230,7 @@ extGraph
 
 runProg :: String -> String -> Graph -> Assertion
 runProg name contents expected = do
-  runExceptT (loadFiles "" name contents) >>= \case
+  runExceptT (loadFiles ("" :| []) name contents) >>= \case
     Right (_, _, _, named_gs) -> let gs = map snd named_gs in
       -- merge graphs from all functions
       (fold gs) =? expected

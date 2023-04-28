@@ -16,9 +16,9 @@ import System.FilePath (dropExtension)
 import Brat.Elaborator
 import Brat.Dot (toDotString)
 
-printDeclsHoles :: String -> IO ()
-printDeclsHoles file = do
-  env <- runExceptT $ loadFilename file
+printDeclsHoles :: [FilePath] -> String -> IO ()
+printDeclsHoles libDirs file = do
+  env <- runExceptT $ loadFilename libDirs file
   (_, decls, holes, _) <- eitherIO env
   putStrLn "Decls:"
   print decls
@@ -49,9 +49,9 @@ printAST printRaw printAST file = do
   when printAST $
     banner "desugared AST" (mapM_ print =<< eitherIO (addSrcContext file cts (desugarEnv env')))
 
-writeDot :: String -> String -> IO ()
-writeDot file out = do
-  env <- runExceptT $ loadFilename file
+writeDot :: [FilePath] -> String -> String -> IO ()
+writeDot libDirs file out = do
+  env <- runExceptT $ loadFilename libDirs file
   (_, _, _, graphs) <- eitherIO env
   case filter isMain graphs of
     [(_, g)] -> writeFile out (toDotString g)
@@ -61,9 +61,9 @@ writeDot file out = do
   isMain (PrefixName [] "main", _) = True
   isMain _ = False
 
-compileFile :: String -> IO ()
-compileFile file = do
-  env <- runExceptT $ loadFilename file
+compileFile :: [FilePath] -> String -> IO ()
+compileFile libDirs file = do
+  env <- runExceptT $ loadFilename libDirs file
   (_, decls, _, named_gs) <- eitherIO env
   -- Check main exists. (Will/should this work if "main" is in an imported module?)
   mn <- eitherIO $

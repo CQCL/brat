@@ -1,0 +1,5 @@
+import outer.lib
+import lib
+
+main :: [Bool,Nat]
+main = [outer.lib.x, lib.x]
