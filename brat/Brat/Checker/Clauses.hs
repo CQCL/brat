@@ -103,9 +103,9 @@ checkBody name (Clauses cs) fv@(FV ctx ss ts) = do
   (box, overs, unders) <- makeBox name ctx ss ts
   let bs = uncurry (mkBranch fv) <$> (NE.zip (NE.fromList [0..]) cs)
   -- Do graph building, typechecking, and get back a list of every clause reached
-  (box, usedBranches) <- runWriterT (build name (fst box) overs bs unders)
+  ((), usedBranches) <- runWriterT (build name overs bs unders)
   checkAllBranchesReached usedBranches bs
-  pure box
+  pure (fst box)
  where
   checkAllBranchesReached reachedBranches bs = do
     let allBranches = S.fromList (NE.toList (index <$> bs))
@@ -133,14 +133,13 @@ mkBranch (FV B0 ss ts) i (WC absFC abs, tm)
 
 build :: forall m. (?my :: Modey m, CheckConstraints m UVerb, Eval (BinderType m))
       => String              -- Name of the function we're building
-      -> Src                 -- The box which provides our unders and overs
       -> Overs m UVerb       -- Gamma (All overs to the graph)
       -> NonEmpty (Branch m) -- Our potential branches
       -> Unders m Chk        -- Delta (All unders from the graph)
       -- Return a Src which emits the outermost box, and collect a set of branches
       -- which have been reached in the Writer monad
-      -> WriterT (S.Set Int) Checking Src
-build name prov overs (b :| branches) unders = do
+      -> WriterT (S.Set Int) Checking ()
+build name overs (b :| branches) unders = do
   (pats, overs) <- lift $ absList (lhs (case_ b)) overs
   lift (localFC (clauseFC b) $ areIndiscriminate (0,B0) overs pats) >>= \case
     -- If the first branch doesn't discriminate, we can wire it up directly
@@ -153,14 +152,14 @@ build name prov overs (b :| branches) unders = do
                           localEnv env $
                           check (WC (clauseFC b) tm) (overs, unders)
       ensureEmpty "build leftovers" emptyOvers
-      pure prov)
+      )
     Left (i, test) -> do
       (fRef :& tRef) <- lift $ throwLeft $ possibilities (i, test) (rowToSig overs)
 
       buildOrDont (b:|branches) (fRef, i) False (covers $ case_ b) (cunders $ case_ b)
       buildOrDont (b:|branches) (tRef, i) True  (covers $ case_ b) (cunders $ case_ b)
 
-      pure prov
+      pure ()
  where
   absList :: NormalisedAbstractor -> [(Src, BinderType m)] -> Checking ([Pattern], [(Src, BinderType m)])
   absList na overs = absListWorker na overs <&> \(pats, lovers, rovers) -> (pats, lovers ++ rovers)
@@ -196,10 +195,11 @@ build name prov overs (b :| branches) unders = do
       pure (refinedBranches, dangling, boxOvers, boxUnders)
 
     case refinedBranches of
-      [] -> pure dangling
+      [] -> pure ()
       -- Ignore the inner thunks for now. We're just type checking branches,
       -- not yet wiring everything up
-      (b:bs) -> build (name ++ "/" ++ show whichCase) dangling boxOvers (b :| bs) boxUnders
+      (b:bs) -> build (name ++ "/" ++ show whichCase) boxOvers (b :| bs) boxUnders
+    pure dangling
 
   getSig [] ga de = (ga,de)
   getSig (b:_) _ _ = (covers &&& cunders) (case_ b)
