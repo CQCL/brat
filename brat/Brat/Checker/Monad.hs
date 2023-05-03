@@ -142,31 +142,29 @@ catchErr (Req r k) = Req r (catchErr . k)
 
 handler :: Free CheckingSig v
         -> Context
+        -> Graph
         -> Namespace
         -> Either Error (v,([TypedHole],Graph),Namespace)
-handler (Ret v) _ ns = return (v, mempty, ns)
-handler (Req s k) ctx ns
+handler (Ret v) _ g ns = return (v, ([], g), ns)
+handler (Req s k) ctx g ns
   = case s of
       Fresh str -> let (name, root) = fresh str ns in
-                     handler (k name) ctx root
+                     handler (k name) ctx g root
       Throw err -> Left err
-      LogHole hole -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
+      LogHole hole -> do (v,(holes,g),ns) <- handler (k ()) ctx g ns
                          return (v,(hole:holes,g),ns)
       AskFC -> error "AskFC in handler - shouldn't happen, should always be in localFC"
-      VLup s -> handler (k $ M.lookup s (venv ctx)) ctx ns
-      ALup s -> handler (k $ M.lookup s (aliasTable ctx)) ctx ns
-      AddNode name node -> do
-        (v,(holes,g),ns) <- handler (k ()) ctx ns
-        return (v,(holes,(M.singleton name node, []) <> g),ns)
-      Wire w -> do (v,(holes,g),ns) <- handler (k ()) ctx ns
-                   return (v,(holes,(M.empty,[w]) <> g),ns)
+      VLup s -> handler (k $ M.lookup s (venv ctx)) ctx g ns
+      ALup s -> handler (k $ M.lookup s (aliasTable ctx)) ctx g ns
+      AddNode name node -> handler (k ()) ctx ((M.singleton name node, []) <> g) ns
+      Wire w -> handler (k ()) ctx ((M.empty,[w]) <> g) ns
       -- We only get a KLup here if the variable has not been found in the kernel context
-      KLup _ -> handler (k Nothing) ctx ns
+      KLup _ -> handler (k Nothing) ctx g ns
       -- Receiving KDone may become possible when merging the two check functions
       KDone -> error "KDone in handler - this shouldn't happen"
-      AskVEnv -> handler (k (venv ctx)) ctx ns
-      ELup end -> handler (k ((M.lookup end) . valueMap . store $ ctx)) ctx ns
-      EndKind end -> handler (k ((M.lookup end) . kindMap . store $ ctx)) ctx ns
+      AskVEnv -> handler (k (venv ctx)) ctx g ns
+      ELup end -> handler (k ((M.lookup end) . valueMap . store $ ctx)) ctx g ns
+      EndKind end -> handler (k ((M.lookup end) . kindMap . store $ ctx)) ctx g ns
       Declare end kind ->
         let st@Store{kindMap=m} = store ctx
         in case M.lookup end m of
@@ -174,7 +172,7 @@ handler (Req s k) ctx ns
           Nothing -> handler (k ())
             (ctx { store =
               st { kindMap = M.insert end kind m }
-            }) ns
+            }) g ns
       Define end v ->
         let st@Store{kindMap=km, valueMap=vm} = store ctx
         in case M.lookup end vm of
@@ -185,21 +183,21 @@ handler (Req s k) ctx ns
               handler (k ())
                 (ctx { store =
                     st { valueMap = M.insert end v vm }
-                }) ns
+                }) g ns
       -- TODO: Use the kind argument for partially applied constructors
       TLup _ c -> do
         args <- case M.lookup c (typeConstructors ctx) of
           Just (Star args) -> pure $ Just args
           Just Nat -> error "Nat type constructor - this shouldn't happen"
           Nothing -> pure Nothing
-        handler (k args) ctx ns
+        handler (k args) ctx g ns
 
       CLup fc vcon tycon -> do
         tbl <- maybeToRight (Err (Just fc) $ VConNotFound $ show vcon) $
                M.lookup vcon (constructors ctx)
         args <- maybeToRight (Err (Just fc) $ TyConNotFound (show tycon) (show vcon)) $
                 M.lookup tycon tbl
-        handler (k args) ctx ns
+        handler (k args) ctx g ns
 
 type Checking = Free CheckingSig
 

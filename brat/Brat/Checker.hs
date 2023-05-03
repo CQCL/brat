@@ -735,4 +735,4 @@ run ve ns m =
                 , typeConstructors = defaultTypeConstructors
                 , aliasTable = M.empty
                 } in
-    (\(a,b,_) -> (a,b)) <$> handler m ctx ns
+    (\(a,b,_) -> (a,b)) <$> handler m ctx mempty ns
