@@ -110,35 +110,6 @@ comment = unlines
   ,""
   ]
 
--- This allows comparing edges as sets, ignoring ordering
-equalEdges :: [Wire] -> [Wire] -> Assertion
-equalEdges actual expected = do
-  actual <- key_by_src actual
-  expected <- key_by_src expected
-  traverse (uncurry wireEq) (zip (M.elems actual) (M.elems expected))
-  pure ()
- where
-  wireEq :: Wire -> Wire -> Assertion
-  wireEq (src, s, tgt) (src', s', tgt')
-   | src == src', tgt == tgt' = signalEq s s'
-   | otherwise = assertFailure "Wires have different ends"
-
-  signalEq :: Either SValue Value -> Either SValue Value -> Assertion
-  signalEq (Left s) (Left t) = assertRunsOk (stypeEq "" s t)
-  signalEq (Right s) (Right t) = assertRunsOk (typeEq "" (Star []) s t)
-  signalEq _ _ = assertFailure "Comparing kernel signal and classical signal"
-
-  assertRunsOk :: Checking a -> Assertion
-  assertRunsOk c = case runEmpty c of
-    Left err -> assertFailure (showError err)
-    Right _ -> pure ()
-
-  dup_wires s _ _ = assertFailure $ "Multiple wires for same source: " ++ (show s)
-  key_by_src :: [Wire] -> IO (M.Map OutPort Wire)
-  key_by_src ws = do
-    let ioVals = M.fromListWithKey dup_wires (map (\w@(src,_,_) -> (src, pure w)) ws)
-    M.fromList <$> (sequence $ map (\(k,iov) -> (k,) <$> iov) $ M.assocs ioVals)
-
 mkTensor :: Checking (Name, Name, Name, [(Src, BinderType Brat)])
 mkTensor = do
   (fooNode, _, foos,  _) <- next "foo" Source (B0,B0) [] [("out1", Right TNat), ("out2", Right TFloat)]
