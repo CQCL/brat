@@ -205,10 +205,10 @@ build name overs (b :| branches) unders = do
   getSig (b:_) _ _ = (covers &&& cunders) (case_ b)
 
 
-refineBranch :: (?my :: Modey m, DeBruijn (BinderType m), Show (BinderType m))
+refineBranch :: forall m. (?my :: Modey m, DeBruijn (BinderType m), Show (BinderType m))
              => Refinement m -> Int -> Branch m -> Checking (Maybe (Branch m))
 refineBranch ref i b
-  = refine ?my B0 i ref (case_ b)
+  = refine B0 i (case_ b)
   <&> fmap (\(sg, c) -> b { case_ = c
                           , subst = sg
                           })
@@ -216,18 +216,15 @@ refineBranch ref i b
   -- Navigate to a certain point (given by the Int argument) of an abstractor and
   -- row of overs, then apply a given refinement at that point.
   -- Binders that we pass along the way have ends generated for applying substitutions
-  refine :: (DeBruijn (BinderType m), Show (BinderType m))
-         => Modey m
-         -> Bwd End
+  refine :: Bwd End
          -> Int
-         -> Refinement m
          -> Case m
          -> Checking (Maybe (Subst m, Case m))
   -- Handle port pulling before anything else! The index that we're refining
   -- assumes that port pulling has already been done
-  refine m ends n ref (Case (NA (APull ps abs)) overs unders)
-    = pullPortsSig ps overs >>= \overs -> refine m ends n ref (Case (NA abs) overs unders)
-  refine m ends 0 ref (Case (NA abs) (over:overs) unders) = do
+  refine ends n (Case (NA (APull ps abs)) overs unders)
+    = pullPortsSig ps overs >>= \overs -> refine ends n (Case (NA abs) overs unders)
+  refine ends 0 (Case (NA abs) (over:overs) unders) = do
     result <- case abs of
       APat p -> ref p ends over overs unders
       (APat p :||: as) -> ref p ends over overs unders <&> \case
@@ -236,15 +233,15 @@ refineBranch ref i b
       _ -> err $ InternalError "Found unnormalised pattern"
     pure $ flip fmap result $
       \(sg, (Case (NA b) overs unders)) ->
-      let (overs' :-> unders') = changeVars (ParToInx ends) 0 (doesItBind m) (overs :-> unders)
+      let (overs' :-> unders') = changeVars (ParToInx ends) 0 (doesItBind ?my) (overs :-> unders)
         in (sg, (Case (NA b) overs' unders'))
-  refine m ends i ref (Case (NA (a :||: b)) (over:overs) unders) = do
-    ends <- case (m, doesItBind m (snd over)) of
+  refine ends i (Case (NA (a :||: b)) (over:overs) unders) = do
+    ends <- case (?my, doesItBind ?my (snd over)) of
       (Braty, Just k) -> do
         (_, _, [(value, _)], _) <- next "" Hypo (B0,B0) [] [("value", Left k)]
         pure (ends :< ExEnd (end value))
       _ -> pure ends
-    rest <- refine m ends (i - 1) ref (Case (NA b) overs unders)
+    rest <- refine ends (i - 1) (Case (NA b) overs unders)
     pure $ reattach a over <$> rest
 
   reattach a over (sg, (Case (NA b) overs unders)) = (sg, (Case (normaliseAbstractor (a :||: b)) (over:overs) unders))
