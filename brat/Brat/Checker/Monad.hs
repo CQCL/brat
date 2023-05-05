@@ -7,7 +7,7 @@ import Brat.Checker.Types
 import Brat.Constructors (ConstructorMap)
 import Brat.Error (Error(..), ErrorMsg(..), dumbErr)
 import Brat.Eval
-import Brat.FC
+import Brat.FC (FC)
 import Brat.Graph
 import Brat.Naming (fresh, Name, Namespace)
 import Brat.Syntax.Common
@@ -17,6 +17,7 @@ import Bwd
 import Util
 
 import Control.Monad.Freer
+import Control.Monad.State (State, runState, state)
 
 import Control.Applicative (liftA2)
 import Control.Monad.Fail ()
@@ -82,6 +83,33 @@ localVEnv ext (Req (VLup x) k) | Just x <- M.lookup x ext = localVEnv ext (k (Ju
 localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
                                    localVEnv ext (k (M.union ext env)) -- ext shadows env
 localVEnv ext (Req r k) = Req r (localVEnv ext . k)
+
+-- runs a computation, but intercepts uses of outer variables and redirects
+-- them to use new outports of the specified node (expected to be a Source).
+-- Returns a list of captured variables and their generated (Source-node) outports
+captureOuterVars :: Name -> Int -- Name of Source node and #existing inputs
+                 -> Checking v
+                 -> Checking (v, M.Map UserName [(Src, BinderType Brat)])
+captureOuterVars src_node = helper M.empty
+ where
+  helper :: M.Map UserName [(Src, BinderType Brat)]  -- accumulates variables captured
+         -> Int                                      -- next free outport of input node (sum of lengths of values of previous)
+         -> Checking v
+         -> Checking (v, M.Map UserName [(Src, BinderType Brat)])
+  helper captured _ (Ret v) = Ret (v, captured)
+  helper captured n_inputs (Req (VLup x) k) = do
+    case M.lookup x captured of
+      j@(Just _) -> helper captured n_inputs (k j)
+      Nothing -> req (VLup x) >>= \case
+          Nothing -> helper captured n_inputs (k Nothing)
+          Just outerVals ->
+            let (outPorts, n_inputs') = runState (mapM next_input outerVals) n_inputs
+            in helper (M.insert x outPorts captured) n_inputs' (k $ Just outPorts)
+  helper captured n_inputs (Req r k) =
+    Req r (helper captured n_inputs . k)
+  -- replaces the end (not portname) with the *next* port of 'src_node', defined by the state
+  next_input :: (Src, BinderType Brat) -> State Int (Src, BinderType Brat)
+  next_input (src, ty) = state (\n_input -> ((src {end=Ex src_node n_input}, ty), n_input+1))
 
 wrapError :: (Error -> Error) -> Checking v -> Checking v
 wrapError _ (Ret v) = Ret v

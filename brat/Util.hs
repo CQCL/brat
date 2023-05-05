@@ -5,6 +5,11 @@ nth [] _ = Nothing
 nth (a:_) 0 = Just a
 nth (_:as) n = as `nth` (n - 1)
 
+zip_same_length :: [a] -> [b] -> Maybe [(a,b)]
+zip_same_length (x:xs) (y:ys) = ((x,y):) <$> zip_same_length xs ys
+zip_same_length [] [] = Just []
+zip_same_length _ _ = Nothing
+
 lookupBy :: (a -> Bool) -> (a -> b) -> [a] -> Maybe b
 lookupBy _ _ [] = Nothing
 lookupBy p f (x:xs) | p x = Just (f x)

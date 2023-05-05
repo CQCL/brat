@@ -169,10 +169,11 @@ checkThunk :: (?my :: Modey m, CheckConstraints m UVerb)
            -> WC (Term Chk UVerb)
            -> Checking Src
 checkThunk name vctx ss ts tm = do
-  ((dangling,_), thOvers, thUnders) <- makeBox name vctx ss ts
-  (((), ()), (emptyOvers, emptyUnders)) <- check tm (thOvers, thUnders)
-  ensureEmpty "thunk leftovers" emptyOvers
-  ensureEmpty "thunk leftunders" emptyUnders
+  ((dangling, _), ()) <- makeBox name vctx ss ts $
+    \(thOvers, thUnders) -> do
+      (((), ()), (emptyOvers, emptyUnders)) <- check tm (thOvers, thUnders)
+      ensureEmpty "thunk leftovers" emptyOvers
+      ensureEmpty "thunk leftunders" emptyUnders
   pure dangling
 
 check :: (CheckConstraints m k, TensorOutputs (Outputs m d), ?my :: Modey m)
@@ -250,10 +251,11 @@ check' (TypedTh t) ((), ()) = case ?my of
               -> Checking (SynConnectors Brat Syn Noun
                           ,ChkConnectors Brat Syn Noun)
   createThunk (ins, outs) = do
-    (thunkOut, thOvers, thUnders) <- makeBox "thunk" B0 (rowToSig ins) (rowToSig outs)
-    -- if these ensureEmpty's fail then its a bug!
-    () <- checkInputs t thOvers ins >>= ensureEmpty "TypedTh inputs"
-    () <- checkOutputs t thUnders outs >>= ensureEmpty "TypedTh outputs"
+    (thunkOut, ()) <- makeBox "thunk" B0 (rowToSig ins) (rowToSig outs) $
+        \(thOvers, thUnders) -> do
+          -- if these ensureEmpty's fail then its a bug!
+          checkInputs t thOvers ins >>= ensureEmpty "TypedTh inputs"
+          checkOutputs t thUnders outs >>= ensureEmpty "TypedTh outputs"
     pure (((), [thunkOut]), ((), ()))
 check' (Force th) ((), ()) = do
   (((), outs), ((), ())) <- let ?my = Braty in check th ((), ())

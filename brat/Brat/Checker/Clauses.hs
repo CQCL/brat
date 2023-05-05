@@ -99,11 +99,11 @@ checkBody :: (?my :: Modey m, CheckConstraints m UVerb, Eval (BinderType m))
 checkBody _ Undefined _ = err (InternalError "Checking undefined clause")
 checkBody name (NoLhs verb) (FV ctx ss ts) = checkThunk name ctx ss ts verb
 checkBody name (Clauses cs) fv@(FV ctx ss ts) = do
-  -- The box that contains all the branches for the function
-  (box, overs, unders) <- makeBox name ctx ss ts
   let bs = uncurry (mkBranch fv) <$> (NE.zip (NE.fromList [0..]) cs)
-  -- Do graph building, typechecking, and get back a list of every clause reached
-  ((), usedBranches) <- runWriterT (build name overs bs unders)
+  -- The box that contains all the branches for the function
+  (box, usedBranches) <- makeBox name ctx ss ts $
+    -- Do graph building, typechecking, and get back a list of every clause reached
+    \(overs, unders) -> snd <$> runWriterT (build name overs bs unders)
   checkAllBranchesReached usedBranches bs
   pure (fst box)
  where
@@ -183,22 +183,21 @@ build name overs (b :| branches) unders = do
               -> [(PortName, BinderType m)] -- Unders
               -> WriterT (S.Set Int) Checking Src
   buildOrDont bs (ref, i) whichCase overs unders = do
-    (refinedBranches, dangling, boxOvers, boxUnders) <- lift $ do
+    ((dangling, _), reached) <- lift $ do
+      -- We return "reached" here rather than using WriterT in order to fit 'makeBox'
       refinedBranches <- catMaybes . NE.toList <$> traverse (refineBranch ref i) bs
 
       let (ga,de) = getSig refinedBranches overs unders
-      ((dangling,_), boxOvers, boxUnders) <- makeBox (name ++ "_" ++ show whichCase) B0 ga de
-
-      boxUnders <- evalTgtRow ?my boxUnders
-      boxOvers  <- evalSrcRow ?my boxOvers
-
-      pure (refinedBranches, dangling, boxOvers, boxUnders)
-
-    case refinedBranches of
-      [] -> pure ()
-      -- Ignore the inner thunks for now. We're just type checking branches,
-      -- not yet wiring everything up
-      (b:bs) -> build (name ++ "/" ++ show whichCase) boxOvers (b :| bs) boxUnders
+      makeBox (name ++ "_" ++ show whichCase) B0 ga de $
+        \(boxOvers, boxUnders) -> do
+          boxUnders <- evalTgtRow ?my boxUnders
+          boxOvers  <- evalSrcRow ?my boxOvers
+          case refinedBranches of
+            [] -> pure S.empty
+            -- Ignore the inner thunks for now. We're just type checking branches,
+            -- not yet wiring everything up
+            (b:bs) -> snd <$> (runWriterT $ build (name ++ "/" ++ show whichCase) boxOvers (b :| bs) boxUnders)
+    tell reached
     pure dangling
 
   getSig [] ga de = (ga,de)

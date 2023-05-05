@@ -129,17 +129,19 @@ addNGraph :: String -> Graph
 addNGraph port_name
   = (M.fromList (
      [("add", BratNode (Prim "add") [] [(port_name, add_ty)])
-     ,("add_eval", BratNode (Eval (Ex "add" 0)) [("a", int), ("b", int)] [("c", int)])
+     ,("add_eval", BratNode (Eval (Ex "addN_src" 1)) [("a", int), ("b", int)] [("c", int)])
      ,("N", BratNode (Prim "N") [] [("value", int)])
-     ,("addN_box", BratNode ("addN_src" :>>: "addN_tgt") [] [("thunk", addN_ty)])
-     ,("addN_src", BratNode Source [] [("inp", int)])
+     ,("addN_box", BratNode ("addN_src" :>>: "addN_tgt") [(port_name, add_ty), ("value", int)] [("thunk", addN_ty)])
+     ,("addN_src", BratNode Source [] [("inp", int), (port_name, add_ty), ("value", int)])
      ,("addN_tgt", BratNode Target [("out", int)] [])
      ,("addN", BratNode Id [("thunk", addN_ty)] [("thunk", addN_ty)])
      ])
-    ,[(Ex "addN_box" 0, Right addN_ty, In "addN" 0)
-     ,((Ex "addN_src" 0), Right int, (In "add_eval" 1))
-     ,((Ex "N" 0), Right int, (In "add_eval" 0))
-     ,((Ex "add" 0), Right int, (In "addN_tgt" 0))
+    ,[(Ex "N" 0, Right int, In "addN_box" 1)
+     ,(Ex "add" 0, Right add_ty, In "addN_box" 0)
+     ,(Ex "addN_box" 0, Right addN_ty, In "addN" 0)
+     ,((Ex "addN_src" 0), Right int, (In "add_eval" 0)) -- argument
+     ,((Ex "addN_src" 2), Right int, (In "add_eval" 1)) -- captured
+     ,((Ex "add_eval" 0), Right int, (In "addN_tgt" 0))
      ]
     )
  where

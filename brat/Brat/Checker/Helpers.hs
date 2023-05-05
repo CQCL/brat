@@ -22,11 +22,8 @@ module Brat.Checker.Helpers (pullPortsRow, pullPortsSig
                             ) where
 
 import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr, evSTy, evTy
-                          ,stypeEq, typeEq, kindEq)
-import Brat.Checker.Types {-(ValueType, eval, DeBruijn(..)
-                          ,Overs, Unders
-                          ,VarChanger(..)
-                          )-}
+                          ,stypeEq, typeEq, kindEq, captureOuterVars)
+import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval ( Eval(eval) )
 import Brat.FC (FC)
@@ -38,12 +35,16 @@ import Brat.Syntax.Simple
 import Brat.Syntax.Value
 import Brat.UserName
 import Bwd
-import Control.Monad.Freer (req, Free(Ret))
+import Util (zip_same_length)
 
+import Control.Monad (forM, unless)
+import Control.Monad.Freer (req, Free(Ret))
 import Control.Arrow ((***))
+import Control.Exception (assert)
 import Data.Bifunctor
 import Data.Functor (($>))
 import Data.List (intercalate)
+import Data.Maybe (fromJust)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Prelude hiding (last)
@@ -170,14 +171,13 @@ anext str th vals0 ins outs = do
   mkNode Braty = BratNode
   mkNode Kerny = KernelNode
 
-  akindType :: forall m. Modey m -> BinderType m -> ValueType m
-  akindType Braty (Right thing) = thing
-  akindType Braty (Left k) = kindType k
-  akindType Kerny ty = ty
-
   inputs, outputs :: [(PortName, ValueType m)]
   inputs  = [ (p, akindType ?my ty) | (p, ty) <- ins  ]
   outputs = [ (p, akindType ?my ty) | (p, ty) <- outs ]
+
+akindType :: forall m. Modey m -> BinderType m -> ValueType m
+akindType Braty = either kindType id
+akindType Kerny = id
 
 -- endPorts instantiates the deBruijn variables in a row with Ends
 endPorts :: (?my :: Modey m, DeBruijn (BinderType m))
@@ -303,12 +303,36 @@ makeBox :: (?my :: Modey m, DeBruijn (BinderType m))
         -> Bwd Value -- Stuff that the function type can depend on
         -> [(PortName, BinderType m)] -- Inputs
         -> [(PortName, BinderType m)] -- Outputs
-        -> Checking ((Src, BinderType Brat), Overs m UVerb, Unders m Chk)
-makeBox name vctx ss ts = do
+        -> ((Overs m UVerb, Unders m Chk) -> Checking a) -- checks + builds the body
+        -> Checking ((Src, BinderType Brat), a)
+makeBox name vctx ss ts body = do
   (src, _, overs, ctx) <- anext (name ++ "/in") Source (vctx, B0) [] ss
   (tgt, unders, _, _) <- anext (name ++ "/out") Target ctx ts []
-  (_,_,[thunk],_)<- next (name ++ "_thunk") (src :>>: tgt) (vctx,B0) [] [("thunk", Right (VFun ?my B0 (ss :-> ts)))]
-  pure (thunk, overs, unders)
+  case (?my, ss, ts, body) of
+    (Kerny, _, _, _) -> do
+      bres <- body (overs, unders)
+      (_,_,[thunk],_) <- next (name ++ "_thunk") (src :>>: tgt) (vctx,B0) [] [("thunk", Right (VFun ?my B0 (ss :-> ts)))]
+      pure (thunk, bres)
+    (Braty, ss, ts, body) -> do
+      let n_args = length ss
+      (bres, captures) <- captureOuterVars src (length overs) $ body (overs, unders)
+      inner_outer_srcs :: [[((Src, BinderType Brat), Src)]] <- forM (M.assocs captures) $ \(var, outports) ->
+        fromJust . zip_same_length outports . map fst . fromJust <$> req (VLup var)
+      let new_inports = M.fromList $ map (\((NamedPort {end = Ex isrc n, portName=pn}, ty), _) -> assert (src == isrc) (n, (pn, ty))) (concat inner_outer_srcs)
+      unless ((M.keys new_inports) == [n_args..n_args + length new_inports - 1]) $ err $ InternalError "wrong port numbers"
+      new_inports <- pure $ M.elems new_inports -- sorted
+      -- This *replaces* the earlier 'src' node with the same name, just updating the ports
+      req $ AddNode src (BratNode Source [] (map (second $ akindType Braty) (ss ++ new_inports)))
+      -- Now make the box. This has inputs *only* for the captured variables
+      -- (not the arguments - those are supplied in addition to the box when it's eval'd)
+      (box_node,_,[thunk],_) <- next (name ++ "_thunk") (src :>>: tgt) (vctx,B0) new_inports [("thunk", Right (VFun ?my B0 (ss :-> ts)))]
+      -- Finally, wire captured values into box
+      forM (concat inner_outer_srcs) (
+        \((NamedPort {end=Ex _ n, portName=p}, ty), osrc) -> case ty of
+          Right ty -> wire (osrc, ty, NamedPort {end=In box_node (n-n_args), portName=p})
+          Left _ -> pure ()
+        )
+      pure (thunk, bres)
 
 uncons :: Modey m -> ValueType m -> Maybe (ValueType m, ValueType m)
 uncons Kerny (Of ty n) = case valMatch n (VPNum (NP1Plus NPVar)) of
