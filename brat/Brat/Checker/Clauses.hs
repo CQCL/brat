@@ -30,6 +30,7 @@ import Util (nth)
 
 import Control.Arrow ((&&&))
 import Control.Monad.Writer
+import Data.Bifunctor (first)
 import Data.Functor ((<&>))
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
@@ -128,7 +129,7 @@ mkBranch (FV B0 ss ts) i (WC absFC abs, tm)
     , body  = tm
     , lhsFC = absFC
     , case_ = Case { lhs = normaliseAbstractor abs, covers = ss, cunders = ts }
-    , subst = []
+    , subst = idSubst
     }
 
 build :: forall m. (?my :: Modey m, CheckConstraints m UVerb, Eval (BinderType m))
@@ -146,7 +147,7 @@ build name overs (b :| branches) unders = do
     -- Start by announcing that we've reached this branch
     Right _ -> tell (S.singleton (index b)) *> lift (do
       let tm = WC (lhsFC b) (unNA . lhs . case_ $ b) :\: body b
-      let env = M.fromList $ (\(x,over) -> (plain x, over)) <$> (subst b)
+      let env = M.fromList $ first plain <$> (termSub $ subst b)
       ((), emptyOvers) <- localFC (clauseFC b) $
                           noUnders $
                           localEnv env $
@@ -163,18 +164,18 @@ build name overs (b :| branches) unders = do
  where
   absList :: NormalisedAbstractor -> [(Src, BinderType m)] -> Checking ([Pattern], [(Src, BinderType m)])
   absList na overs = absListWorker na overs <&> \(pats, lovers, rovers) -> (pats, lovers ++ rovers)
-   where
-    absListWorker :: NormalisedAbstractor -> [(Src, BinderType m)] -> Checking ([Pattern], [(Src, BinderType m)], [(Src, BinderType m)])
-    absListWorker (NA abs) overs = case abs of
-      AEmpty -> pure ([], [], overs)
-      a :||: b -> do
-        (as, lovers, rovers) <- absListWorker (normaliseAbstractor a) overs
-        (bs, lovers', rovers') <- absListWorker (normaliseAbstractor b) rovers
-        pure (as ++ bs, lovers ++ lovers', rovers')
-      APull ps abs -> pullPortsRow ps overs >>= absListWorker (normaliseAbstractor abs)
-      APat p -> case overs of
-        [] -> err $ NothingToBind (show p)
-        (o:os) -> pure ([p], [o], os)
+
+  absListWorker :: NormalisedAbstractor -> [(Src, BinderType m)] -> Checking ([Pattern], [(Src, BinderType m)], [(Src, BinderType m)])
+  absListWorker (NA abs) overs = case abs of
+    AEmpty -> pure ([], [], overs)
+    a :||: b -> do
+      (as, lovers, rovers) <- absListWorker (normaliseAbstractor a) overs
+      (bs, lovers', rovers') <- absListWorker (normaliseAbstractor b) rovers
+      pure (as ++ bs, lovers ++ lovers', rovers')
+    APull ps abs -> pullPortsRow ps overs >>= absListWorker (normaliseAbstractor abs)
+    APat p -> case overs of
+      [] -> err $ NothingToBind (show p)
+      (o:os) -> pure ([p], [o], os)
 
   buildOrDont :: NonEmpty (Branch m)
               -> (Refinement m, Int)
@@ -190,6 +191,10 @@ build name overs (b :| branches) unders = do
       let (ga,de) = getSig refinedBranches overs unders
       makeBox (name ++ "_" ++ show whichCase) B0 ga de $
         \(boxOvers, boxUnders) -> do
+          case (?my, refinedBranches) of
+            (Braty, b:_) -> let tySubst = typeSub (subst b) in
+                              defineOvers i tySubst boxOvers
+            _ -> pure ()
           boxUnders <- evalTgtRow ?my boxUnders
           boxOvers  <- evalSrcRow ?my boxOvers
           case refinedBranches of
@@ -199,6 +204,25 @@ build name overs (b :| branches) unders = do
             (b:bs) -> snd <$> (runWriterT $ build (name ++ "/" ++ show whichCase) boxOvers (b :| bs) boxUnders)
     tell reached
     pure dangling
+   where
+    defineOvers :: Int -> TypeSubst -> [(Src, BinderType Brat)] -> Checking ()
+    defineOvers _ TypeId _ = pure ()
+    defineOvers i subst overs = case (lookup i (zip [0..] overs), subst) of
+      (Nothing,_) -> err $ InternalError "Couldn't find type in subst"
+      (Just (src,Left _),DefineKind v) -> defineSrc src v
+      (Just (_,Right ty),DefineInType (vp, sg)) -> do
+        vz <- throwLeft (valMatch ty vp)
+        defineTypeVars (sg <>> []) (vz <>> [])
+      (Just over, sg) -> err $ InternalError $ "Bad subst " ++ show over ++ " " ++ show sg
+
+    defineTypeVars :: [Maybe Value] -> [Value] -> Checking ()
+    defineTypeVars [] _ = pure ()
+    defineTypeVars _ [] = err $ InternalError "defineOvers didn't match enough values"
+    defineTypeVars (Nothing:sg) (_:vs) = defineTypeVars sg vs
+    defineTypeVars (Just x:sg) ((VApp (VPar e) B0):vs) = req (Define e x) *> defineTypeVars sg vs
+    -- If value isn't a variable, we can't define it
+    -- and the relevant refinement is wrong
+    defineTypeVars (Just _:_) (v:_) = err . InternalError $ "defineOvers: trying to define non-variable - " ++ show v
 
   getSig [] ga de = (ga,de)
   getSig (b:_) _ _ = (covers &&& cunders) (case_ b)

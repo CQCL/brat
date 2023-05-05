@@ -77,5 +77,8 @@ pure(X :: *, x :: X, n :: #) -> Vec(X, n)
 pure(_, x, zero) = []
 pure(X, x, succ(n)) = cons(x, pure(X, x, n))
 
+one :: Int
+one = id(Int, 1)
+
 passingN(n :: #) -> Vec(String, n)
 passingN(n) = pure(String, "a", n)

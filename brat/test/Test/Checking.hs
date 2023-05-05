@@ -15,9 +15,6 @@ import Test.Tasty.ExpectedFailure
 
 expectedCheckingFails = map ("examples" </>) ["nested-abstractors.brat"
                                              ,"karlheinz_alias.brat"
-                                             -- The next is a regression in dependent types,
-                                             -- expected to be fixed by upcoming work on pattern refinement
-                                             ,"kinds.brat"
                                              ]
 
 parseAndCheckXF :: FilePath -> TestTree

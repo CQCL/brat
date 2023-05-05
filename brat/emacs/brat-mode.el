@@ -8,7 +8,7 @@
 (defconst brat-port-pull "\\([[:alnum:]'_-]*:\\)+[^:]")
 (defconst brat-comments "\\(--\\)\\(.*\\)$")
 (defconst brat-holes "?[[:alnum:]'_-]*")
-(defconst brat-keywords "\\b\\(type\\|open\\|import\\|ext\\|let\\|in\\)\\([[:space:]]\\|[^[:alnum:]'_-]\\|$\\)\\b")
+(defconst brat-keywords "\\b\\(type\\|open\\|import\\|ext\\|let\\|in\\)\\b")
 (defconst brat-decl
   "^[[:space:]]*\\(ext[[:space:]]*\".*\"\\)?[[:space:]]*\\([[:alnum:]'_-]*\\)\\((.*)[[:space:]]*-\\|[[:space:]]*::\\)")
 (defconst brat-decl2 "^[[:space:]]*\\([[:alnum:]'_-]*\\)[[:print:]]*=")
@@ -17,7 +17,7 @@
 
 (defvar brat-font-lock-keywords
   (list
-   (cons brat-keywords    '(0 font-lock-keyword-face))
+   (cons brat-keywords    '(1 font-lock-keyword-face))
    (cons brat-import      '(2 font-lock-keyword-face))
    (cons brat-decl        '(2 font-lock-function-name-face))
    (cons brat-decl2       '(1 font-lock-function-name-face))
