@@ -106,7 +106,7 @@ loadStmtsWithEnv (venv, oldDecls) (fname, pre, stmts, cts) = addSrcContext fname
   let dups = duplicates (declNames ++ map (PrefixName pre . fnName) decls) in unless (null dups) $
     Left $ dumbErr $ NameClash $ show dups
   -- kindCheck the declaration signatures, but throw away the graph
-  (vdecls, (holes, _graph)) <- run venv root $ withAliases aliases $ forM decls $ \d ->
+  (vdecls, (holes, _graph)) <- run venv root $ withAliases aliases $ forM decls $ \d -> localFC (fnLoc d) $
     kindCheckRow (fnSig d) <&> \sig -> (PrefixName pre (fnName d), d{fnSig=sig} :: VDecl)
   unless (length holes == 0) $ Left $ dumbErr $ InternalError "Decl sigs generated holes"
 
