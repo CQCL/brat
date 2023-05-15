@@ -1,18 +1,11 @@
 module Brat.Compiler (printAST, printDeclsHoles, writeDot, compileFile) where
 
-import Brat.Compile.Circuit
-import Brat.Syntax.Common (Decl'(..), CType'(..), Modey(..), pattern R)
-import Brat.Syntax.Value (Value(..))
 import Brat.UserName
 import Brat.Error
 import Brat.Load
-import Bwd (Bwd(..))
 import Util
 
 import Control.Monad.Except
-import qualified Data.ByteString as BS
-import Data.ProtoLens (encodeMessage)
-import System.FilePath (dropExtension)
 import Brat.Elaborator
 import Brat.Dot (toDotString)
 
@@ -66,19 +59,12 @@ compileFile libDirs file = do
   env <- runExceptT $ loadFilename libDirs file
   (_, decls, _, named_gs) <- eitherIO env
   -- Check main exists. (Will/should this work if "main" is in an imported module?)
-  mn <- eitherIO $
+  _mn <- eitherIO $
       maybeToRight (addSrcName file $ dumbErr MainNotFound) $
       lookup (plain "main") decls
 
-  (_name, graph) <- eitherIO $
+  (_name, _graph) <- eitherIO $
       maybeToRight (addSrcName file $ dumbErr $ InternalError "No graph produced for main") $
       lookupBy ((== (PrefixName [] "main")) . fst) id named_gs
 
-  let outFile = (dropExtension file) <> ".tk"
-  case fnSig mn of
-    [(_, Right (VFun Kerny B0 (ss :-> ts)))] -> do
-      let bin = wrapCircuit (compileCircuit graph (R ss, R ts))
-      BS.writeFile outFile (encodeMessage bin)
-      putStrLn $ "Wrote to file " ++ outFile
-    -- Placeholder while tierkreis output is under development
-    _ -> error "main function must be a kernel"
+  pure ()

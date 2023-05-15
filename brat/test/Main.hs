@@ -3,7 +3,6 @@ import Test.Tasty.Silver.Interactive (defaultMain)
 
 import Test.Abstractor
 import Test.Checking
-import Test.Circuit.Gen
 import Test.Circuit.Graph
 import Test.Compile.RemoveNode
 import Test.Constructors
@@ -25,7 +24,6 @@ main = do
                                 ,failureTests
                                 ,checkingTests
                                 ,letTests
-                                 -- ,circuitTests
                                 ,libDirTests
                                 ,nameTests
                                 ,parsingTests
