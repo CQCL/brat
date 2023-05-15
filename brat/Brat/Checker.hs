@@ -376,6 +376,13 @@ check' (Simple tm) ((), ((hungry, ty):unders)) = ((?my,tm,) <$> evalBinder ?my t
       (_, _, [(dangling, _)], _) <- next "" (Const tm) (B0,B0) [] [("value", Right ty)]
       wire (dangling, ty, hungry)
       pure (((), ()), ((), unders))
+  (Braty, Num n, Left Nat) -> do
+      (_, _, [(dangling, _)], _) <- next "" (Const (Num n)) (B0,B0) [] [("value", Left Nat)]
+      let val = VNum (nConstant n)
+      defineSrc dangling val
+      defineTgt hungry val
+      wire (dangling, kindType Nat, hungry)
+      pure (((), ()), ((), unders))
   (Kerny, Bool _, Bit) -> do
     (_,_,[(dangling, _)],_) <- knext "" (Const tm) (B0,B0) [] [("value", Bit)]
     kwire (dangling, Bit, hungry)
