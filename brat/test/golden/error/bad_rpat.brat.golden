@@ -2,5 +2,5 @@ Error in test/golden/error/bad_rpat.brat@FC {start = Pos {line = 2, col = 8}, en
 test = cons(1, [])
        ^^^^^^^^^^^
 
-  Type constructor not recognised: Bool for "cons"
+  "cons" is not a valid constructor for type Bool
 

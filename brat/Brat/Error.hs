@@ -132,7 +132,7 @@ instance Show ErrorMsg where
   show (AmbiguousPortPull p row) = "Port " ++ p ++ " is ambiguous in " ++ row
   show (BadPortPull x) = "Port " ++ x ++ " can't be pulled because it depends on a previous port"
   show (VConNotFound x) = "Value constructor not recognised: " ++ x
-  show (TyConNotFound ty v) = "Type constructor not recognised: " ++ ty ++ " for " ++ show v
+  show (TyConNotFound ty v) = show v ++ " is not a valid constructor for type " ++ ty
   show MatchingOnTypes = "Trying to pattern match on a type"
   show (ThunkInKernel tm) = "Thunks not allowed in kernels: " ++ tm
   show (InvalidThunkType ty) = "Invalid thunk type: " ++ ty
