@@ -32,18 +32,10 @@ type family TypeOf (k :: Kind) :: Type where
 
 type RawVType = Raw Chk Noun
 
-data RawIO' ty = Named PortName ty | Anon ty deriving (Foldable, Functor, Show, Traversable)
-
-instance Eq ty => Eq (RawIO' ty) where
-  Named _ ty == Named _ ty' = ty == ty'
-  Anon ty == Named _ ty' = ty == ty'
-  Named _ ty == Anon ty' = ty == ty'
-  Anon ty == Anon ty' = ty == ty'
-
-type RawIO = RawIO' (KindOr RawVType)
+type RawIO = TypeRowElem (KindOr RawVType)
 
 type RawCType = CType' RawIO
-type RawKType = CType' (RawIO' (SType' (Raw Chk Noun)))
+type RawKType = CType' (TypeRowElem (SType' (Raw Chk Noun)))
 
 data TypeAliasF tm = TypeAlias FC UserName [(PortName,TypeKind)] tm deriving Show
 type RawAlias = TypeAliasF (Raw Chk Noun)
@@ -54,7 +46,7 @@ type TypeAliasTable = M.Map UserName TypeAlias
 type RawDecl = Decl' RawIO (FunBody Raw Noun)
 type RawEnv = ([RawDecl], [RawAlias], TypeAliasTable)
 
-addNames :: [RawIO' ty] -> [(PortName, ty)]
+addNames :: TypeRow ty -> [(PortName, ty)]
 addNames tms = aux names tms
  where
   aux (n:ns) ((Anon tm):tms) = (n, tm) : aux ns tms
@@ -199,12 +191,9 @@ instance Desugarable ty => Desugarable (PortName, KindOr ty) where
   type Desugared (PortName, KindOr ty) = (PortName, Desugared (KindOr ty))
   desugar' (p, ty) = (p,) <$> desugar' ty
 
-instance Desugarable ty => Desugarable [RawIO' ty] where
-  type Desugared [RawIO' ty] = [(PortName, Desugared ty)]
-  desugar' = zipWithM aux names
-   where
-    aux _ (Named port ty) = (port,) <$> desugar' ty
-    aux port (Anon ty)    = (port,) <$> desugar' ty
+instance Desugarable ty => Desugarable (TypeRow ty) where
+  type Desugared (TypeRow ty) = TypeRow (Desugared ty)
+  desugar' = traverse (traverse desugar')
 
 instance (Kindable k) => Desugarable (Raw d k) where
   type Desugared (Raw d k) = Term d k
@@ -271,7 +260,7 @@ instance (Kindable k) => Desugarable (Raw d k) where
   desugar' (RLet abs thing body) = Let abs <$> desugar thing <*> desugar body
   desugar' (RCon c arg) = Con c <$> desugar arg
   desugar' (RFn cty) = C <$> desugar' cty
-  desugar' (RKernel (ss :-> ts)) = K <$> (R <$> desugar' ss) <*> (R <$> desugar' ts)
+  desugar' (RKernel (ss :-> ts)) = K <$> (R . addNames <$> desugar' ss) <*> (R . addNames <$> desugar' ts)
 
 instance Desugarable ty => Desugarable (KindOr ty) where
   type Desugared (Either TypeKind ty) = Either TypeKind (Desugared ty)
@@ -321,7 +310,7 @@ desugarVBody Undefined = pure Undefined
 instance Desugarable RawDecl where
   type Desugared RawDecl = Decl
   desugar' d@Decl{..} = do
-    tys  <- desugar' fnSig
+    tys  <- addNames <$> desugar' fnSig
     noun <- desugarNBody fnBody
     pure $ d { fnBody = noun
              , fnSig  = tys
@@ -381,7 +370,6 @@ abstractRaw from to (RFn (ss :-> ts))
         ts' = abstRow ts
     in RFn $ ss' :-> ts'
  where
-  abstRow :: [RawIO' (KindOr (Raw Chk Noun))] -> [RawIO' (KindOr (Raw Chk Noun))]
+  abstRow :: TypeRow (KindOr (Raw Chk Noun)) -> TypeRow (KindOr (Raw Chk Noun))
   abstRow = fmap (fmap (fmap (abstractRaw from to)))
 abstractRaw _ _ tm = tm
-

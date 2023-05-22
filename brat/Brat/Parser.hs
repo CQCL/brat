@@ -226,7 +226,7 @@ vtype = cnoun atomExpr
 
 -- Parse a row of type and kind parameters
 -- N.B. kinds must be named
-rawIO :: Parser ty -> Parser [RawIO' (KindOr ty)]
+rawIO :: Parser ty -> Parser (TypeRow (KindOr ty))
 rawIO tyP = rowElem `sepBy` void (try comma)
  where
   rowElem = try (round rowElem') <|> rowElem'
@@ -243,7 +243,7 @@ rawIO tyP = rowElem `sepBy` void (try comma)
     match TypeColon
     Named p . Left <$> typekind
 
-rawIO' :: Parser ty -> Parser [RawIO' ty]
+rawIO' :: Parser ty -> Parser (TypeRow ty)
 rawIO' tyP = rowElem `sepBy` void (try comma)
  where
   rowElem = try (round rowElem') <|> rowElem'

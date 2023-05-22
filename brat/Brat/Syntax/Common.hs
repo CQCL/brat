@@ -12,7 +12,6 @@ module Brat.Syntax.Common (PortName,
                            -- constructors for SType' (do not export SType''):
                            pattern Q, pattern Bit, pattern Of, pattern Rho,
                            copyable,
-                           smap,
                            Dir(..),
                            Kind(..),
                            Diry(..),
@@ -26,8 +25,8 @@ module Brat.Syntax.Common (PortName,
                            Pattern(..),
                            Abstractor(..), occursInAbstractor,
                            FunBody(..),
-                           showSig,
                            TypeKind(..), KindOr,
+                           showSig,
                            showRow,
                            NamedPort(..),
                            Src, Tgt,
@@ -41,7 +40,11 @@ module Brat.Syntax.Common (PortName,
                            pattern PCons,
                            Mode(..),
                            Modey(..),
-                           End(..)
+                           End(..),
+                           TypeRow,
+                           TypeRowElem(..),
+                           forgetPortName,
+                           toTypeRow
                           ) where
 
 import Brat.FC
@@ -49,7 +52,7 @@ import Brat.Syntax.Abstractor
 import Brat.Syntax.Port
 import Brat.UserName
 
-import Data.Bifunctor (second)
+import Data.Bifunctor (first)
 import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Kind (Type)
@@ -81,13 +84,6 @@ data SType'' tm q
  | Rho (Row' tm q)
  deriving (Functor, Foldable, Traversable)
 
-smap :: (tm -> tm') -> SType'' tm q -> SType'' tm' q
-smap f (Of ty n) = Of (smap f ty) (f n)
-smap f (Rho (R xs)) = Rho (R (second (smap f) <$> xs))
--- Boring cases
-smap _ (Q q) = Q q
-smap _ Bit = Bit
-
 deriving instance Eq tm => Eq (SType' tm)
 
 instance (Show q, Show tm) => Show (SType'' tm q) where
@@ -99,7 +95,27 @@ instance (Show q, Show tm) => Show (SType'' tm q) where
 copyable :: SType'' tm q -> Bool
 copyable = null
 
-data TypeKind = Star [(PortName, TypeKind)] | Nat
+data TypeRowElem ty = Named PortName ty | Anon ty deriving (Foldable, Functor, Traversable)
+type TypeRow ty = [TypeRowElem ty]
+
+forgetPortName :: TypeRowElem ty -> ty
+forgetPortName (Anon ty) = ty
+forgetPortName (Named _ ty) = ty
+
+toTypeRow :: [(String, ty)] -> TypeRow ty
+toTypeRow = fmap (uncurry Named)
+
+instance Show ty => Show (TypeRowElem ty) where
+  show (Named p ty) = p ++ " :: " ++ show ty
+  show (Anon ty) = show ty
+
+instance Eq ty => Eq (TypeRowElem ty) where
+  Named _ ty == Named _ ty' = ty == ty'
+  Anon ty == Named _ ty' = ty == ty'
+  Named _ ty == Anon ty' = ty == ty'
+  Anon ty == Anon ty' = ty == ty'
+
+data TypeKind = Star [(PortName, TypeKind)] | Nat | Row
   deriving (Eq, Show)
 
 type KindOr = Either TypeKind
@@ -208,14 +224,9 @@ deriving instance (forall d k. Eq (tm d k)) => Eq (FunBody tm k)
 
 showSig :: Show ty => [(String, ty)] -> String
 showSig [] = "()"
-showSig (x:xs) = showSig1 (x :| xs)
- where
-  showSig1 :: Show ty => NonEmpty (String, ty) -> String
-  showSig1 (x :| xs) = intercalate ", "
-                       [ '(':p ++ " :: " ++ show ty ++ ")"
-                       | (p, ty) <- x:xs ]
+showSig (x:xs)
+  = intercalate ", " [ '(':p ++ " :: " ++ show ty ++ ")"
+                     | (p, ty) <- x:xs]
 
 showRow :: Show ty => [(NamedPort e, ty)] -> String
-showRow [] = "()"
-showRow (x:xs) = intercalate ", " [ '(':(portName p) ++ " :: " ++ show ty ++ ")"
-                                  | (p, ty) <- x:xs]
+showRow = showSig . fmap (first portName)

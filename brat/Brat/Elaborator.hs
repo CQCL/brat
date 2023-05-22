@@ -157,7 +157,6 @@ elaborate' (FAnnotation a ts) = do
   a <- assertNoun a
   pure $ SomeRaw' (a ::::: ts)
 elaborate' (FInto a b) = elaborate' (FApp b a)
--- Traverse the RawIO' within the CType'
 elaborate' (FFn cty) = pure $ SomeRaw' (RFn cty)
 elaborate' (FKernel sty) = pure $ SomeRaw' (RKernel sty)
 -- We catch underscores in the top-level elaborate so this case

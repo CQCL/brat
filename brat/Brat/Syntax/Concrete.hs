@@ -8,8 +8,8 @@ import Brat.Syntax.Raw
 import Brat.Syntax.Simple
 import Brat.UserName
 
-type FlatCType = CType' (RawIO' (WC (KindOr Flat)))
-type FlatKType = CType' (RawIO' (SType' (WC Flat)))
+type FlatCType = CType' (TypeRowElem (WC (KindOr Flat)))
+type FlatKType = CType' (TypeRowElem (SType' (WC Flat)))
 
 data FBody
   = FClauses (NonEmpty (WC Abstractor, WC Flat))
