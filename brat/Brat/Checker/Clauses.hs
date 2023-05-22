@@ -46,7 +46,7 @@ The process for checking definitions with multiple clauses (as is done by checkC
 
 Build then does the following:
   * Check if the first branch doesn't discriminate - if it doesn't, we can ignore the rest of the branches
-  * Otherwise, the function `isIndiscriminate` returns a test to do and an index from the overs to do it on
+  * Otherwise, the function `findFirstTest` returns a test to do and an index from the overs to do it on
   * Perform the given test by calling `doTest` (TODO)
   * Create boxes for the continuations
   * Build selections into those boxes, extracting the relevant into for each possible result of the test (possibilities) (TODO)
@@ -142,10 +142,10 @@ build :: forall m. (?my :: Modey m, CheckConstraints m UVerb, Eval (BinderType m
       -> WriterT (S.Set Int) Checking ()
 build name overs (b :| branches) unders = do
   (pats, overs) <- lift $ absList (lhs (case_ b)) overs
-  lift (localFC (clauseFC b) $ areIndiscriminate (0,B0) overs pats) >>= \case
+  lift (localFC (clauseFC b) $ findFirstTest overs pats) >>= \case
     -- If the first branch doesn't discriminate, we can wire it up directly
     -- Start by announcing that we've reached this branch
-    Right _ -> tell (S.singleton (index b)) *> lift (do
+    Nothing -> tell (S.singleton (index b)) *> lift (do
       let tm = WC (lhsFC b) (unNA . lhs . case_ $ b) :\: body b
       let env = M.fromList $ first plain <$> (termSub $ subst b)
       ((), emptyOvers) <- localFC (clauseFC b) $
@@ -154,7 +154,7 @@ build name overs (b :| branches) unders = do
                           check (WC (clauseFC b) tm) (overs, unders)
       ensureEmpty "build leftovers" emptyOvers
       )
-    Left (i, test) -> do
+    Just (i, test) -> do
       (fRef :& tRef) <- lift $ throwLeft $ possibilities (i, test) (rowToSig overs)
 
       buildOrDont (b:|branches) (fRef, i) False (covers $ case_ b) (cunders $ case_ b)
@@ -294,33 +294,14 @@ pushIfBinds vals (src, ty) = case doesItBind ?my ty of
   Nothing -> vals
   Just k -> vals :< endVal k (ExEnd (end src))
 
-isIndiscriminate :: (?my :: Modey m, Show (ValueType m))
-                 => (Int, Bwd Value) -- Which port are we at?, What ends have we passed?
-                 -> (Src, BinderType m) -- The overs corresponding to the abstractor
-                 -> Pattern             -- The abstractor we're inspecting
-                 -> Checking (Either      -- Either the abstractor discriminates:
-                              PortTest    -- ... and requires Test on the index Int of the overs
-                              (Int, Bwd Value) -- ... else, here's the new context to continue checking with...
-                             )
-isIndiscriminate (i, vals) (src, ty) pat = patTest ?my ty pat >>= \case
-  Discriminate (t, _b) -> pure (Left (i, t))
-  Indiscriminate -> let vals' = pushIfBinds vals (src, ty) in
-                      pure $ Right (i + 1, vals')
-  Invalid sort ty -> err $ PattErr $ unwords ["Couldn't resolve pattern"
-                                             ,show pat
-                                             ,"with"
-                                             ,show sort
-                                             ,show ty
-                                             ]
+patTest :: Modey m -> Bwd Value -> BinderType m -> Pattern -> Checking (PatResult m)
+patTest _ _ _ DontCare = pure Indiscriminate
+patTest _ _ _ (Bind _) = pure Indiscriminate
+patTest m vals aty pat = case (m,aty) of
+  (Braty, Right vty) -> eval (req . ELup) vals vty <&> \ty -> patTestClassical ToKType ty pat
+  (Braty, Left k) -> pure $ patTestClassical ToKKind (kindType k) pat
+  (Kerny, ty) -> eval (req . ELup) vals ty <&> \ty -> patTestKernel ty pat
  where
-  patTest :: Modey m -> BinderType m -> Pattern -> Checking (PatResult m)
-  patTest _ _ DontCare = pure Indiscriminate
-  patTest _ _ (Bind _) = pure Indiscriminate
-  patTest m aty pat = case (m,aty) of
-    (Braty, Right vty) -> eval (req . ELup) vals vty <&> \ty -> patTestClassical ToKType ty pat
-    (Braty, Left k) -> pure $ patTestClassical ToKKind (kindType k) pat
-    (Kerny, ty) -> eval (req . ELup) vals ty <&> \ty -> patTestKernel ty pat
-
   patTestKernel :: ValueType Kernel -> Pattern -> PatResult Kernel
   patTestKernel Bit (Lit (Bool b)) = Discriminate (False0True1, b)
   patTestKernel (Of _ n) PNil = case valMatch n (VPNum NP0) of
@@ -329,7 +310,7 @@ isIndiscriminate (i, vals) (src, ty) pat = patTest ?my ty pat >>= \case
   patTestKernel (Of _ n) (PCons _ _) = case valMatch n (VPNum (NP1Plus NPVar)) of
     Right _ -> Indiscriminate
     Left _ -> Discriminate (Nil0Cons1, False)
-  -- DontCare and Bind are handled by earlier branches of isIndiscriminate
+  -- DontCare and Bind are handled by earlier branches of patTest
   patTestKernel ty _ = Invalid ToKType ty
 
   -- TODO: Make this logic less hard-coded
@@ -389,24 +370,21 @@ isIndiscriminate (i, vals) (src, ty) pat = patTest ?my ty pat >>= \case
   validTm (Float _) TFloat = True
   validTm _ _ = False
 
--- Extends `isIndiscriminate` to a list of patterns
--- N.B. if remaining overs are returned, we don't complain here - it
--- will instead be caught when `check` is called on the problematic branch
-areIndiscriminate :: (?my :: Modey m, Show (ValueType m))
-                 => (Int, Bwd Value) -- Which port are we at?, What ends have we passed?
-                 -> [(Src, BinderType m)] -- The overs corresponding to the abstractor
-                 -> [Pattern]             -- The patterns we're inspecting
-                 -> Checking (Either      -- Either the abstractor discriminates:
-                              PortTest    -- ... and requires Test on the index Int of the overs
-                              ((Int, Bwd Value) -- ... else, here's the new context to continue checking with...
-                              ,[(Src, BinderType m)]) -- ...and the rest of the overs
-                             )
-areIndiscriminate ctx overs pats
-  = foldM (\acc pat -> case acc of
-                         Right (_, []) -> err (NothingToBind (show pat))
-                         Right (ctx, over:overs) -> isIndiscriminate ctx over pat <&> \case
-                           Right ctx -> Right (ctx, overs)
-                           Left test -> Left test
-                         Left test -> pure $ Left test)
-    (Right (ctx, overs))
-    pats
+-- Extends `patTest` to a list of patterns
+findFirstTest :: (?my :: Modey m, Show (ValueType m))
+              => [(Src, BinderType m)]     -- The overs corresponding to the abstractor
+              -> [Pattern]                 -- The patterns we're inspecting
+              -> Checking (Maybe PortTest) -- The test to make if the abstractor discriminates
+findFirstTest = go (0, B0)
+ where
+  go _ _ [] = pure Nothing   -- all pats matched without a test
+  go _ [] (pat:_) = err (NothingToBind $ show pat)
+  go (i,vals) ((src,ty):overs) (pat:pats) = patTest ?my vals ty pat >>= \case
+    Discriminate (t, _b) -> pure $ Just (i,t)
+    Indiscriminate -> let vals' = pushIfBinds vals (src,ty) in go (i+1,vals') overs pats
+    Invalid sort ty -> err $ PattErr $ unwords ["Couldn't resolve pattern"
+                                               ,show pat
+                                               ,"with"
+                                               ,show sort
+                                               ,show ty
+                                               ]
