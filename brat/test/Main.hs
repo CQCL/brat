@@ -7,6 +7,7 @@ import Test.Circuit.Graph
 import Test.Compile.RemoveNode
 import Test.Constructors
 import Test.Elaboration
+import Test.Equality
 import Test.Failure
 import Test.Libs
 import Test.Naming
@@ -34,4 +35,5 @@ main = do
                                 ,substitutionTests
                                 ,abstractorTests
                                 ,refinementTests
+                                ,eqTests
                                 ]

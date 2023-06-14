@@ -302,11 +302,11 @@ instance DeBruijn Value where
   changeVar vc i (VApp v ss)
     = VApp (changeVar vc i v) (changeVar vc i <$> ss)
   changeVar vc i (VLam ctx v)
-    = VLam ctx (changeVar vc (i + 1 + length ctx) v)
+    = VLam ctx (changeVar vc (i + length ctx + 1) v)
   changeVar vc i (VFun m@Braty ctx cty)
-    = VFun m ctx $ changeVars vc i (doesItBind m) cty
+    = VFun m ctx $ changeVars vc (i + length ctx) (doesItBind m) cty
   changeVar vc i (VFun m@Kerny ctx cty)
-    = VFun m ctx $ changeVars vc i (doesItBind m) cty
+    = VFun m ctx $ changeVars vc (i + length ctx) (doesItBind m) cty
 
 changeVars :: (DeBruijn v, Traversable t)
            => VarChanger

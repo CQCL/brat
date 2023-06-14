@@ -276,7 +276,7 @@ kindOf (VPar e) = req (EndKind e) >>= \case
   Nothing -> typeErr "Kind not found"
 kindOf (VInx _) = error "kindOf used on de Bruijn index"
 
--- All of these functions assume that normalisation has already happened
+-- All of these functions assume that eval has already been called
 -- Int arg is the next de Bruijn level
 eq :: String -> Int -> TypeKind
    -> Value -- Expected
@@ -298,10 +298,10 @@ eq tm l k@(Star []) (VApp v ss) (VApp v' ss') | v == v' = do
   kindOf v >>= \case
     Star ks -> eqs tm l (snd <$> ks) (ss <>> []) (ss' <>> [])
     k' -> err (KindMismatch (show tm) (show k) (show k'))
-eq tm l (Star []) (VFun Braty _ cty) (VFun Braty _ cty')
-  = eqCType tm l Braty cty cty'
-eq tm l (Star []) (VFun Kerny _ cty) (VFun Kerny _ cty')
-  = eqCType tm l Kerny cty cty'
+eq tm l (Star []) (VFun Braty ga0 cty0) (VFun Braty ga1 cty1)
+  = eqCType tm Braty ((ga0, ga1), l) cty0 cty1
+eq tm l (Star []) (VFun Kerny ga0 cty0) (VFun Kerny ga1 cty1)
+  = eqCType tm Kerny ((ga0, ga1), l) cty0 cty1
 eq tm _ _ s t = err $ TypeMismatch tm (show s) (show t)
 
 eqs :: String -> Int -> [TypeKind] -> [Value] -> [Value] -> Checking ()
@@ -311,27 +311,41 @@ eqs _ _ _ us vs = typeErr $ "Arity mismatch in type constructor arguments:\n  "
                    ++ show us ++ "\n  " ++ show vs
 
 eqCType :: Show (BinderType m)
-        => String -> Int -> Modey m -> CType' (PortName, BinderType m)
+        => String -> Modey m
+        -> EqEnv
+        -> CType' (PortName, BinderType m)
         -> CType' (PortName, BinderType m) -> Checking ()
-eqCType tm l m (ss :-> ts) (ss' :-> ts') = do
-  acc <- eqRow tm m (B0, l) ss ss'
-  eqRow tm m acc ts ts'
+eqCType tm m eqCtx (ss :-> ts) (ss' :-> ts') = do
+  eqCtx <- eqRow tm m eqCtx ss ss'
+  eqRow tm m eqCtx ts ts'
   pure ()
 
+type EqEnv
+  = ((Bwd Value -- Γ0 -> ∆ (Expected type's environment)
+     ,Bwd Value -- Γ1 -> ∆ (Actual type's environment)
+     )
+    ,Int -- Length of ∆ (Target context) Hence, next free dB level
+    )
+
+-- Type rows have Γi dangling De Bruijn indices, which we provide values for
+-- in the EqEnv. As we go under binders in these rows, we add to the environments
 eqRow :: Show (BinderType m)
       => String
       -> Modey m
-      -> (Bwd (Int, TypeKind), Int)
-      -> [(PortName, BinderType m)] -- Expected
-      -> [(PortName, BinderType m)] -- Actual
-      -> Checking (Bwd (Int, TypeKind), Int)
+      -> EqEnv
+      -> [(PortName, BinderType m {- Γ0 -})] -- Expected
+      -> [(PortName, BinderType m {- Γ1 -})] -- Actual
+      -> Checking EqEnv
 eqRow _ _ acc [] [] = pure acc
-eqRow tm Braty (lvls, l) ((_, Left k):ks) ((_, Left k'):ks') = do
-  throwLeft $ kindEq k k'
-  eqRow tm Braty (lvls :< (l, k), l + 1) ks ks'
-eqRow tm Braty acc@(lvls, l) ((_, Right t):ks) ((_, Right t'):ks') = do
-  eq tm l (Star []) (changeVar (InxToLvl lvls) 0 t) (changeVar (InxToLvl lvls) 0 t')
-  eqRow tm Braty acc ks ks'
+eqRow tm Braty ((ga0, ga1), l) ((_, Left k0):ks0) ((_, Left k1):ks1) = do
+  throwLeft $ kindEq k0 k1
+  let lvl = VApp (VLvl l k0) B0
+  eqRow tm Braty ((ga0 :< lvl, ga1 :< lvl), l + 1) ks0 ks1
+eqRow tm Braty acc@((ga0, ga1), l) ((_, Right t0):ks0) ((_, Right t1):ks1) = do
+  t0 <- eval (req . ELup) ga0 t0
+  t1 <- eval (req . ELup) ga1 t1
+  eq tm l (Star []) t0 t1
+  eqRow tm Braty acc ks0 ks1
 eqRow tm Kerny acc ((_, t):ts) ((_, t'):ts') = stypeEq tm t t' *> eqRow tm Kerny acc ts ts'
 eqRow tm _ _ (t:_) (t':_) = err $ TypeMismatch (show tm) (show t) (show t')
 eqRow _ _ _ ss [] = typeErr $ "eqRow: Ragged rows " ++ show ss ++ " and []"

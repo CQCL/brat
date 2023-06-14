@@ -67,7 +67,7 @@ refTest m ref input (expAbs, expOvers, expUnders)
        -> [(PortName, BinderType m)] -> [(PortName, BinderType m)] -> Checking Abstractor
   comp m ref input expOvers expUnders = localFC (FC (Pos 0 0) (Pos 0 0)) $ do
     refine m B0 ref input >>= \case
-      Just (abs, overs, unders) -> typeEqRow m "" expOvers overs (B0,0) >>=
+      Just (abs, overs, unders) -> typeEqRow m "" expOvers overs ((B0,B0),0) >>=
                                    typeEqRow m "" expUnders unders >>
                                    pure abs
       Nothing -> err $ UnreachableBranch
@@ -149,7 +149,7 @@ testEnds = testCase "Ends" $ case runEmpty comp of
         typeEqRow Braty ""
           (eo:(changeVars (InxToPar (B0 :< ExEnd (end dummy))) 0 (doesItBind Braty) expOvers))
           (ao:(changeVars (InxToPar (B0 :< ExEnd (end dummy))) 0 (doesItBind Braty) actOvers))
-           (B0, 0)
+           ((B0,B0), 0)
         pure actAbs
       Nothing -> err UnreachableBranch
 

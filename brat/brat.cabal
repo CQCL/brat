@@ -206,6 +206,7 @@ test-suite tests
                        Test.Compile.RemoveNode,
                        Test.Constructors,
                        Test.Elaboration,
+                       Test.Equality,
                        Test.Failure,
                        Test.Libs,
                        Test.Parsing,

@@ -62,8 +62,9 @@ instance Eval Monotone where
   type ValOf Monotone = NumValue
   eval g l (Linear v) = eval g l v >>= \case
     Just (VNum v) -> eval g l v
-    Just _ -> error $ "Evaluating ill-kinded var: " ++ show v
+    Just (VApp var@(VLvl _ Nat) B0) -> pure $ nVar var
     Nothing -> pure $ nVar v
+    _ -> error "Evaluating a NumValue went wrong"
   eval g l (Full sm) = nFull <$> eval g l sm
 
 instance (Eval s, Eval t) => Eval (Either s t) where
