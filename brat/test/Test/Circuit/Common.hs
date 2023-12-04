@@ -35,7 +35,8 @@ idGraph = (M.fromList
            ,("main", BratNode Id [("a1", kty)] [("a1", kty)])
            ,("src", KernelNode Source [] [("a", Q Qubit)])
            ,("tgt", KernelNode Target [("b", Q Qubit)] [])
-           ]
+           ,("kcr-main", BratNode Hypo [("a1", star_t)] []) -- into which to skindCheck the thunk type
+           ]                                        -- (however skindCheck doesn't produce any nodes for that)
           ,[((Ex "src" 0), Left (Q Qubit), (In "tgt" 0))
            ,((Ex "main_box" 0), Right kty, (In "main" 0))
            ]
@@ -49,6 +50,7 @@ swapGraph = (M.fromList
              ,("main", BratNode Id [("a1", kty)] [("a1", kty)])
              ,("src", KernelNode Source [] [("a", Q Qubit), ("b", Q Qubit)])
              ,("tgt", KernelNode Target [("b", Q Qubit), ("a", Q Qubit)] [])
+             ,("kcr-main", BratNode Hypo [("a1", star_t)] []) -- into which to skindCheck the thunk type
              ]
             ,[((Ex "src" 0), Left (Q Qubit), (In "tgt" 1))
              ,((Ex "src" 1), Left (Q Qubit), (In "tgt" 0))
@@ -67,6 +69,8 @@ xGraph = (M.fromList
           ,("main", BratNode Id [("a1", mainTy)] [("a1", mainTy)])
           ,("src", KernelNode Source [] [("a", Q Qubit)])
           ,("tgt", KernelNode Target [("b", Q Qubit)] [])
+          ,("kcr-X", BratNode Hypo [("a1", star_t)] []) -- these two receive the thunk types
+          ,("kcr-main", BratNode Hypo [("a1", star_t)] [])
           ]
          ,[((Ex "src" 0), Left (Q Qubit), (In "X" 0))
           ,((Ex "X" 0), Left (Q Qubit), (In "tgt" 0))
@@ -102,28 +106,43 @@ twoGraph = (M.fromList (
             ,("1b", BratNode (Const (Num 1)) [] [("value", int)])
             ,("one", BratNode Id [("n", int)] [("n", int)])
             ,("two", BratNode Id [("a1", int)] [("a1", int)])
-            ])
+            ,("kcr-add", BratNode Hypo [("thunk", star_t)] [])
+            ,("kcr-one", BratNode Hypo [("n", star_t)] [])
+            ,("kcr-two", BratNode Hypo [("a1", star_t)] [])
+            ,("kcr-cty", BratNode Hypo [("a", star_t), ("b", star_t), ("c", star_t)] [])
+            ] ++ ints 5)
            ,[((Ex "1a" 0), Right int, (In "one" 0))
             ,((Ex "1b" 0), Right int, (In "add_eval" 0))
             ,((Ex "one" 0), Right int, (In "add_eval" 1))
             ,((Ex "add_eval" 0), Right int, (In "two" 0))
+            --,(Ex "kcr-cty" 0, Right star_t, In "kcr-add" 0)
+                -- no node exists to actually compute the function type. kcr-cty merely verifies
+                -- that it is a well-formed type (by kindChecking its components, not putting them together)
+            ,(Ex "int_1" 0, Right star_t, In "kcr-cty" 0)
+            ,(Ex "int_2" 0, Right star_t, In "kcr-cty" 1)
+            ,(Ex "int_3" 0, Right star_t, In "kcr-cty" 2)
+            ,(Ex "int_4" 0, Right star_t, In "kcr-one" 0)
+            ,(Ex "int_5" 0, Right star_t, In "kcr-two" 0)
             ]
            )
   where
     add_ty = VFun Braty B0 ([("a", Right int), ("b", Right int)] :-> [("c", Right int)])
 
 oneGraph :: Graph
-oneGraph = (M.fromList
+oneGraph = (M.fromList (
             [("1", BratNode (Const (Num 1)) [] [("value", int)])
             ,("one", BratNode Id [("n", int)] [("n", int)])
-            ]
-           ,[((Ex "1" 0), Right int, (In "one" 0))]
+            ,("kcr", BratNode Hypo [("n", star_t)] [])
+            ] ++ ints 1)
+           ,[((Ex "1" 0), Right int, (In "one" 0))
+            ,((Ex "int" 0), Right star_t, (In "kcr" 0))]
            )
 
-star_wire_t :: Either SValue Value
-star_wire_t = Right (kindType $ Star [])
+star_t = kindType $ Star []
 ints :: Int -> [(Name, Node)]
-ints n = [fromString ("int_" ++ show x) | x <- [1..n]] <&> (, BratNode (Constructor $ plain "Int") [] [("value", kindType (Star []))])
+ints n = [int_node (fromString $ "int_" ++ show x) | x <- [1..n]]
+int_node :: Name -> (Name, Node)
+int_node n = (n, BratNode (Constructor $ plain "Int") [] [("value", star_t)])
 
 addNGraph :: String -> Graph
 addNGraph port_name
@@ -135,13 +154,24 @@ addNGraph port_name
      ,("addN_src", BratNode Source [] [("inp", int), (port_name, add_ty), ("value", int)])
      ,("addN_tgt", BratNode Target [("out", int)] [])
      ,("addN", BratNode Id [("thunk", addN_ty)] [("thunk", addN_ty)])
-     ])
+     ,("kcr-n", BratNode Hypo [("value", star_t)] [])
+     ,("kcr-add-ty", BratNode Hypo [("a", star_t), ("b", star_t), ("c", star_t)] [])
+     ,("kcr-add", BratNode Hypo [(port_name, star_t)] []) -- in theory the thunk type wired in here; add is Ext => Anon => "a1"
+     ,("kcr-addN-ty", BratNode Hypo [("inp", star_t), ("out", star_t)] [])
+     ,("kcr-addN", BratNode Hypo [("thunk", star_t)] [])
+     ] ++ ints 6)
     ,[(Ex "N" 0, Right int, In "addN_box" 1)
      ,(Ex "add" 0, Right add_ty, In "addN_box" 0)
      ,(Ex "addN_box" 0, Right addN_ty, In "addN" 0)
      ,((Ex "addN_src" 0), Right int, (In "add_eval" 0)) -- argument
      ,((Ex "addN_src" 2), Right int, (In "add_eval" 1)) -- captured
      ,((Ex "add_eval" 0), Right int, (In "addN_tgt" 0))
+     ,(Ex "int_1" 0, Right star_t, In "kcr-n" 0)
+     ,(Ex "int_2" 0, Right star_t, In "kcr-add-ty" 0)
+     ,(Ex "int_3" 0, Right star_t, In "kcr-add-ty" 1)
+     ,(Ex "int_4" 0, Right star_t, In "kcr-add-ty" 2)
+     ,(Ex "int_5" 0, Right star_t, In "kcr-addN-ty" 0)
+     ,(Ex "int_6" 0, Right star_t, In "kcr-addN-ty" 1)
      ]
     )
  where
@@ -156,10 +186,12 @@ addNmainGraph =
      [("addN_eval", BratNode (Eval (Ex "addN" 0)) [("inp", int)] [("out", int)])
      ,("1", BratNode (Const (Num 1)) [] [("value", int)])
      ,("main", BratNode Id [("a1", int)] [("a1", int)])
-     ])
+     ,("kcr-main", BratNode Hypo [("a1", star_t)] [])
+     ] ++ [int_node "xtra_int"])
     ,ws ++ [
       (Ex "1" 0, Right int, In "addN_eval" 0)
      ,(Ex "addN_eval" 0, Right int, In "main" 0)
+     ,(Ex "xtra_int" 0, Right star_t, In "kcr-main" 0)
      ]
     )
  where
@@ -167,9 +199,16 @@ addNmainGraph =
 
 extGraph :: Graph
 extGraph
- = (M.singleton "add_decl" (BratNode (Prim "add") [] [("thunk",
+ = (M.fromList (
+    [("add_decl", BratNode (Prim "add") [] [("thunk",
         VFun Braty B0 ([("a", Right TInt), ("b", Right TInt)] :-> [("c", Right TInt)]))])
-   ,[]
+    ,("kcr-cty", BratNode Hypo [("a", star_t), ("b", star_t), ("c", star_t)] [])
+    ,("kcr-add", BratNode Hypo [("thunk", star_t)] [])
+    ] ++ ints 3)
+   ,[(Ex "int_1" 0, Right star_t, In "kcr-cty" 0)
+    ,(Ex "int_2" 0, Right star_t, In "kcr-cty" 1)
+    ,(Ex "int_3" 0, Right star_t, In "kcr-cty" 2)
+    ]
    )
 
 -- Test the "close-enough" "equality" of two graphs

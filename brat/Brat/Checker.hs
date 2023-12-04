@@ -210,7 +210,7 @@ check' (Pull ports t) (overs, unders) = do
   check t (overs, unders)
 check' (t ::: outs) (overs, ()) | Braty <- ?my = do
   -- Check that the annotation is a valid row
-  sig <- kindCheckRow outs
+  sig <- kindCheckRow ":::" outs
   (_, hungries, danglies, _) <- next "id" Id (B0,B0) sig sig
   ((), leftOvers) <- noUnders $ check t (overs, hungries)
   pure (((), danglies), (leftOvers, ()))
@@ -440,7 +440,7 @@ kindCheck ((hungry, k@(Star [])):unders) (Con c arg) = req (TLup k c) >>= \case
       pure ([val], unders)
     Nothing -> typeErr $ "Can't find type constructor or type alias " ++ show c
 kindCheck ((hungry, Star []):unders) (C funTy) = do
-  funTy <- kindCheckRow funTy
+  funTy <- kindCheckRow ":->" funTy
   let val = VFun Braty B0 funTy
   defineTgt hungry val
   pure ([val], unders)
@@ -544,10 +544,11 @@ skindCheckRow xs = do
 
 -- Kindscheck checks the kinds of the types in a dependent row
 kindCheckRow :: Traversable t
-             => t (PortName, KindOr (Term Chk Noun)) -- The row to process
+             => String -- for name of Graph node
+             -> t (PortName, KindOr (Term Chk Noun)) -- The row to process
              -> Checking (t (PortName, BinderType Brat))
-kindCheckRow row = do
-  name <- req (Fresh "__kcr")
+kindCheckRow name row = do
+  name <- req (Fresh $ "__kcr_" ++ name)
   {- The state is
       * the ends we've created for kinds in the row,
       * the inputs to the node in the graph IR
@@ -567,15 +568,17 @@ kindCheckRow row = do
       Left k -> do
         let dangling = ExEnd $ Ex name (length outs)
         req (Declare dangling k)
+        -- add an output, standing for the type variable
         pure (ctx :< dangling, Left k, ins, outs :< (p, kindType k))
       Right ty -> do
         let hungry = NamedPort (In name (length ins)) "type"
         declareTgt hungry (Star [])
         ty <- pure $ changeVar (InxToPar ctx) 0 ty
+        -- add an input, into which the computation of the type is wired
         ([v], leftovers) <- kindCheck [(hungry, Star [])] ty
         ensureEmpty "kindsCheck leftovers" leftovers
         let v' = (changeVar (ParToInx ctx) 0 v)
-        pure (ctx, Right v', ins :< (p, v'), outs)
+        pure (ctx, Right v', ins :< (p, kindType (Star [])), outs)
     put (ctx', ins, outs)
     pure (p, kOrTy)
 

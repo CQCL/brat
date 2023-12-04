@@ -9,7 +9,6 @@ module Brat.Load (loadFilename
 import Brat.Checker.Clauses
 import Brat.Checker.Helpers (ensureEmpty, wire)
 import Brat.Checker.Monad
-import Brat.Checker.Types (EnvData)
 import Brat.Checker
 import Brat.Elaborator (elabEnv)
 import Brat.Error
@@ -29,7 +28,7 @@ import Control.Monad.Freer (req)
 
 import Control.Exception (assert)
 import Control.Monad.Except
-import Data.Functor ((<&>), ($>))
+import Data.Functor (($>))
 import Data.List (sort)
 import Data.List.HT (viewR)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -105,30 +104,27 @@ loadStmtsWithEnv (venv, oldDecls) (fname, pre, stmts, cts) = addSrcContext fname
   let (declNames, _) = unzip oldDecls
   let dups = duplicates (declNames ++ map (PrefixName pre . fnName) decls) in unless (null dups) $
     Left $ dumbErr $ NameClash $ show dups
-  -- kindCheck the declaration signatures, but throw away the graph
-  (vdecls, (holes, _graph)) <- run venv root $ withAliases aliases $ forM decls $ \d -> localFC (fnLoc d) $
-    kindCheckRow (fnSig d) <&> \sig -> (PrefixName pre (fnName d), d{fnSig=sig} :: VDecl)
-  unless (length holes == 0) $ Left $ dumbErr $ InternalError "Decl sigs generated holes"
-
-  (venv', (holes, graph)) <- run venv root $ withAliases aliases $ do
-      -- Generate environment mapping usernames to nodes in the graph
-      entries <- mapM (uncurry declNode) vdecls
-      let env = M.fromList [(name, overs) | (name, _, overs) <- entries]
-      localVEnv env $ do
-        let to_define = M.fromList [(name, unders) | (name, unders, _) <- entries, (length unders) > 0]
-        remaining <- foldM checkDecl' to_define vdecls
-        pure $ assert (M.null remaining) -- all to_define were defined
-      pure env
+  ((venv', vdecls), (holes, graph)) <- run venv root $ withAliases aliases $ do
+    entries <- forM decls $ \d -> localFC (fnLoc d) $ do
+      let name = PrefixName pre (fnName d)
+      sig <- kindCheckRow (show name) (fnSig d)
+      let (thing, ins) = case (fnLocality d) of
+                          Local -> (Id, sig)
+                          Extern sym -> (Prim sym, [])
+      (_, unders, outs, _) <- next (show name) thing (B0, B0) ins sig
+      pure ((name, d{fnSig=sig} :: VDecl), (unders, outs))
+    -- We used to check there were no holes from that, but for now we do not bother
+    let to_define = M.fromList [(name, unders) | ((name, _), (unders, _)) <- entries, (length unders) > 0]
+    let vdecls = map fst entries
+    -- Now generate environment mapping usernames to nodes in the graph
+    let env = M.fromList [(name, overs) | ((name, _), (_, overs)) <- entries]
+    localVEnv env $ do
+      remaining <- foldM checkDecl' to_define vdecls
+      pure $ assert (M.null remaining) -- all to_define were defined
+    pure (env, vdecls)
 
   pure (venv <> venv', oldDecls <> vdecls, holes, [(PrefixName [] "main", graph)])
  where
-  declNode :: UserName -> VDecl -> Checking (UserName, [(Tgt, BinderType Brat)], EnvData Brat)
-  declNode name Decl{..} = let
-      (ins, thing) = case fnLocality of
-        Local -> (fnSig, Id) -- Compilation will probably want these to be flagged with the name
-        Extern sym -> ([], Prim sym)
-      in next (show name) thing (B0, B0) ins fnSig <&> (\(_, unders, outs, _) -> (name, unders,outs))
-
   checkDecl' :: M.Map UserName [(Tgt, BinderType Brat)]
              -> (UserName, VDecl)
              -> Checking (M.Map UserName [(Tgt, BinderType Brat)])
