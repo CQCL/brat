@@ -22,3 +22,11 @@ cabal.project.local~
 .HTF/
 .ghc.environment.*
 *.DS_Store
+*/_minted*
+*.pygtex
+*.pygstyle
+*.out
+*.log
+*.blg
+*.bbl
+*.pdf

@@ -17,7 +17,9 @@ import Brat.Checker.Types (ValueType)
 import Brat.UserName
 import Bwd
 
+import Control.Monad (when)
 import Data.Bifunctor (second)
+import Data.Either (isLeft)
 import Data.Functor ((<&>), ($>))
 
 data TypeSubst
@@ -132,9 +134,14 @@ refinementSucc pat ends (p,ty) overs unders = do
                 (changeVars (InxToPar (ends :< ExEnd (end nPlus1))) 0 (doesItBind Braty) $
                 overs :-> unders))
     _ -> pure (TypeId, overs :-> unders)
-  refinedPat <- pure $ case pat of
-    Bind x -> Just (Subst [(x,[(nPlus1,ty)])] tySub, NA (APat DontCare))
-    _ -> (tySubst tySub,) <$> refinePat pat
+  refinedPat <- case pat of
+    Bind x -> pure $ Just (Subst [(x,[(nPlus1,ty)])] tySub, NA (APat DontCare))
+    Lit (Num lit)
+      | lit > 0 -> do
+          -- defineSrc nPlus1 (VNum (nConstant lit))
+          when (isLeft ty) $ defineSrc n (VNum (nConstant (lit - 1)))
+          pure $ Just (tySubst tySub, NA (APat (Lit (Num (lit - 1)))))
+    _ -> pure $ (tySubst tySub,) <$> refinePat pat
   pure $ (\(sg, na) -> (sg, (Case na ((p,ty):overs) unders))) <$> refinedPat
  where
   refinePat :: Pattern -> Maybe NormalisedAbstractor
