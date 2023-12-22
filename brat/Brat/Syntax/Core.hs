@@ -35,6 +35,7 @@ data Term :: Dir -> Kind -> Type where
   Forget   :: WC (Term d KVerb) -> Term d UVerb
   Pull     :: [PortName] -> WC (Term Chk k) -> Term Chk k
   Var      :: UserName -> Term Syn Noun  -- Look up in noun (value) env
+  Arith    :: ArithOp -> WC (Term Chk Noun) -> WC (Term Chk Noun) -> Term Chk Noun
   -- Type annotations (annotating a term with its outputs)
   -- TODO: Make it possible for Output to be (PortName, SType) when using this in kernels
   (:::)    :: WC (Term Chk Noun) -> [Output] -> Term Syn Noun

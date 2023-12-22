@@ -3,7 +3,7 @@
 module Brat.Graph where
 
 import Brat.Naming
-import Brat.Syntax.Port
+import Brat.Syntax.Common
 import Brat.Syntax.Simple
 import Brat.Syntax.Value
 import Brat.UserName
@@ -36,6 +36,7 @@ data Thing
   | Hypo         -- Hypothesis for type checking
   | Constructor UserName
   | Selector UserName
+  | ArithNode ArithOp
   deriving (Eq, Show)
 
 type Graph = (M.Map Name Node, [Wire])

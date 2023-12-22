@@ -1,0 +1,2 @@
+f(Int, Float) -> Int
+f(x, y) = x + (y - x)

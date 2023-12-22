@@ -31,6 +31,7 @@ data Flat
 -- Keep |> distinct from application to keep track of user's syntax choice.
 -- Note that it's turned into an application during elaboration
  | FInto (WC Flat) (WC Flat)
+ | FArith ArithOp (WC Flat) (WC Flat)
  | FLambda (WC Abstractor) (WC Flat)
  | FAnnotation (WC Flat) [RawIO]
  | FLetIn (WC Abstractor) (WC Flat) (WC Flat)

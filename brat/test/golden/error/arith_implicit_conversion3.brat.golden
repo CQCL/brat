@@ -1,0 +1,9 @@
+Error in test/golden/error/arith_implicit_conversion3.brat@FC {start = Pos {line = 2, col = 11}, end = Pos {line = 2, col = 12}}:
+f(x, y) = y + x
+          ^
+
+  Type mismatch when checking y
+Expected: (left :: Int)
+But got:  (y :: Float)
+
+

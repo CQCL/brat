@@ -46,7 +46,10 @@ data Tok
  | Newline
  | Quoted String
  | Plus
+ | Minus
  | Asterisk
+ | Slash
+ | Caret
  | Hash
  | Underscore
  deriving Eq
@@ -79,7 +82,10 @@ instance Show Tok where
   show Newline = "\n"
   show (Quoted x) = show x
   show Plus = "+"
+  show Minus = "-"
   show Asterisk = "*"
+  show Slash = "/"
+  show Caret = "^"
   show Hash = "#"
   show Underscore = "_"
 
@@ -166,6 +172,8 @@ tok = (   try (char '(' $> LParen)
       <|> try (FloatLit <$> float)
       <|> try (Number <$> number)
       <|> try (string "+" $> Plus)
+      <|> try (string "/" $> Slash)
+      <|> try (string "^" $> Caret)
       <|> try (string "->") $> Arrow
       <|> try (string "=>") $> FatArrow
       <|> try (string "-o") $> Lolly
@@ -180,6 +188,7 @@ tok = (   try (char '(' $> LParen)
       <|> try (string "<-" $> KindColon)
       <|> try (string "#"  $> Hash)
       <|> try (string "*"  $> Asterisk)
+      <|> try (string "-" $> Minus)
       <|> try (K <$> try keyword)
       <|> try qualified
       <|> Ident <$> ident
@@ -187,18 +196,16 @@ tok = (   try (char '(' $> LParen)
  where
   float :: Lexer Double
   float = label "float literal" $ do
-    msign <- optional (char '-')
     n <- some digitChar
     char '.'
     m <- some digitChar
     let val = n ++ "." ++ m
-    readL (maybe val (:val) msign)
+    readL val
 
   number :: Lexer Int
   number = label "number literal" $ do
-    msign <- optional (char '-')
     val <- some digitChar
-    readL (maybe val (:val) msign)
+    readL val
 
 en :: Lexer Tok -> Lexer Token
 en l = do st <- convPos <$> getSourcePos

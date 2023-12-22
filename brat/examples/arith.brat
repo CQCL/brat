@@ -1,0 +1,21 @@
+open import lib.kernel (Rx)
+
+double_rot(Float) -> { Qubit -o Qubit }
+double_rot(x) = { q => (Rx(x * 2.0))(q) }
+
+double_rot2(Float) -> { Qubit -o Qubit }
+double_rot2(x) = { q => (Rx(x + x))(q) }
+
+-- Postulate existance of a sqrt function
+ext "" sqrt(Float) -> Float
+
+-- One solution of the quadratic equation
+quad(Float, Float, Float) -> Float
+quad(a, b, c) = (0.0 - b) + sqrt(b ^ 2.0 - 4.0 * a * c) / 2.0 * a
+
+-- Only works for literals for now
+unary_minus(Float) -> Float
+unary_minus(x) = x + -3.0
+
+unary_minus2(Int) -> Int
+unary_minus2(x) = -2-x

@@ -85,6 +85,14 @@ elaborate (WC fc x) = do
 
 elaborate' :: Flat -> Either Error SomeRaw'
 elaborate' (FVar x) = pure $ SomeRaw' (RVar x)
+elaborate' (FArith op a b) = do
+  (SomeRaw a) <- elaborate a
+  (SomeRaw b) <- elaborate b
+  a <- assertChk a
+  b <- assertChk b
+  a <- assertNoun a
+  b <- assertNoun b
+  pure $ SomeRaw' (RArith op a b)
 elaborate' (FApp f a) = do
   (SomeRaw f) <- elaborate f
   (SomeRaw a) <- elaborate a

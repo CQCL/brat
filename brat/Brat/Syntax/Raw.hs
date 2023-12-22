@@ -71,6 +71,7 @@ data Raw :: Dir -> Kind -> Type where
   RForget   :: WC (Raw d KVerb) -> Raw d UVerb
   RPull     :: [PortName] -> WC (Raw Chk k) -> Raw Chk k
   RVar      :: UserName -> Raw Syn Noun
+  RArith    :: ArithOp -> WC (Raw Chk Noun) -> WC (Raw Chk Noun) -> Raw Chk Noun
   (:::::)   :: WC (Raw Chk Noun) -> [RawIO] -> Raw Syn Noun
   (::-::)   :: WC (Raw Syn k) -> WC (Raw d UVerb) -> Raw d k -- vertical juxtaposition (diagrammatic composition)
   (::$::)   :: WC (Raw d KVerb) -> WC (Raw Chk k) -> Raw d k -- Eval with ChkRaw n argument
@@ -109,6 +110,7 @@ instance Show (Raw d k) where
   show (RPull [] x) = "[]:" ++ show x
   show (RPull ps x) = concat ((++":") <$> ps) ++ show x
   show (RVar x) = show x
+  show (RArith op a b) = "(" ++ show op ++ " " ++ show a ++ " " ++ show b ++ ")"
   show (fun ::$:: arg) = show fun ++ ('(' : show arg ++ ")")
   show (tm ::::: ty) = show tm ++ " :: " ++ show ty
   show (a ::-:: b) = show a ++ "; " ++ show b
@@ -246,6 +248,7 @@ instance (Kindable k) => Desugarable (Raw d k) where
   desugar' (RForget kv) = Forget <$> desugar kv
   desugar' (RPull ps raw) = Pull ps <$> desugar raw
   desugar' (RVar name) = pure $ Var name
+  desugar' (RArith op a b) = Arith op <$> desugar a <*> desugar b
   desugar' (fun ::$:: arg) = (:$:) <$> desugar fun <*> desugar arg
   desugar' (tm ::::: outputs) = do
     tm <- desugar tm

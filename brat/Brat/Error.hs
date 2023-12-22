@@ -72,6 +72,8 @@ data ErrorMsg
  | ValMatchFail String String
  -- Constructor, Type
  | UnrecognisedConstructor String String
+ | ArithInKernel
+ | ArithNotExpected String
  | UnificationError String
  | UnreachableBranch
 
@@ -148,6 +150,8 @@ instance Show ErrorMsg where
   show (UnrecognisedConstructor c ty) = unlines ["Unrecognised constructor: " ++ c
                                                 ,"For type: " ++ ty
                                                 ]
+  show ArithInKernel = "Arithmetic expressions not allowed in kernels"
+  show (ArithNotExpected tm) = "Expected " ++ tm ++ " but got arithmetic expression"
   -- TODO: Make all of these use existing errors
   show (UnificationError str) = "Unification error: " ++ str
   show UnreachableBranch = "Branch cannot be reached"

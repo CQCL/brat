@@ -290,6 +290,27 @@ check' (Var x) ((), ()) = (, ((), ())) . ((),) <$> case ?my of
   Kerny -> req (KLup x) >>= \case
     Just (p, ty) -> pure [(p, ty)]
     Nothing -> err $ KVarNotFound (show x)
+check' (Arith op l r) ((), u@(hungry, ty):unders) = case (?my, ty) of
+  (Braty, ty) -> do
+    ty <- evalBinder Braty ty
+    case ty of
+      Right TNat -> check_arith TNat
+      Right TInt -> check_arith TInt
+      Right TFloat -> check_arith TFloat
+      _ -> err . ArithNotExpected $ show u
+    pure (((), ()), ((), unders))
+  (Kerny, _) -> err ArithInKernel
+ where
+  check_arith ty = let ?my = Braty in do
+    let inRo = RPr ("left", ty) $ RPr ("right", ty) R0
+    let outRo = RPr ("out", ty) R0
+    (_, [lunders, runders], [(dangling, _)], _) <- next (show op) (ArithNode op) (S0, Some $ Zy :* S0) inRo outRo
+    (((), ()), ((), leftUnders)) <- check l ((), [lunders])
+    ensureEmpty "arith unders" leftUnders
+    (((), ()), ((), leftUnders)) <- check r ((), [runders])
+    ensureEmpty "arith unders" leftUnders
+    wire (dangling, ty, hungry)
+    pure (((), ()), ((), unders))
 check' (fun :$: arg) (overs, unders) = do
   ((ins, outputs), ((), leftUnders)) <- check fun ((), unders)
   ((argIns, ()), (leftOvers, argUnders)) <- check arg (overs, ins)

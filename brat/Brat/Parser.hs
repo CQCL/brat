@@ -135,6 +135,17 @@ into = token0 $ \case
     in  WC fc (FInto a b)
   _ -> Nothing
 
+arith :: ArithOp -> Parser (WC Flat -> WC Flat -> WC Flat)
+arith op = token0 $ \(Token _ tok) -> case (op, tok) of
+  (Add, Plus) -> Just make
+  (Sub, Minus) -> Just make
+  (Mul, Asterisk) -> Just make
+  (Div, Slash) -> Just make
+  (Pow, Caret) -> Just make
+  _ -> Nothing
+ where
+  make a b = WC (FC (start (fcOf a)) (end (fcOf b))) (FArith op a b)
+
 chainl1 :: Parser a -> Parser (a -> a -> a) -> Parser a
 chainl1 px pf = px >>= rest
  where
@@ -198,9 +209,12 @@ abstractor = do ps <- many (try portPull)
 
 simpleTerm :: Parser SimpleTerm
 simpleTerm =
-  ((Text <$> string <?> "string")
+  (Text <$> string <?> "string")
+  <|> try (Float . negate <$> (match Minus *> float) <?> "float")
   <|> try (Float <$> float <?> "float")
-  <|> (Num <$> number <?> "nat"))
+  <|> (Num . negate <$> (match Minus *> number) <?> "nat")
+  <|> (Num <$> number <?> "nat")
+
 
 outputs :: Parser [RawIO]
 outputs = rawIO (unWC <$> vtype)
@@ -370,19 +384,32 @@ cthunk = try bratFn <|> try kernel <|> thunk
 
 
 -- Expressions that can occur inside juxtapositions and vectors (i.e. everything with a higher
--- precedence than juxtaposition).
+-- precedence than juxtaposition). Precedence table (loosest to tightest binding):
+--    + -  (left-assoc)
+--    * /  (left-assoc)
+--    ^    (left-assoc)
+--    ::   (no associativity, i.e. explicit parenthesis required for chaining)
+--    app  (no associativity, i.e. explicit parenthesis required for chaining)
 atomExpr :: Parser Flat
 atomExpr = atomExpr' 0
  where
   atomExpr' n = choice $ drop n [
+    try (addSub <?> "addition or subtraction"),
+    try (mulDiv <?> "multiplication or division"),
+    try (pow <?> "power"),
     try (annotation <?> "type annotation"),
     try (app <?> "application"),
     simpleExpr,
     round expr ]
 
-  annotation = FAnnotation <$> withFC (atomExpr' 1) <* match TypeColon <*> rawIO (unWC <$> vtype)
+  binary ops lvl = unWC <$> withFC (atomExpr' lvl) `chainl1` choice (try . arith <$> ops)
+  addSub = binary [Add, Sub] 1
+  mulDiv = binary [Mul, Div] 2
+  pow = binary [Pow] 3
 
-  app = FApp <$> withFC (atomExpr' 2) <*> withFC (round expr)
+  annotation = FAnnotation <$> withFC (atomExpr' 4) <* match TypeColon <*> rawIO (unWC <$> vtype)
+
+  app = FApp <$> withFC (atomExpr' 5) <*> withFC (round expr)
 
   simpleExpr = FHole <$> hole
             <|> try (FSimple <$> simpleTerm)
@@ -399,7 +426,7 @@ atomExpr = atomExpr' 0
    |> (left-assoc)
    ;
    , & port-pull
-   ::
+   atomExpr
 -}
 expr :: Parser Flat
 expr = expr' 0

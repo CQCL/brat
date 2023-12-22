@@ -47,7 +47,8 @@ module Brat.Syntax.Common (PortName,
                            forgetPortName,
                            toTypeRow,
                            MODEY(..),
-                           modily
+                           modily,
+                           ArithOp(..),
                           ) where
 
 import Brat.FC
@@ -250,3 +251,6 @@ showSig (x:xs)
 
 showRow :: Show ty => [(NamedPort e, ty)] -> String
 showRow = showSig . fmap (first portName)
+
+
+data ArithOp = Add | Sub | Mul | Div | Pow deriving (Eq, Show)
