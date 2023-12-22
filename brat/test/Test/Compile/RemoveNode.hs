@@ -21,6 +21,11 @@ dummyNode = BratNode (Const (Num 3)) [] [("value", int)]
 idNode = BratNode Id [("in", int)] [("out", int)]
 outNode = BratNode Target [("sink", int)] []
 
+assertNoDifference :: Graph -> Graph -> Assertion
+assertNoDifference act exp = case act =? exp of
+  (Nothing, _) -> pure ()
+  (Just msg, _) -> assertFailure msg
+
 testGraph =
         (M.fromList
           [(a, dummyNode)
@@ -35,7 +40,7 @@ testGraph =
         )
 
 removeA = testCase "removeNode.a" $ do
-  let exp = 
+  let exp =
         (M.fromList
           [(b, idNode)
           ,(c, idNode)
@@ -45,10 +50,10 @@ removeA = testCase "removeNode.a" $ do
          ,((Ex c 0), Right int, (In out 0))
          ]
         )
-    in removeNode a testGraph =? exp
+    in assertNoDifference (removeNode a testGraph) exp
 
 removeB = testCase "removeNode.b" $ do
-  let exp = 
+  let exp =
         (M.fromList
           [(a, dummyNode)
           ,(c, idNode)
@@ -56,6 +61,6 @@ removeB = testCase "removeNode.b" $ do
           ]
         ,[((Ex c 0), Right int, (In out 0))]
         )
-    in removeNode b testGraph =? exp
+    in assertNoDifference (removeNode b testGraph) exp
 
 removeNodeTests = testGroup "removeNode" [removeA, removeB]

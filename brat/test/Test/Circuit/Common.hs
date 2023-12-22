@@ -5,13 +5,16 @@ module Test.Circuit.Common where
 import Control.Arrow ((&&&))
 import Control.Monad.Except (runExceptT)
 import qualified Data.Map as M
-import Data.Tuple.HT
+import Data.Foldable (fold)
+import Data.Functor ((<&>))
 import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.String (IsString(..))
-import Data.Foldable (fold)
-import Data.Functor ((<&>))
+import Data.Text (pack)
+import Data.Tuple.HT
+import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
+import Test.Tasty.Silver.Advanced (goldenTest1, GDiff(..), GShow(ShowText))
 
 import Brat.Eval (kindType)
 import Brat.Graph
@@ -201,14 +204,21 @@ extGraph
     ]
    )
 
+graphDiff :: Graph -> Graph -> GDiff
+graphDiff act exp = case act =? exp of
+  (Nothing, _) -> Equal
+  (msg, (act, exp)) -> DiffText msg (pack act) (pack exp)
+
 -- Test the "close-enough" "equality" of two graphs
 (=?) :: Graph -- Actual
      -> Graph -- Expected
-     -> Assertion
-(ns_act, ws_act) =? (ns_exp, ws_exp) = nodeEq >> wireEq
+     -> (Maybe String, (String, String))
+(ns_act, ws_act) =? (ns_exp, ws_exp) = case (nodeEq, wireEq) of
+  ((Nothing, _), _) -> wireEq
+  _ -> nodeEq
  where
-  wireEq :: Assertion
-  wireEq = assertNoDifference "Wires" (wireSet ws_act) (wireSet ws_exp)
+  wireEq :: (Maybe String, (String, String))
+  wireEq = difference "Wires" (wireSet ws_act) (wireSet ws_exp)
 
   wireSet :: [Wire] -> M.Map String Int
   wireSet ws = foldr (M.alter inc) M.empty (wireKey <$> ws)
@@ -216,8 +226,8 @@ extGraph
   wireKey :: Wire -> String
   wireKey (Ex _ p, ty, In _ p') = unwords [show p, "--", show ty, "->", show p']
 
-  nodeEq :: Assertion
-  nodeEq = assertNoDifference "Nodes" (nodeSet ns_act) (nodeSet ns_exp)
+  nodeEq :: (Maybe String, (String, String))
+  nodeEq = difference "Nodes" (nodeSet ns_act) (nodeSet ns_exp)
 
   inc :: Maybe Int -> Maybe Int
   inc = Just . maybe 1 (1+)
@@ -244,27 +254,29 @@ extGraph
   nodeSet ns = foldr (M.alter inc) M.empty (nodeKey <$> (snd <$> M.toList ns))
 
   -- `M.difference a b` finds things that are in `a` but not in `b`
-  assertNoDifference :: String -> M.Map String Int -> M.Map String Int -> Assertion -- Actual vs Expected
-  assertNoDifference msg act exp = let
+  -- The first thing in the tuple is `Nothing` if they're equal
+  difference :: String -> M.Map String Int -> M.Map String Int -> (Maybe String, (String, String)) -- Actual vs Expected
+  difference msg act exp = let
       sub = \a b -> if a <= b then Nothing else Just (a - b)
       (mAct, mExp) = (M.differenceWith sub act exp, M.differenceWith sub exp act)
       sAct = intercalate "\n" (map show $ M.toList mAct)
       sExp = intercalate "\n" (map show $ M.toList mExp)
-    in case (mAct, mExp) of
+    in (, (sAct, sExp)) $ case (mAct, mExp) of
       (mAct, mExp)
-        | M.null mAct, M.null mExp -> pure ()
-        | M.null mAct -> assertFailure $ msg ++ " expected but not found: " ++ sExp
-        | M.null mExp -> assertFailure $ msg ++ " found but not expected: " ++ sAct
-        | otherwise -> assertFailure $ unlines [msg ++ " expected: " ++ sExp
-                                             ," but found: " ++ sAct
-                                             ]
+        | M.null mAct, M.null mExp -> Nothing
+        | M.null mAct -> Just (msg ++ " expected but not found: " ++ sExp)
+        | M.null mExp -> Just (msg ++ " found but not expected: " ++ sAct)
+        | otherwise -> Just $ unlines [msg ++ " expected: " ++ sExp
+                                      ," but found: " ++ sAct
+                                      ]
 
-runProg :: String -> String -> Graph -> Assertion
-runProg name contents expected = do
-  runExceptT (loadFiles ("" :| []) name contents) >>= \case
-    Right (_, _, _, named_gs) -> let gs = map snd named_gs in
-      -- merge graphs from all functions
-      (fold gs) =? expected
+graphTest :: String -> String -> Graph -> TestTree
+graphTest name contents expected = goldenTest1 name (pure $ Just expected) actual graphDiff (ShowText . pack . show) update
+ where
+  actual :: IO Graph
+  actual = runExceptT (loadFiles ("" :| []) name contents) >>= \case
+    -- merge graphs from all functions
+    Right (_, _, _, named_gs) -> pure (fold (map snd named_gs))
     Left err -> assertFailure (show err)
 
-graphTest name file graph = testCase name (runProg name file graph)
+  update _ = putStrLn "Can't update golden file"
