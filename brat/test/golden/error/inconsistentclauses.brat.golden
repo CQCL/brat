@@ -6,6 +6,5 @@ f(true, n) = 1
 f(b) = 2
 ^^^^^^^^
 
-  Internal error: Expected empty build leftovers, got:
-  (b1 :: Nat)
+  Unification error: Pattern doesn't match expected length for constructor args
 

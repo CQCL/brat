@@ -1,19 +1,18 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, RankNTypes #-}
 
 module Brat.Checker.Monad where
 
 import Brat.Checker.Quantity (Quantity(..), qpred)
 import Brat.Checker.Types
-import Brat.Constructors (ConstructorMap)
+import Brat.Constructors (ConstructorMap, CtorArgs)
 import Brat.Error (Error(..), ErrorMsg(..), dumbErr)
-import Brat.Eval
 import Brat.FC (FC)
 import Brat.Graph
-import Brat.Naming (fresh, Name, Namespace)
+import Brat.Naming (fresh, split, Name, Namespace)
 import Brat.Syntax.Common
 import Brat.Syntax.Value
 import Brat.UserName (UserName)
-import Bwd
+import Hasochism
 import Util
 
 import Control.Monad.Freer
@@ -21,20 +20,39 @@ import Control.Monad.State (State, runState, state)
 
 import Control.Applicative (liftA2)
 import Control.Monad.Fail ()
-import Data.Foldable (traverse_)
-import Data.Functor (($>))
 import Data.List (intercalate)
 import qualified Data.Map as M
+
+import Debug.Trace
+
+track = const (const id) trace
+
+-- Data for using a type alias. E.g.
+-- type A(x :: *, y :: #, z :: *(a :: *)) = body (with [x,y,z] in scope)
+-- this gets encoded as VLam (VLam (VLam body))
+type Alias = ([(PortName, TypeKind)] -- The arguments to A, e.g. [("x", Star []),...] (allowed to be empty)
+             ,Val Z -- The alias, rendered as i lambda abstractions over the body
+             )
+
+kindArgRows :: Stack Z (PortName, TypeKind) i -> (Ro Brat Z i, Ro Brat i (S i))
+kindArgRows argKinds = (helper argKinds R0
+                    ,REx ("type", Star []) (S0 ::- R0)
+                    )
+ where
+  helper :: forall i j. Stack Z (PortName, TypeKind) i -> Ro Brat i j -> Ro Brat Z j
+  helper S0 ro = ro
+  helper (zx :<< (p,k)) ro = helper zx (REx (p,k) (S0 ::- ro))
 
 data Context = Ctx { venv   :: VEnv
                    , store  :: Store
                    , constructors :: ConstructorMap
                    , typeConstructors :: M.Map UserName TypeKind
-                   , aliasTable :: M.Map UserName ([(PortName, TypeKind)], [ValPat], Value)
+                   , aliasTable :: M.Map UserName Alias
                    }
 
 data CheckingSig ty where
   Fresh   :: String -> CheckingSig Name
+  FreshSupply :: String -> CheckingSig Namespace
   Throw   :: Error  -> CheckingSig a
   LogHole :: TypedHole -> CheckingSig ()
   AskFC   :: CheckingSig FC
@@ -46,24 +64,23 @@ data CheckingSig ty where
   CLup    :: FC -- File context for error reporting
           -> UserName -- Value constructor
           -> UserName  -- Type constructor
-          -> CheckingSig ([ValPat]
-                         ,[(PortName, BinderType Brat)])
+          -> CheckingSig CtorArgs
   -- Lookup an end in the Store
-  ELup    :: End -> CheckingSig (Maybe Value)
+  ELup    :: End -> CheckingSig (Maybe (Val Z))
   -- Lookup an alias in the table
-  ALup    :: UserName -> CheckingSig (Maybe ([(PortName, TypeKind)], [ValPat], Value))
+  ALup    :: UserName -> CheckingSig (Maybe Alias)
   EndKind :: End -> CheckingSig (Maybe TypeKind)
   AddNode :: Name -> Node -> CheckingSig ()
   Wire    :: Wire -> CheckingSig ()
   KDone   :: CheckingSig ()
   AskVEnv :: CheckingSig VEnv
   Declare :: End -> TypeKind -> CheckingSig ()
-  Define  :: End -> Value -> CheckingSig ()
+  Define  :: End -> Val Z -> CheckingSig ()
 
-localAlias :: (UserName, [(PortName, TypeKind)], [ValPat], Value) -> Checking v -> Checking v
+localAlias :: (UserName, Alias) -> Checking v -> Checking v
 localAlias _ (Ret v) = Ret v
-localAlias con@(name, args, pats, val) (Req (ALup u) k)
-  | u == name = localAlias con $ k (Just (args, pats, val))
+localAlias con@(name, alias) (Req (ALup u) k)
+  | u == name = localAlias con $ k (Just alias)
 localAlias con (Req r k) = Req r (localAlias con . k)
 
 localFC :: FC -> Checking v -> Checking v
@@ -126,7 +143,7 @@ vlup s = do
     Just vty -> pure vty
     Nothing -> err $ VarNotFound (show s)
 
-alup :: UserName -> Checking ([(PortName, TypeKind)], [ValPat], Value)
+alup :: UserName -> Checking Alias
 alup s = do
   req (ALup s) >>= \case
     Just vty -> pure vty
@@ -134,8 +151,7 @@ alup s = do
 
 clup :: UserName -- Value constructor
      -> UserName  -- Type constructor
-     -> Checking ([ValPat]
-                 ,[(PortName, BinderType Brat)])
+     -> Checking CtorArgs
 clup vcon tycon = req AskFC >>= \fc -> req (CLup fc vcon tycon)
 
 
@@ -178,6 +194,8 @@ handler (Req s k) ctx g ns
   = case s of
       Fresh str -> let (name, root) = fresh str ns in
                      handler (k name) ctx g root
+      FreshSupply str -> let (freshNS, newRoot) = split str ns in
+                           handler (k freshNS) ctx g newRoot
       Throw err -> Left err
       LogHole hole -> do (v,(holes,g),ns) <- handler (k ()) ctx g ns
                          return (v,(hole:holes,g),ns)
@@ -197,13 +215,13 @@ handler (Req s k) ctx g ns
         let st@Store{kindMap=m} = store ctx
         in case M.lookup end m of
           Just _ -> Left $ dumbErr (InternalError $ "Redeclaring " ++ show end)
-          Nothing -> handler (k ())
+          Nothing -> track ("Declared " ++ show end ++ " :: " ++ show kind) $ handler (k ())
             (ctx { store =
               st { kindMap = M.insert end kind m }
             }) g ns
       Define end v ->
         let st@Store{kindMap=km, valueMap=vm} = store ctx
-        in case M.lookup end vm of
+        in case track ("Define " ++ show end ++ " = " ++ show v) $ M.lookup end vm of
           Just _ -> Left $ dumbErr (InternalError $ "Redefining " ++ show end)
           Nothing -> case M.lookup end km of
             Nothing -> Left $ dumbErr (InternalError $ "Defining un-Declared " ++ show end)
@@ -216,7 +234,9 @@ handler (Req s k) ctx g ns
       TLup _ c -> do
         args <- case M.lookup c (typeConstructors ctx) of
           Just (Star args) -> pure $ Just args
-          Just Nat -> error "Nat type constructor - this shouldn't happen"
+          Just _ -> Left $
+                    Err Nothing $
+                    InternalError "Non * type constructor - this shouldn't happen"
           Nothing -> pure Nothing
         handler (k args) ctx g ns
 
@@ -247,125 +267,3 @@ typeErr = err . TypeErr
 -- This way we get file contexts when pattern matching fails
 instance MonadFail Checking where
   fail = typeErr
-
-kindEq :: TypeKind -> TypeKind -> Either ErrorMsg ()
-kindEq Nat Nat = Right ()
-kindEq (Star xs) (Star ys) = kindListEq xs ys
- where
-  kindListEq :: [(PortName, TypeKind)] -> [(PortName, TypeKind)] -> Either ErrorMsg ()
-  kindListEq [] [] = Right ()
-  kindListEq ((_, x):xs) ((_, y):ys) = kindEq x y *> kindListEq xs ys
-  kindListEq _ _ = Left $ TypeErr "Unequal kind lists"
-kindEq _ _ = Left $ TypeErr "Unequal kinds"
-
--- The first arg is the term we're querying for error reporting
--- Expected type, then actual type
-typeEq :: String -> TypeKind
-       -> Value -- Expected
-       -> Value -- Actual
-       -> Checking ()
-typeEq tm k s t = do
-  s <- evTy s
-  t <- evTy t
-  eq tm 0 k s t
-
-kindOf :: VVar -> Checking TypeKind
-kindOf (VLvl _ k) = pure k
-kindOf (VPar e) = req (EndKind e) >>= \case
-  Just k -> pure k
-  Nothing -> typeErr "Kind not found"
-kindOf (VInx _) = error "kindOf used on de Bruijn index"
-
--- All of these functions assume that eval has already been called
--- Int arg is the next de Bruijn level
-eq :: String -> Int -> TypeKind
-   -> Value -- Expected
-   -> Value -- Actual
-   -> Checking ()
-eq _ _ Nat (VNum n) (VNum m) | n == m = pure ()
-eq _ _ Nat (VApp v B0) (VApp v' B0)
- | v == v' = kindOf v >>= \k -> throwLeft (kindEq Nat k) $> ()
-eq tm l (Star ((_, k):ks)) f g = do
- let x = varVal k (VLvl l k)
- f <- apply (req . ELup) f x
- g <- apply (req . ELup) g x
- eq tm (l + 1) (Star ks) f g
-eq tm l (Star []) (VCon c vs) (VCon c' vs') | c == c' = do
-  req (TLup (Star []) c) >>= \case
-    Just ks -> eqs tm l (snd <$> ks) vs vs'
-    Nothing -> typeErr $ "Type constructor " ++ show c ++ " undefined"
-eq tm l k@(Star []) (VApp v ss) (VApp v' ss') | v == v' = do
-  kindOf v >>= \case
-    Star ks -> eqs tm l (snd <$> ks) (ss <>> []) (ss' <>> [])
-    k' -> err (KindMismatch (show tm) (show k) (show k'))
-eq tm l (Star []) (VFun Braty ga0 cty0) (VFun Braty ga1 cty1)
-  = eqCType tm Braty ((ga0, ga1), l) cty0 cty1
-eq tm l (Star []) (VFun Kerny ga0 cty0) (VFun Kerny ga1 cty1)
-  = eqCType tm Kerny ((ga0, ga1), l) cty0 cty1
-eq tm _ _ s t = err $ TypeMismatch tm (show s) (show t)
-
-eqs :: String -> Int -> [TypeKind] -> [Value] -> [Value] -> Checking ()
-eqs _ _ [] [] [] = pure ()
-eqs tm l (k:ks) (u:us) (v:vs) = eq tm l k u v *> eqs tm l ks us vs
-eqs _ _ _ us vs = typeErr $ "Arity mismatch in type constructor arguments:\n  "
-                   ++ show us ++ "\n  " ++ show vs
-
-eqCType :: Show (BinderType m)
-        => String -> Modey m
-        -> EqEnv
-        -> CType' (PortName, BinderType m)
-        -> CType' (PortName, BinderType m) -> Checking ()
-eqCType tm m eqCtx (ss :-> ts) (ss' :-> ts') = do
-  eqCtx <- eqRow tm m eqCtx ss ss'
-  eqRow tm m eqCtx ts ts'
-  pure ()
-
-type EqEnv
-  = ((Bwd Value -- Γ0 -> ∆ (Expected type's environment)
-     ,Bwd Value -- Γ1 -> ∆ (Actual type's environment)
-     )
-    ,Int -- Length of ∆ (Target context) Hence, next free dB level
-    )
-
--- Type rows have Γi dangling De Bruijn indices, which we provide values for
--- in the EqEnv. As we go under binders in these rows, we add to the environments
-eqRow :: Show (BinderType m)
-      => String
-      -> Modey m
-      -> EqEnv
-      -> [(PortName, BinderType m {- Γ0 -})] -- Expected
-      -> [(PortName, BinderType m {- Γ1 -})] -- Actual
-      -> Checking EqEnv
-eqRow _ _ acc [] [] = pure acc
-eqRow tm Braty ((ga0, ga1), l) ((_, Left k0):ks0) ((_, Left k1):ks1) = do
-  throwLeft $ kindEq k0 k1
-  let lvl = VApp (VLvl l k0) B0
-  eqRow tm Braty ((ga0 :< lvl, ga1 :< lvl), l + 1) ks0 ks1
-eqRow tm Braty acc@((ga0, ga1), l) ((_, Right t0):ks0) ((_, Right t1):ks1) = do
-  t0 <- eval (req . ELup) ga0 t0
-  t1 <- eval (req . ELup) ga1 t1
-  eq tm l (Star []) t0 t1
-  eqRow tm Braty acc ks0 ks1
-eqRow tm Kerny acc ((_, t):ts) ((_, t'):ts') = stypeEq tm t t' *> eqRow tm Kerny acc ts ts'
-eqRow tm _ _ (t:_) (t':_) = err $ TypeMismatch (show tm) (show t) (show t')
-eqRow _ _ _ ss [] = typeErr $ "eqRow: Ragged rows " ++ show ss ++ " and []"
-eqRow _ _ _ [] ts = typeErr $ "eqRow: Ragged rows [] and " ++ show ts
-
-stypeEq :: String -> SValue -> SValue -> Checking ()
-stypeEq tm (Of sty n) (Of sty' n') = do
-  typeEq tm Nat n n'
-  stypeEq tm sty sty'
-stypeEq _ (Q q) (Q q') | q == q' = pure ()
-stypeEq _ Bit Bit = pure ()
-stypeEq tm (Rho (R row)) (Rho (R row'))
-  = traverse_ (uncurry (stypeEq tm)) (zip (snd <$> row) (snd <$> row'))
-stypeEq tm t t' = err $ TypeMismatch tm (show t) (show t')
-
-evTy :: Value -> Checking Value
-evTy = eval (req . ELup) B0
-
-evVa :: Value -> Checking Value
-evVa = eval (req . ELup) B0
-
-evSTy :: SValue -> Checking SValue
-evSTy = eval (req . ELup) B0

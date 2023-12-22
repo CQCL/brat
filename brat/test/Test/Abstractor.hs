@@ -27,7 +27,6 @@ instance Arbitrary Abstractor where
 
 instance Arbitrary SimpleTerm where
   arbitrary = oneof [Num <$> arbitrary
-                    ,Bool <$> arbitrary
                     ,Text <$> arbitrary
                     ,Float <$> arbitrary
                     ,pure Unit
@@ -61,7 +60,7 @@ idempotency :: Abstractor -> Bool
 idempotency abs = let NA abs' = normaliseAbstractor abs
                       NA abs'' = normaliseAbstractor abs'
                   in abs' == abs''
-                    
+
 monoidalUnitCancelled :: Abstractor -> Bool
 monoidalUnitCancelled abs = let NA abs' = normaliseAbstractor abs in aux abs'
  where

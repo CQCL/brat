@@ -16,6 +16,7 @@ import Brat.Syntax.Simple
 import Brat.Syntax.Value
 import Brat.UserName
 import Bwd
+import Hasochism
 import Test.Circuit.Common
 import Test.Checking (runEmpty)
 
@@ -30,8 +31,6 @@ import qualified Data.Map as M
 import Data.List (delete)
 
 fst3 (a,_,_) = a
-
-graphTest name file graph = testCase name (runProg name file graph)
 
 idFile = unlines
   ["main :: { a :: Qubit -o b :: Qubit }"
@@ -112,9 +111,9 @@ comment = unlines
 
 mkTensor :: Checking (Name, Name, Name, [(Src, BinderType Brat)])
 mkTensor = do
-  (fooNode, _, foos,  _) <- next "foo" Source (B0,B0) [] [("out1", Right TNat), ("out2", Right TFloat)]
-  (barNode, _, [bar], _) <- next "bar" Source (B0,B0) [] [("out1", Right TInt)]
-  (quxNode, _, [qux], _) <- next "qux" Source (B0,B0) [] [("res", Right TText)]
+  (fooNode, _, foos,  _) <- next "foo" Source (S0,Some (Zy :* S0)) R0 (RPr ("out1", TNat) (RPr ("out2", TFloat) R0))
+  (barNode, _, [bar], _) <- next "bar" Source (S0,Some (Zy :* S0)) R0 (RPr ("out1", TInt) R0)
+  (quxNode, _, [qux], _) <- next "qux" Source (S0,Some (Zy :* S0)) R0 (RPr ("res", TText) R0)
   let outs = tensor foos [bar, qux]
   pure (fooNode, barNode, quxNode, outs)
 

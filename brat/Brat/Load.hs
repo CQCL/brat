@@ -7,7 +7,7 @@ module Brat.Load (loadFilename
                  ) where
 
 import Brat.Checker.Clauses
-import Brat.Checker.Helpers (ensureEmpty, wire)
+import Brat.Checker.Helpers (ensureEmpty, showMode, wire)
 import Brat.Checker.Monad
 import Brat.Checker
 import Brat.Elaborator (elabEnv)
@@ -23,8 +23,8 @@ import Brat.Syntax.Raw
 import Brat.Syntax.Value
 import Brat.UserName
 import Util (duplicates,duplicatesWith)
-import Bwd
 import Control.Monad.Freer (req)
+import Hasochism
 
 import Control.Exception (assert)
 import Control.Monad.Except
@@ -53,43 +53,40 @@ type VMod = (VEnv, [(UserName, VDecl)] -- all symbols from all modules
 emptyMod :: VMod
 emptyMod = (M.empty, [], [], [])
 
-checkDecl :: Prefix -> VDecl -> Maybe [(Tgt, BinderType Brat)] -> Checking ()
-checkDecl pre Decl{..} to_define = case (fnLocality, to_define) of
-  (Local, Just decl_defines) -> localFC fnLoc $ do
-    case fnBody of
-      NoLhs body -> do
-        (((), ()), ((), [])) <- let ?my = Braty in check body ((), decl_defines)
-        pure ()
-      -- TODO: Unify this with `getThunks` and `check (Th _)` code
-      ThunkOf (WC _ verb) -> do
-        (ty, box_out) <- case fnSig of
-          -- Seems like it should be important to not drop the context here
-          [(_, Right ty@(VFun m@Braty ctx (ss :-> ts)))] -> (ty,) <$> let ?my = m in checkBody fnName verb (FV ctx ss ts)
-          [(_, Right ty@(VFun m@Kerny ctx (ss :-> ts)))] -> (ty,) <$> let ?my = m in checkBody fnName verb (FV ctx ss ts)
-          [u] -> req $ Throw (dumbErr $ ExpectedThunk "" (show u))
-          [] -> err $ EmptyRow name
-          (_:_) -> err $ MultipleOutputsForThunk name
-        let [(thunk_in, _)] = decl_defines
-        wire (box_out, ty, thunk_in)
-      Undefined -> error "No body in `checkDecl`"
-    pure ()
-  (Extern _, Nothing) -> pure () -- no body to check; all sigs kindCheck'd already
+-- N.B. This should only be passed local functions
+checkDecl :: Prefix -> VDecl -> [(Tgt, BinderType Brat)] -> Checking ()
+checkDecl pre (VDecl Decl{..}) to_define = localFC fnLoc $ do
+  unless (fnLocality == Local) $ err $ InternalError "checkDecl called on ext function"
+  case fnBody of
+    NoLhs body -> do
+      (((), ()), ((), [])) <- let ?my = Braty in check body ((), to_define)
+      pure ()
+    -- TODO: Unify this with `getThunks` and `check (Th _)` code
+    ThunkOf (WC _ verb) -> do
+      (ty, box_out) <- case fnSig of
+        Some (Flip (RPr u R0)) -> case u of
+          (_, ty@(VFun m@Braty cty)) -> (ty,) <$> let ?my = m in checkBody fnName verb cty
+          (_, ty@(VFun m@Kerny cty)) -> (ty,) <$> let ?my = m in checkBody fnName verb cty
+          _ -> req $ Throw (dumbErr $ ExpectedThunk "" (show u))
+        Some (Flip R0) -> err $ EmptyRow name
+        _ -> err $ MultipleOutputsForThunk name -- also if it's a kind, hmm?
+      case to_define of
+        [(thunk_in, _)] -> wire (box_out, ty, thunk_in)
+        [] -> err $ ExpectedThunk (showMode Braty) "No body"
+        row -> err $ ExpectedThunk (showMode Braty) (showRow row)
+    Undefined -> error "No body in `checkDecl`"
+  pure ()
  where
   uname = PrefixName pre fnName
   name = show uname
 
-loadAlias :: TypeAlias -> Checking (UserName, [(PortName, TypeKind)], [ValPat], Value)
+loadAlias :: TypeAlias -> Checking (UserName, Alias)
 loadAlias (TypeAlias fc name args body) = localFC fc $ do
-  (_, [(hhungry, Left k)], _, _) <- next "" Hypo (B0,B0) [("type", Left (Star args))] []
+  (_, [(hhungry, Left k)], _, _) <- next "" Hypo (S0,Some (Zy :* S0)) (REx ("type", Star args) (S0 ::- R0)) R0
   let abs = WC fc $ foldr (:||:) AEmpty (APat . Bind . fst <$> args)
   ([v], unders) <- kindCheck [(hhungry, k)] $ Th (WC fc (abs :\: (WC fc body)))
   ensureEmpty "loadAlias unders" unders
-  -- TODO: We give patterns here than can be used to restrict what arguments a
-  -- given type alias can receive. Currently, for simplicity, we make all of
-  -- these patterns `VPVar`. `VPVar` is the pattern which matches a term without
-  -- scrutinising it.
-  let pats = [ VPVar | _ <- args]
-  pure (name, args, pats, v)
+  pure (name, (args, v))
 
 withAliases :: [TypeAlias] -> Checking a -> Checking a
 withAliases [] m = m
@@ -105,16 +102,24 @@ loadStmtsWithEnv (venv, oldDecls) (fname, pre, stmts, cts) = addSrcContext fname
   let dups = duplicates (declNames ++ map (PrefixName pre . fnName) decls) in unless (null dups) $
     Left $ dumbErr $ NameClash $ show dups
   ((venv', vdecls), (holes, graph)) <- run venv root $ withAliases aliases $ do
+    -- Generate some stuff for each entry:
+    --  * A map from names to VDecls (aka an Env)
+    --  * Some overs and outs??
     entries <- forM decls $ \d -> localFC (fnLoc d) $ do
       let name = PrefixName pre (fnName d)
-      sig <- kindCheckRow (show name) (fnSig d)
-      let (thing, ins) = case (fnLocality d) of
-                          Local -> (Id, sig)
-                          Extern sym -> (Prim sym, [])
-      (_, unders, outs, _) <- next (show name) thing (B0, B0) ins sig
-      pure ((name, d{fnSig=sig} :: VDecl), (unders, outs))
+      (thing, ins :->> outs, sig) <- case (fnLocality d) of
+                        Local -> do
+                          ins :->> outs <- kindCheckAnnotation (show name) (fnSig d)
+                          pure (Id, ins :->> outs, Some (Flip ins))
+                        Extern sym -> do
+                          (Some (Flip outs)) <- kindCheckRow (show name) (fnSig d)
+                          pure (Prim sym, R0 :->> outs, Some (Flip outs))
+      -- In the Extern case, unders will be empty
+      (_, unders, overs, _) <- next (show name) thing (S0, Some (Zy :* S0)) ins outs
+      pure ((name, VDecl d{fnSig=sig}), (unders, overs))
     -- We used to check there were no holes from that, but for now we do not bother
-    let to_define = M.fromList [(name, unders) | ((name, _), (unders, _)) <- entries, (length unders) > 0]
+    -- A list of local functions (read: with bodies) to define with checkDecl
+    let to_define = M.fromList [ (name, unders) | ((name, VDecl decl), (unders, _)) <- entries, fnLocality decl == Local ]
     let vdecls = map fst entries
     -- Now generate environment mapping usernames to nodes in the graph
     let env = M.fromList [(name, overs) | ((name, _), (_, overs)) <- entries]
@@ -129,8 +134,11 @@ loadStmtsWithEnv (venv, oldDecls) (fname, pre, stmts, cts) = addSrcContext fname
              -> (UserName, VDecl)
              -> Checking (M.Map UserName [(Tgt, BinderType Brat)])
   checkDecl' to_define (name, decl) =
-    let (decl_defines, remaining) = M.updateLookupWithKey (\_ _ -> Nothing) name to_define
-    in checkDecl pre decl decl_defines $> remaining
+    -- Get the decl out of the map, and delete it from things to define
+    case M.updateLookupWithKey (\_ _ -> Nothing) name to_define of
+      -- If Nothing: We deleted this from the map, so must have checked it already
+      (Nothing, remaining) -> pure remaining
+      (Just decl_defines, remaining) -> checkDecl pre decl decl_defines $> remaining
 
 loadFilename :: [FilePath] -> String -> ExceptT SrcErr IO VMod
 loadFilename libDirs file = do

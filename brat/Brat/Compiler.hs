@@ -27,7 +27,7 @@ banner s m = putStrLn startText *> m <* putStrLn endText
   endText = replicate 80 '-'
 
   -- Add an extra space if `s` is odd to pad to 80 chars
-  space = ' ' : (replicate (len `mod` 2) ' ')
+  space = ' ' : replicate (len `mod` 2) ' '
   dashes = replicate (39 - hlen) '-'
   len = length s + 2
   hlen = len `div` 2
@@ -65,6 +65,6 @@ compileFile libDirs file = do
 
   (_name, _graph) <- eitherIO $
       maybeToRight (addSrcName file $ dumbErr $ InternalError "No graph produced for main") $
-      lookupBy ((== (PrefixName [] "main")) . fst) id named_gs
+      lookupBy ((== PrefixName [] "main") . fst) id named_gs
 
   pure ()

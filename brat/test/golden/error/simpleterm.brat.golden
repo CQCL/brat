@@ -2,5 +2,5 @@ Error in test/golden/error/simpleterm.brat@FC {start = Pos {line = 2, col = 10},
 simple = true
          ^^^^
 
-  Type error: Expected something of type `Nat` but got `true`
+  "true" is not a valid constructor for type Nat
 

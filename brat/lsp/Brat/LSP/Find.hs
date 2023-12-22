@@ -10,6 +10,7 @@ import Brat.LSP.State
 import Brat.Syntax.Common
 import Brat.Syntax.Core
 import Brat.Syntax.Skel
+import Brat.Syntax.Value (VDecl(..))
 
 data Context
   = Context { declName :: String
@@ -25,11 +26,11 @@ getInfo ps pos
       [] -> Nothing
       (x:_) -> buildContext pos x
  where
-  pred :: Decl' io raw -> Bool
-  pred Decl{..} = pos `inside` fnLoc
+  pred :: VDecl -> Bool
+  pred (VDecl (Decl{..})) = pos `inside` fnLoc
 
-  buildContext :: Pos -> Decl' io (FunBody Term Noun) -> Maybe Context
-  buildContext pos Decl{..} = do
+  buildContext :: Pos -> VDecl -> Maybe Context
+  buildContext pos (VDecl Decl{..}) = do
     body <- findInBody pos fnBody
     subject <- getThing pos body
     pure $ Context { declName = fnName

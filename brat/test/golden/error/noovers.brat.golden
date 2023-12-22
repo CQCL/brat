@@ -4,5 +4,5 @@ f(Int) -> []
 f(a, b) = []
 ^^^^^^^^^^^^
 
-  Nothing to bind to: b
+  Unification error: Pattern doesn't match expected length for constructor args
 

@@ -1,0 +1,30 @@
+f(X :: *, n :: #, Vec(X, n)) -> Vec(X, n)
+f(X, n, cons(x, xs)) = cons(x, xs)
+f(X, n, []) = []
+
+vectorTail(X :: *, n :: #, Vec(X, succ(n))) -> Vec(X, n)
+vectorTail(_, _, cons(_, xs)) = xs
+-- vectorTail(_, _, []) = ?l -- Fails (correctly)
+
+zipWith(X :: *, Y :: *, Z :: *, n :: #, f :: { X, Y -> Z }, Vec(X, n), Vec(Y, n)) -> Vec(Z, n)
+-- TODO: Fix port pulling for this
+zipWith(_, _, _, _, _, [], []) = []
+zipWith(X, Y, Z, succ(n), f, cons(x,xs), cons(y,ys)) = cons(f(x,y), zipWith(X,Y,Z,n,f,xs,ys))
+
+replicate(X :: *, n :: #, x :: X) -> Vec(X, n)
+replicate(_, 0, _) = []
+replicate(X, succ(n), x) = cons(x, replicate(X, n, x))
+
+ap(X :: *, Y :: *, n :: #, fs :: Vec({ X -> Y }, n), xs :: Vec(X, n)) -> Vec(Y, n)
+ap(_, _, _, [], []) = []
+ap(X, Y, succ(n), cons(f,fs), cons(x,xs)) = cons(f(x), ap(X, Y, n, fs, xs))
+
+permute(X :: *, n :: #, Vec(X, n)) -> Vec(X, n)
+permute(_, _, []) = []
+permute(_, _, [x]) = [x]
+permute(X, succ(succ(n)), cons(x, cons(y, zs))) = cons(y, cons(x, permute(X, n, zs)))
+
+swapFront(X :: *, n :: #, Vec(X, n)) -> Vec(X, n)
+swapFront(_, _, []) = []
+swapFront(_, _, [x]) = [x]
+swapFront(X, _, cons(x, cons(y, zs))) = cons(y, cons(x, zs))

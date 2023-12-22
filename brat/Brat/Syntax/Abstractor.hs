@@ -28,10 +28,12 @@ instance Show Pattern where
   show (Lit tm) = show tm
   show DontCare = "_"
 
-pattern PNone, PNil, PZero :: Pattern
+pattern PNone, PNil, PZero, PTrue, PFalse :: Pattern
 pattern PNone = PCon (PrefixName [] "none") AEmpty
 pattern PNil  = PCon (PrefixName [] "nil")  AEmpty
 pattern PZero = PCon (PrefixName [] "zero") AEmpty
+pattern PTrue = PCon (PrefixName [] "true") AEmpty
+pattern PFalse = PCon (PrefixName [] "false") AEmpty
 
 pattern PSome, POnePlus, PTwoTimes :: Pattern -> Pattern
 pattern PSome x     = PCon (PrefixName [] "some") (APat x)
@@ -69,6 +71,9 @@ occursInAbstractor s (APat p) = occursInPat s p
   occursInPat s (PCon _ xs) = occursInAbstractor s xs
   occursInPat _ DontCare = False
 
+-- Make abstractors right nested, where the thing on the left of a pair is always
+-- a pattern. Port pulling on the left of a `:||:` bubbles outwards, and `AEmpty`
+-- on the left of a `:||:` is deleted.
 newtype NormalisedAbstractor = NA Abstractor
 
 instance Show NormalisedAbstractor where
@@ -80,6 +85,7 @@ cat (NA a) (NA b) = NA $ aux a b
  where
   aux AEmpty b = b
   aux a AEmpty = a
+  aux (APull ps a) b = APull ps (aux a b)
   aux (a :||: b) c = a :||: aux b c
   aux a b = a :||: b
 
@@ -104,3 +110,9 @@ normaliseAbstractor AEmpty = NA AEmpty
 
 unNA :: NormalisedAbstractor -> Abstractor
 unNA (NA a) = a
+
+-- N.B. This is to be called after port pulling has been resolved!
+unconsNA :: NormalisedAbstractor -> Maybe (Pattern, NormalisedAbstractor)
+unconsNA (NA (APat p :||: abs)) = Just (p, NA abs)
+unconsNA (NA (APat p)) = Just (p, NA AEmpty)
+unconsNA _ = Nothing

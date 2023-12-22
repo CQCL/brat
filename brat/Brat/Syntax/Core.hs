@@ -18,7 +18,7 @@ type InOut = (PortName, KindOr (Term Chk Noun))
 
 type CType = CType' InOut
 
-type Decl = Decl' InOut (FunBody Term Noun)
+type Decl = Decl' [InOut] (FunBody Term Noun)
 
 data Term :: Dir -> Kind -> Type where
   Simple   :: SimpleTerm -> Term Chk Noun
@@ -35,10 +35,6 @@ data Term :: Dir -> Kind -> Type where
   Forget   :: WC (Term d KVerb) -> Term d UVerb
   Pull     :: [PortName] -> WC (Term Chk k) -> Term Chk k
   Var      :: UserName -> Term Syn Noun  -- Look up in noun (value) env
-  -- Things which are bound in the global context
-  Par      :: End -> Term Syn Noun
-  -- Things which are bound in a type signature
-  Inx      :: Int -> Term Syn Noun
   -- Type annotations (annotating a term with its outputs)
   -- TODO: Make it possible for Output to be (PortName, SType) when using this in kernels
   (:::)    :: WC (Term Chk Noun) -> [Output] -> Term Syn Noun
@@ -76,8 +72,6 @@ instance Show (Term d k) where
   show (Pull [] x) = "[]:" ++ show x
   show (Pull ps x) = concat ((++":") <$> ps) ++ show x
   show (Var x) = show x
-  show (Par nm) = "Par " ++ show nm
-  show (Inx n)  = '^' : show n
   show (fun :$: arg) = show fun ++ ('(' : show arg ++ ")")
   show (tm ::: ty) = show tm ++ " :: " ++ show ty
   show (a :-: b) = show a ++ "; " ++ show b

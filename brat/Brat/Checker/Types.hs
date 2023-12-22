@@ -7,7 +7,6 @@ module Brat.Checker.Types (Overs, Unders
                           ,Env, VEnv, KEnv, EnvData
                           ,Store(..)
                           ,TypedHole(..)
-                          ,ValueType
                           ,initStore
                           ) where
 
@@ -17,6 +16,8 @@ import Brat.Naming (Name)
 import Brat.Syntax.Common
 import Brat.Syntax.Value
 import Brat.UserName (UserName)
+import Hasochism (N(..))
+
 import Data.Kind (Type)
 import qualified Data.Map as M
 
@@ -45,10 +46,6 @@ type family Outputs (m :: Mode) (d :: Dir) :: Type where
 type ChkConnectors (m :: Mode) (d :: Dir) (k :: Kind) = (Overs m k, Unders m d)
 type SynConnectors (m :: Mode) (d :: Dir) (k :: Kind) = (Inputs m k, Outputs m d)
 
-type family ValueType (m :: Mode) where
-  ValueType Brat = Value
-  ValueType Kernel = SValue
-
 type family EnvData (m :: Mode) where
   -- Brat variables can stand for rows when referring to a top level
   -- binding. Most of the time, this will be a singleton list
@@ -68,7 +65,7 @@ data TypedHole
 
 data Store = Store
   { kindMap :: M.Map End TypeKind
-  , valueMap :: M.Map End Value
+  , valueMap :: M.Map End (Val Z)
   }
 
 instance Show Store where

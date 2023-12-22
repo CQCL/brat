@@ -1,7 +1,10 @@
-Error in test/golden/binding/cons.brat@FC {start = Pos {line = 7, col = 10}, end = Pos {line = 7, col = 31}}:
-badUncons(cons(stuff)) = stuff
-         ^^^^^^^^^^^^^^^^^^^^^
+Error in test/golden/binding/cons.brat@FC {start = Pos {line = 6, col = 1}, end = Pos {line = 7, col = 31}}:
 
-  Internal error: Expected empty unders after abstract, got:
-  (tail :: List(Int))
+
+badUncons(List(Int)) -> Int, List(Int)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+badUncons(cons(stuff)) = stuff
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  Unification error: Pattern doesn't match expected length for constructor args
 

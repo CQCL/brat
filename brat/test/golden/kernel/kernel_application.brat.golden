@@ -3,6 +3,6 @@ rotate = { q => maybeRotate(true) }
                 ^^^^^^^^^^^
 
   Expected function to be a (kernel) thunk, but found:
-  (thunk :: (a1 :: Bool) -> (a1 :: (a1 :: Qubit) -o (a1 :: Qubit)))
+  (thunk :: { (a1 :: Bool) -> (a1 :: { (a1 :: Qubit) -o (a1 :: Qubit) }) })
 
 

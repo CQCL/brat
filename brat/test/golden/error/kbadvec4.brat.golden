@@ -2,5 +2,5 @@ Error in test/golden/error/kbadvec4.brat@FC {start = Pos {line = 2, col = 5}, en
 f = { [1,2] => true }
     ^^^^^^^^^^^^^^^^^
 
-  Type error: 1 is not of type Bool
+  Type error: Expected something of type `Bool` but got `1`
 

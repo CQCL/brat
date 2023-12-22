@@ -8,7 +8,8 @@ data ProgramState
   = PS { decls :: [VDecl]
        , aliases :: [(String, TypeAlias)]
        , holes :: [TypedHole]
-       } deriving Show
+       }
+    deriving Show
 
 emptyPS :: ProgramState
 emptyPS = PS [] [] []

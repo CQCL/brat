@@ -19,14 +19,6 @@ import Test.Tasty.HUnit
 
 runEmpty m = run emptyEnv root m
 
-typeEqRow :: (DeBruijn (BinderType m), Show (BinderType m))
-          => Modey m -> String
-          -> [(PortName, BinderType m)] -- Expected
-          -> [(PortName, BinderType m)] -- Actual
-          -> EqEnv
-          -> Checking EqEnv
-typeEqRow m tm ss ts eqCtx = eqRow tm m eqCtx ss ts
-
 assertChecking :: Checking a -> Assertion
 assertChecking m = case runEmpty $ localFC (FC (Pos 0 0) (Pos 0 0)) m of
   Right _ -> pure ()

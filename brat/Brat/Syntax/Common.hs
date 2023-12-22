@@ -11,7 +11,6 @@ module Brat.Syntax.Common (PortName,
                            SType',
                            -- constructors for SType' (do not export SType''):
                            pattern Q, pattern Bit, pattern Of, pattern Rho,
-                           copyable,
                            Dir(..),
                            Kind(..),
                            Diry(..),
@@ -38,13 +37,17 @@ module Brat.Syntax.Common (PortName,
                            pattern PZero,
                            pattern PNil,
                            pattern PCons,
+                           pattern PTrue,
+                           pattern PFalse,
                            Mode(..),
                            Modey(..),
                            End(..),
                            TypeRow,
                            TypeRowElem(..),
                            forgetPortName,
-                           toTypeRow
+                           toTypeRow,
+                           MODEY(..),
+                           modily
                           ) where
 
 import Brat.FC
@@ -56,12 +59,32 @@ import Data.Bifunctor (first)
 import Data.List (intercalate)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Kind (Type)
+import Data.Type.Equality (TestEquality(..), (:~:)(..))
 
 data Mode = Brat | Kernel
 
 data Modey :: Mode -> Type where
   Braty :: Modey Brat
   Kerny :: Modey Kernel
+
+class MODEY (m :: Mode) where
+  modey :: Modey m
+
+instance MODEY Brat where
+  modey = Braty
+
+instance MODEY Kernel where
+  modey = Kerny
+
+-- `MODEY m` means that `m` is a Mode known at runtime
+modily :: Modey m -> (MODEY m => t) -> t
+modily Braty t = t
+modily Kerny t = t
+
+instance TestEquality Modey where
+  testEquality Braty Braty = Just Refl
+  testEquality Kerny Kerny = Just Refl
+  testEquality _ _ = Nothing
 
 data Quantum = Qubit | Money deriving (Eq, Show)
 newtype Row' tm q = R [(PortName, SType'' tm q)] deriving (Functor, Foldable, Traversable)
@@ -91,9 +114,6 @@ instance (Show q, Show tm) => Show (SType'' tm q) where
   show Bit = "Bool"
   show (Of ty n) = "Vec(" ++ show ty ++ ", " ++ show n ++ ")"
   show (Rho (R row)) = '(' : (intercalate ", " ((\(p, tm) -> p ++ " :: " ++ show tm) <$> row)) ++ ")"
-
-copyable :: SType'' tm q -> Bool
-copyable = null
 
 data TypeRowElem ty = Named PortName ty | Anon ty deriving (Foldable, Functor, Traversable)
 type TypeRow ty = [TypeRowElem ty]
@@ -164,7 +184,7 @@ data Locality = Extern String | Local deriving (Eq, Show)
 
 data Decl' (io :: Type) (body :: Type)
   = Decl { fnName :: String
-         , fnSig  :: [io]
+         , fnSig  :: io
          , fnBody :: body
          , fnLoc  :: FC
          , fnRT   :: Runtime

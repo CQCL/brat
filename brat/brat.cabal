@@ -28,6 +28,7 @@ common haskell
                        StandaloneDeriving,
                        TupleSections,
                        TypeFamilies,
+                       TypeOperators,
                        TypeSynonymInstances
 
 common ghc-perf
@@ -64,44 +65,47 @@ common warning-flags
 library
   import:              haskell, warning-flags
   default-language:    Haskell2010
-  other-modules:       Brat.Checker.Quantity,
+  exposed-modules:     Brat.Checker.Quantity,
                        Brat.Dot,
                        Brat.Eval,
                        Brat.Lexer
-
-  exposed-modules:     Brat.Checker,
                        Brat.Checker.Clauses,
-                       Brat.Checker.Clauses.Refinements,
                        Brat.Checker.Helpers,
                        Brat.Checker.Helpers.Nodes,
                        Brat.Checker.Monad,
                        Brat.Checker.Types,
-                       Brat.Compiler,
                        Brat.Compile.Simple,
                        Brat.Constructors,
                        Brat.Error,
-                       Brat.FC,
                        Brat.Graph,
                        Brat.Load,
-                       Brat.Naming,
                        Brat.Parser,
                        Brat.Search,
                        Brat.Elaborator,
                        Brat.Syntax.Abstractor,
-                       Brat.Syntax.Common,
                        Brat.Syntax.Concrete,
-                       Brat.Syntax.Core,
                        Brat.Syntax.Port,
-                       Brat.Syntax.Raw,
                        Brat.Syntax.Simple,
-                       Brat.Syntax.Skel,
-                       Brat.Syntax.Value,
                        Brat.UserName,
                        Bwd,
                        Control.Monad.Freer,
+                       Hasochism,
                        Proto.V1alpha.Graph, Proto.V1alpha.Graph_Fields,
                        Proto.V1alpha.Signature, Proto.V1alpha.Signature_Fields,
                        Util
+
+                       -- For the `brat` exe
+  exposed-modules:     Brat.Compiler,
+                       -- For LSP
+                       Brat.Checker,
+                       Brat.Syntax.Core,
+                       Brat.Syntax.Common,
+                       Brat.Syntax.Skel,
+                       Brat.FC,
+                       Brat.Naming,
+                       Brat.Syntax.Raw,
+                       Brat.Syntax.Value
+
 
   autogen-modules:     Proto.V1alpha.Graph, Proto.V1alpha.Graph_Fields,
                        Proto.V1alpha.Signature, Proto.V1alpha.Signature_Fields
@@ -128,6 +132,7 @@ executable brat
   import:              haskell, ghc-perf, warning-flags
   default-language:    Haskell2010
   main-is:             Main.hs
+  hs-source-dirs:      app
   build-depends:       base < 5,
                        brat,
                        megaparsec >= 9.0.0,
@@ -144,45 +149,6 @@ executable brat
                        directory,
                        utility-ht,
                        graphviz
-
-  other-modules:       Brat.Checker,
-                       Brat.Checker.Clauses,
-                       Brat.Checker.Clauses.Refinements,
-                       Brat.Checker.Helpers,
-                       Brat.Checker.Helpers.Nodes,
-                       Brat.Checker.Quantity,
-                       Brat.Checker.Monad,
-                       Brat.Checker.Types,
-                       Brat.Compiler,
-                       Brat.Compile.Simple,
-                       Brat.Constructors,
-                       Brat.Dot,
-                       Brat.Error,
-                       Brat.Eval,
-                       Brat.FC,
-                       Brat.Graph,
-                       Brat.Lexer,
-                       Brat.Load,
-                       Brat.Naming,
-                       Brat.Parser,
-                       Brat.Search,
-                       Brat.Elaborator,
-                       Brat.Syntax.Abstractor,
-                       Brat.Syntax.Common,
-                       Brat.Syntax.Concrete,
-                       Brat.Syntax.Core,
-                       Brat.Syntax.Port,
-                       Brat.Syntax.Raw,
-                       Brat.Syntax.Simple,
-                       Brat.Syntax.Skel
-                       Brat.Syntax.Value,
-                       Brat.UserName,
-                       Bwd,
-                       Control.Monad.Freer,
-                       Proto.V1alpha.Graph,
-                       Proto.V1alpha.Graph_Fields,
-                       Util
-
 
 executable lsp-brat
   import:              ghc-perf, warning-flags
@@ -211,7 +177,6 @@ test-suite tests
                        Test.Libs,
                        Test.Parsing,
                        Test.Naming,
-                       Test.Refinements,
                        Test.Search,
                        Test.Substitution,
                        Test.Syntax.Let,

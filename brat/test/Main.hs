@@ -12,7 +12,6 @@ import Test.Failure
 import Test.Libs
 import Test.Naming
 import Test.Parsing
-import Test.Refinements
 import Test.Search
 import Test.Substitution
 import Test.Syntax.Let
@@ -34,6 +33,5 @@ main = do
                                 ,elaborationTests
                                 ,substitutionTests
                                 ,abstractorTests
-                                ,refinementTests
                                 ,eqTests
                                 ]

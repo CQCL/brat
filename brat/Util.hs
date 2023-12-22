@@ -1,10 +1,5 @@
 module Util where
 
-nth :: [a] -> Int -> Maybe a
-nth [] _ = Nothing
-nth (a:_) 0 = Just a
-nth (_:as) n = as `nth` (n - 1)
-
 zip_same_length :: [a] -> [b] -> Maybe [(a,b)]
 zip_same_length (x:xs) (y:ys) = ((x,y):) <$> zip_same_length xs ys
 zip_same_length [] [] = Just []

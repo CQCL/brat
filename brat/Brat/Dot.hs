@@ -4,6 +4,7 @@ import Brat.Naming
 import Brat.Graph
 import Brat.Syntax.Common
 import Brat.Syntax.Value
+import Hasochism (N(..))
 
 import qualified Data.GraphViz as GV
 import qualified Data.GraphViz.Printing as GV
@@ -18,7 +19,7 @@ import Data.Maybe (fromJust)
 import Data.Tuple.HT (snd3)
 
 
--- Wrap Name into a new type to avoid orphan instance 
+-- Wrap Name into a new type to avoid orphan instance
 newtype Name' = Name' Name deriving (Eq, Ord, Show)
 
 instance (GV.PrintDot Name') where
@@ -26,7 +27,7 @@ instance (GV.PrintDot Name') where
   toDot  (Name' name) =  GV.text . pack $ "\"" ++ show name ++ "\""
 
 
-data EdgeType = EvalEdge | SrcEdge | GraphEdge (Either SValue Value)
+data EdgeType = EvalEdge | SrcEdge | GraphEdge (Either (SVal Z) (Val Z))
 
 instance Show EdgeType where
   show EvalEdge = ""
@@ -97,4 +98,3 @@ toDotString (ns,ws) = unpack . GV.printDotGraph $ GV.graphElemsToDot params vert
 
   arrow EvalEdge = GV.oDot
   arrow _ = GV.vee
-

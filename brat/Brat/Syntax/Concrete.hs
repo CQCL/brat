@@ -17,7 +17,7 @@ data FBody
   | FUndefined
  deriving Show
 
-type FDecl = Decl' RawIO FBody
+type FDecl = Decl' [RawIO] FBody
 deriving instance Show FDecl
 type FEnv = ([FDecl], [RawAlias])
 

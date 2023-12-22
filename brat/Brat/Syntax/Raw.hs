@@ -11,6 +11,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Data.Bifunctor
 import Data.Kind (Type)
+import Data.List.NonEmpty (fromList, NonEmpty(..))
 import Data.Map (disjoint, member, union)
 import qualified Data.Map as M
 import Data.Tuple.HT (thd3)
@@ -43,18 +44,20 @@ type TypeAlias = TypeAliasF (Term Chk Noun)
 
 type TypeAliasTable = M.Map UserName TypeAlias
 
-type RawDecl = Decl' RawIO (FunBody Raw Noun)
+type RawDecl = Decl' [RawIO] (FunBody Raw Noun)
 type RawEnv = ([RawDecl], [RawAlias], TypeAliasTable)
 
 addNames :: TypeRow ty -> [(PortName, ty)]
-addNames tms = aux names tms
+addNames tms = aux (fromList names) tms
  where
-  aux (n:ns) ((Anon tm):tms) = (n, tm) : aux ns tms
+  -- aux is passed the infinite list `names`, so we can use the partial function
+  -- `fromList` to repeatedly convert it to NonEmpty so GHC doesn't complain
+  -- about the missing case `aux [] _`
+  aux (n :| ns) ((Anon tm):tms) = (n, tm) : aux (fromList ns) tms
   aux ns ((Named n tm):tms)  = (n, tm) : aux ns tms
   aux _ [] = []
 
 data Raw :: Dir -> Kind -> Type where
-  RBound    :: Int -> Raw Syn Noun
   RSimple   :: SimpleTerm -> Raw Chk Noun
   RLet      :: WC Abstractor -> WC (Raw Syn Noun) -> WC (Raw d k) -> Raw d k
   RNHole    :: String -> Raw Chk Noun
@@ -91,7 +94,6 @@ instance (Kindable UVerb) where kind _ = UVerby
 instance (Kindable KVerb) where kind _ = KVerby
 
 instance Show (Raw d k) where
-  show (RBound i) = '^' : show i
   show (RLet abs xs body)
     = unwords ["let", show abs, "=", show xs, "in", show body]
   show (RNHole name) = '?':name
@@ -198,8 +200,6 @@ instance Desugarable ty => Desugarable (TypeRow ty) where
 instance (Kindable k) => Desugarable (Raw d k) where
   type Desugared (Raw d k) = Term d k
   -- TODO: holes need to know their arity for type checking
-  -- hmm.....
-  desugar' (RBound i) = pure $ Inx i
   desugar' (RNHole name) = NHole <$> freshM name
   desugar' (RVHole name) = VHole <$> freshM name
   desugar' (RSimple simp) = pure $ Simple simp
@@ -245,11 +245,7 @@ instance (Kindable k) => Desugarable (Raw d k) where
   desugar' (RForce v) = Force <$> desugar v
   desugar' (RForget kv) = Forget <$> desugar kv
   desugar' (RPull ps raw) = Pull ps <$> desugar raw
-  desugar' (RVar name) = do
-    sc <- asks snd
-    pure $ case findUnder name sc of
-      Just i -> Inx i
-      Nothing -> Var name
+  desugar' (RVar name) = pure $ Var name
   desugar' (fun ::$:: arg) = (:$:) <$> desugar fun <*> desugar arg
   desugar' (tm ::::: outputs) = do
     tm <- desugar tm
@@ -344,32 +340,3 @@ desugarEnv env@(decls, aliases, aliasTbl)
   decls <- local (\((decls, aliases, aliasTbl), uz) -> ((decls, aliases, newAliasTbl `union` aliasTbl),uz)) $
               traverse desugar' decls
   pure (decls, aliases)
-
-abstractRaw :: UserName -> Int -> Raw d k -> Raw d k
-abstractRaw from to (RVar x)
-  | x == from = RBound to
-  | otherwise = RVar x
-abstractRaw from to (a ::|:: b) = (abstractRaw from to <$> a) ::|:: (abstractRaw from to <$> b)
-abstractRaw from to (RLet abs x y)
-  | not (occursInAbstractor (show from) (unWC abs))
-  = RLet abs (abstractRaw from to <$> x) (abstractRaw from to <$> y)
-abstractRaw from to (RTh tm) = RTh $ abstractRaw from to <$> tm
-abstractRaw from to (REmb tm) = REmb $ abstractRaw from to <$> tm
-abstractRaw from to (RPull ps tm) = RPull ps (abstractRaw from to <$> tm)
-abstractRaw from to (f ::$:: a)
-  = (abstractRaw from to <$> f) ::$:: (abstractRaw from to <$> a)
-abstractRaw from to (tm ::::: ty) = (abstractRaw from to <$> tm) ::::: ty -- shold we do the type too?
-abstractRaw from to (a ::-:: b)
-  = (abstractRaw from to <$> a) ::-:: (abstractRaw from to <$> b)
-abstractRaw from to (abs ::\:: tm)
-  | not (occursInAbstractor (show from) (unWC abs))
-  = abs ::\:: (abstractRaw from to <$> tm)
-abstractRaw from to (RCon c tm) = RCon c (abstractRaw from to <$> tm)
-abstractRaw from to (RFn (ss :-> ts))
-  = let ss' = abstRow ss
-        ts' = abstRow ts
-    in RFn $ ss' :-> ts'
- where
-  abstRow :: TypeRow (KindOr (Raw Chk Noun)) -> TypeRow (KindOr (Raw Chk Noun))
-  abstRow = fmap (fmap (fmap (abstractRaw from to)))
-abstractRaw _ _ tm = tm

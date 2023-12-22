@@ -1,6 +1,10 @@
-Error in test/golden/error/vecpat3.brat@FC {start = Pos {line = 3, col = 5}, end = Pos {line = 3, col = 19}}:
+Error in test/golden/error/vecpat3.brat@FC {start = Pos {line = 1, col = 1}, end = Pos {line = 3, col = 19}}:
+fst3(Vec(Int, 3)) -> Option(Int)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+fst3(cons(x,xs)) = some(x)
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 fst3([a,b]) = none
-    ^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^
 
-  Branch cannot be reached
+  Unification error: Couldn't unify 0 with 1
 

@@ -1,6 +1,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module Test.Search (searchTests) where
+module Test.Search {- (searchTests) -} where
 
 import Brat.Checker (check, Modey(..))
 import Brat.FC
@@ -9,6 +9,7 @@ import Brat.Search (vsearch)
 import Brat.Syntax.Common
 import Brat.Syntax.Core
 import Brat.Syntax.Simple (SimpleTerm(..))
+import Hasochism (N(..))
 import Util (names)
 import Test.Checking (runEmpty)
 
@@ -26,29 +27,30 @@ bounds = (1,5)
 -- Max depth of recursive types
 maxDepth = 5
 
-row :: Int -> Int -> Gen [(PortName, SValue)]
-row d n = sequence [ (name,) <$> arbitrarySValue d | name <- take n names ]
+row :: Int -> Int -> Gen (Ro Kernel Z Z)
+row d n = sequence [ (name,) <$> arbitrarySValue d | name <- take n names ] <&>
+          foldr (\this rest -> RPr this rest) R0
 
-arbitrarySValue :: Int -> Gen SValue
+arbitrarySValue :: Int -> Gen (SVal Z)
 arbitrarySValue d = case d of
   1 -> cheap
   d -> oneof [cheap, vec (d - 1)]
  where
-  cheap = pure Bit
+  cheap = pure VBit
 
   vec d = do
     n <- chooseInt bounds
     ty <- arbitrarySValue d
-    pure (Of ty (VNum (NumValue n Constant0))) -- Only the simplest values of `n`
+    pure (VOf ty (NumValue n Constant0)) -- Only the simplest values of `n`
 
 
-instance Arbitrary SValue where
+instance Arbitrary (SVal Z) where
   arbitrary = arbitrarySValue maxDepth
-      
-instance Arbitrary Value where
-  arbitrary = chooseInt bounds >>= \n -> row n maxDepth <&> \r -> VFun Kerny B0 (r :-> r)
 
-tokensTypecheck :: Value -> Bool
+instance Arbitrary (Val Z) where
+  arbitrary = chooseInt bounds >>= \n -> row n maxDepth <&> \r -> VFun Kerny (r :->> r)
+
+tokensTypecheck :: Val Z -> Bool
 tokensTypecheck kty =
   let kernels = vsearch fc kty in
     case kernels of
@@ -60,5 +62,4 @@ tokensTypecheck kty =
   fc = FC (Pos 0 0) (Pos 0 0)
   src = MkName [("src", 0)]
 
-  
 searchTests = testProperty "Token Values Typecheck" tokensTypecheck

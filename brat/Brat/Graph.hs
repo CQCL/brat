@@ -5,16 +5,18 @@ module Brat.Graph where
 import Brat.Naming
 import Brat.Syntax.Port
 import Brat.Syntax.Simple
-
-import qualified Data.Graph as G
-import qualified Data.Map as M
 import Brat.Syntax.Value
 import Brat.UserName
 
+import Hasochism (N(..))
+
+import qualified Data.Graph as G
+import qualified Data.Map as M
+
 data Node
   -- Inputs first, then outputs
-  = BratNode Thing [(PortName, Value)] [(PortName, Value)]
-  | KernelNode Thing [(PortName, SValue)] [(PortName, SValue)]
+  = BratNode Thing [(PortName, Val Z)] [(PortName, Val Z)]
+  | KernelNode Thing [(PortName, SVal Z)] [(PortName, SVal Z)]
  deriving Show
 
 nodeThing :: Node -> Thing
@@ -43,7 +45,7 @@ emptyGraph = (M.empty, [])
 instance {-# OVERLAPPING #-} Show Graph where
   show (ns, ws) = unlines (("Nodes:":(show <$> M.toList ns)) ++ ("":"Wires:":(show <$> ws)))
 
-type Wire = (OutPort, Either SValue Value, InPort)
+type Wire = (OutPort, Either (SVal Z) (Val Z), InPort)
 
 toGraph :: Graph -> (G.Graph, G.Vertex -> (Node, Name, [Name]), Name -> Maybe G.Vertex)
 toGraph (ns, ws) = G.graphFromEdges adj

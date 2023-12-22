@@ -176,6 +176,8 @@ abstractor = do ps <- many (try portPull)
     <|> try cons
     <|> try (matchString "none" $> PNone)
     <|> try psome
+    <|> try (matchString "true" $> PTrue)
+    <|> try (matchString "false" $> PFalse)
     <|> (Bind <$> simpleName)
    where
     psome = do
@@ -198,12 +200,7 @@ simpleTerm :: Parser SimpleTerm
 simpleTerm =
   ((Text <$> string <?> "string")
   <|> try (Float <$> float <?> "float")
-  <|> (Num <$> number <?> "nat")
-  <|> (bool <?> "bool"))
- where
-  bool :: Parser SimpleTerm
-  bool = Bool <$> (matchString "true" $> True
-                   <|> matchString "false" $> False)
+  <|> (Num <$> number <?> "nat"))
 
 outputs :: Parser [RawIO]
 outputs = rawIO (unWC <$> vtype)
@@ -595,13 +592,12 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
 -}
     match Equal
     ty <- vtype
-    let ty' = foldl (\ty (i, x) -> abstractRaw (plain x) i ty) (unWC ty) (zip [0..] (reverse args))
     -- TODO: Right now we restrict the variables in a type alias to being of
     -- kind `Star []` (i.e. the type of simple types). In future we should allow
     -- users to specify the kinds of variables in type aliases, like:
     --   type X(a :: *, b :: #, c :: *(x :: *, y :: #)) = ...
     -- See KARL-325
-    pure (alias, (,Star []) <$> args, ty')
+    pure (alias, (,Star []) <$> args, unWC ty)
 
   extDecl :: Parser FDecl
   extDecl = do (WC fc (fnName, ty, symbol)) <- withFC $ do
