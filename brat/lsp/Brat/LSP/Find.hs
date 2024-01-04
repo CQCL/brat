@@ -8,17 +8,18 @@ import Data.Maybe (catMaybes)
 import Brat.FC
 import Brat.LSP.State
 import Brat.Syntax.Common
+import Brat.Syntax.Concrete (Flat(..))
 import Brat.Syntax.Core
-import Brat.Syntax.Skel
 import Brat.Syntax.Value (VDecl(..))
+import Brat.Unelaborator (unelab)
 
 data Context
   = Context { declName :: String
-            , root :: Skel
+            , root :: Flat
             -- May be nothing if not hovering over a term
-            , thing :: Skel
+            , thing :: Flat
             , runtime :: Runtime
-            } deriving (Eq, Show)
+            } deriving Show
 
 getInfo :: ProgramState -> Pos -> Maybe Context
 getInfo ps pos
@@ -39,20 +40,20 @@ getInfo ps pos
                    , runtime = fnRT
                    }
 
-  findInBody :: Juxt k => Pos -> FunBody Term k -> Maybe (WC Skel)
+  findInBody :: KINDY k => Pos -> FunBody Term k -> Maybe (WC Flat)
   findInBody pos (NoLhs (WC fc rhs))
-    | pos `inside` fc = Just (WC fc (stripInfo rhs))
+    | pos `inside` fc = Just (WC fc (unelab Chky kindy rhs))
   -- TODO: Doesn't search in LHS
   findInBody pos (Clauses (c :| cs)) = findInClauses (c:cs)
    where
-    findInClauses :: [(WC Abstractor, WC (Term Chk Noun))] -> Maybe (WC Skel)
+    findInClauses :: [(WC Abstractor, WC (Term Chk Noun))] -> Maybe (WC Flat)
     findInClauses [] = Nothing
     findInClauses ((_, rhs):cs)
-     | rfc <- fcOf rhs, pos `inside` rfc = Just (stripInfo <$> rhs)
+     | rfc <- fcOf rhs, pos `inside` rfc = Just (unelab Chky Nouny <$> rhs)
      | otherwise = findInClauses cs
   findInBody _ _ = Nothing
 
-  getThing :: Pos -> WC Skel -> Maybe Skel
+  getThing :: Pos -> WC Flat -> Maybe Flat
   getThing pos (WC fc x)
     | pos `inside` fc = case catMaybes (getThing pos <$> subTerms x) of
                           [] -> Just x
@@ -60,3 +61,18 @@ getInfo ps pos
                           -- worth crashing the server over
                           (x:_) -> Just x
     | otherwise = Nothing
+
+-- Helper function for getting the nested terms from a Flat term, so that we can
+-- dig through them to find the most local thing which matches the FC.
+subTerms :: Flat -> [WC Flat]
+subTerms (FApp a b) = [a, b]
+subTerms (FJuxt a b) = [a, b]
+subTerms (FThunk th) = [th]
+subTerms (FCompose a b) = [a,  b]
+subTerms (FInto a b) = [a, b]
+subTerms (FLambda _ body) = [body]
+subTerms (FAnnotation tm _) = [tm]
+subTerms (FLetIn _ a b) = [a, b]
+subTerms (FCon _ arg) = [arg]
+subTerms (FPull _ tm) = [tm]
+subTerms _ = []

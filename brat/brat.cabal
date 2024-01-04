@@ -100,11 +100,11 @@ library
                        Brat.Checker,
                        Brat.Syntax.Core,
                        Brat.Syntax.Common,
-                       Brat.Syntax.Skel,
                        Brat.FC,
                        Brat.Naming,
                        Brat.Syntax.Raw,
-                       Brat.Syntax.Value
+                       Brat.Syntax.Value,
+                       Brat.Unelaborator
 
 
   autogen-modules:     Proto.V1alpha.Graph, Proto.V1alpha.Graph_Fields,

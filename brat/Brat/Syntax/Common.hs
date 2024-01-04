@@ -47,6 +47,7 @@ module Brat.Syntax.Common (PortName,
                            forgetPortName,
                            toTypeRow,
                            MODEY(..),
+                           KINDY(..),
                            modily,
                            ArithOp(..),
                           ) where
@@ -76,6 +77,18 @@ instance MODEY Brat where
 
 instance MODEY Kernel where
   modey = Kerny
+
+class KINDY (k :: Kind) where
+  kindy :: Kindy k
+
+instance KINDY Noun where
+  kindy = Nouny
+
+instance KINDY UVerb where
+  kindy = UVerby
+
+instance KINDY KVerb where
+  kindy = KVerby
 
 -- `MODEY m` means that `m` is a Mode known at runtime
 modily :: Modey m -> (MODEY m => t) -> t
