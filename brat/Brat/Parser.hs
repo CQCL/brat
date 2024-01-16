@@ -14,6 +14,7 @@ import Control.Monad (void)
 import Control.Monad.State (State, evalState, runState, get, put)
 import Data.Bifunctor
 import Data.List.NonEmpty (toList, NonEmpty(..), nonEmpty)
+import Data.Foldable (msum)
 import Data.Functor (($>), (<&>))
 import Data.Maybe (fromJust, maybeToList)
 import Data.Set (empty)
@@ -180,32 +181,18 @@ abstractor = do ps <- many (try portPull)
   pat = try vecPat
     <|> (match Underscore $> DontCare)
     <|> try (Lit <$> simpleTerm)
-    <|> try onePlus
-    <|> try twoTimes
-    <|> try (matchString "zero" $> PZero)
-    <|> try (matchString "nil" $> PNil)
-    <|> try cons
-    <|> try (matchString "none" $> PNone)
-    <|> try psome
-    <|> try (matchString "true" $> PTrue)
-    <|> try (matchString "false" $> PFalse)
+    <|> try constructorsWithArgs
+    <|> try nullaryConstructors
     <|> (Bind <$> simpleName)
    where
-    psome = do
-      matchString "some"
-      PSome <$> round pat
+    constructor :: Parser Abstractor -> String -> Parser Pattern
+    constructor pabs c = do
+      matchString c
+      PCon (plain c) <$> pabs
 
-    cons = do
-      matchString "cons"
-      PCon (plain "cons") <$> round abstractor
+    nullaryConstructors = msum (try . constructor (pure AEmpty) <$> ["zero", "nil", "none", "true", "false"])
 
-    onePlus = do
-      matchString "succ"
-      POnePlus <$> round pat
-
-    twoTimes = do
-      matchString "doub"
-      PTwoTimes <$> round pat
+    constructorsWithArgs = msum (try . constructor (round abstractor) <$> ["succ", "doub", "cons", "some"])
 
 simpleTerm :: Parser SimpleTerm
 simpleTerm =
