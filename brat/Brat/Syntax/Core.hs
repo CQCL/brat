@@ -66,6 +66,8 @@ data Term :: Dir -> Kind -> Type where
   C        :: CType' (PortName, KindOr (Term Chk Noun)) -> Term Chk Noun
   -- Kernel types
   K        :: CType' (PortName, Term Chk Noun) -> Term Chk Noun
+  FanOut   :: Term Syn UVerb
+  FanIn    :: Term Chk UVerb
 
 deriving instance Eq (Term d k)
 
@@ -126,6 +128,9 @@ instance Show (Term d k) where
 
   show (C f) = "{" ++ show f ++ "}"
   show (K (ss :-> ts)) = "{" ++ showSig ss ++ " -o " ++ showSig ts ++ "}"
+  show FanOut = "[/\\]"
+  show FanIn = "[\\/]"
+
 
 -- Wrap a term in brackets if its `precedence` is looser than `n`
 bracket :: Precedence -> WC (Term d k) -> String

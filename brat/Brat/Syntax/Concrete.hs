@@ -43,4 +43,6 @@ data Flat
  | FKernel RawKType
  | FUnderscore
  | FPass
+ | FFanOut
+ | FFanIn
  deriving Show
