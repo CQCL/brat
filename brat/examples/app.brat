@@ -1,0 +1,6 @@
+if(X :: *, Bool, { -> X }, { -> X }) -> X
+if(_, true, then, _) = then()
+if(_, false, _, else) = else()
+
+test(Bool) -> Nat
+test(b) = if(Nat, b, { => 4 }, { => 12 })

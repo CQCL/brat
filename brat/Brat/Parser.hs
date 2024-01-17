@@ -396,7 +396,7 @@ atomExpr = atomExpr' 0
 
   annotation = FAnnotation <$> withFC (atomExpr' 4) <* match TypeColon <*> rawIO (unWC <$> vtype)
 
-  app = FApp <$> withFC (atomExpr' 5) <*> withFC (round expr)
+  app = FApp <$> withFC (atomExpr' 5) <*> withFC (round (expr <|> pure FEmpty))
 
   simpleExpr = FHole <$> hole
             <|> try (FSimple <$> simpleTerm)
