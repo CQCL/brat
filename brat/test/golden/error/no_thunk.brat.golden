@@ -1,0 +1,9 @@
+Error in test/golden/error/no_thunk.brat@FC {start = Pos {line = 8, col = 14}, end = Pos {line = 8, col = 15}}:
+    Rz(2.0 / n); X
+             ^
+
+  Type mismatch when checking n
+Expected: (right :: Float)
+But got:  (n :: Nat)
+
+
