@@ -33,6 +33,7 @@ data Term :: Dir -> Kind -> Type where
   Let      :: WC Abstractor -> WC (Term Syn Noun) -> WC (Term d k) -> Term d k
   NHole    :: Name -> Term Chk Noun
   VHole    :: Name -> Term Chk UVerb
+  Pass     :: Term Syn UVerb
   Empty    :: Term Chk Noun -- The empty row (monoidal unit of :|:)
   -- Parallel composition, aka juxtaposition
   (:|:)    :: WC (Term d k) -> WC (Term d k) -> Term d k
@@ -73,6 +74,7 @@ instance Show (Term d k) where
   show (VHole (MkName [])) = "?<root>"
   show Empty = "()"
   show (a :|: b) = bracket 2 a ++ ", " ++ bracket 2 b
+  show Pass = "pass"
   show (Th comp) = '{' : show comp ++ "}"
   show (TypedTh comp) = "{:" ++ show comp ++ ":}"
   show (Force th) = show th ++ "()"

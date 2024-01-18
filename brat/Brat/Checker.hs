@@ -220,6 +220,8 @@ check' (s :-: t) (overs, unders) = do
   (((), outs), (emptyOvers, rightunders)) <- check t (overs, unders)
   ensureEmpty "composition overs" emptyOvers
   pure ((ins, outs), (rightovers, rightunders))
+check' Pass ([], ()) = typeErr "pass is being given an empty row"
+check' Pass (overs, ()) = pure (((), overs), ([], ()))
 check' (binder :\: body) (overs, unders) = do
   (ext, overs) <- abstract overs (unWC binder)
   (sycs, ((), unders)) <- localEnv ext $ check body ((), unders)

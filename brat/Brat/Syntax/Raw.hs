@@ -63,6 +63,7 @@ data Raw :: Dir -> Kind -> Type where
   RNHole    :: String -> Raw Chk Noun
   RVHole    :: String -> Raw Chk UVerb
   REmpty    :: Raw Chk Noun
+  RPass     :: Raw Syn UVerb
   (::|::)   :: WC (Raw d k) -> WC (Raw d k) -> Raw d k
   RTh       :: WC (Raw Chk UVerb) -> Raw Chk Noun
   RTypedTh  :: WC (Raw Syn KVerb) -> Raw Syn Noun
@@ -100,6 +101,7 @@ instance Show (Raw d k) where
   show (RNHole name) = '?':name
   show (RVHole name) = '?':name
   show (RSimple tm) = show tm
+  show RPass = show "pass"
   show REmpty = "()"
   show (a ::|:: b) = show a ++ ", " ++ show b
   show (RTh comp) = '{' : show comp ++ "}"
@@ -204,6 +206,7 @@ instance (Kindable k) => Desugarable (Raw d k) where
   -- TODO: holes need to know their arity for type checking
   desugar' (RNHole name) = NHole <$> freshM name
   desugar' (RVHole name) = VHole <$> freshM name
+  desugar' RPass = pure Pass
   desugar' (RSimple simp) = pure $ Simple simp
   desugar' REmpty = pure Empty
   desugar' (a ::|:: b) = (:|:) <$> desugar a <*> desugar b

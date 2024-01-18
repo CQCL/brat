@@ -1,0 +1,6 @@
+Error in test/golden/error/pass_empty.brat@FC {start = Pos {line = 2, col = 17}, end = Pos {line = 2, col = 21}}:
+f = { (x => x), pass }
+                ^^^^
+
+  Type error: pass is being given an empty row
+

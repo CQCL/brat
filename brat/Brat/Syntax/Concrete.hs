@@ -44,4 +44,5 @@ data Flat
  | FFn RawCType
  | FKernel RawKType
  | FUnderscore
+ | FPass
  deriving Show

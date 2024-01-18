@@ -122,6 +122,7 @@ elaborate' (FJuxt a b) = do
       r1 <- assertChk r1
       r2 <- assertChk r2
       pure $ SomeRaw' (r1 ::|:: r2)
+elaborate' FPass = pure $ SomeRaw' RPass
 elaborate' (FThunk a) = do
   (SomeRaw a) <- elaborate a
   case (assertKVerb >=> assertSyn) a of
