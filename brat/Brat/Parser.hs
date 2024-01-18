@@ -342,6 +342,8 @@ cthunk = try bratFn <|> try kernel <|> thunk
     -- which are illegal for the user to use as variables
     case runState (replaceU e) 0 of
       (e', 0) -> pure (unWC e')
+      -- If we don't have a `=>` at the start of a kernel, it could (and should)
+      -- be a verb, not the RHS of a no-arg lambda
       (e', n) -> let abs = braceSectionAbstractor [0..n-1] in
                  pure $ FLambda (WC (fcOf e) abs) e'  -- TODO: Which FC to use for the abstracor?
 
