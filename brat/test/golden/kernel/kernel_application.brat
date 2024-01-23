@@ -10,7 +10,7 @@ maybeRotate(true) = Rx(30.0)
 maybeRotate(false) = qid
 
 good_rotate :: { Qubit -o Qubit }
-good_rotate = { q => (maybeRotate(true))(q) }
+good_rotate = { q => maybeRotate(true)(q) }
 
 rotate :: { Qubit -o Qubit }
 rotate = { q => maybeRotate(true) }

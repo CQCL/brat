@@ -16,7 +16,7 @@ import Data.Bifunctor
 import Data.List.NonEmpty (toList, NonEmpty(..), nonEmpty)
 import Data.Foldable (msum)
 import Data.Functor (($>), (<&>))
-import Data.Maybe (fromJust, maybeToList)
+import Data.Maybe (fromJust, maybeToList, fromMaybe)
 import Data.Set (empty)
 import Prelude hiding (lex, round)
 import Text.Megaparsec hiding (Pos, Token, State, empty, match, ParseError, parse)
@@ -378,7 +378,7 @@ cthunk = try bratFn <|> try kernel <|> thunk
 --    * /  (left-assoc)
 --    ^    (left-assoc)
 --    ::   (no associativity, i.e. explicit parenthesis required for chaining)
---    app  (no associativity, i.e. explicit parenthesis required for chaining)
+--    app  (left-assoc)
 atomExpr :: Parser Flat
 atomExpr = atomExpr' 0
  where
@@ -398,7 +398,13 @@ atomExpr = atomExpr' 0
 
   annotation = FAnnotation <$> withFC (atomExpr' 4) <* match TypeColon <*> rawIO (unWC <$> vtype)
 
-  app = FApp <$> withFC (atomExpr' 5) <*> withFC (round (expr <|> pure FEmpty))
+  app = withFC (atomExpr' 5) >>= applied
+  applied :: WC Flat -> Parser Flat
+  applied f = do
+    first <- withFC (round $ expr <|> pure FEmpty)
+    let one = FApp f first
+    let combinedFC = FC (start (fcOf f)) (end (fcOf first))
+    optional (applied $ WC combinedFC one) <&> fromMaybe one
 
   simpleExpr = FHole <$> hole
             <|> try (FSimple <$> simpleTerm)

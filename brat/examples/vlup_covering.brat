@@ -13,4 +13,4 @@ maybeRotate(true) = lib.kernel.Rx(30.0)
 maybeRotate(false) = lib.kernel.qid
 
 rotate :: { Qubit -o Qubit }
-rotate = { q => (maybeRotate(true))(q) }
+rotate = { q => maybeRotate(true)(q) }

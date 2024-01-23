@@ -1,0 +1,17 @@
+id(X::*) -> { X -> X }
+id(_) = {x => x}
+
+id2 :: { Nat -> Nat }
+id2(x) = id( {Nat -> Nat})(id(Nat))(x)
+
+deeper(X :: *) -> { X -> { Y :: * -> { Y -> { -> [X, Y] } } } }
+deeper(_) = { x => { _ => { y => { => [x, y] } } } }
+
+call1(Nat) -> { Y :: * -> { Y -> { -> [Nat, Y] } } }
+call1 = deeper(Nat)
+
+call2(Bool) -> { -> [Nat, Bool] }
+call2 = deeper(Nat)(42)(Bool)
+
+call3 :: [Nat, Bool]
+call3 = deeper(Nat)(42)(Bool)(true)()
