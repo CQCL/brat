@@ -1,7 +1,7 @@
+import Distribution.Simple (defaultMain)
 import Control.Monad (unless)
 import System.Directory
 import System.Exit (ExitCode(..))
-import Data.ProtoLens.Setup
 
 installEmacsMode :: IO ()
 installEmacsMode = do
@@ -24,5 +24,4 @@ installEmacsMode = do
   putStrLn $ "Copied emacs files to " ++ show dest
 
 
-main = installEmacsMode *> defaultMainGeneratingProtos "proto/"
-
+main = installEmacsMode *> defaultMain

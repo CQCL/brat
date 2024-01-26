@@ -4,7 +4,7 @@ name:                brat
 version:             0.1.0.0
 maintainer:          craig.roy@cambridgequantum.com
 build-type:          Custom
-extra-source-files:  emacs/brat-mode.el, emacs/lsp-brat.el, proto/v1alpha/*.proto
+extra-source-files:  emacs/brat-mode.el, emacs/lsp-brat.el
 
 
 custom-setup
@@ -12,7 +12,6 @@ custom-setup
     base < 5,
     Cabal,
     directory,
-    proto-lens-setup
 
 common haskell
   default-extensions:  DataKinds,
@@ -90,8 +89,6 @@ library
                        Bwd,
                        Control.Monad.Freer,
                        Hasochism,
-                       Proto.V1alpha.Graph, Proto.V1alpha.Graph_Fields,
-                       Proto.V1alpha.Signature, Proto.V1alpha.Signature_Fields,
                        Util
 
                        -- For the `brat` exe
@@ -107,18 +104,11 @@ library
                        Brat.Unelaborator
 
 
-  autogen-modules:     Proto.V1alpha.Graph, Proto.V1alpha.Graph_Fields,
-                       Proto.V1alpha.Signature, Proto.V1alpha.Signature_Fields
-
   build-depends:       base < 5,
-                       bytestring,
                        megaparsec >= 9.0.0,
                        mtl,
                        HUnit,
                        containers,
-                       proto-lens-runtime,
-                       proto-lens,
-                       microlens,
                        vector,
                        text,
                        deepseq,
@@ -139,10 +129,7 @@ executable brat
                        filepath,
                        mtl,
                        containers,
-                       proto-lens-runtime,
-                       microlens,
                        text,
-                       proto-lens,
                        optparse-applicative,
                        bytestring,
                        array,
