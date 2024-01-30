@@ -452,7 +452,7 @@ expr = expr' 0
     body <- withFC (try lambda <|> expr' 2)
     pure (FLambda abs body)
 
-  cinto = unWC <$> withFC (expr' 3) `chainl1` try into
+  cinto = unWC <$> withFC (expr' 3 <|> pure FEmpty) `chainl1` try into
 
   composition = unWC <$> withFC (expr' 4) `chainl1` try semicolon
 

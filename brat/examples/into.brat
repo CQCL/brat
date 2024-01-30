@@ -16,3 +16,12 @@ test4(x,f,g) = { f ; (x |> g) }
 
 test5(A, {A -> B}, {B -> {B -> C}}) -> {A -> C}
 test5(x,f,g) = { f ; (x |> f ; g) }
+
+test6({ -> A }) -> { -> A }
+test6(f) = {  => ( |> f) }
+
+test7({ -> A }) -> A
+test7(f) = (|> f)
+
+test8({ -> A }) -> A
+test8(f) = |> f
