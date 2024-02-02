@@ -1,2 +1,2 @@
 f(Nat) -> Nat
-f = { (x => x), pass }
+f = { (x => x), .. }

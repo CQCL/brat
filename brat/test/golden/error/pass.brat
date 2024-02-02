@@ -1,5 +1,5 @@
--- Pass can't be used in the left of a juxtaposition because it consumes all
--- remaining wires. There's nothing left after "pass" for the next thing to
--- check againsaxst
+-- `..` can't be used in the left of a juxtaposition because it consumes all
+-- remaining wires. There's nothing left after `..` for the next thing to
+-- check against
 f(Nat, Bool) -> Nat, Bool
-f = { pass, (x => x) }
+f = { .., (x => x) }

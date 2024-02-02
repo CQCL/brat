@@ -411,7 +411,7 @@ atomExpr = atomExpr' 0
             <|> vec
             <|> cthunk
             <|> (withFC (kmatch KBool) <&> \(WC fc _) -> FCon (plain "Bool") (WC fc FEmpty))
-            <|> try (matchString "pass" $> FPass)
+            <|> try (match DotDot $> FPass)
             <|> var
             <|> match Underscore $> FUnderscore
 
