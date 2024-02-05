@@ -53,10 +53,9 @@ common warning-flags
     -Wno-missing-signatures
     -Wno-noncanonical-monoid-instances
     -Werror=unused-imports
--- Hack week
---    -Werror=unused-matches
+    -Werror=unused-matches
     -Werror=missing-methods
---    -Werror=unused-top-binds
+    -Werror=unused-top-binds
     -Werror=unused-local-binds
     -Werror=redundant-constraints
     -Werror=orphans
@@ -75,7 +74,6 @@ library
                        Brat.Checker.Monad,
                        Brat.Checker.Types,
                        Brat.Compile.Simple,
-                       Brat.Compile.Hugr,
                        Brat.Constructors,
                        Brat.Error,
                        Brat.Graph,
@@ -90,9 +88,6 @@ library
                        Brat.UserName,
                        Bwd,
                        Control.Monad.Freer,
-                       Data.Hugr,
-                       Data.Hugr.Ops,
-                       Data.Hugr.Types,
                        Hasochism,
                        Util
 
@@ -121,9 +116,7 @@ library
                        filepath,
                        directory,
                        utility-ht,
-                       graphviz,
-                       aeson,
-                       bytestring
+                       graphviz
 
 executable brat
   import:              haskell, ghc-perf, warning-flags
