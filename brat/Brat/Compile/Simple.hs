@@ -17,7 +17,7 @@ removeNode n (nodes, wires) = (M.delete n nodes, filter (not . connected) wires)
  where
   connected :: Wire -> Bool
   connected (Ex a _, _, In b _) = a == n || b == n
-                      
+
 removeRedundant :: Graph -> Graph
 removeRedundant g@(nodes, _)
   = foldr removeNode g (M.keys (M.filter (redundant . nodeThing) nodes))

@@ -1,13 +1,15 @@
 module Brat.Compiler (printAST, printDeclsHoles, writeDot, compileFile) where
 
-import Brat.UserName
+import Brat.Compile.Hugr
+import Brat.Dot (toDotString)
+import Brat.Elaborator
 import Brat.Error
 import Brat.Load
-import Util
+import Brat.UserName
+-- import Util
 
+import qualified Data.ByteString.Lazy as BS
 import Control.Monad.Except
-import Brat.Elaborator
-import Brat.Dot (toDotString)
 
 printDeclsHoles :: [FilePath] -> String -> IO ()
 printDeclsHoles libDirs file = do
@@ -57,14 +59,18 @@ writeDot libDirs file out = do
 compileFile :: [FilePath] -> String -> IO ()
 compileFile libDirs file = do
   env <- runExceptT $ loadFilename libDirs file
-  (_, decls, _, named_gs) <- eitherIO env
-  -- Check main exists. (Will/should this work if "main" is in an imported module?)
-  _mn <- eitherIO $
-      maybeToRight (addSrcName file $ dumbErr MainNotFound) $
-      lookup (plain "main") decls
+  (venv, _, _, named_gs) <- eitherIO env
+  -- TODO: Call out to hugr compilation
+  BS.putStrLn (compile venv named_gs)
 
-  (_name, _graph) <- eitherIO $
-      maybeToRight (addSrcName file $ dumbErr $ InternalError "No graph produced for main") $
-      lookupBy ((== PrefixName [] "main") . fst) id named_gs
+  -- Check main exists. (Will/should this work if "main" is in an imported module?)
+
+  --_mn <- eitherIO $
+  --    maybeToRight (addSrcName file $ dumbErr MainNotFound) $
+  --    lookup (plain "main") decls
+
+  --(_name, _graph) <- eitherIO $
+  --    maybeToRight (addSrcName file $ dumbErr $ InternalError "No graph produced for main") $
+  --    lookupBy ((== PrefixName [] "main") . fst) id named_gs
 
   pure ()
