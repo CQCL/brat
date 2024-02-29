@@ -11,6 +11,7 @@ import Brat.Constructors (pattern CNil
                          ,pattern CInt
                          ,pattern CNat
                          ,pattern CBool
+                         ,pattern CQubit
                          )
 import Brat.Load
 import Brat.FC
@@ -75,16 +76,16 @@ listGraph =
     [("value", TUnit)]
     )
    ]
-  ,[(Ex "1" 0, Right TInt, In "cons" 0)
-   ,(Ex "2" 0, Right TInt, In "cons.tail" 0)
-   ,(Ex "3" 0, Right TInt, In "cons.tail.tail" 0)
-   ,(Ex "nil" 0, Right (TList TInt), In "cons.tail.tail" 1)
-   ,(Ex "cons.tail.tail" 0, Right (TList TInt), In "mklist.tail" 1)
-   ,(Ex "cons.tail" 0, Right (TList TInt), In "mklist" 1)
-   ,(Ex "cons" 0, Right (TList TInt), In "xs" 0)
-   ,(Ex "Int" 0, Right TUnit, In "List" 0)
+  ,[(Ex "1" 0, TInt, In "cons" 0)
+   ,(Ex "2" 0, TInt, In "cons.tail" 0)
+   ,(Ex "3" 0, TInt, In "cons.tail.tail" 0)
+   ,(Ex "nil" 0, TList TInt, In "cons.tail.tail" 1)
+   ,(Ex "cons.tail.tail" 0, TList TInt, In "mklist.tail" 1)
+   ,(Ex "cons.tail" 0, TList TInt, In "mklist" 1)
+   ,(Ex "cons" 0, TList TInt, In "xs" 0)
+   ,(Ex "Int" 0, TUnit, In "List" 0)
    -- This node doesn't exist!
-   ,(Ex "List" 0, Right TUnit, In "__kca" 0)
+   ,(Ex "List" 0, TUnit, In "__kca" 0)
    ]
   )
 
@@ -117,17 +118,17 @@ vecGraph =
    ,("Int", BratNode (Constructor CInt) [] [("value", TUnit)])
    ,("Vec", BratNode (Constructor CVec) [("X", TUnit), ("n", TNat)] [("value", TUnit)])
    ]
-  ,[(Ex "0" 0, Right TInt, In "mkvec" 0)
-   ,(Ex "1" 0, Right TInt, In "mkvec.tail" 0)
-   ,(Ex "2" 0, Right TInt, In "mkvec.tail.tail" 0)
-   ,(Ex "mkvec.tail" 0, Right (TVec TInt (VNum (nConstant 2))), In "mkvec" 1)
-   ,(Ex "mkvec.tail.tail" 0, Right (TVec TInt (VNum (nConstant 1))), In "mkvec.tail" 1)
-   ,(Ex "nil" 0, Right (TVec TInt (VNum nZero)), In "mkvec.tail.tail" 1)
-   ,(Ex "Int" 0, Right TUnit, In "Vec" 0)
-   ,(Ex "3" 0, Right TNat, In "Vec" 1)
-   ,(Ex "mkvec" 0, Right (TVec TInt (VNum (nConstant 3))), In "xs" 0)
+  ,[(Ex "0" 0, TInt, In "mkvec" 0)
+   ,(Ex "1" 0, TInt, In "mkvec.tail" 0)
+   ,(Ex "2" 0, TInt, In "mkvec.tail.tail" 0)
+   ,(Ex "mkvec.tail" 0, TVec TInt (VNum (nConstant 2)), In "mkvec" 1)
+   ,(Ex "mkvec.tail.tail" 0, TVec TInt (VNum (nConstant 1)), In "mkvec.tail" 1)
+   ,(Ex "nil" 0, TVec TInt (VNum nZero), In "mkvec.tail.tail" 1)
+   ,(Ex "Int" 0, TUnit, In "Vec" 0)
+   ,(Ex "3" 0, TNat, In "Vec" 1)
+   ,(Ex "mkvec" 0, TVec TInt (VNum (nConstant 3)), In "xs" 0)
    -- This isn't in the list of nodes above
-   ,(Ex "Vec" 0, Right TUnit, In "__kca" 0)
+   ,(Ex "Vec" 0, TUnit, In "__kca" 0)
    ]
   )
 
@@ -198,17 +199,17 @@ pairGraph = (fromList
    ,("1", BratNode (Const (Num 1)) [] [("value", TInt)])
    ,("true", BratNode (Constructor CTrue) [] [("value", TBool)])
    ]
-  ,[(Ex "kc_Bool" 0, Right TUnit, In "kc_cons_tail" 0)
-   ,(Ex "kc_nil" 0, Right TUnit, In "kc_cons_tail" 1)
-   ,(Ex "kc_Int" 0, Right TUnit, In "kc_cons" 0)
-   ,(Ex "kc_cons_tail" 0, Right TUnit, In "kc_cons" 1)
-   ,(Ex "nil" 0, Right TNil, In "mkpair_tail" 1)
-   ,(Ex "true" 0, Right TBool, In "mkpair_tail" 0)
-   ,(Ex "1" 0,    Right TInt, In "mkpair" 0)
-   ,(Ex "mkpair_tail" 0, Right (TCons TBool TNil), In "mkpair" 1)
-   ,(Ex "mkpair" 0, Right (TCons TInt (TCons TBool TNil)), In "xs" 0)
+  ,[(Ex "kc_Bool" 0, TUnit, In "kc_cons_tail" 0)
+   ,(Ex "kc_nil" 0, TUnit, In "kc_cons_tail" 1)
+   ,(Ex "kc_Int" 0, TUnit, In "kc_cons" 0)
+   ,(Ex "kc_cons_tail" 0, TUnit, In "kc_cons" 1)
+   ,(Ex "nil" 0, TNil, In "mkpair_tail" 1)
+   ,(Ex "true" 0, TBool, In "mkpair_tail" 0)
+   ,(Ex "1" 0,    TInt, In "mkpair" 0)
+   ,(Ex "mkpair_tail" 0, TCons TBool TNil, In "mkpair" 1)
+   ,(Ex "mkpair" 0, TCons TInt (TCons TBool TNil), In "xs" 0)
    -- This kc_ann isn't in our node list!
-   ,(Ex "kc_cons" 0, Right TUnit, In "kc_ann" 0)
+   ,(Ex "kc_cons" 0, TUnit, In "kc_ann" 0)
    ]
   )
 
@@ -277,22 +278,22 @@ consGraph =
    ,("2n", BratNode (Const (Num 2)) [] [("value", TNat)])
    ,("3n", BratNode (Const (Num 3)) [] [("value", TNat)])
    ]
-  ,[(Ex "0i" 0, Right TInt, In "three.vec.cons" 0)
-   ,(Ex "1i" 0, Right TInt, In "two.vec.cons" 0)
-   ,(Ex "2i" 0, Right TInt, In "two.vec.cons.tail" 0)
-   ,(Ex "nil" 0, Right (TVec TInt (VNum nZero)), In "two.vec.cons.tail" 1)
-   ,(Ex "two.vec.cons.tail" 0, Right (TVec TInt (VNum (nConstant 1))), In "two.vec.cons" 1)
-   ,(Ex "two" 0, Right (TVec TInt (VNum (nConstant 2))), In "two.vec.cons" 1)
-   ,(Ex "two.vec.cons" 0, Right (TVec TInt (VNum (nConstant 2))), In "two" 0)
-   ,(Ex "three.vec.cons" 0, Right (TVec TInt (VNum (nConstant 3))), In "three" 0)
+  ,[(Ex "0i" 0, TInt, In "three.vec.cons" 0)
+   ,(Ex "1i" 0, TInt, In "two.vec.cons" 0)
+   ,(Ex "2i" 0, TInt, In "two.vec.cons.tail" 0)
+   ,(Ex "nil" 0, TVec TInt (VNum nZero), In "two.vec.cons.tail" 1)
+   ,(Ex "two.vec.cons.tail" 0, TVec TInt (VNum (nConstant 1)), In "two.vec.cons" 1)
+   ,(Ex "two" 0, TVec TInt (VNum (nConstant 2)), In "two.vec.cons" 1)
+   ,(Ex "two.vec.cons" 0, TVec TInt (VNum (nConstant 2)), In "two" 0)
+   ,(Ex "three.vec.cons" 0, TVec TInt (VNum (nConstant 3)), In "three" 0)
    -- Kind checking
-   ,(Ex "Int1" 0, Right TUnit, In "Vec1" 0)
-   ,(Ex "2n" 0, Right TNat, In "Vec1" 1)
-   ,(Ex "Int2" 0, Right TUnit, In "Vec2" 0)
-   ,(Ex "3n" 0, Right TNat, In "Vec2" 1)
+   ,(Ex "Int1" 0, TUnit, In "Vec1" 0)
+   ,(Ex "2n" 0, TNat, In "Vec1" 1)
+   ,(Ex "Int2" 0, TUnit, In "Vec2" 0)
+   ,(Ex "3n" 0, TNat, In "Vec2" 1)
     -- These nodes aren't defined above
-   ,(Ex "Vec1" 0, Right TUnit, In "__kca_1" 0)
-   ,(Ex "Vec2" 0, Right TUnit, In "__kca_2" 0)
+   ,(Ex "Vec1" 0, TUnit, In "__kca_1" 0)
+   ,(Ex "Vec2" 0, TUnit, In "__kca_2" 0)
    ]
   )
 
@@ -340,13 +341,13 @@ numGraph =
    ,("Nat", BratNode (Constructor CNat) [] [("value", TUnit)])
    ,("Int", BratNode (Constructor CInt) [] [("value", TUnit)])
    ]
-  ,[(Ex "2" 0, Right TNat, In "succ" 0)
-   ,(Ex "succ" 0, Right TNat, In "n" 0)
-   ,(Ex "-3" 0, Right TInt, In "doub" 0)
-   ,(Ex "doub" 0, Right TInt, In "m" 0)
+  ,[(Ex "2" 0, TNat, In "succ" 0)
+   ,(Ex "succ" 0, TNat, In "n" 0)
+   ,(Ex "-3" 0, TInt, In "doub" 0)
+   ,(Ex "doub" 0, TInt, In "m" 0)
    -- kind checking nodes that aren't in the above list
-   ,(Ex "Nat" 0, Right TUnit, In "__kca_n" 0)
-   ,(Ex "Int" 0, Right TUnit, In "__kca_m" 0)
+   ,(Ex "Nat" 0, TUnit, In "__kca_n" 0)
+   ,(Ex "Int" 0, TUnit, In "__kca_m" 0)
    ]
   )
 
@@ -370,31 +371,31 @@ kernelGraph =
    ,("nil"
     ,KernelNode (Constructor CNil)
      []
-     [("value", VOf VQ nZero)]
+     [("value", TVec TQ (VNum nZero))]
     )
    ,("vec.cons.tail.tail"
     ,KernelNode (Constructor CCons)
-     [("head", VQ), ("tail", VOf VQ nZero)]
-     [("value", VOf VQ (nConstant 1))]
+     [("head", TQ), ("tail", TVec TQ (VNum nZero))]
+     [("value", TVec TQ (VNum (nConstant 1)))]
     )
 
    ,("vec.cons.tail"
     ,KernelNode (Constructor CCons)
-     [("head", VQ), ("tail", VOf VQ (nConstant 1))]
-     [("value", VOf VQ (nConstant 2))]
+     [("head", TQ), ("tail", TVec TQ (VNum (nConstant 1)))]
+     [("value", TVec TQ (VNum (nConstant 2)))]
     )
 
    ,("vec.cons"
     ,KernelNode (Constructor CCons)
-     [("head", VQ), ("tail", VOf VQ (nConstant 2))]
-     [("value", VOf VQ (nConstant 3))]
+     [("head", TQ), ("tail", TVec TQ (VNum (nConstant 2)))]
+     [("value", TVec TQ (VNum (nConstant 3)))]
     )
 
    ,("src"
-    ,KernelNode Source [] [("a1", VQ), ("b1", VQ), ("c1", VQ)]
+    ,KernelNode Source [] [("a1", TQ), ("b1", TQ), ("c1", TQ)]
     )
    ,("tgt"
-    ,KernelNode Target [("a1", VOf VQ (nConstant 3))] []
+    ,KernelNode Target [("a1", TVec TQ (VNum (nConstant 3)))] []
     )
 
    ,("kbox"
@@ -402,22 +403,32 @@ kernelGraph =
     )
 
    ,("3", BratNode (Const (Num 3)) [] [("value", TNat)])
+   ,("qubit0", BratNode (Constructor CQubit) [] [("value", TUnit)])
+   ,("qubit1", BratNode (Constructor CQubit) [] [("value", TUnit)])
+   ,("qubit2", BratNode (Constructor CQubit) [] [("value", TUnit)])
+   ,("qubit3", BratNode (Constructor CQubit) [] [("value", TUnit)])
+   ,("Vec", BratNode (Constructor CVec) [("X", TUnit), ("n", TNat)] [("value", TUnit)])
    ]
-  ,[(Ex "src" 0, Left VQ, In "vec.cons" 0)
-   ,(Ex "src" 1, Left VQ, In "vec.cons.tail" 0)
-   ,(Ex "src" 2, Left VQ, In "vec.cons.tail.tail" 0)
+  ,[(Ex "src" 0, TQ, In "vec.cons" 0)
+   ,(Ex "src" 1, TQ, In "vec.cons.tail" 0)
+   ,(Ex "src" 2, TQ, In "vec.cons.tail.tail" 0)
 
-   ,(Ex "nil" 0, Left (VOf VQ nZero), In "vec.cons.tail.tail" 1)
-   ,(Ex "vec.cons.tail.tail" 0, Left (VOf VQ (nConstant 1)), In "vec.cons.tail" 1)
-   ,(Ex "vec.cons.tail" 0, Left (VOf VQ (nConstant 2)), In "vec.cons" 1)
-   ,(Ex "vec.cons" 0, Left (VOf VQ (nConstant 3)), In "tgt" 0)
-   ,(Ex "kbox" 0, Right ktype, In "id3" 0)
-   -- This node isn't in the list above"
-   ,(Ex "3" 0, Right TNat, In "__kca" 0)
+   ,(Ex "nil" 0, TVec TQ (VNum nZero), In "vec.cons.tail.tail" 1)
+   ,(Ex "vec.cons.tail.tail" 0, TVec TQ (VNum (nConstant 1)), In "vec.cons.tail" 1)
+   ,(Ex "vec.cons.tail" 0, TVec TQ (VNum (nConstant 2)), In "vec.cons" 1)
+   ,(Ex "vec.cons" 0, TVec TQ (VNum (nConstant 3)), In "tgt" 0)
+   ,(Ex "kbox" 0, ktype, In "id3" 0)
+   -- These nodes aren't in the list above"
+   ,(Ex "Vec" 0, TUnit, In "__kca" 0)
+   ,(Ex "qubit0" 0, TUnit, In "__kc" 0)
+   ,(Ex "qubit1" 0, TUnit, In "__kc" 1)
+   ,(Ex "qubit2" 0, TUnit, In "__kc" 2)
+   ,(Ex "qubit3" 0, TUnit, In "Vec" 0)
+   ,(Ex "3" 0, TNat, In "Vec" 1)
    ]
   )
  where
-  ktype = VFun Kerny ((RPr ("a1", VQ) (RPr ("b1", VQ) (RPr ("c1", VQ) R0))) :->> (RPr ("a1", VOf VQ (nConstant 3)) R0))
+  ktype = VFun Kerny ((RPr ("a1", TQ) (RPr ("b1", TQ) (RPr ("c1", TQ) R0))) :->> (RPr ("a1", TVec TQ (VNum (nConstant 3))) R0))
 
 kernelTest = graphTest "kernel" kernelProg kernelGraph
 

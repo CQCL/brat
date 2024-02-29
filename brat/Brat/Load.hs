@@ -109,10 +109,10 @@ loadStmtsWithEnv (venv, oldDecls) (fname, pre, stmts, cts) = addSrcContext fname
       let name = PrefixName pre (fnName d)
       (thing, ins :->> outs, sig) <- case (fnLocality d) of
                         Local -> do
-                          ins :->> outs <- kindCheckAnnotation (show name) (fnSig d)
+                          ins :->> outs <- kindCheckAnnotation Braty (show name) (fnSig d)
                           pure (Id, ins :->> outs, Some (Flip ins))
                         Extern sym -> do
-                          (Some (Flip outs)) <- kindCheckRow (show name) (fnSig d)
+                          (Some (Flip outs)) <- kindCheckRow Braty (show name) (fnSig d)
                           pure (Prim sym, R0 :->> outs, Some (Flip outs))
       -- In the Extern case, unders will be empty
       (_, unders, overs, _) <- next (show name) thing (S0, Some (Zy :* S0)) ins outs

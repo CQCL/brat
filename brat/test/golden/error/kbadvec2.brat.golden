@@ -3,7 +3,7 @@ triple = { b => nil }
                 ^^^
 
   Expected vector of length 3
-from the type:  Vec(Bool, 3)
+from the type:  Vec(Bit, 3)
 but got vector: []
 of length 0
 

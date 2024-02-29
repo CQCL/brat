@@ -23,7 +23,7 @@ binders :: Int -> Abstractor
 binders n = foldr1 (:||:) $ take n (APat . Bind . (:[]) <$> ['a'..])
 
 -- TODO: Extend this to Ro's with binders
-tokenRow :: FC -> (ValueType m Z -> [Term Chk Noun]) -> Ro m Z Z -> [Term Chk Noun]
+tokenRow :: FC -> (Val Z -> [Term Chk Noun]) -> Ro m Z Z -> [Term Chk Noun]
 tokenRow fc f r = foldr1 comma <$> tokenRows r
  where
   comma a b = WC fc a :|: WC fc b
@@ -97,16 +97,14 @@ tokenValues fc (VFun Kerny (ss :->> ts)) =
   rhs = case (kernelNoBind ss, kernelNoBind ts) of
     (Refl, Refl) -> tokenRow fc tokenSType ts
 
-  tokenSType :: SVal Z -> [Term Chk Noun]
-  tokenSType VQ = []
-  tokenSType VBit = tokenValues fc TBool
-  tokenSType (VOf VQ _) = []
-  tokenSType (VOf sty (NumValue n Constant0)) = do
+  tokenSType :: Val Z -> [Term Chk Noun]
+  tokenSType TQ = []
+  tokenSType TBit = tokenValues fc TBool
+  tokenSType (TVec TQ _) = []
+  tokenSType (TVec sty (VNum (NumValue n Constant0))) = do
     tm <- tokenSType sty
     [vec fc (replicate n $ WC fc tm)]
-  tokenSType (VOf _ _) = []
-  tokenSType (VRho row) = case kernelNoBind row of
-    Refl -> tokenRow fc tokenSType row
+  tokenSType _ = []
 tokenValues _ _ = []
 
 rowLen :: Ro m bot top -> Int

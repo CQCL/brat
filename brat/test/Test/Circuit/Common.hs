@@ -16,6 +16,7 @@ import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 import Test.Tasty.Silver.Advanced (goldenTest1, GDiff(..), GShow(ShowText))
 
+import Brat.Constructors (pattern CQubit)
 import Brat.Eval (kindType)
 import Brat.Graph
 import Brat.Load (loadFiles)
@@ -36,61 +37,85 @@ idGraph :: Graph
 idGraph = (M.fromList
            [("main_box", BratNode ("src" :>>: "tgt") [] [("thunk", kty)])
            ,("main", BratNode Id [("a1", kty)] [("a1", kty)])
-           ,("src", KernelNode Source [] [("a", VQ)])
-           ,("tgt", KernelNode Target [("b", VQ)] [])
+           ,("src", KernelNode Source [] [("a", TQ)])
+           ,("tgt", KernelNode Target [("b", TQ)] [])
+           ,("qubit0", BratNode (Constructor CQubit) [] [("value", TUnit)])
+           ,("qubit1", BratNode (Constructor CQubit) [] [("value", TUnit)])
            ]
-          ,[((Ex "src" 0), Left (VQ), (In "tgt" 0))
-           ,((Ex "main_box" 0), Right kty, (In "main" 0))
+          ,[((Ex "src" 0), TQ, (In "tgt" 0))
+           ,((Ex "main_box" 0), kty, (In "main" 0))
+           -- kind check node which doesn't make it into the graph above
+           ,(Ex "qubit0" 0, TUnit, In "__kc0" 0)
+           ,(Ex "qubit1" 0, TUnit, In "__kc1" 0)
            ]
           )
  where
-  kty = kernel ((RPr ("a", VQ) R0) :->> (RPr ("b", VQ) R0))
+  kty = kernel ((RPr ("a", TQ) R0) :->> (RPr ("b", TQ) R0))
 
 swapGraph :: Graph
 swapGraph = (M.fromList
              [("main_box", BratNode ("src" :>>: "tgt") [] [("thunk", kty)])
              ,("main", BratNode Id [("a1", kty)] [("a1", kty)])
-             ,("src", KernelNode Source [] [("a", VQ), ("b", VQ)])
-             ,("tgt", KernelNode Target [("b", VQ), ("a", VQ)] [])
+             ,("src", KernelNode Source [] [("a", TQ), ("b", TQ)])
+             ,("tgt", KernelNode Target [("b", TQ), ("a", TQ)] [])
+             ,("qubit0", BratNode (Constructor CQubit) [] [("value", TUnit)])
+             ,("qubit1", BratNode (Constructor CQubit) [] [("value", TUnit)])
+             ,("qubit2", BratNode (Constructor CQubit) [] [("value", TUnit)])
+             ,("qubit3", BratNode (Constructor CQubit) [] [("value", TUnit)])
              ]
-            ,[((Ex "src" 0), Left (VQ), (In "tgt" 1))
-             ,((Ex "src" 1), Left (VQ), (In "tgt" 0))
-             ,((Ex "main_box" 0), Right kty, (In "main" 0))
+            ,[((Ex "src" 0), TQ, (In "tgt" 1))
+             ,((Ex "src" 1), TQ, (In "tgt" 0))
+             ,((Ex "main_box" 0), kty, (In "main" 0))
+             -- kind check node which doesn't make it into the graph above
+             ,(Ex "qubit0" 0, TUnit, In "__kc0" 0)
+             ,(Ex "qubit1" 0, TUnit, In "__kc0" 1)
+             ,(Ex "qubit2" 0, TUnit, In "__kc1" 0)
+             ,(Ex "qubit3" 0, TUnit, In "__kc1" 1)
              ]
             )
  where
   kty = kernel
-        ((RPr ("a", VQ) (RPr ("b", VQ) R0)) :->> (RPr ("b", VQ) (RPr ("a", VQ) R0)))
+        ((RPr ("a", TQ) (RPr ("b", TQ) R0)) :->> (RPr ("b", TQ) (RPr ("a", TQ) R0)))
 
 xGraph :: Graph
 xGraph = (M.fromList
           [("tket.X", BratNode (Prim "tket.X") [] [("a1", xTy)])
-          ,("X", KernelNode (Eval (Ex "tket.X" 0)) [("xa", VQ)] [("xb", VQ)])
+          ,("X", KernelNode (Eval (Ex "tket.X" 0)) [("xa", TQ)] [("xb", TQ)])
           ,("main_box", BratNode ("src" :>>: "tgt") [] [("thunk", mainTy)])
           ,("main", BratNode Id [("a1", mainTy)] [("a1", mainTy)])
-          ,("src", KernelNode Source [] [("a", VQ)])
-          ,("tgt", KernelNode Target [("b", VQ)] [])
+          ,("src", KernelNode Source [] [("a", TQ)])
+          ,("tgt", KernelNode Target [("b", TQ)] [])
+          ,("qubit0", BratNode (Constructor CQubit) [] [("value", TUnit)])
+          ,("qubit1", BratNode (Constructor CQubit) [] [("value", TUnit)])
+          ,("qubit2", BratNode (Constructor CQubit) [] [("value", TUnit)])
+          ,("qubit3", BratNode (Constructor CQubit) [] [("value", TUnit)])
           ]
-         ,[((Ex "src" 0), Left (VQ), (In "X" 0))
-          ,((Ex "X" 0), Left (VQ), (In "tgt" 0))
-          ,((Ex "main_box" 0), Right mainTy, (In "main" 0))
+         ,[((Ex "src" 0), TQ, (In "X" 0))
+          ,((Ex "X" 0), TQ, (In "tgt" 0))
+          ,((Ex "main_box" 0), mainTy, (In "main" 0))
+          -- kind check node which doesn't make it into the graph above
+          ,(Ex "qubit0" 0, TUnit, In "__kc0" 0)
+          ,(Ex "qubit1" 0, TUnit, In "__kc1" 0)
+          ,(Ex "qubit2" 0, TUnit, In "__kc2" 0)
+          ,(Ex "qubit3" 0, TUnit, In "__kc3" 0)
           ]
          )
  where
-  xTy = kernel ((RPr ("xa", VQ) R0) :->> (RPr ("xb", VQ) R0))
-  mainTy = kernel ((RPr ("a", VQ) R0) :->> (RPr ("b", VQ) R0))
+  xTy = kernel ((RPr ("xa", TQ) R0) :->> (RPr ("xb", TQ) R0))
+  mainTy = kernel ((RPr ("a", TQ) R0) :->> (RPr ("b", TQ) R0))
 
 -- TODO:
 rxGraph :: Graph
 rxGraph = (M.fromList
            [("id", BratNode (Prim "Rx")
             [("th", TFloat)]
-            [("kernel", kernel ((RPr ("a", VQ) R0) :->> (RPr ("b", VQ) R0)))])
+            [("kernel", kernel ((RPr ("a", TQ) R0) :->> (RPr ("b", TQ) R0)))])
            ,("angle", BratNode (Const (Float 30.0)) [("th", TFloat)] [])
            --,KernelNode (Eval "") testProcess
-           ,("main", BratNode ("src" :>>: "tgt") [] [("thunk", kernel ((RPr ("a", VQ) R0) :->> (RPr ("b", VQ) R0)))])
-           ,("src", KernelNode Source [] [("a", VQ)])
-           ,("tgt", KernelNode Target [("b", VQ)] [])
+           ,("main", BratNode ("src" :>>: "tgt") [] [("thunk", kernel ((RPr ("a", TQ) R0) :->> (RPr ("b", TQ) R0)))])
+           ,("src", KernelNode Source [] [("a", TQ)])
+           ,("tgt", KernelNode Target [("b", TQ)] [])
+           ,("qubit", BratNode (Constructor CQubit) [] [("value", TUnit)])
            ]
           ,[]
           )
@@ -106,18 +131,18 @@ twoGraph = (M.fromList (
             ,("one", BratNode Id [("n", int)] [("n", int)])
             ,("two", BratNode Id [("a1", int)] [("a1", int)])
             ] ++ ints 5)
-           ,[((Ex "1a" 0), Right int, (In "one" 0))
-            ,((Ex "1b" 0), Right int, (In "add_eval" 0))
-            ,((Ex "one" 0), Right int, (In "add_eval" 1))
-            ,((Ex "add_eval" 0), Right int, (In "two" 0))
-            --,(Ex "kcr-cty" 0, Right star_t, In "kcr-add" 0)
+           ,[((Ex "1a" 0), int, (In "one" 0))
+            ,((Ex "1b" 0), int, (In "add_eval" 0))
+            ,((Ex "one" 0), int, (In "add_eval" 1))
+            ,((Ex "add_eval" 0), int, (In "two" 0))
+            --,(Ex "kcr-cty" 0, star_t, In "kcr-add" 0)
                 -- no node exists to actually compute the function type. kcr-cty merely verifies
                 -- that it is a well-formed type (by kindChecking its components, not putting them together)
-            ,(Ex "int_1" 0, Right star_t, In "kcr-cty" 0)
-            ,(Ex "int_2" 0, Right star_t, In "kcr-cty" 1)
-            ,(Ex "int_3" 0, Right star_t, In "kcr-cty" 2)
-            ,(Ex "int_4" 0, Right star_t, In "kcr-one" 0)
-            ,(Ex "int_5" 0, Right star_t, In "kcr-two" 0)
+            ,(Ex "int_1" 0, star_t, In "kcr-cty" 0)
+            ,(Ex "int_2" 0, star_t, In "kcr-cty" 1)
+            ,(Ex "int_3" 0, star_t, In "kcr-cty" 2)
+            ,(Ex "int_4" 0, star_t, In "kcr-one" 0)
+            ,(Ex "int_5" 0, star_t, In "kcr-two" 0)
             ]
            )
   where
@@ -128,8 +153,8 @@ oneGraph = (M.fromList (
             [("1", BratNode (Const (Num 1)) [] [("value", int)])
             ,("one", BratNode Id [("n", int)] [("n", int)])
             ] ++ ints 1)
-           ,[((Ex "1" 0), Right int, (In "one" 0))
-            ,((Ex "int" 0), Right star_t, (In "kcr" 0))]
+           ,[((Ex "1" 0), int, (In "one" 0))
+            ,((Ex "int" 0), star_t, (In "kcr" 0))]
            )
 
 star_t = kindType $ Star []
@@ -154,20 +179,20 @@ addNGraph port_name
      ,("addN1_src", BratNode Source [] [("inp", int), (port_name, add_ty), ("value", int)])
      ,("addN1_tgt", BratNode Target [("out", int)] [])
      ] ++ ints 6)
-    ,[(Ex "N" 0, Right int, In "addN_box" 1)
-     ,(Ex "add" 0, Right add_ty, In "addN_box" 0)
-     ,(Ex "addN_box" 0, Right addN_ty, In "addN" 0)
-     ,((Ex "addN_src" 0), Right int, (In "add_eval" 0)) -- argument
-     ,((Ex "addN_src" 1), Right add_ty, In "addN1_box" 0) -- from (Source of) outer func to clause
-     ,((Ex "addN_src" 2), Right int, (In "add_eval" 1)) -- captured
-     ,((Ex "addN_src" 2), Right int, (In "addN1_box" 1))  -- from (Source of) outer func to clause
-     ,((Ex "add_eval" 0), Right int, (In "addN_tgt" 0))
-     ,(Ex "int_1" 0, Right star_t, In "kcr-n" 0)
-     ,(Ex "int_2" 0, Right star_t, In "kcr-add-ty" 0)
-     ,(Ex "int_3" 0, Right star_t, In "kcr-add-ty" 1)
-     ,(Ex "int_4" 0, Right star_t, In "kcr-add-ty" 2)
-     ,(Ex "int_5" 0, Right star_t, In "kcr-addN-ty" 0)
-     ,(Ex "int_6" 0, Right star_t, In "kcr-addN-ty" 1)
+    ,[(Ex "N" 0, int, In "addN_box" 1)
+     ,(Ex "add" 0, add_ty, In "addN_box" 0)
+     ,(Ex "addN_box" 0, addN_ty, In "addN" 0)
+     ,((Ex "addN_src" 0), int, (In "add_eval" 0)) -- argument
+     ,((Ex "addN_src" 1), add_ty, In "addN1_box" 0) -- from (Source of) outer func to clause
+     ,((Ex "addN_src" 2), int, (In "add_eval" 1)) -- captured
+     ,((Ex "addN_src" 2), int, (In "addN1_box" 1))  -- from (Source of) outer func to clause
+     ,((Ex "add_eval" 0), int, (In "addN_tgt" 0))
+     ,(Ex "int_1" 0, star_t, In "kcr-n" 0)
+     ,(Ex "int_2" 0, star_t, In "kcr-add-ty" 0)
+     ,(Ex "int_3" 0, star_t, In "kcr-add-ty" 1)
+     ,(Ex "int_4" 0, star_t, In "kcr-add-ty" 2)
+     ,(Ex "int_5" 0, star_t, In "kcr-addN-ty" 0)
+     ,(Ex "int_6" 0, star_t, In "kcr-addN-ty" 1)
      ]
     )
  where
@@ -184,9 +209,9 @@ addNmainGraph =
      ,("main", BratNode Id [("a1", int)] [("a1", int)])
      ] ++ [int_node "xtra_int"])
     ,ws ++ [
-      (Ex "1" 0, Right int, In "addN_eval" 0)
-     ,(Ex "addN_eval" 0, Right int, In "main" 0)
-     ,(Ex "xtra_int" 0, Right star_t, In "kcr-main" 0)
+      (Ex "1" 0, int, In "addN_eval" 0)
+     ,(Ex "addN_eval" 0, int, In "main" 0)
+     ,(Ex "xtra_int" 0, star_t, In "kcr-main" 0)
      ]
     )
  where
@@ -198,9 +223,9 @@ extGraph
     ("add_decl", BratNode (Prim "add") [] [("thunk",
         VFun Braty ((RPr ("a", TInt) (RPr ("b", TInt) R0)) :->> (RPr ("c", TInt) R0)))])
     :ints 3)
-   ,[(Ex "int_1" 0, Right star_t, In "kcr-cty" 0)
-    ,(Ex "int_2" 0, Right star_t, In "kcr-cty" 1)
-    ,(Ex "int_3" 0, Right star_t, In "kcr-cty" 2)
+   ,[(Ex "int_1" 0, star_t, In "kcr-cty" 0)
+    ,(Ex "int_2" 0, star_t, In "kcr-cty" 1)
+    ,(Ex "int_3" 0, star_t, In "kcr-cty" 2)
     ]
    )
 

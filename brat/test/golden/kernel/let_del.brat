@@ -1,4 +1,4 @@
 ext "" X :: { Qubit -o Qubit }
 
-f :: { Qubit -o Bool }
+f :: { Qubit -o Bit }
 f = { q => let q' = X(q) in true }

@@ -3,8 +3,7 @@ module Brat.Unelaborator (unelab) where
 import Brat.FC (unWC)
 import Brat.Syntax.Concrete (Flat(..))
 import Brat.Syntax.Common (Dir(..), Kind(..), Diry(..), Kindy(..)
-                          ,KindOr, PortName, TypeRowElem(Named), CType'(..), pattern R
-                          ,SType', pattern Rho, pattern Q, pattern Bit, pattern Of
+                          ,KindOr, PortName, TypeRowElem(Named), CType'(..)
                           )
 import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Raw (Raw(..), RawVType)
@@ -34,8 +33,8 @@ unelab dy ky (top :-: bot) = case ky of
 unelab dy ky (f :$: s) = FApp (unelab dy KVerby <$> f) (unelab Chky ky <$> s)
 unelab dy _ (abs :\: bod) = FLambda abs (unelab dy Nouny <$> bod)
 unelab _ _ (Con c args) = FCon c (unelab Chky Nouny <$> args)
-unelab _ _ (C cty) = FFn $ fmap (\(p, bty) -> Named p (second toRaw bty)) cty
-unelab _ _ (K (R ss) (R ts)) = FKernel (toRawKRo ss :-> toRawKRo ts)
+unelab _ _ (C (ss :-> ts)) = FFn (toRawRo ss :-> toRawRo ts)
+unelab _ _ (K cty) = FKernel $ fmap (\(p, ty) -> Named p (toRaw ty)) cty
 
 -- This is needed for concrete terms which embed a type as a list of `Raw` things
 toRaw :: Term d k -> Raw d k
@@ -60,16 +59,7 @@ toRaw (f :$: s) = (toRaw <$> f) ::$:: (toRaw <$> s)
 toRaw (abs :\: body) = abs ::\:: (toRaw <$> body)
 toRaw (Con c args) = RCon c (toRaw <$> args)
 toRaw (C (ss :-> ts)) = RFn (toRawRo ss :-> toRawRo ts)
-toRaw (K (R ss) (R ts)) = RKernel (toRawKRo ss :-> toRawKRo ts)
+toRaw (K cty) = RKernel $ (\(p, ty) -> Named p (toRaw ty)) <$> cty
 
 toRawRo :: [(PortName, KindOr (Term Chk Noun))] -> [TypeRowElem (KindOr RawVType)]
 toRawRo = fmap (\(p, bty) -> Named p (second toRaw bty))
-
-toRawKRo :: [(PortName, SType' (Term Chk Noun))] -> [(TypeRowElem (SType' (Raw Chk Noun)))]
-toRawKRo = fmap (\(p, ty) -> Named p (toRawK ty))
- where
-  toRawK :: SType' (Term Chk Noun) -> SType' (Raw Chk Noun)
-  toRawK (Q q) = Q q
-  toRawK Bit = Bit
-  toRawK (Of ty n) = Of (toRawK ty) (toRaw n)
-  toRawK (Rho (R row)) = Rho (R (second toRawK <$> row))

@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 module Brat.Syntax.Core (Term(..)
-                        ,SType
                         ,Input
                         ,Output
                         ,InOut
@@ -17,8 +16,6 @@ import Brat.UserName
 
 import Data.Kind (Type)
 import Data.Maybe (fromJust)
-
-type SType = SType' (Term Chk Noun)
 
 type Input = InOut
 type Output = InOut
@@ -46,7 +43,6 @@ data Term :: Dir -> Kind -> Type where
   Var      :: UserName -> Term Syn Noun  -- Look up in noun (value) env
   Arith    :: ArithOp -> WC (Term Chk Noun) -> WC (Term Chk Noun) -> Term Chk Noun
   -- Type annotations (annotating a term with its outputs)
-  -- TODO: Make it possible for Output to be (PortName, SType) when using this in kernels
   (:::)    :: WC (Term Chk Noun) -> [Output] -> Term Syn Noun
   -- Composition: values fed from source (first) into dest (second),
   -- of number/type determined by the source
@@ -60,7 +56,7 @@ data Term :: Dir -> Kind -> Type where
   -- Brat function types
   C        :: CType' (PortName, KindOr (Term Chk Noun)) -> Term Chk Noun
   -- Kernel types
-  K        :: Row (Term Chk Noun) -> Row (Term Chk Noun) -> Term Chk Noun
+  K        :: CType' (PortName, Term Chk Noun) -> Term Chk Noun
 
 deriving instance Eq (Term d k)
 
@@ -117,7 +113,7 @@ instance Show (Term d k) where
     prettyPat _ = Nothing
 
   show (C f) = "{" ++ show f ++ "}"
-  show (K (R ss) (R ts)) = showSig ss ++ " -o " ++ showSig ts
+  show (K (ss :-> ts)) = "{" ++ showSig ss ++ " -o " ++ showSig ts ++ "}"
 
 -- Wrap a term in brackets if its `precedence` is looser than `n`
 bracket :: Int -> WC (Term d k) -> String

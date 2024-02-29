@@ -3,14 +3,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
 module Brat.Syntax.Common (PortName,
-                           Row,
-                           -- constructors for Quantum (type could be exported if required):
-                           pattern Qubit, pattern Money,
-                           -- constructor for Row (do not export Row'):
-                           pattern R,
-                           SType',
-                           -- constructors for SType' (do not export SType''):
-                           pattern Q, pattern Bit, pattern Of, pattern Rho,
                            Dir(..),
                            Kind(..),
                            Diry(..),
@@ -50,6 +42,8 @@ module Brat.Syntax.Common (PortName,
                            KINDY(..),
                            modily,
                            ArithOp(..),
+                           pattern Dollar,
+                           pattern Star,
                           ) where
 
 import Brat.FC
@@ -63,7 +57,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import Data.Kind (Type)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 
-data Mode = Brat | Kernel
+data Mode = Brat | Kernel deriving (Eq, Ord, Show)
 
 data Modey :: Mode -> Type where
   Braty :: Modey Brat
@@ -100,35 +94,6 @@ instance TestEquality Modey where
   testEquality Kerny Kerny = Just Refl
   testEquality _ _ = Nothing
 
-data Quantum = Qubit | Money deriving (Eq, Show)
-newtype Row' tm q = R [(PortName, SType'' tm q)] deriving (Functor, Foldable, Traversable)
-
-type Row tm = Row' tm Quantum
-
-deriving instance Show (SType'' tm q) => Show (Row' tm q)
-
-instance Eq (SType'' tm q) => Eq (Row' tm q) where
-  (R r) == (R r') = (snd <$> r) == (snd <$> r')
-
-type SType' tm = SType'' tm Quantum
-
--- N.B. Functor, Foldable, Traversable instances are definined for mapping the
--- type of qubits, not the type of subterms
-data SType'' tm q
- = Q q
- | Bit
- | Of (SType'' tm q) tm
- | Rho (Row' tm q)
- deriving (Functor, Foldable, Traversable)
-
-deriving instance Eq tm => Eq (SType' tm)
-
-instance (Show q, Show tm) => Show (SType'' tm q) where
-  show (Q q) = show q
-  show Bit = "Bool"
-  show (Of ty n) = "Vec(" ++ show ty ++ ", " ++ show n ++ ")"
-  show (Rho (R row)) = '(' : (intercalate ", " ((\(p, tm) -> p ++ " :: " ++ show tm) <$> row)) ++ ")"
-
 data TypeRowElem ty = Named PortName ty | Anon ty deriving (Foldable, Functor, Traversable)
 type TypeRow ty = [TypeRowElem ty]
 
@@ -149,8 +114,11 @@ instance Eq ty => Eq (TypeRowElem ty) where
   Named _ ty == Anon ty' = ty == ty'
   Anon ty == Anon ty' = ty == ty'
 
-data TypeKind = Star [(PortName, TypeKind)] | Nat | Row
+data TypeKind = TypeFor Mode [(PortName, TypeKind)] | Nat | Row
   deriving (Eq, Show)
+
+pattern Star ks = TypeFor Brat ks
+pattern Dollar ks = TypeFor Kernel ks
 
 type KindOr = Either TypeKind
 
@@ -190,9 +158,6 @@ deriving instance Eq io => Eq (CType' io)
 
 instance Semigroup (CType' (PortName, ty)) where
   (ss :-> ts) <> (us :-> vs) = (ss <> us) :-> (ts <> vs)
-
-instance Semigroup (Row' tm q) where
-  R ss <> R ts = R (ss <> ts)
 
 data Locality = Extern String | Local deriving (Eq, Show)
 

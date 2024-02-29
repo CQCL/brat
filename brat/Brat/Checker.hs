@@ -32,7 +32,6 @@ import Data.Bifunctor (second)
 import Data.Functor (($>))
 -- import Data.List (filter, intercalate, transpose)
 import qualified Data.Map as M
-import Data.Traversable (for)
 import Data.Type.Equality ((:~:)(..))
 import Prelude hiding (filter)
 
@@ -61,19 +60,25 @@ mergeEnvs = foldM combineDisjointEnvs M.empty
 emptyEnv :: Env a
 emptyEnv = M.empty
 
-singletonEnv :: (?my :: Modey m) => String -> (Src, BinderType m) -> Env (EnvData m)
+singletonEnv :: (?my :: Modey m) => String -> (Src, BinderType m) -> Checking (Env (EnvData m))
 singletonEnv x input@(p, ty) = case ?my of
-  Braty -> M.singleton (plain x) [(p, ty)]
-  Kerny -> let q = if copyable ty then Tons else One
-           in  M.singleton (plain x) (q, input)
+  Braty -> pure $ M.singleton (plain x) [(p, ty)]
+  Kerny -> do
+    ty <- standardise (Dollar []) ty
+    q <- case copyable ty of
+      Just True -> pure Tons
+      Just False -> pure One
+      Nothing -> err $ InternalError $ "Didn't expect " ++ show ty ++ " in a kernel type"
+    pure $ M.singleton (plain x) (q, input)
    where
-    copyable :: SVal Z -> Bool
-    copyable VBit = True
-    copyable VQ = False
-    copyable (VOf elem _) = copyable elem
-    copyable (VRho (RPr (_, ty) ro)) = copyable ty && copyable (VRho ro)
-    copyable (VRho R0) = True
-    --copyable (VRho (REx _ _)) -- fail: this should never happen
+    copyable :: Val Z -> Maybe Bool
+    copyable TQ = Just False
+    copyable TMoney = Just False
+    -- If it can be instantiated with something linear, we can't copy it!
+    copyable (VApp _ _) = Just False
+    copyable (TVec elem _) = copyable elem
+    copyable TBit = Just True
+    copyable _ = Nothing
 
 
 class TensorOutputs d where
@@ -85,7 +90,7 @@ instance TensorOutputs () where
 instance TensorOutputs [(Src, KindOr a)] where
  tensor ss ts = ss <> ts
 
-instance TensorOutputs [(Src, SVal Z)] where
+instance TensorOutputs [(Src, Val Z)] where
  tensor ss ts = ss <> ts
 
 class CombineInputs d where
@@ -98,9 +103,7 @@ instance CombineInputs [(Tgt, a)] where
   combine = (++)
 
 type CheckConstraints m k =
-  (Show (ValueType m Z)
-  ,Show (BinderType m)
-  ,DeBruijn (ValueType m)
+  (Show (BinderType m)
   ,TensorOutputs (Outputs m Syn)
   ,TensorOutputs (Outputs m Chk)
   ,CombineInputs (Inputs m k)
@@ -130,9 +133,9 @@ checkWire Braty (WC fc tm) outputs (dangling, o) (hungry, u) = localFC fc $ do
   wire (dangling, ot, hungry)
 checkWire Kerny (WC fc tm) outputs (dangling, ot) (hungry, ut) = localFC fc $ do
   if outputs
-    then stypeEq (show tm) ot ut
-    else stypeEq (show tm) ut ot
-  kwire (dangling, ot, hungry)
+    then typeEq (show tm) (Dollar []) ot ut
+    else typeEq (show tm) (Dollar []) ut ot
+  wire (dangling, ot, hungry)
 
 checkInputs :: (CheckConstraints m KVerb, ?my :: Modey m)
             => WC (Term d KVerb)
@@ -230,7 +233,7 @@ check' (Pull ports t) (overs, unders) = do
   unders <- pullPortsRow ports unders
   check t (overs, unders)
 check' (t ::: outs) (overs, ()) | Braty <- ?my = do
-  (ins :->> outs) :: CTy Brat Z <- kindCheckAnnotation ":::" outs
+  (ins :->> outs) :: CTy Brat Z <- kindCheckAnnotation Braty ":::" outs
   (_, hungries, danglies, _) <- next "id" Id (S0,Some (Zy :* S0)) ins outs
   ((), leftOvers) <- noUnders $ check t (overs, hungries)
   pure (((), danglies), (leftOvers, ()))
@@ -371,55 +374,28 @@ check' tm@(Con vcon vargs) ((), ((hungry, ty):unders)) = case (?my, ty) of
     (_, leftOvers) <- kindCheck [(hungry, k)] (Con vcon vargs)
     ensureEmpty "kindCheck leftovers" leftOvers
     pure (((), ()), ((), unders))
-  (Braty, Right ty) -> do
+  (Braty, Right ty) -> aux Braty clup ty $> (((), ()), ((), unders))
+  (Kerny, _) -> aux Kerny kclup ty $> (((), ()), ((), unders))
+ where
+  aux :: Modey m -> (UserName -> UserName -> Checking (CtorArgs m)) -> Val Z -> Checking ()
+  aux my lup ty = do
     VCon tycon tyargs <- eval S0 ty
-    (CArgs pats nFree _ argTypeRo) <- clup vcon tycon
+    (CArgs pats nFree _ argTypeRo) <- lup vcon tycon
     -- Look for vectors to produce better error messages for mismatched lengths
     wrap <- detectVecErrors vcon tycon tyargs pats ty (Left tm)
     Some (ny :* env) <- throwLeft $ valMatches tyargs pats
     -- Make sure env is the correct length for args
     Refl <- throwLeft $ natEqOrBust ny nFree
-    let topy = roTop ny argTypeRo
+    let topy = roTopM my ny argTypeRo
     -- Weaken the scope of ty from Z to the top end of argTypeRo
+    -- in the kernel case the bottom and top of the row are the same
     let ty' = weaken topy ty
-    (_, argUnders, [(dangling, _)], _) <- next (show vcon) (Constructor vcon)
+    (_, argUnders, [(dangling, _)], _) <- anext (show vcon) (Constructor vcon)
                                           (env, Some (Zy :* S0))
                                           argTypeRo (RPr ("value", ty') R0)
     (((), ()), ((), leftUnders)) <- wrapError wrap $ check vargs ((), argUnders)
     ensureEmpty "con unders" leftUnders
     wire (dangling, ty, hungry)
-    pure (((), ()), ((), unders))
-  (Kerny, _) -> do
-    ty <- eval S0 ty
-    outerFC <- req AskFC
-    case (ty, vcon, unWC vargs) of
-      (VOf ty n, PrefixName [] "nil", Empty) -> case numMatch B0 n NP0 of
-        Right B0 -> do
-          (_, _, [(dangling, _)], _) <- knext (show vcon) (Constructor vcon) (S0, Some (Zy :* S0))
-                                        R0 (RPr ("value", VOf ty (numVal $ VNum n)) R0)
-          kwire (dangling, VOf ty (numVal $ VNum n), hungry)
-          pure (((), ()), ((), unders))
-        _ -> err $ VecLength (show tm) (show $ VOf ty (numVal $ VNum n)) (show n) (Length 0)
-      (VOf elemTy succN, PrefixName [] "cons", _) ->
-        case numMatch B0 succN (NP1Plus NPVar) of
-          Right (B0 :< (VNum n)) -> do
-            let tailTy = VOf elemTy (numVal $ VNum n)
-            (_, argUnders, [(dangling, _)], _) <-
-              knext (show vcon) (Constructor vcon) (S0, Some (Zy :* S0))
-              (RPr ("head", elemTy) (RPr ("tail", tailTy) R0))
-              (RPr ("value", ty) R0)
-            (((), ()), ((), [])) <- wrapError (consError outerFC (Left tm) (show ty) succN) $
-                                    check vargs ((), argUnders)
-            kwire (dangling, ty, hungry)
-            pure (((), ()), ((), unders))
-          _ -> err $ VecLength (show tm) (show ty) (show succN) (LongerThan 0)
-      (VBit, PrefixName [] c, Empty)
-        | c `elem` ["true","false"] -> do
-            (_, _, [(dangling, _)], _) <- knext (show vcon) (Constructor vcon) (S0, Some (Zy :* S0)) R0 (RPr ("value", VBit) R0)
-            kwire (dangling, VBit, hungry)
-            pure (((), ()), ((), unders))
-      _ -> err $ UnrecognisedConstructor (show vcon) (show (VBit :: SVal Z))
-
 
 check' (C cty) ((), ((hungry, ty):unders)) = case (?my, ty) of
   (Braty, Left k) -> do
@@ -445,7 +421,7 @@ check' (Simple tm) ((), ((hungry, ty):unders)) = do
       throwLeft $ simpleCheck ?my vty tm
       (_, _, [(dangling, _)], _) <- anext @m "" (Const tm) (S0,Some (Zy :* S0))
                                      R0 (RPr ("value", vty) R0)
-      awire @m (dangling, vty, hungry)
+      wire (dangling, vty, hungry)
       pure (((), ()), ((), unders))
 check' tm _ = error $ "check' " ++ show tm
 
@@ -478,13 +454,13 @@ kindCheck unders (a :|: b) = do
   (vs', unders) <- kindCheck unders (unWC b)
   pure (vs <> vs', unders)
 kindCheck _ (Pull _ _) = err $ Unimplemented "Port pulling in kinds" [] -- FIXME
-kindCheck ((hungry, k@(Star [])):unders) (Con c arg) = req (TLup k c) >>= \case
+kindCheck ((hungry, k@(TypeFor m [])):unders) (Con c arg) = req (TLup (m, c)) >>= \case
   -- This must be either a type constructor...
   Just args -> case mkKindRo args of
     Some (Flip args) -> do
       (_, argUnders, [(dangling, _)], _) <- next (show c) (Constructor c) (S0, Some (Zy :* S0))
                                               args --[(p, Left k) | (p, k) <- args])
-                                              (REx ("value", Star []) (S0 ::- R0))
+                                              (REx ("value", TypeFor m []) (S0 ::- R0))
       let kindArgs = [ (tgt, k) | (tgt, Left k) <- argUnders ]
       -- recurse first so we Define the necessary argUnders
       (_, emptyUnders) <- kindCheck kindArgs (unWC arg)
@@ -496,7 +472,8 @@ kindCheck ((hungry, k@(Star [])):unders) (Con c arg) = req (TLup k c) >>= \case
       wire (dangling, kindType k, hungry)
       pure ([value],unders)
   -- ... or a type alias
-  Nothing -> req (ALup c) >>= \case
+  -- (only allow aliases to be of kind `Star`)
+  Nothing | m == Brat -> req (ALup c) >>= \case
     Just (aliasArgs, aliasLam) -> case mkKindRo aliasArgs of
       Some (Flip aliasArgs) -> do
         -- It only looks weird that we don't use this `va`
@@ -514,34 +491,38 @@ kindCheck ((hungry, k@(Star [])):unders) (Con c arg) = req (TLup k c) >>= \case
         wire (kindOut, kindType k, hungry)
         pure ([val], unders)
     Nothing -> typeErr $ "Can't find type constructor or type alias " ++ show c
+  Nothing -> typeErr $ "Can't find type constructor " ++ show c ++ " in this context"
 kindCheck ((hungry, Star []):unders) (C (ss :-> ts)) = do
   name <- req (Fresh "__kcc")
-  kindCheckRow' (Zy :* S0) M.empty (name,0) ss >>= \case
-    (i, env, Some (ez :* Flip inRo)) -> kindCheckRow' ez env (name, i) ts >>= \case
+  kindCheckRow' Braty (Zy :* S0) M.empty (name,0) ss >>= \case
+    (i, env, Some (ez :* Flip inRo)) -> kindCheckRow' Braty ez env (name, i) ts >>= \case
       (_, _, Some (_ :* Flip outRo)) -> do
         let val = VFun Braty (inRo :->> outRo)
         defineTgt hungry val
         pure ([val], unders)
-kindCheck ((hungry, Star []):unders) (K (R ss) (R ts)) = do
+kindCheck ((hungry, Star []):unders) (K (ss :-> ts)) = do
   -- N.B. Kernels can't bind so we don't need to pass around a stack of ends
-  ss <- skindCheckRow ss
-  ts <- skindCheckRow ts
-  let val = VFun Kerny (foldr RPr R0 ss :->> foldr RPr R0 ts)
-  defineTgt hungry val
-  pure ([val], unders)
+  ss <- kindCheckRow Kerny "" ss
+  ts <- kindCheckRow Kerny "" ts
+  case (ss, ts) of
+    (Some (Flip ss), Some (Flip ts)) -> case kernelNoBind ss of
+      Refl -> do
+        let val = VFun Kerny (ss :->> ts)
+        defineTgt hungry val
+        pure ([val], unders)
 
 -- N.B. This code is currently only called for checking the validity of type aliases
 --
 -- Check a lambda as the body of a higher-order kind
 -- Body will contain Core.Var for things that correspond to variables bound by xs
-kindCheck ((hungry, Star args):unders) (Th (WC _ (xs :\: (WC fc body)))) = case mkKindRo args of
+kindCheck ((hungry, TypeFor m args):unders) (Th (WC _ (xs :\: (WC fc body)))) = case mkKindRo args of
   Some (Flip ro) -> do
     -- Make some ends (outputs here) to correspond to hypothetical arguments to the alias
     (_, [], kovers, (_, endz)) <- next "aliargs" Hypo (S0, Some (Zy :* S0)) R0 ro
     ext <- let ?my = Braty in abstractAll kovers (unWC xs)
     -- kindCheck the alias with those arguments into a second Hypo node
     (_, [(p, Left k)], _, _) <- next "alias" Hypo (S0, Some (Zy :* S0))
-                                   (REx ("type", Star []) (S0 ::- R0)) R0
+                                   (REx ("type", TypeFor m []) (S0 ::- R0)) R0
     ([vbody], emptyUnders) <- localFC fc $ localVEnv ext $ kindCheck [(p, k)] body
     ensureEmpty "kindCheck unders" emptyUnders
     vbody <- eval S0 vbody
@@ -553,7 +534,7 @@ kindCheck ((hungry, Star args):unders) (Th (WC _ (xs :\: (WC fc body)))) = case 
   lambdify :: Stack Z End i -> Val i -> Val Z
   lambdify S0 v = v
   lambdify (zx :<< _) v = lambdify zx (VLam (S0 ::- v))
-kindCheck unders (Emb (WC _ (Var v))) = vlup v >>= f unders
+kindCheck unders (Emb (WC fc (Var v))) = localFC fc $ vlup v >>= f unders
  where
   f :: [(Tgt, TypeKind)]
     -> [(Src, BinderType Brat)]
@@ -591,58 +572,25 @@ kindCheck ((hungry, Nat):unders) (Con c arg)
      pure ([v], unders)
 kindCheck unders tm = err $ Unimplemented "kindCheck" [showRow unders, show tm]
 
--- kindCheck, but for kernel types
--- Note that all dependency happens in classical terms,
--- so we only really care about the index in `Of`
-skindCheck :: [(Tgt, TypeKind)]
-           -> SType' (Term Chk Noun)
-           -> Checking ([SVal Z], [(Tgt, TypeKind)])
-skindCheck ((_, Star []):unders) (Q _) = pure ([VQ], unders)
-skindCheck ((_, Star []):unders) Bit = pure ([VBit], unders)
-skindCheck ((_, Star []):unders) (Of sty n) = do
-  nm <- req (Fresh "")
-  let signal = NamedPort (In nm 0) "type"
-  declareTgt signal (Star [])
-  ([vsty], emptyUnders) <- skindCheck [(signal, Star [])] sty
-  ensureEmpty "skindCheck unders" emptyUnders
-
-  nm2 <- req (Fresh "")
-  let size = NamedPort (In nm2 0) "value"
-  declareTgt size Nat
-  ([vn], emptyUnders) <- kindCheck [(size, Nat)] n
-  ensureEmpty "kindCheck unders" emptyUnders
-  pure ([VOf vsty (numVal vn)], unders)
-skindCheck ((_, Star []):unders) (Rho (R row))
-  = (,unders) . (:[]) . VRho . foldr RPr R0 <$> skindCheckRow row
-skindCheck _ _ = err $ InternalError "Kind checking in a kernel"
-
-skindCheckRow :: [(PortName, SType' (Term Chk Noun))] -> Checking [(PortName, SVal Z)]
-skindCheckRow xs = do
-  node <- req (Fresh "")
-  for (zip xs [0..]) $ \((p, sty), i) -> do
-    let tgt = NamedPort (In node i) p
-    declareTgt tgt (Star [])
-    ([v], emptyUnders) <- skindCheck [(tgt, Star [])] sty
-    ensureEmpty "skindCheck" emptyUnders
-    pure (p, v)
-
 -- Checks the kinds of the types in a dependent row
-kindCheckRow :: String -- for node name
-             -> [(PortName, KindOr (Term Chk Noun))] -- The row to process
-             -> Checking (Some (Flip (Ro' Brat) Z))
-kindCheckRow name r = do
+kindCheckRow :: Modey m
+             -> String -- for node name
+             -> [(PortName, ThunkRowType m)] -- The row to process
+             -> Checking (Some (Flip (Ro' m) Z))
+kindCheckRow my name r = do
   name <- req $ Fresh $ "__kcr_" ++ name
-  kindCheckRow' (Zy :* S0) M.empty (name, 0) r >>= \case
+  kindCheckRow' my (Zy :* S0) M.empty (name, 0) r >>= \case
     (_, _, Some (_ :* flipped_ro)) -> pure $ Some flipped_ro
 
 -- Checks that an annotation is a valid row, returning the
 -- evaluation of the type of an Id node passing through such values
-kindCheckAnnotation :: String -- for node name
-                    -> [(PortName, KindOr (Term Chk Noun))]
-                    -> Checking (CTy Brat Z)
-kindCheckAnnotation name outs = do
+kindCheckAnnotation :: Modey m
+                    -> String -- for node name
+                    -> [(PortName, ThunkRowType m)]
+                    -> Checking (CTy m Z)
+kindCheckAnnotation my name outs = do
   name <- req (Fresh $ "__kca_" ++ name)
-  kindCheckRow' (Zy :* S0) M.empty (name, 0) outs >>= \case
+  kindCheckRow' my (Zy :* S0) M.empty (name, 0) outs >>= \case
     (_, _, Some ((n :* s) :* Flip ins)) ->
       -- Make a copy of ins whose free indices claim to start where the
       -- first left off. Since any references to the Ends in `s` have
@@ -652,31 +600,40 @@ kindCheckAnnotation name outs = do
       case varChangerThroughRo (ParToInx (AddZ n) s) ins of
         Some (_ :* Flip outs) -> pure (ins :->> outs)
 
-kindCheckRow' :: Endz n -- kind outports so far
+kindCheckRow' :: forall m n
+               . Modey m
+              -> Endz n -- kind outports so far
               -> VEnv -- from string variable names to VPar's
               -> (Name, Int) -- node name and next free input (under to 'kindCheck' a type)
-              -> [(PortName, KindOr (Term Chk Noun))]
-              -> Checking (Int, VEnv, Some (Endz :* Flip (Ro' Brat) n))
-kindCheckRow' ez env (_,i) [] = pure (i, env, Some (ez :* Flip R0))
-kindCheckRow' ez@(ny :* s) env (name, i) ((p, Right tm):rest) = do
-  let hungry = NamedPort (In name i) p -- or always call it "type"?
-  declareTgt hungry (Star [])
-  ([v], []) <- localVEnv env $ kindCheck [(hungry, Star [])] tm -- TODO give proper errors on failed match
-  -- v has no dangling Inx's but contains Par's in `s`. Convert to `n` Inx's
-  v <- pure $ changeVar (ParToInx (AddZ ny) s) v
-  (i, env, ser) <- kindCheckRow' ez env (name, i+1) rest
-  case ser of
-    Some (s_m :* Flip ro) -> pure (i, env, Some (s_m :* Flip (RPr (p, v) ro)))
-kindCheckRow' (ny :* s) env (name,i) ((p, Left k):rest) = do -- s is Stack Z n
+              -> [(PortName, ThunkRowType m)]
+              -> Checking (Int, VEnv, Some (Endz :* Flip (Ro' m) n))
+kindCheckRow' _ ez env (_,i) [] = pure (i, env, Some (ez :* Flip R0))
+kindCheckRow' Braty (ny :* s) env (name,i) ((p, Left k):rest) = do -- s is Stack Z n
   let dangling = Ex name (ny2int ny)
   req (Declare (ExEnd dangling) k)
   env <- pure $ M.insert (plain p) [(NamedPort dangling p, Left k)] env
-  (i, env, ser) <- kindCheckRow' (Sy ny :* (s :<< ExEnd dangling)) env (name, i) rest
+  (i, env, ser) <- kindCheckRow' Braty (Sy ny :* (s :<< ExEnd dangling)) env (name, i) rest
   case ser of
     Some (s_m :* Flip ro) -> -- for some m>=S(n), there is Stack S(n) m, ro is Ro Brat S(n) m
       -- The Some we return quantifies over the same m, but the ::- allows us to
       -- return a Ro starting at n rather than ro starting at S(n)
       pure (i, env, Some (s_m :* Flip (REx (p,k) (S0 ::- ro))))
+kindCheckRow' my ez@(ny :* s) env (name, i) ((p, bty):rest) = case (my, bty) of
+  (Braty, Right ty) -> helper ty (Star [])
+  (Braty, Left _) -> err $ InternalError "kindCheckRow' is going very wrong"
+  (Kerny, ty) -> helper ty (Dollar [])
+
+ where
+  helper :: Term Chk Noun -> TypeKind -> Checking (Int, VEnv, Some (Endz :* Flip (Ro' m) n))
+  helper ty kind = do
+    let hungry = NamedPort (In name i) p -- or always call it "type"?
+    declareTgt hungry kind
+    ([v], []) <- localVEnv env $ kindCheck [(hungry, kind)] ty -- TODO give proper errors on failed match
+    -- v has no dangling Inx's but contains Par's in `s`. Convert to `n` Inx's
+    v <- pure $ changeVar (ParToInx (AddZ ny) s) v
+    (i, env, ser) <- kindCheckRow' my ez env (name, i+1) rest
+    case ser of
+      Some (s_m :* Flip ro) -> pure (i, env, Some (s_m :* Flip (RPr (p, v) ro)))
 
 -- Look for vectors to produce better error messages for mismatched lengths
 -- in terms or patterns.
@@ -748,56 +705,20 @@ abstract inputs (APull ports abst) = do
 abstract ((src, ty):inputs) (APat p) = (,inputs) <$> abstractPattern ?my (src, ty) p
 abstract [] a = err (NothingToBind (show a))
 
-abstractPattern :: Show (BinderType m)
+abstractPattern :: forall m
+                 . (EvMode m, Show (BinderType m))
                 => Modey m
                 -> (Src, BinderType m)
                 -> Pattern
                 -> Checking (Env (EnvData m)) -- Local env for checking body of lambda
-abstractPattern m (src, ty) (Bind x) = let ?my = m in pure $ singletonEnv x (src, ty)
+abstractPattern m (src, ty) (Bind x) = let ?my = m in singletonEnv x (src, ty)
 abstractPattern Braty (_, Left Nat) (Lit tm) = throwLeft (simpleCheck Braty TNat tm) $> emptyEnv
 abstractPattern Braty (_, Right ty) (Lit tm) = throwLeft (simpleCheck Braty ty tm) $> emptyEnv
 abstractPattern Kerny (_, ty) (Lit tm) = throwLeft (simpleCheck Kerny ty tm) $> emptyEnv
-abstractPattern Braty (dangling, Right ty@(VCon tycon tyargs)) pat@(PCon pcon abst) = do
-  (CArgs vps nFree _ unders) <- clup pcon tycon
-  -- Look for vectors to produce better error messages for mismatched lengths
-  wrap <- detectVecErrors pcon tycon tyargs vps ty (Right pat)
-  Some (ny :* zv) <- throwLeft $ valMatches tyargs vps
-  Refl <- throwLeft $ natEqOrBust ny nFree
-  -- ty is Inx-closed, but `next` expects it to have <ny> free vars,
-  -- so persuade the type system of that
-  let ty' = weaken ny ty
-  (_, [(hungry, _)], overs, _) <- next (show pcon) (Selector pcon) (zv, Some (Zy :* S0)) (RPr ("value", ty') R0) unders
-  wire (dangling, ty, hungry)
-  (env, abstractUnders) <- let ?my = Braty in wrapError wrap $ abstract overs abst
-  ensureEmpty "unders after abstract" abstractUnders
-  pure env
-abstractPattern Kerny (dangling, sty) (PCon (PrefixName [] c) abs) = do
-  outputs <- kConFields c sty
-  (_, [(hungry,_)], overs, _) <- knext "kcons" (Selector (plain "cons")) (S0, Some (Zy :* S0))
-                                 (RPr ("value", sty) R0) outputs
-  kwire (dangling, sty, hungry)
-  let ?my = Kerny in abstractAll overs abs
- where
-  -- Tells abstractPattern what you get when you take apart a constructor
-  kConFields :: String -> SVal Z -> Checking (Ro Kernel Z Z)
-  -- Note: These are the only Kerny constructors
-  kConFields "nil" (VOf _ n) = do
-    n <- eval S0 n
-    throwLeft $ numMatch B0 n NP0
-    pure R0
-  kConFields "cons" (VOf elTy n) = do
-    elTy <- eval S0 elTy
-    matches <- throwLeft $ numMatch B0 n (NP1Plus NPVar)
-    case matches of
-      B0 :< VNum pred -> pure (RPr ("head", elTy) (RPr ("tail", VOf elTy pred) R0))
-      _ -> err $ InternalError "conFields: Invalid cons length"
-  kConFields con VBit | con `elem` ["true", "false"] = pure R0
-  kConFields con ty = err $ TyConNotFound (show ty) con
-abstractPattern Kerny (_, VOf _ _) PNil = pure emptyEnv
 abstractPattern Braty (dangling, Left k) pat = abstractKind k pat
  where
   abstractKind :: TypeKind -> Pattern -> Checking (Env (EnvData Brat))
-  abstractKind _ (Bind x) = let ?my = Braty in pure (singletonEnv x (dangling, Left k))
+  abstractKind _ (Bind x) = let ?my = Braty in singletonEnv x (dangling, Left k)
   abstractKind _ (DontCare) = pure emptyEnv
   abstractKind k (Lit x) = case (k, x) of
     (Nat, Num n) -> defineSrc dangling (VNum (nConstant n)) $> emptyEnv
@@ -817,10 +738,45 @@ abstractPattern Braty (dangling, Left k) pat = abstractKind k pat
       Just (Nothing,_) -> err (PattErr $ show pat ++ " can't be used as a pattern")
       Nothing -> err (PattErr $ "Couldn't resolve pattern " ++ show pat ++ " with kind " ++ show k)
   abstractKind k (PCon _ _) = err $ PattErr $ "No patterns for matching kind " ++ show k
+abstractPattern my (dangling, bty) pat@(PCon pcon abst) = case (my, bty) of
+  (Braty, Right ty) -> helper my ty (Star []) clup
+  (Kerny, ty) -> helper my ty (Dollar []) kclup
+  _ -> err $ InternalError "abstractPattern shouldn't have got here"
+ where
+  helper :: Modey m
+         -> Val Z
+         -> TypeKind
+         -> (UserName -> UserName -> Checking (CtorArgs m))
+         -> Checking (Env (EnvData m))
+  helper my v k lup = standardise k v >>=
+                      throwLeft . unpackTypeConstructor >>=
+                      abstractCon my lup
 
+  unpackTypeConstructor :: Val Z -> Either ErrorMsg (UserName, [Val Z])
+  unpackTypeConstructor (VCon tycon tyargs) = pure (tycon, tyargs)
+  unpackTypeConstructor ty = Left (PattErr $ unwords ["Couldn't resolve pattern"
+                                                     ,show pat
+                                                     ,"with type"
+                                                     ,show ty])
+
+  abstractCon :: Modey m
+              -> (UserName -> UserName -> Checking (CtorArgs m))
+              -> (UserName, [Val Z])
+              -> Checking (Env (EnvData m))
+  abstractCon my lup (tycon, tyargs) = do
+    let ty = VCon tycon tyargs
+    (CArgs vps nFree _ unders) <- lup pcon tycon
+    -- Look for vectors to produce better error messages for mismatched lengths
+    wrap <- detectVecErrors pcon tycon tyargs vps ty (Right pat)
+    Some (ny :* zv) <- throwLeft $ valMatches tyargs vps
+    Refl <- throwLeft $ natEqOrBust ny nFree
+    -- ty is Inx-closed, but `next` expects it to have <ny> free vars,
+    -- so persuade the type system of that
+    let ty' = weaken ny ty
+    (_, [(hungry, _)], overs, _) <- anext (show pcon) (Selector pcon) (zv, Some (Zy :* S0)) (RPr ("value", ty') R0) unders
+    wire (dangling, ty, hungry)
+    wrapError wrap $ let ?my = my in abstractAll overs abst
 abstractPattern _ _ DontCare = pure emptyEnv
-abstractPattern _ (_, ty) pat
-  = err (PattErr $ "Couldn't resolve pattern " ++ show pat ++ " with type " ++ show ty)
 
 weaken :: DeBruijn v => Ny n -> v Z -> v n
 -- TODO: here we call changeVar with some fake ends that don't get abstracted.
@@ -841,6 +797,7 @@ run ve ns m =
                 , store = initStore
                 -- TODO: fill with default constructors
                 , constructors = defaultConstructors
+                , kconstructors = kernelConstructors
                 , typeConstructors = defaultTypeConstructors
                 , aliasTable = M.empty
                 } in

@@ -36,7 +36,7 @@ type RawVType = Raw Chk Noun
 type RawIO = TypeRowElem (KindOr RawVType)
 
 type RawCType = CType' RawIO
-type RawKType = CType' (TypeRowElem (SType' (Raw Chk Noun)))
+type RawKType = CType' (TypeRowElem RawVType)
 
 data TypeAliasF tm = TypeAlias FC UserName [(PortName,TypeKind)] tm deriving Show
 type RawAlias = TypeAliasF (Raw Chk Noun)
@@ -143,7 +143,8 @@ splitM s = do
 
 isConstructor :: UserName -> Desugar Bool
 isConstructor c = pure (c `member` defaultConstructors
-                        || c `member` defaultTypeConstructors
+                        || (Brat, c) `member` defaultTypeConstructors
+                        || (Kernel, c) `member` defaultTypeConstructors
                         || c `member` natConstructors)
 
 isAlias :: UserName -> Desugar Bool
@@ -182,21 +183,6 @@ class Desugarable ty where
 
   desugar' :: ty -> Desugar (Desugared ty)
 
-instance Desugarable (SType' (Raw Chk Noun)) where
-  type Desugared (SType' (Raw Chk Noun)) = SType
-  desugar' (Q q) = pure $ Q q
-  desugar' Bit = pure Bit
-  desugar' (Of sty tm) = Of <$> desugar' sty <*> desugar' tm
-  desugar' (Rho row) = Rho <$> desugar' row
-
-instance Desugarable (Row (Raw Chk Noun)) where
-  type Desugared (Row (Raw Chk Noun)) = Row (Term Chk Noun)
-  desugar' (R r) = R <$> mapM (traverse desugar') r
-
-instance Desugarable ty => Desugarable (PortName, KindOr ty) where
-  type Desugared (PortName, KindOr ty) = (PortName, Desugared (KindOr ty))
-  desugar' (p, ty) = (p,) <$> desugar' ty
-
 instance Desugarable ty => Desugarable (TypeRow ty) where
   type Desugared (TypeRow ty) = TypeRow (Desugared ty)
   desugar' = traverse (traverse desugar')
@@ -232,21 +218,6 @@ instance (Kindable k) => Desugarable (Raw d k) where
         True -> pure $ Con c (WC (fcOf syn) Empty)
         False -> Emb <$> desugar syn
     _ -> Emb <$> desugar syn
-   where
-    isConOrAlias :: UserName -> Desugar Bool
-    isConOrAlias c = do
-      con <- isConstructor c
-      ali <- isAlias c
-      xor con ali
-
-    -- Double check that we don't have name clashes. This should never
-    -- happen since we already detect them in `desugarAliases` before
-    -- this function is called.
-    xor :: Bool -> Bool -> Desugar Bool
-    xor True True = throwError $
-                    dumbErr $
-                    InternalError "Name clash between type constructor and type alias"
-    xor a b = pure (a || b)
   desugar' (RForce v) = Force <$> desugar v
   desugar' (RForget kv) = Forget <$> desugar kv
   desugar' (RPull ps raw) = Pull ps <$> desugar raw
@@ -262,7 +233,34 @@ instance (Kindable k) => Desugarable (Raw d k) where
   desugar' (RLet abs thing body) = Let abs <$> desugar thing <*> desugar body
   desugar' (RCon c arg) = Con c <$> desugar arg
   desugar' (RFn cty) = C <$> desugar' cty
-  desugar' (RKernel (ss :-> ts)) = K <$> (R . addNames <$> desugar' ss) <*> (R . addNames <$> desugar' ts)
+  desugar' (RKernel cty) = K <$> desugar' cty
+
+instance Desugarable ty => Desugarable (PortName, ty) where
+  type Desugared (PortName, ty) = (PortName, Desugared ty)
+  desugar' (p, ty) = (p,) <$> desugar' ty
+
+instance Desugarable (CType' (TypeRowElem RawVType)) where
+  type Desugared (CType' (TypeRowElem RawVType)) = CType' (PortName, Term Chk Noun)
+  desugar' (ss :-> ts) = do
+    ss <- traverse desugar' (addNames ss)
+    ts <- traverse desugar' (addNames ts)
+    pure (ss :-> ts)
+
+isConOrAlias :: UserName -> Desugar Bool
+isConOrAlias c = do
+  con <- isConstructor c
+  ali <- isAlias c
+  xor con ali
+ where
+  -- Double check that we don't have name clashes. This should never
+  -- happen since we already detect them in `desugarAliases` before
+  -- this function is called.
+  xor :: Bool -> Bool -> Desugar Bool
+  xor True True = throwError $
+                  dumbErr $
+                  InternalError "Name clash between type constructor and type alias"
+  xor a b = pure (a || b)
+
 
 instance Desugarable ty => Desugarable (KindOr ty) where
   type Desugared (Either TypeKind ty) = Either TypeKind (Desugared ty)

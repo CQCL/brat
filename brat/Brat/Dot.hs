@@ -27,13 +27,12 @@ instance (GV.PrintDot Name') where
   toDot  (Name' name) =  GV.text . pack $ "\"" ++ show name ++ "\""
 
 
-data EdgeType = EvalEdge | SrcEdge | GraphEdge (Either (SVal Z) (Val Z))
+data EdgeType = EvalEdge | SrcEdge | GraphEdge (Val Z)
 
 instance Show EdgeType where
   show EvalEdge = ""
   show SrcEdge = ""
-  show (GraphEdge (Left ty)) = show ty
-  show (GraphEdge (Right ty)) = show ty
+  show (GraphEdge ty) = show ty
 
 
 toDotString :: Graph -> String

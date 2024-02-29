@@ -3,7 +3,9 @@ module Brat.Parser (parseFile) where
 import Brat.Error
 import Brat.FC
 import Brat.Lexer
+import qualified Brat.Lexer as Lexer
 import Brat.Syntax.Common hiding (end)
+import qualified Brat.Syntax.Common as Syntax
 import Brat.Syntax.Concrete
 import Brat.Syntax.Raw
 import Brat.Syntax.Simple
@@ -207,12 +209,12 @@ outputs :: Parser [RawIO]
 outputs = rawIO (unWC <$> vtype)
 
 typekind :: Parser TypeKind
-typekind = try (match Hash $> Nat) <|> ty
+typekind = try (match Hash $> Nat) <|> kindHelper Lexer.Dollar Syntax.Dollar <|> kindHelper Asterisk Star
  where
-  ty = do
-    match Asterisk
+  kindHelper tok c  = do
+    match tok
     margs <- optional (round row)
-    pure $ Star (concat $ maybeToList margs)
+    pure $ c (concat $ maybeToList margs)
 
   row = (`sepBy` match Comma)  $ do
     p <- port
@@ -255,28 +257,6 @@ rawIO' tyP = rowElem `sepBy` void (try comma)
        Just p -> Named p <$> tyP
        Nothing -> Anon <$> tyP
 
-stype :: Parser (SType' (Raw Chk Noun))
-stype = try (Rho <$> round row)
-        <|> try vec
-        <|> match (K KQubit) $> Q Qubit
-        <|> match (K KMoney) $> Q Money
-        <|> match (K KBool)  $> Bit
- where
-  row = fmap R $ (`sepBy` match Comma) $ do
-    p <- port
-    match TypeColon
-    (p,) <$> stype
-
-  vec :: Parser (SType' (Raw Chk Noun))
-  vec = label "Vec" $ do
-    ident (\x -> if x == "Vec" then Just () else Nothing)
-    (ty, n) <- round $ do
-      ty <- stype
-      match Comma
-      n <- unWC <$> cnoun atomExpr
-      pure (ty, n)
-    pure $ Of ty n
-
 functionType :: Parser RawVType
 functionType = try (RFn <$> ctype) <|> (RKernel <$> kernel)
  where
@@ -289,9 +269,9 @@ functionType = try (RFn <$> ctype) <|> (RKernel <$> kernel)
 
   kernel :: Parser RawKType
   kernel = do
-    ins <- round $ rawIO' stype
+    ins <- round $ rawIO' (unWC <$> vtype)
     match Lolly
-    outs <- rawIO' stype
+    outs <- rawIO' (unWC <$> vtype)
     pure (ins :-> outs)
 
 
@@ -322,9 +302,9 @@ cthunk = try bratFn <|> try kernel <|> thunk
     pure $ FFn (ss :-> ts)
 
   kernel = curly $ do
-    ss <- rawIO' stype
+    ss <- rawIO' (unWC <$> vtype)
     match Lolly
-    ts <- rawIO' stype
+    ts <- rawIO' (unWC <$> vtype)
     pure $ FKernel (ss :-> ts)
 
   -- Explicit lambda or brace section
@@ -410,7 +390,6 @@ atomExpr = atomExpr' 0
             <|> try (FSimple <$> simpleTerm)
             <|> vec
             <|> cthunk
-            <|> (withFC (kmatch KBool) <&> \(WC fc _) -> FCon (plain "Bool") (WC fc FEmpty))
             <|> try (match DotDot $> FPass)
             <|> var
             <|> match Underscore $> FUnderscore

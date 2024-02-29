@@ -18,7 +18,7 @@ module Brat.Syntax.Value {-(VDecl
                          ,pattern TText, pattern TOption
                          ,pattern TUnit, pattern TNil, pattern TCons
                          ,pattern TList, pattern TVec
-                         ,Value(..),SValue
+                         ,Value(..)
                          ,BinderType
                          ,ValPat(..), valMatch, valMatches
                          ,NumPat(..), numMatch
@@ -120,10 +120,6 @@ infixr 8 <<+
 -- Environment of closed values of size `top`
 type Valz = Stack Z (Val Z)
 
-type family ValueType (m :: Mode) :: N -> Type where
-  ValueType Brat = Val
-  ValueType Kernel = SVal
-
 data VVar :: N -> Type where
   VPar :: End -> VVar n  -- Has to be declared in the Store (for equality testing)
   VLvl :: Int -> TypeKind -> VVar n  -- Cache the kind for equality testing
@@ -177,7 +173,7 @@ data Ro' :: Mode
       -> Scope (Ro' Brat top) bot -- This why top and bot have to be backwards
       -> Ro Brat bot top
   -- Pairing
-  RPr :: (PortName, ValueType m bot) -> Ro m bot top -> Ro m bot top
+  RPr :: (PortName, Val bot) -> Ro m bot top -> Ro m bot top
 
 instance forall m top bot. MODEY m => Show (Ro' m top bot) where
   show ro = intercalate ", " $ roToList ro
@@ -314,6 +310,11 @@ pattern TVec, TCons :: Val n -> Val n -> Val n
 pattern TVec ty n = VCon (PrefixName [] "Vec") [ty, n]
 pattern TCons x ys = VCon (PrefixName [] "cons") [x, ys]
 
+pattern TQ, TMoney, TBit :: Val n
+pattern TQ = VCon (PrefixName [] "Qubit") []
+pattern TMoney = VCon (PrefixName [] "Money") []
+pattern TBit = VCon (PrefixName [] "Bit") []
+
 instance Show (Val n) where
   show v@(VCon _ _) | Just vs <- asList v = show vs
    where
@@ -328,11 +329,9 @@ instance Show (Val n) where
   show (VApp v ctx) = "VApp " ++ show v ++ " " ++ show ctx
   show (VLam (ga ::- x)) = "VLam " ++ show ga ++ " " ++ show x
 
-type SValue = SVal Z
-
 type family BinderType (m :: Mode) where
   BinderType Brat = KindOr (Val Z)
-  BinderType Kernel = SVal Z
+  BinderType Kernel = Val Z
 
 type family BinderVal (m :: Mode) where
   BinderVal Brat = Val Z
@@ -491,8 +490,7 @@ instance DeBruijn Val where
   changeVar vc (VFun Kerny cty)
     = VFun Kerny $ changeVar vc cty
 
-varChangerThroughRo :: DeBruijn (ValueType m)
-                    => VarChanger src tgt
+varChangerThroughRo :: VarChanger src tgt
                     -> Ro m src src'
                     -> Some (VarChanger src' -- VarChanger src' tgt'
                              :*
@@ -511,7 +509,7 @@ varChangerThroughRo vc {- src -> tgt -} (REx pk (vz {- src -> src' -} ::- ro {- 
       Some (vc {- src' -> tgt' -} :* vz {- tgt -> tgt' -}) -> case varChangerThroughRo (weakenVC vc) ro of
         Some (vc {- src'' -> tgt'' -} :* Flip ro {- S tgt' -> tgt'' -}) -> Some (vc :* Flip (REx pk (vz ::- ro)))
 
-instance DeBruijn (ValueType m) => DeBruijn (CTy m) where
+instance DeBruijn (CTy m) where
   changeVar (vc {- srcIn -> tgtIn -}) (ri {- srcIn -> srcMid -} :->> ro {- srcMid -> srcOut -}) = case varChangerThroughRo vc ri of
     Some {- tgtMid -} (vc {- srcMid -> tgtMid -} :* Flip ri {- tgtIn -> tgtMid -}) -> case varChangerThroughRo vc ro of
       Some {- tgtOut -} (_vc {- srcOut -> tgtOut -} :* Flip ro {- tgtMid -> tgtOut -}) -> ri :->> ro
@@ -531,14 +529,6 @@ instance DeBruijn Monotone where
   changeVar vc (Full sm) = Full (changeVar vc sm)
 
 
-instance DeBruijn SVal where
-  changeVar vc (VOf ty n) = VOf (changeVar vc ty) (changeVar vc n)
-  changeVar (vc {- src -> tgt -}) (VRho ro {- src -> src -}) = case varChangerThroughRo vc ro of
-    Some {- tgt' -} (_vc {- src -> tgt' -} :* Flip ro {- tgt -> tgt' -})
-      | Refl <- kernelNoBind ro {- tgt = tgt' -} -> VRho ro
-  changeVar _ VQ = VQ
-  changeVar _ VBit = VBit
-
 kernelNoBind :: Ro Kernel bot top -> bot :~: top
 kernelNoBind R0 = Refl
 kernelNoBind (RPr _ ro) = kernelNoBind ro
@@ -555,20 +545,6 @@ varVal :: TypeKind -> (VVar n) -> Val n
 varVal Nat v = VNum (nVar v)
 varVal _ v = VApp v B0
 
--- TODO: Rename this to KernelType or similar
-data SVal :: N -> Type where
-  VQ   :: SVal n
-  VBit :: SVal n
-  VOf  :: SVal n -> NumVal n -> SVal n
-  -- We're not allowed any binding constructs in a kernel row (no `REx`s)
-  VRho :: Ro Kernel n n -> SVal n
-
-instance Show (SVal n) where
-  show VQ = "Qubit"
-  show VBit = "Bool"
-  show (VOf ty n) = "Vec(" ++ show ty ++ ", " ++ show n ++ ")"
-  show (VRho ro) = show ro
-
 data KernelVal :: N -> Type where
   KVar  :: VVar n -> KernelVal n
   KBit  :: Bool -> KernelVal n
@@ -579,6 +555,11 @@ deriving instance Show (KernelVal n)
 type FunVal m = CTy m Z
 --value :: Modey m -> FunVal m -> Val Z
 --value = VFun
+
+roTopM :: Modey m -> Ny bot -> Ro m bot top -> Ny top
+roTopM Braty = roTop
+roTopM Kerny = \ny ro -> case kernelNoBind ro of
+  Refl -> ny
 
 roTop :: Ny bot -> Ro Brat bot top -> Ny top
 roTop ny R0 = ny

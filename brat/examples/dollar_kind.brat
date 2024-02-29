@@ -1,0 +1,15 @@
+kid(X :: $) -> { X -o X }
+kid(_) = { x => x }
+
+qid(Qubit) -o Qubit
+qid = kid(Qubit)
+
+lmap(X :: $, Y :: $, n :: #, { X -o Y }) -> { Vec(X, n) -o Vec(Y, n) }
+lmap(_, _, 0, _) = { [] => [] }
+lmap(X, Y, succ(n), f) = { cons(x, xs) => cons(f(x), (lmap(X, Y, n, f))(xs)) }
+
+swap(X :: $, Y :: $) -> { X, Y -o Y, X }
+swap(_, _) = { x, y => y, x }
+
+test(Qubit, Bit) -o Bit, Qubit
+test = swap(Qubit, Bit)

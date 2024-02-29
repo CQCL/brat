@@ -9,19 +9,19 @@ import Bwd
 import Hasochism (N(..), Ny(..))
 
 -- TODO: Enforce the invariant that the number of pattern variables is n
-data CtorArgs where
+data CtorArgs m where
   CArgs :: [ValPat] -- Patterns to match the arguments to Ty against
-        -> Ny n        -- Number of pattern variables bound (natEqOrBust will test this)
-        -> Ro Brat Z n  -- Kinds of pattern variables
-        -> Ro Brat n m -- Inputs for the constructor node, which we should feed C's args into
+        -> Ny i        -- Number of pattern variables bound (natEqOrBust will test this)
+        -> Ro Brat Z i  -- Kinds of pattern variables
+        -> Ro m i j -- Inputs for the constructor node, which we should feed C's args into
         -- N.B. these can include bound variables which refer to things bound by
         -- matching the patterns in the `[ValPat]` against Ty's arguments.
-        -> CtorArgs
+        -> CtorArgs m
 
-type ConstructorMap
+type ConstructorMap m
   = M.Map UserName  -- The name of a constructor "C"
     (M.Map UserName -- The name of the type we're checking against "Ty"
-     CtorArgs
+     (CtorArgs m)
     )
 
 pattern CSucc, CDoub, CNil, CCons, CSome, CNone, CTrue, CFalse, CZero, CSnoc :: UserName
@@ -47,7 +47,11 @@ pattern CBit = PrefixName [] "Bit"
 pattern CFloat = PrefixName [] "Float"
 pattern CString = PrefixName [] "String"
 
-defaultConstructors :: ConstructorMap
+pattern CQubit, CMoney :: UserName
+pattern CQubit = PrefixName [] "Qubit"
+pattern CMoney = PrefixName [] "Money"
+
+defaultConstructors :: ConstructorMap Brat
 defaultConstructors = M.fromList
   [(CSucc, M.fromList
      [(CNat, CArgs [] Zy R0 (RPr ("value", TNat) R0))
@@ -104,19 +108,45 @@ defaultConstructors = M.fromList
   ,(CFalse, M.fromList [(CBool, CArgs [] Zy R0 R0)])
   ]
 
-defaultTypeConstructors :: M.Map UserName TypeKind
+kernelConstructors :: ConstructorMap Kernel
+kernelConstructors = M.fromList
+  [(CNil, M.fromList
+     [(CVec, CArgs [VPVar, VPNum NP0] (Sy Zy) (REx ("elementType", Dollar []) (S0 ::- R0)) R0)]
+   )
+  ,(CCons, M.fromList
+     [(CVec, CArgs [VPVar, VPNum (NP1Plus NPVar)] (Sy (Sy Zy))
+       (REx ("elementType", Dollar []) (S0 ::- (REx ("tailLength", Nat) (S0 ::- R0))))
+       (RPr ("head", VApp (VInx (VS VZ)) B0)
+        (RPr ("tail", TVec (VApp (VInx (VS VZ)) B0) (VNum $ nVar (VInx VZ))) R0)))
+     ])
+  ,(CSnoc, M.fromList
+     [(CVec, CArgs [VPVar, VPNum (NP1Plus NPVar)] (Sy (Sy Zy))
+       (REx ("elementType", Dollar []) (S0 ::- (REx ("tailLength", Nat) (S0 ::- R0))))
+       (RPr ("tail", TVec (VApp (VInx (VS VZ)) B0) (VNum $ nVar (VInx VZ)))
+        (RPr ("head", VApp (VInx (VS VZ)) B0) R0)))
+     ])
+  ,(CTrue, M.fromList [(CBit, CArgs [] Zy R0 R0)])
+  ,(CFalse, M.fromList [(CBit, CArgs [] Zy R0 R0)])
+  ]
+
+defaultTypeConstructors :: M.Map (Mode, UserName) [(PortName, TypeKind)]
 defaultTypeConstructors = M.fromList
-  [(COption, Star [("value", Star [])])
-  ,(CList,   Star [("listValue", Star [])])
-  ,(CVec,    Star [("X", Star []), ("n", Nat)])
-  ,(CBool,   Star [])
-  ,(CBit,    Star [])
-  ,(CInt,    Star [])
-  ,(CFloat,  Star [])
-  ,(CString, Star [])
-  ,(CNat,    Star [])
-  ,(CNil,    Star [])
-  ,(CCons,   Star [("head", Star []), ("tail", Star [])])
+  [((Brat, COption), [("value", Star [])])
+  ,((Brat, CList),   [("listValue", Star [])])
+  ,((Brat, CVec),    [("X", Star []), ("n", Nat)])
+  ,((Brat, CBool),   [])
+  ,((Brat, CBit),    [])
+  ,((Brat, CInt),    [])
+  ,((Brat, CFloat),  [])
+  ,((Brat, CString), [])
+  ,((Brat, CNat),    [])
+  ,((Brat, CNil),    [])
+  ,((Brat, CCons),   [("head", Star []), ("tail", Star [])])
+  ,((Kernel, CQubit), [])
+  ,((Kernel, CMoney), [])
+  ,((Kernel, CVec), [("X", Dollar []), ("n", Nat)])
+  ,((Kernel, CBit), [])
+  ,((Kernel, CBool), [])
   ]
 
 {-

@@ -51,6 +51,7 @@ data Tok
  | Slash
  | Caret
  | Hash
+ | Dollar
  | Underscore
  deriving Eq
 
@@ -87,6 +88,7 @@ instance Show Tok where
   show Slash = "/"
   show Caret = "^"
   show Hash = "#"
+  show Dollar = "$"
   show Underscore = "_"
 
 data Token = Token { fc :: FC
@@ -104,10 +106,6 @@ instance Ord Token where
 
 data Keyword
   = KType
-  | KBit
-  | KBool
-  | KQubit
-  | KMoney
   | KExt
   | KImport
   | KLet
@@ -116,10 +114,6 @@ data Keyword
 
 instance Show Keyword where
   show KType = "type"
-  show KBit = "Bit"
-  show KBool = "Bool"
-  show KQubit = "Qubit"
-  show KMoney = "Money"
   show KExt = "ext"
   show KImport = "import"
   show KLet = "let"
@@ -128,10 +122,6 @@ instance Show Keyword where
 keyword :: Lexer Keyword
 keyword
   = ((try (string "type") $> KType)
-     <|> (try (string "Bool")
-           <|> string "Bit") $> KBool
-     <|> string "Qubit" $> KQubit
-     <|> string "Money" $> KMoney
      <|> string "ext"   $> KExt
      <|> string "import" $> KImport
      <|> string "let" $> KLet
@@ -189,6 +179,7 @@ tok = (   try (char '(' $> LParen)
       <|> try (string "#"  $> Hash)
       <|> try (string "*"  $> Asterisk)
       <|> try (string "-" $> Minus)
+      <|> try (string "$" $> Dollar)
       <|> try (K <$> try keyword)
       <|> try qualified
       <|> Ident <$> ident

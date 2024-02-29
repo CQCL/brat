@@ -1,2 +1,2 @@
-test :: { Bool, Qubit -o Qubit }
+test :: { Bit, Qubit -o Qubit }
 test = { b, q => q }

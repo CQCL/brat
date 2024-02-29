@@ -38,7 +38,7 @@ import Data.Functor ((<&>), ($>))
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
-import Data.Kind (Type)
+import Data.Type.Equality ((:~:)(..))
 
 import Debug.Trace
 
@@ -164,164 +164,165 @@ type Unify m = StateT (Store m) (Except String)
 data Equation = (Val Z, TypeKind) :=: Val Z
  deriving Show
 
-solve :: Show (BinderType m)
-      => Modey m
+solve :: Modey m
       -> Problem
       -> Unify m (Solution m)
-solve _ [] = pure []
-solve my ((_, DontCare):p) = solve my p
-solve my ((e, Bind x):p) = do
-  ty <- typeOfEnd my e
-  let v = endVal' my ty e
-  ((x, (v, ty)):) <$> solve my p
-solve my ((e, Lit tm):p) = do
-  case my of
-    Braty -> do
-      ty <- typeOfEnd my e
-      case ty of
-        Left Nat | Num n <- tm -> do
-          unless (n >= 0) $ throwError "Negative Nat kind"
-          unifyNum (nConstant n) (nVar (VPar e))
-          solve my p
-        Left k -> throwError $ "Kind " ++ show k ++ " can't be literal " ++ show tm
-        Right ty -> liftEither (first show (simpleCheck my ty tm)) *> solve my p
-    Kerny -> do
-      ty <- typeOfEnd my e
-      liftEither (first show (simpleCheck my ty tm)) *> solve my p
-solve my ((e, pat@(PCon c abs)):p) = do
-  ty <- typeOfEnd my e
-  -- Need to get rid of kinds and ensure we're in my = Braty
-  case (my, ty) of
-    (Braty, Right ty) -> solveConstructor (c, abs) ty p
-    (Braty, Left Nat) -> case c of
+solve Braty p = solveBrat p
+solve Kerny p = solveKern p
+
+solveBrat :: Problem -> Unify Brat (Solution Brat)
+solveBrat [] = pure []
+solveBrat ((_, DontCare):p) = solveBrat p
+solveBrat ((e, Bind x):p) = do
+  ty <- typeOfEnd Braty e
+  let v = endVal' Braty ty e
+  ((x, (v, ty)):) <$> solveBrat p
+solveBrat ((e, Lit tm):p) = do
+  ty <- typeOfEnd Braty e
+  case ty of
+    Left Nat | Num n <- tm -> do
+                 unless (n >= 0) $ throwError "Negative Nat kind"
+                 unifyNum (nConstant n) (nVar (VPar e))
+                 solveBrat p
+    Left k -> throwError $ "Kind " ++ show k ++ " can't be literal " ++ show tm
+    Right ty -> liftEither (first show (simpleCheck Braty ty tm)) *> solveBrat p
+solveBrat ((e, pat@(PCon c abs)):p) = do
+  ty <- typeOfEnd Braty e
+  -- Need to get rid of kinds
+  case ty of
+    Right ty -> solveConstructor (c, abs) ty p
+    Left Nat -> case c of
+      -- Special case for 0, so that we can call `unifyNum` instead of pattern
+      -- matching using what's returned from `natConstructors`
       PrefixName [] "zero" -> do
         unifyNum (nVar (VPar e)) nZero
         p <- argProblems [] (normaliseAbstractor abs) p
-        solve my p
+        solveBrat p
       _ -> case M.lookup c natConstructors of
         Just (Just _, relationToInner) -> do
           innerEnd <- freshEnd (show c ++ "inner") (Left Nat)
           unifyNum (nVar (VPar e)) (relationToInner (nVar (VPar innerEnd)))
           p <- argProblems [("inner", innerEnd)] (normaliseAbstractor abs) p
-          solve my p
+          solveBrat p
         _ -> throwError $ "Couldn't find Nat constructor " ++ show c
-    (Kerny, ty) -> normalise ty >>= \case
-      -- And constrain to 0 if the length pattern is "nil"
-      ty@(VOf sty len) -> do
-        case (c, normaliseAbstractor abs) of
-          (PrefixName [] "nil", na) -> do
-            liftEither $ first show (numMatch B0 len NP0)
-            p <- argProblems [] na p
-            solve my p
-          (PrefixName [] "cons", na) -> do
-            liftEither (first show (numMatch B0 len (NP1Plus NPVar))) >>= \case
-              B0 :< VNum lenPred -> do
-                headEnd <- freshEnd "VOf head" sty
-                let tailTy = VOf sty lenPred
-                tailEnd <- freshEnd "VOf tail" tailTy
-                -- These port names should be canonical, but we're making them up here
-                p <- argProblems [("head", headEnd), ("tail", tailEnd)] na p
-                solve my p
-              _ -> throwError "Length for Vec wasn't a successor"
-          (name, _) -> throwError $ "Pattern " ++ show name ++ " invalid for type " ++ show ty
-      VBit
-        | PrefixName [] x <- c, x `elem` ["true","false"] -> do
-            p <- argProblems [] (normaliseAbstractor abs) p
-            solve my p
-      _ -> throwError $ "Pattern " ++ show pat ++ " invalid for type " ++ show ty
     _ -> throwError $ "Pattern " ++ show pat ++ " invalid for type " ++ show ty
 
+solveKern :: Problem -> Unify Kernel (Solution Kernel)
+solveKern [] = pure []
+solveKern ((_, DontCare):p) = solveKern p
+solveKern ((e, Bind x):p) = do
+  ty <- typeOfEnd Kerny e
+  let v = endVal' Kerny ty e
+  ((x, (v, ty)):) <$> solveKern p
+solveKern ((e, Lit tm):p) = do
+  ty <- typeOfEnd Kerny e
+  liftEither (first show (simpleCheck Kerny ty tm)) *> solveKern p
+-- TODO: Refactor so that this case can just be a call to `solveConstructor`
+solveKern ((e, pat@(PCon c abs)):p) = do
+  ty <- typeOfEnd Kerny e
+  normalise ty >>= \case
+    VCon tyCon tyArgs -> do
+      CArgs pats nFree _tyArgRo argRo <- runChecker $ req (KCLup (FC (Pos 0 0) (Pos 0 0)) c tyCon)
+      let na = normaliseAbstractor abs
+      -- Fail when the types don't match up
+      case valMatches tyArgs pats of
+        Left err -> throwError (show err)
+        Right (Some (ny :* valz)) -> do
+          case natEqOrBust nFree ny of
+            Left _ -> throwError "internal error in solveKern"
+            Right Refl -> do
+              (_, args) <- mkEndsForRo Kerny valz argRo
+              p <- argProblems args na p
+              solveKern p
+    _ -> throwError $ "Pattern " ++ show pat ++ " invalid for type " ++ show ty
+
+-- Solve a BRAT constructor.
 solveConstructor :: (UserName, Abstractor) -> Val Z -> Problem -> Unify Brat (Solution Brat)
 solveConstructor (c, abs) ty p = do
-  (CArgs pats _ patRo argRo, (tycon, tyargs)) <- lookupConstructor c ty
+  (CArgs pats _ patRo argRo, (tycon, tyargs)) <- lookupConstructor Braty c ty
   (stk, patEnds) <- mkEndsForRo Braty S0 patRo
   (_, argEnds) <- mkEndsForRo Braty stk argRo
   trackM ("Constructor " ++ show c ++ "; type " ++ show ty)
   let (lhss, leftovers) = patVals pats (snd <$> patEnds)
   unless (null leftovers) $ error "There's a bug in the constructor table"
-  tyargKinds <- lookupTypeConstructorArgs tycon
+  tyargKinds <- lookupTypeConstructorArgs Brat tycon
   -- Constrain tyargs to match pats
-  unifys Braty lhss (KfB . snd <$> tyargKinds) tyargs
+  unifys lhss (snd <$> tyargKinds) tyargs
   p <- argProblems argEnds (normaliseAbstractor abs) p
   solve Braty p
 
-unifys :: Show (ValueType m Z) => Modey m -> [ValueType m Z] -> [KindFor m] -> [ValueType m Z] -> Unify m ()
-unifys _ [] [] [] = pure ()
-unifys my (l:ls) (k:ks) (r:rs) = unify my l k r *> unifys my ls ks rs
-unifys _ _ _ _ = error "jagged unifyArgs lists"
+unifys :: [Val Z] -> [TypeKind] -> [Val Z] -> Unify Brat ()
+unifys [] [] [] = pure ()
+unifys (l:ls) (k:ks) (r:rs) = unify l k r *> unifys ls ks rs
+unifys _ _ _ = error "jagged unifyArgs lists"
 
-unify :: Show (ValueType m Z) => Modey m -> ValueType m Z -> KindFor m -> ValueType m Z -> Unify m ()
-unify my l k r = do
-  (l, r) <- case my of
-    Braty -> (,) <$> normalise l <*> normalise r
-    Kerny -> (,) <$> normalise l <*> normalise r
-  b <- equal my k l r
+-- Unify two Braty types
+unify :: Val Z -> TypeKind -> Val Z -> Unify Brat ()
+unify l k r = do
+  (l, r) <- (,) <$> normalise l <*> normalise r
+  b <- equal Braty k l r
   if b
   then pure ()
-  else case (my, l, r, k) of
-    (Braty, VCon c args, VCon c' args', KfB (Star []))
+  else case (l, r, k) of
+    (VCon c args, VCon c' args', Star [])
       | c == c' -> do
-          ks <- lookupTypeConstructorArgs c
-          unifys Braty args (KfB . snd <$> ks) args'
-    (Braty, VNum l, VNum r, KfB Nat) -> unifyNum l r
-    (Braty, VApp (VPar x) B0, v, _) -> instantiateMeta x v
-    (Braty, v, VApp (VPar x) B0, _) -> instantiateMeta x v
-    (Kerny, VOf ty n, VOf ty' n', _) -> do
-      unifyNum n n'
-      unify Kerny ty KfK ty'
-    (_, l, r, _) -> throwError $ "Can't unify " ++ show l ++ " with " ++ show r
+          ks <- lookupTypeConstructorArgs Brat c
+          unifys args (snd <$> ks) args'
+    (VCon c args, VCon c' args', Dollar [])
+      | c == c' -> do
+          ks <- lookupTypeConstructorArgs Kernel c
+          unifys args (snd <$> ks) args'
+    (VNum l, VNum r, Nat) -> unifyNum l r
+    (VApp (VPar x) B0, v, _) -> instantiateMeta x v
+    (v, VApp (VPar x) B0, _) -> instantiateMeta x v
+    -- TODO: Handle function types
+    -- TODO: Postpone this problem instead of giving up. Stick it an a list of
+    --       equations that we hope are true and check them once we've processed
+    --       the whole `Problem`.
+    (l, r, _) -> throwError $ "Can't unify " ++ show l ++ " with " ++ show r
 
 instantiateMeta :: End -> Val Z -> Unify m ()
 instantiateMeta e val = do
   st <- get
   let ev = endVals st
-  liftEither (doesntOccur @Brat ev e val)
+  liftEither (doesntOccur ev e val)
   let ev' = M.insert e val ev
   put (st { endVals = ev' })
 
 
-class Occurs (m :: Mode) where
-  doesntOccur :: M.Map End (Val Z) -> End -> ValueType m n -> Either String ()
-
 -- Be conservative, fail if in doubt. Not dangerous like being wrong while succeeding
 -- We can have bogus failures here because we're not normalising under lambdas
-instance Occurs Brat where
-  doesntOccur endVals e (VNum nv) = case getNumVar nv of
-    Just e' -> chaseDefn endVals e e'
-    _ -> pure ()
-   where
-    getNumVar :: NumVal n -> Maybe End
-    getNumVar (NumValue _ (StrictMonoFun (StrictMono _ mono))) = case mono of
-      Linear v -> case v of
-        VPar e -> Just e
-        _ -> Nothing
-      Full sm -> getNumVar (numValue sm)
-    getNumVar _ = Nothing
-  doesntOccur endVals e (VApp var args) = case var of
-    VPar e' -> chaseDefn endVals e e' *> traverse_ (doesntOccur @Brat endVals e) args
-    _ -> pure ()
-  doesntOccur endVals e (VCon _ args) = traverse_ (doesntOccur @Brat endVals e) args
-  doesntOccur endVals e (VLam (stash ::- body)) = doesntOccurStash stash *> doesntOccur @Brat endVals e body
-   where
-    doesntOccurStash :: Stack i (Val Z) j -> Either String ()
-    doesntOccurStash S0 = pure ()
-    doesntOccurStash (zx :<< x) = doesntOccur @Brat endVals e x *> doesntOccurStash zx
-  doesntOccur endVals e (VFun my (ins :->> outs)) = case my of
-    Braty -> doesntOccurRo my endVals e ins *> doesntOccurRo my endVals e outs
-    Kerny -> doesntOccurRo my endVals e ins *> doesntOccurRo my endVals e outs
-
-instance Occurs Kernel where
-  doesntOccur endVals e (VOf ty n) = doesntOccur @Kernel endVals e ty *> doesntOccur @Brat endVals e (VNum n)
-  doesntOccur endVals e (VRho ro) = doesntOccurRo Kerny endVals e ro
-  doesntOccur _ _ VBit = pure ()
-  doesntOccur _ _ VQ = pure ()
+doesntOccur :: M.Map End (Val Z) -> End -> Val n -> Either String ()
+doesntOccur endVals e (VNum nv) = case getNumVar nv of
+  Just e' -> chaseDefn endVals e e'
+  _ -> pure ()
+ where
+  getNumVar :: NumVal n -> Maybe End
+  getNumVar (NumValue _ (StrictMonoFun (StrictMono _ mono))) = case mono of
+    Linear v -> case v of
+      VPar e -> Just e
+      _ -> Nothing
+    Full sm -> getNumVar (numValue sm)
+  getNumVar _ = Nothing
+doesntOccur endVals e (VApp var args) = case var of
+  VPar e' -> chaseDefn endVals e e' *> traverse_ (doesntOccur endVals e) args
+  _ -> pure ()
+doesntOccur endVals e (VCon _ args) = traverse_ (doesntOccur endVals e) args
+doesntOccur endVals e (VLam (stash ::- body)) = doesntOccurStash stash *> doesntOccur endVals e body
+ where
+  doesntOccurStash :: Stack i (Val Z) j -> Either String ()
+  doesntOccurStash S0 = pure ()
+  doesntOccurStash (zx :<< x) = doesntOccur endVals e x *> doesntOccurStash zx
+doesntOccur endVals e (VFun my (ins :->> outs)) = case my of
+  Braty -> doesntOccurRo my endVals e ins *> doesntOccurRo my endVals e outs
+  Kerny -> doesntOccurRo my endVals e ins *> doesntOccurRo my endVals e outs
 
 chaseDefn :: M.Map End (Val Z) -- `endVals` from the Store
           -> End -> End -> Either String ()
 chaseDefn endVals e v | e == v = throwError $ show e ++ " is cyclic"
                       | otherwise = case M.lookup v endVals of
                           Nothing -> pure ()
-                          Just defn -> doesntOccur @Brat endVals e defn
+                          Just defn -> doesntOccur endVals e defn
 
 
 -- Is this numvalue just a var plus a constant?
@@ -332,8 +333,7 @@ isNumVar _ = Nothing
 
 doesntOccurRo :: Modey m -> M.Map End (Val Z) -> End -> Ro m i j -> Either String ()
 doesntOccurRo _ _ _ R0 = pure ()
-doesntOccurRo my@Braty endVals e (RPr (_, ty) ro) = doesntOccur @Brat endVals e ty *> doesntOccurRo my endVals e ro
-doesntOccurRo my@Kerny endVals e (RPr (_, ty) ro) = doesntOccur @Kernel endVals e ty *> doesntOccurRo my endVals e ro
+doesntOccurRo my endVals e (RPr (_, ty) ro) = doesntOccur endVals e ty *> doesntOccurRo my endVals e ro
 doesntOccurRo Braty endVals e (REx _ (_ ::- ro)) = doesntOccurRo Braty endVals e ro
 
 -- Can be clever, but not for now
@@ -353,20 +353,13 @@ unifyNum l r = case (isNumVar l, isNumVar r) of
     | otherwise -> instantiateMeta y (VNum $ nPlus (n - m) (nVar (VPar x)))
   _ -> throwError $ "Couldn't unify " ++ show l ++ " with " ++ show r
 
-data KindFor :: Mode -> Type where
-  KfB :: TypeKind -> KindFor Brat
-  KfK :: KindFor Kernel
-
 getStore :: Unify m (Store m)
 getStore = get
 
-equal :: Modey m -> KindFor m -> ValueType m Z -> ValueType m Z -> Unify m Bool
-equal Braty (KfB k) l r = do
+equal :: Modey m -> TypeKind -> Val Z -> Val Z -> Unify m Bool
+equal _ k l r = do
   st <- getStore
   pure $ isRight (runExcept $ evalStateT (runChecker $ typeEq "" k l r) st)
-equal Kerny KfK l r = do
-  st <- getStore
-  pure $ isRight (runExcept $ evalStateT (runChecker $ stypeEq "" l r) st)
 
 patVal :: ValPat -> [End] -> (Val Z, [End])
 -- Nat variables will only be found in a `NumPat`, not a `ValPat`
@@ -396,7 +389,7 @@ argProblems [] (NA AEmpty) p = pure p
 argProblems _ _ _ = throwError "Pattern doesn't match expected length for constructor args"
 
 -- Make new ends and put them in the context
-mkEndsForRo :: DeBruijn (ValueType m) => Modey m -> Stack Z (Val Z) i -> Ro m i j -> Unify m (Stack Z (Val Z) j, [(PortName, End)])
+mkEndsForRo :: Modey m -> Stack Z (Val Z) i -> Ro m i j -> Unify m (Stack Z (Val Z) j, [(PortName, End)])
 mkEndsForRo _ stk R0 = pure (stk, [])
 mkEndsForRo my stk (RPr (p, ty) ro) = do
   ty <- case my of
@@ -417,20 +410,26 @@ normalise = runChecker . eval S0
 
 -- HACK: For now, use the hard coded constructor map in `Constructors.hs`, rather
 -- than the updatable one in the `Checking` monad
-lookupConstructor :: UserName -- A value constructor
+lookupConstructor :: Modey m
+                  -> UserName -- A value constructor
                   -> Val Z    -- A corresponding type to normalise
-                  -> Unify Brat (CtorArgs -- The needed args to the value constructor
+                  -- TODO: Something with this m
+                  -> Unify Brat (CtorArgs m -- The needed args to the value constructor
                                 ,(UserName, [Val Z])  -- The type constructor we normalised and its args
                                 )
-lookupConstructor c ty = runChecker (eval S0 ty) >>= \case
-  ty@(VCon cty args) -> case M.lookup c defaultConstructors >>= M.lookup cty of
+lookupConstructor my c ty = runChecker (eval S0 ty) >>= \case
+  ty@(VCon cty args) -> case M.lookup c (constructorTable my) >>= M.lookup cty of
                          Just ctorArgs -> pure (ctorArgs, (cty, args))
                          Nothing -> throwError $ "Couldn't find constructor " ++ show c ++ " for type " ++ show ty
   ty -> throwError $ "Couldn't normalise type " ++ show ty ++ " to a constructor"
+ where
+  constructorTable :: Modey m -> ConstructorMap m
+  constructorTable Braty = defaultConstructors
+  constructorTable Kerny = kernelConstructors
 
-lookupTypeConstructorArgs :: UserName -> Unify Brat [(String, TypeKind)]
-lookupTypeConstructorArgs tycon = case M.lookup tycon defaultTypeConstructors of
-  Just (Star ks) -> pure ks
+lookupTypeConstructorArgs :: Mode -> UserName -> Unify m' [(String, TypeKind)]
+lookupTypeConstructorArgs m tycon = case M.lookup (m, tycon) defaultTypeConstructors of
+  Just ks -> pure ks
   _ -> throwError $ "Invalid type constructor " ++ show tycon
 
 -- Run a `Checking` computation, but substituting our own store for `ELup`, and
@@ -438,6 +437,14 @@ lookupTypeConstructorArgs tycon = case M.lookup tycon defaultTypeConstructors of
 runChecker :: Free CheckingSig v -> Unify m v
 runChecker (Ret v) = pure v
 runChecker (Req (ELup e) k) = get >>= \st -> runChecker $ k (M.lookup e (endVals st))
+-- TODO: This will need to change to using the proper Checking Monad before we
+-- can handle user defined value constructors
+runChecker (Req (KCLup _ tmCon tyCon) k) = case M.lookup tmCon kernelConstructors of
+  Nothing -> throwError ("Invalid constructor " ++ show tmCon)
+  Just tbl -> case M.lookup tyCon tbl of
+    Nothing -> throwError (show tmCon ++ " isn't a valid constructor for " ++ show tyCon)
+    Just answer -> runChecker $ k answer
+
 runChecker (Req (Throw err) _) = throwError (showError err)
 -- Provide a dummy FC because it'll probably be asked for before an error is thrown
 runChecker (Req AskFC k) = runChecker $ k (FC (Pos 0 0) (Pos 0 0))
@@ -509,7 +516,7 @@ data Pair (t :: N -> Type) (n :: N) where
 data PatResult m
  = Indiscriminate
  | Discriminate (Test, Bool)
- | forall n. Invalid TypeOrKind (ValueType m n)
+ | forall n. Invalid TypeOrKind (Val n)
 
 type PortTest = (Int, Test)
 -}

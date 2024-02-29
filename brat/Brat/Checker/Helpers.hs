@@ -8,7 +8,7 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
                             ,rowToSig
                             ,showMode, getVec
                             ,mkThunkTy
-                            ,awire, wire, kwire
+                            ,wire
                             ,next, knext, anext
                             ,kindType, getThunks
                             ,binderToValue, valueToBinder
@@ -49,7 +49,7 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import Prelude hiding (last)
 
-simpleCheck :: Show (ValueType m Z) => Modey m -> ValueType m Z -> SimpleTerm -> Either ErrorMsg ()
+simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Either ErrorMsg ()
 simpleCheck Braty TNat (Num n) | n >= 0 = pure ()
 simpleCheck Braty TInt (Num _) = pure ()
 simpleCheck Braty TFloat (Float _) = pure ()
@@ -65,9 +65,9 @@ simpleCheck _ ty tm = Left $ TypeErr $ unwords
 pull1PortRo :: MODEY m
             => Modey m
             -> PortName -- The port we want to pull to the front
-            -> Bwd (PortName, ValueType m bot) -- The things we've passed so far
+            -> Bwd (PortName, Val bot) -- The things we've passed so far
             -> Ro m bot top -- The row we've got left to traverse
-            -> Checking ((PortName, ValueType m bot), Ro m bot top)
+            -> Checking ((PortName, Val bot), Ro m bot top)
 -- TODO: Make an `Error` constructor for this
 pull1PortRo _ p _ R0 = fail $ "Port not found: " ++ p
 pull1PortRo m p stuff (RPr (p', ty) ro)
@@ -78,7 +78,7 @@ pull1PortRo m p stuff (RPr (p', ty) ro)
  where
   rebuildRo :: Modey m
             -> Ro m bot top -- The row that we still haven't traversed
-            -> [(PortName, ValueType m bot)] -- The stuff we've passed
+            -> [(PortName, Val bot)] -- The stuff we've passed
             -> Ro m bot top
   rebuildRo _ ro [] = ro
   rebuildRo m ro (x:xs) = RPr x (rebuildRo m ro xs)
@@ -159,20 +159,13 @@ showMode :: Modey m -> String
 showMode Braty = ""
 showMode Kerny = "(kernel) "
 
-{-
-getVec :: Modey m -> ValueType m n -> Maybe (ValueType m n, NumVal n)
-getVec Braty (TVec ty (VNum n)) = Just (ty, n)
-getVec Kerny (Of ty (VNum n)) = Just (ty, n)
-getVec _ _ = Nothing
--}
-
 type family ThunkFCType (m :: Mode) where
   ThunkFCType Brat = FC
   ThunkFCType Kernel = ()
 
 type family ThunkRowType (m :: Mode) where
   ThunkRowType Brat = KindOr (Term Chk Noun)
-  ThunkRowType Kernel = SType' (Term Chk Noun)
+  ThunkRowType Kernel = Term Chk Noun
 
 mkThunkTy :: Modey m
           -> ThunkFCType m
@@ -181,7 +174,7 @@ mkThunkTy :: Modey m
           -> Term Chk Noun
 -- mkThunkTy Braty fc ss ts = C (WC fc (ss :-> ts))
 mkThunkTy Braty _ ss ts = C (ss :-> ts)
-mkThunkTy Kerny () ss ts = K (R ss) (R ts)
+mkThunkTy Kerny () ss ts = K (ss :-> ts)
 
 anext :: forall m i j k
        . EvMode m
@@ -208,8 +201,8 @@ anext str th vals0 ins outs = do
   pure (node, unders, overs, vals2)
  where
   mkNode :: forall m. Modey m -> Thing
-         -> [(PortName, ValueType m Z)]
-         -> [(PortName, ValueType m Z)]
+         -> [(PortName, Val Z)]
+         -> [(PortName, Val Z)]
          -> Node
   mkNode Braty = BratNode
   mkNode Kerny = KernelNode
@@ -264,17 +257,10 @@ knext :: String -> Thing -> (Valz i, Some Endz)
       -> Checking (Name, Unders Kernel Chk, Overs Kernel UVerb, (Valz i, Some Endz))
 knext = let ?my = Kerny in anext
 
-awire :: (?my :: Modey m) => (Src, ValueType m Z, Tgt) -> Checking ()
-awire (src, ty, tgt) = do
-  ty <- mkT ?my ty
+wire :: (Src, Val Z, Tgt) -> Checking ()
+wire (src, ty, tgt) = do
+  ty <- eval S0 ty
   req $ Wire (end src, ty, end tgt)
- where
-  mkT :: Modey m -> ValueType m Z -> Checking (Either (SVal Z) (Val Z))
-  mkT Braty ty = Right <$> eval S0 ty
-  mkT Kerny ty = pure $ Left ty
-
-wire = let ?my = Braty in awire
-kwire = let ?my = Kerny in awire
 
 -- Called by check when synthesising a function.
 -- Given a row of overs which starts with some function types for the same mode:
@@ -321,12 +307,12 @@ getThunks Braty ((src, Left (Star args)):rest) = do
   pure (node:nodes, unders <> unders', overs <> overs')
 getThunks m ro = err $ ExpectedThunk (showMode m) (showRow ro)
 
-binderToValue :: Modey m -> BinderType m -> ValueType m Z
+binderToValue :: Modey m -> BinderType m -> Val Z
 binderToValue Braty (Left k) = kindType k
 binderToValue Braty (Right ty) = ty
 binderToValue Kerny v = v
 
-valueToBinder :: Modey m -> ValueType m Z -> BinderType m
+valueToBinder :: Modey m -> Val Z -> BinderType m
 valueToBinder Braty = Right
 valueToBinder Kerny = id
 
@@ -386,39 +372,11 @@ makeBox name cty@(ss :->> ts) body = do
         )
       pure (thunk, bres)
 
-{-
-uncons :: Modey m -> ValueType m Z -> Maybe (ValueType m Z, ValueType m Z)
-uncons Kerny (VOf ty n) = case numMatch B0 n (NP1Plus NPVar) of
-  Right (B0 :< m) -> pure (ty, VOf ty m)
-  _ -> Nothing
-uncons Braty (TList ty) = Just (ty, TList ty)
-uncons Braty (TVec ty n) = case valMatch n (VPNum (NP1Plus NPVar)) of
-  Right (B0 :< m) -> pure (ty, TVec ty m)
-  _ -> Nothing
-uncons Braty (TCons x xs) = Just (x, xs)
-uncons _ _ = Nothing
--}
-
 -- Evaluate either mode's BinderType
 evalBinder :: Modey m -> BinderType m -> Checking (BinderType m)
 evalBinder Kerny sty = eval S0 sty
 evalBinder Braty (Right ty) = Right <$> eval S0 ty
 evalBinder Braty (Left k) = pure (Left k)
-
-{-
-evalRowElem :: Modey m -> (a, BinderType m) -> Checking (a, BinderType m)
-evalRowElem Braty (p, Right ty) = (p,) . Right <$> evTy ty
-evalRowElem Braty (p, Left k) = pure (p, Left k)
-evalRowElem Kerny (p, ty) = (p,) <$> evSTy ty
-
--- This should be a row of Srcs, generated by next, rather than a
--- signature to ensure that all Inx's are instantiated
-evalSrcRow :: Modey m -> [(Src, BinderType m)] -> Checking [(Src, BinderType m)]
-evalSrcRow m = traverse (evalRowElem m)
-
-evalTgtRow :: Modey m -> [(Tgt, BinderType m)] -> Checking [(Tgt, BinderType m)]
-evalTgtRow m = traverse (evalRowElem m)
--}
 
 -- If this goes wrong, we probably messed up writing the constructor table
 natEqOrBust :: Ny i -> Ny j -> Either ErrorMsg (i :~: j)

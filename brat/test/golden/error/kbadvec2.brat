@@ -1,2 +1,2 @@
-triple :: { Bool -o Vec(Bool,3) }
+triple :: { Bit -o Vec(Bit, 3) }
 triple = { b => nil }

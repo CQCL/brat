@@ -31,21 +31,18 @@ row :: Int -> Int -> Gen (Ro Kernel Z Z)
 row d n = sequence [ (name,) <$> arbitrarySValue d | name <- take n names ] <&>
           foldr (\this rest -> RPr this rest) R0
 
-arbitrarySValue :: Int -> Gen (SVal Z)
+arbitrarySValue :: Int -> Gen (Val Z)
 arbitrarySValue d = case d of
   1 -> cheap
   d -> oneof [cheap, vec (d - 1)]
  where
-  cheap = pure VBit
+  cheap = pure TBit
 
   vec d = do
     n <- chooseInt bounds
     ty <- arbitrarySValue d
-    pure (VOf ty (NumValue n Constant0)) -- Only the simplest values of `n`
+    pure (TVec ty (VNum (NumValue n Constant0))) -- Only the simplest values of `n`
 
-
-instance Arbitrary (SVal Z) where
-  arbitrary = arbitrarySValue maxDepth
 
 instance Arbitrary (Val Z) where
   arbitrary = chooseInt bounds >>= \n -> row n maxDepth <&> \r -> VFun Kerny (r :->> r)

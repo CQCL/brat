@@ -19,8 +19,7 @@ testParse file = testCase (show file) $ do
 
 expectedParsingFails = map ("examples" </>) [
     "karlheinz.brat",
-    "thin.brat",
-    "hea.brat"]
+    "thin.brat"]
 
 expectFailForPaths :: [FilePath] -> (FilePath -> TestTree) -> FilePath -> TestTree
 expectFailForPaths xf f path = (if path `elem` xf then expectFail else id) $ f path

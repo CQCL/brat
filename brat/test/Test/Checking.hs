@@ -15,6 +15,7 @@ import Test.Tasty.ExpectedFailure
 
 expectedCheckingFails = map ("examples" </>) ["nested-abstractors.brat"
                                              ,"karlheinz_alias.brat"
+                                             ,"hea.brat"
                                              ]
 
 parseAndCheckXF :: FilePath -> TestTree

@@ -45,8 +45,9 @@ kindArgRows argKinds = (helper argKinds R0
 
 data Context = Ctx { venv   :: VEnv
                    , store  :: Store
-                   , constructors :: ConstructorMap
-                   , typeConstructors :: M.Map UserName TypeKind
+                   , constructors :: ConstructorMap Brat
+                   , kconstructors :: ConstructorMap Kernel
+                   , typeConstructors :: M.Map (Mode, UserName) [(PortName, TypeKind)]
                    , aliasTable :: M.Map UserName Alias
                    }
 
@@ -59,12 +60,17 @@ data CheckingSig ty where
   VLup    :: UserName -> CheckingSig (Maybe [(Src, BinderType Brat)])
   KLup    :: UserName -> CheckingSig (Maybe (Src, BinderType Kernel))
   -- Lookup type constructors
-  TLup    :: TypeKind -> UserName -> CheckingSig (Maybe [(PortName, TypeKind)])
+  TLup    :: (Mode, UserName) -> CheckingSig (Maybe [(PortName, TypeKind)])
   -- Lookup term constructor - ask whether a constructor builds a certain type
   CLup    :: FC -- File context for error reporting
           -> UserName -- Value constructor
           -> UserName  -- Type constructor
-          -> CheckingSig CtorArgs
+          -> CheckingSig (CtorArgs Brat)
+  -- Lookup kernel constructors
+  KCLup   :: FC -- File context for error reporting
+          -> UserName -- Value constructor
+          -> UserName  -- Type constructor
+          -> CheckingSig (CtorArgs Kernel)
   -- Lookup an end in the Store
   ELup    :: End -> CheckingSig (Maybe (Val Z))
   -- Lookup an alias in the table
@@ -151,8 +157,13 @@ alup s = do
 
 clup :: UserName -- Value constructor
      -> UserName  -- Type constructor
-     -> Checking CtorArgs
+     -> Checking (CtorArgs Brat)
 clup vcon tycon = req AskFC >>= \fc -> req (CLup fc vcon tycon)
+
+kclup :: UserName -- Value constructor
+      -> UserName  -- Type constructor
+      -> Checking (CtorArgs Kernel)
+kclup vcon tycon = req AskFC >>= \fc -> req (KCLup fc vcon tycon)
 
 
 lookupAndUse :: UserName -> KEnv
@@ -231,18 +242,20 @@ handler (Req s k) ctx g ns
                     st { valueMap = M.insert end v vm }
                 }) g ns
       -- TODO: Use the kind argument for partially applied constructors
-      TLup _ c -> do
-        args <- case M.lookup c (typeConstructors ctx) of
-          Just (Star args) -> pure $ Just args
-          Just _ -> Left $
-                    Err Nothing $
-                    InternalError "Non * type constructor - this shouldn't happen"
-          Nothing -> pure Nothing
+      TLup key -> do
+        let args = M.lookup key (typeConstructors ctx)
         handler (k args) ctx g ns
 
       CLup fc vcon tycon -> do
         tbl <- maybeToRight (Err (Just fc) $ VConNotFound $ show vcon) $
                M.lookup vcon (constructors ctx)
+        args <- maybeToRight (Err (Just fc) $ TyConNotFound (show tycon) (show vcon)) $
+                M.lookup tycon tbl
+        handler (k args) ctx g ns
+
+      KCLup fc vcon tycon -> do
+        tbl <- maybeToRight (Err (Just fc) $ VConNotFound $ show vcon) $
+               M.lookup vcon (kconstructors ctx)
         args <- maybeToRight (Err (Just fc) $ TyConNotFound (show tycon) (show vcon)) $
                 M.lookup tycon tbl
         handler (k args) ctx g ns

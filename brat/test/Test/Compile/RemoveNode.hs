@@ -33,9 +33,9 @@ testGraph =
           ,(c, idNode)
           ,(out, outNode)
           ]
-        ,[((Ex a 0), Right int, (In b 0))
-         ,((Ex b 0), Right int, (In c 0))
-         ,((Ex c 0), Right int, (In out 0))
+        ,[(Ex a 0, int, In b 0)
+         ,(Ex b 0, int, In c 0)
+         ,(Ex c 0, int, In out 0)
          ]
         )
 
@@ -46,8 +46,8 @@ removeA = testCase "removeNode.a" $ do
           ,(c, idNode)
           ,(out, outNode)
           ]
-        ,[((Ex b 0), Right int, (In c 0))
-         ,((Ex c 0), Right int, (In out 0))
+        ,[(Ex b 0, int, In c 0)
+         ,(Ex c 0, int, In out 0)
          ]
         )
     in assertNoDifference (removeNode a testGraph) exp
@@ -59,7 +59,7 @@ removeB = testCase "removeNode.b" $ do
           ,(c, idNode)
           ,(out, outNode)
           ]
-        ,[((Ex c 0), Right int, (In out 0))]
+        ,[(Ex c 0, int, In out 0)]
         )
     in assertNoDifference (removeNode b testGraph) exp
 

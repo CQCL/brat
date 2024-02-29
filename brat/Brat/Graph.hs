@@ -16,7 +16,7 @@ import qualified Data.Map as M
 data Node
   -- Inputs first, then outputs
   = BratNode Thing [(PortName, Val Z)] [(PortName, Val Z)]
-  | KernelNode Thing [(PortName, SVal Z)] [(PortName, SVal Z)]
+  | KernelNode Thing [(PortName, Val Z)] [(PortName, Val Z)]
  deriving Show
 
 nodeThing :: Node -> Thing
@@ -46,7 +46,7 @@ emptyGraph = (M.empty, [])
 instance {-# OVERLAPPING #-} Show Graph where
   show (ns, ws) = unlines (("Nodes:":(show <$> M.toList ns)) ++ ("":"Wires:":(show <$> ws)))
 
-type Wire = (OutPort, Either (SVal Z) (Val Z), InPort)
+type Wire = (OutPort, Val Z, InPort)
 
 toGraph :: Graph -> (G.Graph, G.Vertex -> (Node, Name, [Name]), Name -> Maybe G.Vertex)
 toGraph (ns, ws) = G.graphFromEdges adj
