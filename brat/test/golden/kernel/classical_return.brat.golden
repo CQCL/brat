@@ -6,5 +6,5 @@ f :: { Qubit -o Qubit, Int }
 f = { q -> q, 1 }
 ^^^^^^^^^^^^^^^^^
 
-  Type error: Can't use Int in a kernel
+  Type error: Can't find type constructor Int in this context
 
