@@ -3,16 +3,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 import Control.Concurrent.MVar
-import Control.Lens hiding (Iso)
+import Control.Lens hiding (Iso, to)
 import Control.Monad.Except
+import Control.Monad.IO.Class
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe (fromMaybe)
-import Data.Rope.UTF16 (toString)
-import Data.Text (pack)
+import Data.Text.Utf16.Rope (toText)
+import Data.Text (pack, unpack)
 import Language.LSP.Server
 import Language.LSP.Diagnostics
-import Language.LSP.Types
-import Language.LSP.Types.Lens hiding (publishDiagnostics, textDocumentSync)
+import Language.LSP.Protocol.Lens hiding (length, publishDiagnostics)
+import Language.LSP.Protocol.Message
+import Language.LSP.Protocol.Types
 import Language.LSP.VFS
 import System.FilePath (dropFileName)
 import System.Log.Logger
@@ -28,21 +30,21 @@ import Brat.LSP.State
 main :: IO Int
 main = do
   ps   <- newMVar emptyPS
-  setupLogger Nothing ["lsp-brat"] DEBUG
 
   runServer $ ServerDefinition
       { defaultConfig = ()
-      , onConfigurationChange = \old _ -> pure old
+      , onConfigChange = \() -> pure ()
       , doInitialize = \env _ -> pure (Right env)
-      , staticHandlers = handlers ps
+      -- Ignore ClientCapabilities argument
+      , staticHandlers = \_ -> handlers ps
       , interpretHandler = \env -> Iso (runLspT env) liftIO
-      , options = defaultOptions { textDocumentSync = Just syncOptions }
+      , options = defaultOptions { optTextDocumentSync = Just syncOptions }
       }
  where
   syncOptions :: TextDocumentSyncOptions
   syncOptions = TextDocumentSyncOptions
     { _openClose         = Just True
-    , _change            = Just TdSyncIncremental
+    , _change            = Just TextDocumentSyncKind_Incremental
     , _willSave          = Just False
     , _willSaveWaitUntil = Just False
     , _save              = Just $ InR $ SaveOptions $ Just False
@@ -54,10 +56,12 @@ sendError fileUri Err{..} =
       endPos   = maybe (Position 0 100) (conv . FC.end) fc
       diags = [Diagnostic
                (Range startPos endPos)
-               (Just DsError)
+               (Just DiagnosticSeverity_Error)
+               Nothing
                Nothing
                (Just "lsp-brat")
                (pack $ show msg)
+               Nothing
                Nothing
                Nothing
               ]
@@ -65,11 +69,11 @@ sendError fileUri Err{..} =
  where
   conv :: Pos -> Position
   conv p@(Pos l c) = case msg of
-                        LexErr _ -> Position l c
+                        LexErr _ -> Position (fromIntegral l) (fromIntegral c)
                         _ -> convPos p
 
 convPos :: Pos -> Position
-convPos (Pos l c) = Position (max 0 (l - 1)) (max 0 (c - 1))
+convPos (Pos l c) = Position (fromIntegral (max 0 (l - 1))) (fromIntegral (max 0 (c - 1)))
 
 -- publish 0 error messages (to delete old ones)
 allGood :: NormalizedUri -> LspM () ()
@@ -84,10 +88,12 @@ logHoles hs fileUri = publishDiagnostics (length hs) fileUri Nothing (partitionB
                   range = Range (convPos start) (convPos end)
               in  Diagnostic
                   range
-                  (Just DsInfo)
+                  (Just DiagnosticSeverity_Information)
+                  Nothing
                   Nothing
                   (Just "lsp-brat")
                   msg
+                  Nothing
                   Nothing
                   Nothing
 
@@ -95,12 +101,12 @@ loadVFile state _ msg = do
   let fileUri = msg ^. params
                 . textDocument
                 . uri
-  let fileName = fileUri ^. to toNormalizedUri
+  let fileName = toNormalizedUri fileUri
   file <- getVirtualFile fileName
   let cwd = fromMaybe "" $ dropFileName <$> (uriToFilePath fileUri)
   case file of
     Just (VirtualFile _version str rope) -> do
-      let file = toString rope
+      let file = unpack $ toText rope
       liftIO $ debugM "loadVFile" $ "Found file: " ++ show str
       -- N.B. The lsp server will never look for libraries file outside of the
       -- current working directory because of this argument!
@@ -119,22 +125,22 @@ loadVFile state _ msg = do
 
 handlers :: MVar ProgramState -> Handlers (LspM ())
 handlers state = mconcat
-  [ notificationHandler SInitialized $ const (pure ())
-  , notificationHandler STextDocumentDidOpen (loadVFile state ("TextDocumentDidOpen" :: String))
-  , notificationHandler STextDocumentDidChange (loadVFile state ("TextDocumentDidChange" :: String))
-  , notificationHandler STextDocumentDidSave (loadVFile state ("TextDocumentDidSave" :: String))
+  [ notificationHandler SMethod_Initialized $ const (pure ())
+  , notificationHandler SMethod_TextDocumentDidOpen (loadVFile state ("TextDocumentDidOpen" :: String))
+  , notificationHandler SMethod_TextDocumentDidChange (loadVFile state ("TextDocumentDidChange" :: String))
+  , notificationHandler SMethod_TextDocumentDidSave (loadVFile state ("TextDocumentDidSave" :: String))
   -- Do nothing, never cancel!
-  , notificationHandler SCancelRequest (const (pure ()))
+  , notificationHandler SMethod_CancelRequest (const (pure ()))
   -- TODO: on hover, give some info
-  , requestHandler STextDocumentHover $ \req responder -> do
-      let conv (Position l c) = Pos (l + 1) (c + 1)
+  , requestHandler SMethod_TextDocumentHover $ \req responder -> do
+      let conv (Position l c) = Pos (fromIntegral $ l + 1) (fromIntegral $ c + 1)
       st <- liftIO $ readMVar state
       liftIO $ debugM "handlers" "TextDocumentHover"
       let HoverParams _ pos _ = req ^. params
           -- Dummy info to respond with
           info = pack . show <$> getInfo st (conv pos)
-          ms = maybe mempty (HoverContents . unmarkedUpContent) info
+          msg =  InL . MarkupContent MarkupKind_PlainText $ fromMaybe mempty info
           range = Range pos pos
-          rsp = Hover ms (Just range)
-      responder (Right $ Just rsp)
+          rsp = Hover msg (Just range)
+      responder (Right (InL rsp))
   ]

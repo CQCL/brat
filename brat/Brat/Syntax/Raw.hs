@@ -5,7 +5,7 @@
 
 module Brat.Syntax.Raw where
 
-import Control.Applicative
+import Control.Monad (unless, when)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State

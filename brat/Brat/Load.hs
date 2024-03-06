@@ -27,7 +27,9 @@ import Control.Monad.Freer (req)
 import Hasochism
 
 import Control.Exception (assert)
+import Control.Monad (filterM, foldM, forM, forM_, unless)
 import Control.Monad.Except
+import Control.Monad.Trans.Class (lift)
 import Data.Functor (($>))
 import Data.List (sort)
 import Data.List.HT (viewR)

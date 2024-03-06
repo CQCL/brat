@@ -18,7 +18,6 @@ import Util
 import Control.Monad.Freer
 import Control.Monad.State (State, runState, state)
 
-import Control.Applicative (liftA2)
 import Control.Monad.Fail ()
 import Data.List (intercalate)
 import qualified Data.Map as M

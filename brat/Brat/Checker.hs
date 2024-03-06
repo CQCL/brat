@@ -620,7 +620,6 @@ kindCheckRow' Braty (ny :* s) env (name,i) ((p, Left k):rest) = do -- s is Stack
       pure (i, env, Some (s_m :* Flip (REx (p,k) (S0 ::- ro))))
 kindCheckRow' my ez@(ny :* s) env (name, i) ((p, bty):rest) = case (my, bty) of
   (Braty, Right ty) -> helper ty (Star [])
-  (Braty, Left _) -> err $ InternalError "kindCheckRow' is going very wrong"
   (Kerny, ty) -> helper ty (Dollar [])
 
  where
@@ -741,7 +740,6 @@ abstractPattern Braty (dangling, Left k) pat = abstractKind k pat
 abstractPattern my (dangling, bty) pat@(PCon pcon abst) = case (my, bty) of
   (Braty, Right ty) -> helper my ty (Star []) clup
   (Kerny, ty) -> helper my ty (Dollar []) kclup
-  _ -> err $ InternalError "abstractPattern shouldn't have got here"
  where
   helper :: Modey m
          -> Val Z

@@ -29,6 +29,7 @@ import Bwd
 import Control.Monad.Freer
 import Hasochism
 
+import Control.Monad (unless)
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Bifunctor (first)

@@ -5,6 +5,7 @@ import Brat.Error
 import Brat.Load
 import Util
 
+import Control.Monad (when)
 import Control.Monad.Except
 import Brat.Elaborator
 import Brat.Dot (toDotString)

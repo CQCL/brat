@@ -116,7 +116,8 @@ library
                        filepath,
                        directory,
                        utility-ht,
-                       graphviz
+                       graphviz,
+                       transformers
 
 executable brat
   import:              haskell, ghc-perf, warning-flags
@@ -143,7 +144,7 @@ executable lsp-brat
   main-is:             Driver.hs
   other-modules:       Brat.LSP.Find, Brat.LSP.Holes, Brat.LSP.State
   hs-source-dirs:      lsp
-  build-depends:       base <5, brat, lsp, lsp-types, text, lens, hslogger, rope-utf16-splay, mtl, filepath
+  build-depends:       base <5, brat, lsp, lsp-types, text, lens, hslogger, text-rope, mtl, filepath
   default-extensions:  RecordWildCards
 
 test-suite tests
