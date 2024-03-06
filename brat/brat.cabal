@@ -15,20 +15,12 @@ custom-setup
 
 common haskell
   default-extensions:  DataKinds,
-                       DeriveTraversable,
-                       FlexibleInstances,
                        GADTs,
-                       GeneralizedNewtypeDeriving,
                        ImplicitParams,
                        LambdaCase,
-                       KindSignatures,
                        PatternSynonyms,
                        RecordWildCards,
-                       StandaloneDeriving,
-                       TupleSections,
-                       TypeFamilies,
-                       TypeOperators,
-                       TypeSynonymInstances
+                       TypeFamilies
 
 common ghc-perf
   ghc-options:
@@ -63,7 +55,7 @@ common warning-flags
 
 library
   import:              haskell, warning-flags
-  default-language:    Haskell2010
+  default-language:    GHC2021
   exposed-modules:     Brat.Checker.Quantity,
                        Brat.Dot,
                        Brat.Eval,
@@ -121,7 +113,7 @@ library
 
 executable brat
   import:              haskell, ghc-perf, warning-flags
-  default-language:    Haskell2010
+  default-language:    GHC2021
   main-is:             Main.hs
   hs-source-dirs:      app
   build-depends:       base < 5,
@@ -140,7 +132,7 @@ executable brat
 
 executable lsp-brat
   import:              ghc-perf, warning-flags
-  default-language:    Haskell2010
+  default-language:    GHC2021
   main-is:             Driver.hs
   other-modules:       Brat.LSP.Find, Brat.LSP.Holes, Brat.LSP.State
   hs-source-dirs:      lsp
@@ -150,7 +142,7 @@ executable lsp-brat
 test-suite tests
   import:              ghc-perf, haskell
   type:                exitcode-stdio-1.0
-  default-language:    Haskell2010
+  default-language:    GHC2021
   hs-source-dirs:      test
   main-is:             Main.hs
   other-modules:       Test.Abstractor,

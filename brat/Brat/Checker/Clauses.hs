@@ -1,9 +1,5 @@
 {-# LANGUAGE
 AllowAmbiguousTypes,
-FlexibleContexts,
-MultiParamTypeClasses,
-ScopedTypeVariables,
-TypeApplications,
 UndecidableInstances
 #-}
 

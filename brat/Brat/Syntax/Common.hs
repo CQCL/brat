@@ -1,6 +1,4 @@
-{-# LANGUAGE FlexibleContexts, UndecidableInstances #-}
-{-# LANGUAGE RankNTypes, QuantifiedConstraints #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE AllowAmbiguousTypes, QuantifiedConstraints, UndecidableInstances #-}
 
 module Brat.Syntax.Common (PortName,
                            Dir(..),

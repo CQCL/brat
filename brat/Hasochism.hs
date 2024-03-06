@@ -1,5 +1,3 @@
-{-# LANGUAGE PolyKinds #-}
-
 module Hasochism where
 
 import Data.Kind (Type)

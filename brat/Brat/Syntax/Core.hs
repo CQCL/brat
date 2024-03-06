@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-
 module Brat.Syntax.Core (Term(..)
                         ,Input
                         ,Output

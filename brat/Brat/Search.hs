@@ -1,4 +1,3 @@
-{-# LANGUAGE Rank2Types #-}
 module Brat.Search (vsearch) where
 
 import Brat.Constructors (CtorArgs(..), defaultConstructors)

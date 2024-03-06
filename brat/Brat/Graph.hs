@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, UndecidableInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module Brat.Graph where
 

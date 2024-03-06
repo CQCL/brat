@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleContexts, RankNTypes #-}
-
 module Brat.Checker.Monad where
 
 import Brat.Checker.Quantity (Quantity(..), qpred)

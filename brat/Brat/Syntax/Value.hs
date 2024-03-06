@@ -1,10 +1,4 @@
-{-# LANGUAGE
-EmptyCase,
-FlexibleContexts,
-QuantifiedConstraints,
-ScopedTypeVariables,
-UndecidableInstances
-#-}
+{-# LANGUAGE QuantifiedConstraints, UndecidableInstances #-}
 
 module Brat.Syntax.Value {-(VDecl
                          ,VVar(..)

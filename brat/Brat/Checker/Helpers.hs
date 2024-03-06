@@ -1,5 +1,4 @@
-{-# LANGUAGE AllowAmbiguousTypes, FlexibleContexts, ScopedTypeVariables,
-TypeApplications #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
                             ,simpleCheck

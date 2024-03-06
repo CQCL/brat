@@ -1,12 +1,3 @@
-{-# LANGUAGE
-ConstraintKinds,
-FlexibleContexts,
-MultiParamTypeClasses,
-RankNTypes,
-ScopedTypeVariables,
-TypeApplications
-#-}
-
 module Brat.Checker (check
                     ,run
                     ,VEnv

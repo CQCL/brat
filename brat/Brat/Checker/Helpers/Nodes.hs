@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleContexts, TypeApplications #-}
-
 module Brat.Checker.Helpers.Nodes where
 
 import Brat.Checker.Helpers

@@ -1,13 +1,4 @@
-{-# LANGUAGE
-AllowAmbiguousTypes,
-ConstraintKinds,
-EmptyCase,
-FlexibleContexts,
-PolyKinds,
-RankNTypes,
-ScopedTypeVariables,
-UndecidableInstances
-#-}
+{-# LANGUAGE AllowAmbiguousTypes, UndecidableInstances #-}
 
 module Brat.Eval (Eval(..)
                  ,EvMode(..)

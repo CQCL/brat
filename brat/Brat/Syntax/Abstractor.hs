@@ -1,5 +1,3 @@
-{-# LANGUAGE PatternSynonyms #-}
-
 module Brat.Syntax.Abstractor where
 
 import Brat.Syntax.Port

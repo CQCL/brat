@@ -1,5 +1,3 @@
-{-# LANGUAGE ConstraintKinds, FlexibleContexts #-}
-
 module Brat.Load (loadFilename
                  ,loadFiles
                  ,parseFile
