@@ -1,0 +1,21 @@
+name: Add issues to project board
+
+on:
+  issues:
+    types:
+      - opened
+
+jobs:
+  add-to-project:
+    name: Add issue to project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/add-to-project@RELEASE_VERSION
+        with:
+          # You can target a project in a different organization
+          # to the issue
+          project-url: https://github.com/orgs/CQCL-DEV/projects/10
+          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
+          # Optionally, the issues can be filtered by label
+          #labeled: bug, another-label
+          #label-operator: OR
