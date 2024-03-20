@@ -1,2 +1,2 @@
-# brat
-The &lt;bra|t programming language
+# BRAT
+The BRAT programming language
