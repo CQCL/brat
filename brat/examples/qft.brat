@@ -1,0 +1,31 @@
+open import lib.kernel
+
+ext "arith.i2f" to_float(Nat) -> Float
+
+pi :: Float
+pi = 3.1415926535897
+
+entangle(n :: #, Nat)
+      -> { Qubit, Vec(Qubit, n) -o
+           Qubit, Vec(Qubit, n) }
+entangle(zero, _) = { q, qs => q, qs }
+entangle(succ(n), x) = {
+    qid, uncons(n);
+    CRx(2.0 * pi / 2.0 ^ to_float(x)), vid(n);
+    swap, vid(n);
+    qid, entangle(n, x + 1);
+    swap, vid(n);
+    qid, recons(n)
+}
+
+qft(n :: #) ->
+   { Vec(Qubit, n) -o
+     Vec(Qubit, n) }
+qft(zero) = { [] => [] }
+qft(succ(n)) = {
+    uncons(n);
+    H, vid(n);
+    entangle(n, 2);
+    qid, qft(n);
+    recons(n)
+}
