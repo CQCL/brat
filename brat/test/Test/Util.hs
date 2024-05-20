@@ -24,8 +24,8 @@ assertChecking m = case runEmpty $ localFC (FC (Pos 0 0) (Pos 0 0)) m of
 
 parseAndCheck :: [FilePath] -> FilePath -> TestTree
 parseAndCheck libDirs file = testCase (show file) $ do
-  env <- runExceptT $ loadFilename libDirs file
+  env <- runExceptT $ loadFilename root libDirs file
   case env of
     Left err -> assertFailure (show err)
-    Right (venv, nouns, holes, _) ->
+    Right (venv, nouns, holes, _, _) ->
       ((length venv) + (length nouns) + (length holes) > 0) @? "Should produce something"

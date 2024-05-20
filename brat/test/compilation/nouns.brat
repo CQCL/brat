@@ -1,0 +1,8 @@
+x :: Int
+x = 3
+
+y :: Int
+y = 1 + 2
+
+f(Int) -> Int
+f(i) = i + y

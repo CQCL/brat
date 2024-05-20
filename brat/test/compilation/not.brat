@@ -1,0 +1,3 @@
+not(Bit) -o Bit
+not(true) = false
+not(false) = true

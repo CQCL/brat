@@ -15,6 +15,8 @@ import Brat.Elaborator
 import Control.Monad (void)
 import Control.Monad.State (State, evalState, runState, get, put)
 import Data.Bifunctor
+import Data.List (intercalate)
+import Data.List.HT (chop, viewR)
 import Data.List.NonEmpty (toList, NonEmpty(..), nonEmpty)
 import Data.Foldable (msum)
 import Data.Functor (($>), (<&>))
@@ -607,7 +609,13 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
                   symbol <- string
                   fnName <- simpleName
                   ty <- try nDecl <|> vDecl
-                  pure (fnName, ty, symbol)
+                  -- When external ops are used, we expect it to be in the form:
+                  -- extension.op for the hugr extension used and the op name
+                  let bits = chop (=='.') symbol
+                  (ext, op) <- case viewR bits of
+                                 Just (ext, op) -> pure (intercalate "." ext, op)
+                                 Nothing -> fail $ "Malformed op name: " ++ symbol
+                  pure (fnName, ty, (ext, op))
                pure Decl { fnName = fnName
                          , fnSig = ty
                          , fnBody = FUndefined

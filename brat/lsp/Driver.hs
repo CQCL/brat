@@ -24,6 +24,7 @@ import Brat.Load
 import Brat.LSP.Find
 import Brat.LSP.Holes
 import Brat.LSP.State
+import qualified Brat.Naming as Name
 
 main :: IO Int
 main = do
@@ -108,11 +109,11 @@ loadVFile state _ msg = do
       liftIO $ debugM "loadVFile" $ "Found file: " ++ show str
       -- N.B. The lsp server will never look for libraries file outside of the
       -- current working directory because of this argument!
-      --                                             ||
-      --                                             vv
-      env <- liftIO . runExceptT $ loadFiles (cwd :| []) (show fileName) file
+      --                                                ||
+      --                                                vv
+      env <- liftIO . runExceptT $ loadFiles Name.root (cwd :| []) (show fileName) file
       case env of
-        Right (_,newDecls,holes,_) -> do
+        Right (_,newDecls,holes,_,_) -> do
           old <- liftIO $ takeMVar state
           liftIO $ putMVar state (updateState (snd <$> newDecls, holes) old)
           allGood fileName

@@ -1,0 +1,43 @@
+-- This is the "best" QFT that we can actually compile in practice, rather than merely typecheck
+ext "tket.H" H :: { Qubit -o Qubit }
+ext "tket.CRx" CRx(Float) -> { Qubit, Qubit -o Qubit, Qubit }
+-- We don't compile selectors yet, so extern these
+ext "helpers.uncons" uncons(n :: #) -> { Vec(Qubit, succ(n)) -o Qubit, Vec(Qubit, n) }
+ext "helpers.recons" recons(n :: #) -> { Qubit, Vec(Qubit, n) -o Vec(Qubit, succ(n)) }
+
+qid :: { Qubit -o Qubit }
+qid = { q => q }
+
+vid(n :: #) -> { Vec(Qubit, n) -o Vec(Qubit, n) }
+vid(_) = { qs => qs }
+
+swap(Qubit, Qubit) -o Qubit, Qubit
+swap(a, b) = b, a
+
+half_pi :: Float
+half_pi = 3.1415926535897 / 2.0
+
+entangle(n :: #, Float)
+      -> { Qubit, Vec(Qubit, n) -o
+           Qubit, Vec(Qubit, n) }
+entangle(zero, _) = { q, qs => q, qs }
+entangle(succ(n), th) = {
+    qid, uncons(n);
+    CRx(th), vid(n);
+    swap, vid(n);
+    qid, entangle(n, th / 2.0);
+    swap, vid(n);
+    qid, recons(n)
+}
+
+qft(n :: #) ->
+   { Vec(Qubit, n) -o
+     Vec(Qubit, n) }
+-- qft(zero) = { [] => [] } -- this breaks because we can't compile 'nil'...so panic?!
+qft(succ(n)) = {
+    uncons(n);
+    H, vid(n);
+    entangle(n, half_pi);
+    qid, qft(n);
+    recons(n)
+}

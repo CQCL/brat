@@ -49,3 +49,11 @@ B0 !< _ = error "(!<) failed"
 (<+) :: Bwd a -> Bwd a -> Bwd a
 zx <+ (zy :< y) = (zx <+ zy) :< y
 zx <+ B0 = zx
+
+-- All ways you can split a list
+foci :: [a] -> [(a, (Bwd a, [a]))]
+foci = go B0
+ where
+  go :: Bwd a -> [a] -> [(a, (Bwd a, [a]))]
+  go _ [] = []
+  go az (a:as) = (a, (az, as)) : go (az :< a) as

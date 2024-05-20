@@ -15,8 +15,11 @@ module Brat.Checker (check
                     ,CheckConstraints
                     ,TensorOutputs(..)
                     ,kindCheck, kindCheckRow, kindCheckAnnotation
+                    ,mkArgRo
+                    ,weaken
                     ) where
 
+import Control.Arrow (first)
 import Control.Monad (foldM)
 import Control.Monad.Freer
 import Data.Bifunctor (second)
@@ -26,7 +29,7 @@ import qualified Data.Map as M
 import Data.Type.Equality ((:~:)(..))
 import Prelude hiding (filter)
 
-import Brat.Checker.Helpers
+import Brat.Checker.Helpers hiding (track, trackM)
 import Brat.Checker.Monad
 import Brat.Checker.Quantity
 import Brat.Checker.Types
@@ -39,6 +42,7 @@ import Brat.Naming
 -- import Brat.Search
 import Brat.Syntax.Common
 import Brat.Syntax.Core
+import Brat.Syntax.Port (toEnd)
 import Brat.Syntax.Simple
 import Brat.Syntax.Value
 import Brat.UserName
@@ -61,16 +65,6 @@ singletonEnv x input@(p, ty) = case ?my of
       Just False -> pure One
       Nothing -> err $ InternalError $ "Didn't expect " ++ show ty ++ " in a kernel type"
     pure $ M.singleton (plain x) (q, input)
-   where
-    copyable :: Val Z -> Maybe Bool
-    copyable TQ = Just False
-    copyable TMoney = Just False
-    -- If it can be instantiated with something linear, we can't copy it!
-    copyable (VApp _ _) = Just False
-    copyable (TVec elem _) = copyable elem
-    copyable TBit = Just True
-    copyable _ = Nothing
-
 
 class TensorOutputs d where
   tensor :: d -> d -> d
@@ -264,8 +258,8 @@ check' (TypedTh t) ((), ()) = case ?my of
               -> Checking (SynConnectors Brat Syn Noun
                           ,ChkConnectors Brat Syn Noun)
   createThunk (ins, outs) = do
-    Some (b :* Flip inR) <- pure $ mkArgRo ?my Zy (rowToSig ins)
-    Some (_ :* Flip outR) <- pure $ mkArgRo ?my b (rowToSig outs)
+    Some (ez :* Flip inR) <- mkArgRo ?my S0 (first (fmap toEnd) <$> ins)
+    Some (_ :* Flip outR) <- mkArgRo ?my ez (first (fmap toEnd) <$> outs)
     (thunkOut, ()) <- makeBox "thunk" (inR :->> outR) $
         \(thOvers, thUnders) -> do
           -- if these ensureEmpty's fail then its a bug!
@@ -416,15 +410,21 @@ check' (Simple tm) ((), ((hungry, ty):unders)) = do
       pure (((), ()), ((), unders))
 check' tm _ = error $ "check' " ++ show tm
 
--- Pass in bot (as a Ny) and get back top (in the Some)
-mkArgRo :: Modey m -> Ny bot -> [(PortName, BinderType m)] -> Some (Ny :* Flip (Ro' m) bot)
-mkArgRo _ b [] = Some (b :* Flip R0)
-mkArgRo Braty b ((p, Left k):rest) = case mkArgRo Braty (Sy b) rest of
-  Some (n :* Flip ro) -> Some $ n :* (Flip $ REx (p, k) (S0 ::- ro))
-mkArgRo Braty b ((p, Right t):rest) = case mkArgRo Braty b rest of
-  Some (n :* Flip ro) -> Some $ n :* (Flip $ RPr (p, weaken b t) ro)
-mkArgRo Kerny b ((p,t):rest) = case mkArgRo Kerny b rest of
-  Some (n :* Flip ro) -> Some $ n :* (Flip $ RPr (p, weaken b t) ro)
+-- Constructs row from a list of ends and types. Uses standardize to ensure that dependency is
+-- detected. Fills in the first bot ends from a stack. The stack grows every time we go under
+-- a binder. The final stack is returned, so we can compute an output row after an input row.
+mkArgRo :: Modey m -> Stack Z End bot -> [(NamedPort End, BinderType m)] -> Checking (Some (Stack Z End :* Flip (Ro' m) bot))
+mkArgRo _ ez [] = pure $ Some (ez :* Flip R0)
+mkArgRo Braty ez ((p, Left k):rest) = mkArgRo Braty (ez :<< end p) rest >>= \case
+  Some (ez' :* Flip ro) -> pure $ Some $ ez' :* Flip (REx (portName p, k) (S0 ::- ro))
+mkArgRo Braty ez ((p, Right t):rest) = mkArgRo Braty ez rest >>= \case
+  Some (ez' :* Flip ro) -> do
+    t <- standardise (TypeFor Brat []) t
+    pure $ Some $ ez' :* Flip (RPr (portName p, abstractEndz ez t) ro)
+mkArgRo Kerny ez ((p, t):rest) = mkArgRo Kerny ez rest >>= \case
+  Some (ez' :* Flip ro) -> do
+    t <- standardise (TypeFor Brat []) t
+    pure $ Some $ ez' :* Flip (RPr (portName p, abstractEndz ez t) ro)
 
 mkKindRo :: [(PortName, TypeKind)] -> Some (Flip (Ro' Brat) bot)
 mkKindRo [] = Some (Flip R0)
@@ -561,6 +561,7 @@ kindCheck ((hungry, Nat):unders) (Con c arg)
      defineSrc cdangling v
      defineTgt hungry v
      pure ([v], unders)
+
 kindCheck unders tm = err $ Unimplemented "kindCheck" [showRow unders, show tm]
 
 -- Checks the kinds of the types in a dependent row
@@ -580,6 +581,7 @@ kindCheckAnnotation :: Modey m
                     -> [(PortName, ThunkRowType m)]
                     -> Checking (CTy m Z)
 kindCheckAnnotation my name outs = do
+  trackM "kca"
   name <- req (Fresh $ "__kca_" ++ name)
   kindCheckRow' my (Zy :* S0) M.empty (name, 0) outs >>= \case
     (_, _, Some ((n :* s) :* Flip ins)) ->
@@ -601,7 +603,7 @@ kindCheckRow' :: forall m n
 kindCheckRow' _ ez env (_,i) [] = pure (i, env, Some (ez :* Flip R0))
 kindCheckRow' Braty (ny :* s) env (name,i) ((p, Left k):rest) = do -- s is Stack Z n
   let dangling = Ex name (ny2int ny)
-  req (Declare (ExEnd dangling) k)
+  req (Declare (ExEnd dangling) Braty (Left k))
   env <- pure $ M.insert (plain p) [(NamedPort dangling p, Left k)] env
   (i, env, ser) <- kindCheckRow' Braty (Sy ny :* (s :<< ExEnd dangling)) env (name, i) rest
   case ser of
@@ -617,7 +619,7 @@ kindCheckRow' my ez@(ny :* s) env (name, i) ((p, bty):rest) = case (my, bty) of
   helper :: Term Chk Noun -> TypeKind -> Checking (Int, VEnv, Some (Endz :* Flip (Ro' m) n))
   helper ty kind = do
     let hungry = NamedPort (In name i) p -- or always call it "type"?
-    declareTgt hungry kind
+    declareTgt hungry Braty (Left kind)
     ([v], []) <- localVEnv env $ kindCheck [(hungry, kind)] ty -- TODO give proper errors on failed match
     -- v has no dangling Inx's but contains Par's in `s`. Convert to `n` Inx's
     v <- pure $ changeVar (ParToInx (AddZ ny) s) v
@@ -768,19 +770,15 @@ abstractPattern my (dangling, bty) pat@(PCon pcon abst) = case (my, bty) of
 abstractPattern _ _ DontCare = pure emptyEnv
 
 weaken :: DeBruijn v => Ny n -> v Z -> v n
--- TODO: here we call changeVar with some fake ends that don't get abstracted.
--- This is not the right way to do this, and we should replace this with proper weakening.
-weaken n ty = changeVar (ParToInx (AddZ n) (mkStk n)) ty
- where
-  -- TODO: Remove this; perhaps another VarChanger?
-  mkStk :: Ny n -> Stack Z End n
-  mkStk Zy = S0
-  mkStk (Sy n) = (mkStk n) :<< InEnd (In (MkName []) (-1)) -- an end that does not exist
+weaken n = changeVar (Thinning (thEmpty n))
+
+abstractEndz :: DeBruijn v => Stack Z End n -> v Z -> v n
+abstractEndz ez = changeVar (ParToInx (AddZ (stackLen ez)) ez)
 
 run :: VEnv
     -> Namespace
     -> Checking a
-    -> Either Error (a, ([TypedHole], Graph))
+    -> Either Error (a, ([TypedHole], Store, Graph))
 run ve ns m =
   let ctx = Ctx { venv = ve
                 , store = initStore
@@ -790,4 +788,4 @@ run ve ns m =
                 , typeConstructors = defaultTypeConstructors
                 , aliasTable = M.empty
                 } in
-    (\(a,b,_) -> (a,b)) <$> handler m ctx mempty ns
+    (\(a,ctx,(holes, graph),_) -> (a, (holes, store ctx, graph))) <$> handler m ctx mempty ns

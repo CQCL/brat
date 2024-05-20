@@ -1,0 +1,2 @@
+uncons(n :: #, Vec(Int, succ(n))) -> Int
+uncons(_, cons(x, _)) = x

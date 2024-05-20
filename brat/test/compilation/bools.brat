@@ -1,0 +1,11 @@
+and(Bit, Bit) -o Bit
+and(true, b) = b
+and(false, _) = false
+
+not(Bit) -o Bit
+not(true) = false
+not(false) = true
+
+or(Bit, Bit) -o Bit
+or(true, _) = true
+or(false, b) = b

@@ -1,0 +1,11 @@
+[package]
+name = "hugr_validator"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+quantinuum-hugr = "0.2.0"
+serde_json = "*"
+brat_extension = { path = "../hugr_extension" }

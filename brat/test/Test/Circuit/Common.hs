@@ -5,19 +5,22 @@ module Test.Circuit.Common where
 import Control.Arrow ((&&&))
 import Control.Monad.Except (runExceptT)
 import qualified Data.Map as M
+import Data.Bifunctor (bimap)
 import Data.Foldable (fold)
 import Data.Functor ((<&>))
 import Data.List (intercalate)
-import Data.List.NonEmpty (NonEmpty(..))
+import Data.List.NonEmpty (NonEmpty(..), toList)
 import Data.String (IsString(..))
 import Data.Text (pack)
 import Data.Tuple.HT
+import Data.Type.Equality ((:~:)(..))
 import Test.Tasty (TestTree)
 import Test.Tasty.HUnit
 import Test.Tasty.Silver.Advanced (goldenTest1, GDiff(..), GShow(ShowText))
 
+import Brat.Checker.Helpers (valueToBinder)
 import Brat.Constructors (pattern CQubit)
-import Brat.Eval (kindType)
+import Brat.Eval (EvMode, kindType)
 import Brat.Graph
 import Brat.Load (loadFiles)
 import Brat.Naming
@@ -27,14 +30,61 @@ import Brat.Syntax.Simple
 import Brat.Syntax.Value
 import Brat.UserName (plain)
 import Bwd
+import Hasochism
 
 instance IsString Name where
   fromString s = MkName [(s, 0)]
 
 kernel cty = VFun Kerny cty
 
+singleClauseMatching :: forall m
+                      . Show (BinderType m)
+                      => Modey m
+                      -> ([(String, Val Z)], [(String, Val Z)])
+                      -> ([(String, Val Z)], [(String, Val Z)])
+                      -> [(Name, Node)]
+singleClauseMatching my (ins, outs) (matchedIns, matchedOuts) =
+  [("box_branch_matched", BratNode ("matched_src" :>>: "matched_tgt") [] [("thunk", VFun my matchedKty)])
+  ,("matched_src", node Source [] matchedIns)
+  ,("matched_tgt", node Target matchedOuts [])
+
+  ,("box_branch_didnt_match", BratNode ("didnt_match_src" :>>: "didnt_match_tgt") [] [("thunk", VFun my kty)])
+  ,("didnt_match_src", node Source [] ins)
+  ,("didnt_match_tgt", node Target outs [])
+
+  ,("funclauses", node (FunClauses (("box_branch_didnt_match", "box_branch_matched") :| [])) [] [("value", VFun my (makeCTy ins outs))])
+  ,("testmatch", node
+     (TestMatch (TestMatchData my
+                 (MatchSequence
+                   (bimap dummy (valueToBinder my) <$> ins)
+                   []
+                   (bimap dummy (valueToBinder my) <$> matchedIns))
+                ))
+     ins
+     [("test_out", VSum my [(Some (Flip (aux ins)))
+                           ,(Some (Flip (aux matchedIns)))]
+      )]
+   )
+  ]
+ where
+  node = case my of
+    Braty -> BratNode
+    Kerny -> KernelNode
+
+  matchedKty = makeCTy matchedIns matchedOuts
+  kty = makeCTy ins outs
+
+  makeCTy :: [(String, Val Z)] -> [(String, Val Z)] -> CTy m Z
+  makeCTy ins outs = aux ins :->> aux outs
+
+  aux :: [(String, Val Z)] -> Ro m Z Z
+  aux [] = R0
+  aux (x:xs) = RPr x (aux xs)
+
+  dummy = NamedPort (Ex (MkName []) 0)
+
 idGraph :: Graph
-idGraph = (M.fromList
+idGraph = (M.fromList $
            [("main_box", BratNode ("src" :>>: "tgt") [] [("thunk", kty)])
            ,("main", BratNode Id [("a1", kty)] [("a1", kty)])
            ,("src", KernelNode Source [] [("a", TQ)])
@@ -51,9 +101,10 @@ idGraph = (M.fromList
           )
  where
   kty = kernel ((RPr ("a", TQ) R0) :->> (RPr ("b", TQ) R0))
+  kty' = kernel ((RPr ("q", TQ) R0) :->> (RPr ("b", TQ) R0))
 
 swapGraph :: Graph
-swapGraph = (M.fromList
+swapGraph = (M.fromList $
              [("main_box", BratNode ("src" :>>: "tgt") [] [("thunk", kty)])
              ,("main", BratNode Id [("a1", kty)] [("a1", kty)])
              ,("src", KernelNode Source [] [("a", TQ), ("b", TQ)])
@@ -78,9 +129,9 @@ swapGraph = (M.fromList
         ((RPr ("a", TQ) (RPr ("b", TQ) R0)) :->> (RPr ("b", TQ) (RPr ("a", TQ) R0)))
 
 xGraph :: Graph
-xGraph = (M.fromList
-          [("tket.X", BratNode (Prim "tket.X") [] [("a1", xTy)])
-          ,("X", KernelNode (Eval (Ex "tket.X" 0)) [("xa", TQ)] [("xb", TQ)])
+xGraph = (M.fromList $
+          [("tket.X", BratNode (Prim ("tket", "X")) [] [("a1", xTy)])
+          ,("X", KernelNode (Splice (Ex "tket.X" 0)) [("xa", TQ)] [("xb", TQ)])
           ,("main_box", BratNode ("src" :>>: "tgt") [] [("thunk", mainTy)])
           ,("main", BratNode Id [("a1", mainTy)] [("a1", mainTy)])
           ,("src", KernelNode Source [] [("a", TQ)])
@@ -107,11 +158,11 @@ xGraph = (M.fromList
 -- TODO:
 rxGraph :: Graph
 rxGraph = (M.fromList
-           [("id", BratNode (Prim "Rx")
+           [("id", BratNode (Prim ("", "Rx"))
             [("th", TFloat)]
             [("kernel", kernel ((RPr ("a", TQ) R0) :->> (RPr ("b", TQ) R0)))])
            ,("angle", BratNode (Const (Float 30.0)) [("th", TFloat)] [])
-           --,KernelNode (Eval "") testProcess
+           --,KernelNode (Splice "") testProcess
            ,("main", BratNode ("src" :>>: "tgt") [] [("thunk", kernel ((RPr ("a", TQ) R0) :->> (RPr ("b", TQ) R0)))])
            ,("src", KernelNode Source [] [("a", TQ)])
            ,("tgt", KernelNode Target [("b", TQ)] [])
@@ -124,7 +175,7 @@ int = TInt
 
 twoGraph :: Graph
 twoGraph = (M.fromList (
-            [("add", BratNode (Prim "add") [] [("thunk", add_ty)])
+            [("add", BratNode (Prim ("", "add")) [] [("thunk", add_ty)])
             ,("add_eval", BratNode (Eval (Ex "add" 0)) [("a", int), ("b", int)] [("c", int)])
             ,("1a", BratNode (Const (Num 1)) [] [("value", int)])
             ,("1b", BratNode (Const (Num 1)) [] [("value", int)])
@@ -166,27 +217,17 @@ int_node n = (n, BratNode (Constructor $ plain "Int") [] [("value", star_t)])
 addNGraph :: String -> Graph
 addNGraph port_name
   = (M.fromList (
-     [("add", BratNode (Prim "add") [] [(port_name, add_ty)])
+     [("add", BratNode (Prim ("", "add")) [] [(port_name, add_ty)])
      ,("add_eval", BratNode (Eval (Ex "addN_src" 1)) [("a", int), ("b", int)] [("c", int)])
-     ,("N", BratNode (Prim "N") [] [("value", int)])
-     -- one box for the function
-     ,("addN_box", BratNode ("addN_src" :>>: "addN_tgt") [(port_name, add_ty), ("value", int)] [("thunk", addN_ty)])
-     ,("addN_src", BratNode Source [] [("inp", int), (port_name, add_ty), ("value", int)])
-     ,("addN_tgt", BratNode Target [("out", int)] [])
+     ,("N", BratNode (Prim ("", "N")) [] [("value", int)])
      ,("addN", BratNode Id [("thunk", addN_ty)] [("thunk", addN_ty)])
      -- and one for the single clause
-     ,("addN1_box", BratNode ("addN1_src" :>>: "addN1_tgt") [(port_name, add_ty), ("value", int)] [("thunk", addN_ty)])
-     ,("addN1_src", BratNode Source [] [("inp", int), (port_name, add_ty), ("value", int)])
-     ,("addN1_tgt", BratNode Target [("out", int)] [])
-     ] ++ ints 6)
+     ] ++ ints 6 ++ singleClauseMatching Braty ([("inp", TInt)], [("out", TInt)]) ([("n", TInt)], [("out", TInt)])
+     )
     ,[(Ex "N" 0, int, In "addN_box" 1)
-     ,(Ex "add" 0, add_ty, In "addN_box" 0)
      ,(Ex "addN_box" 0, addN_ty, In "addN" 0)
-     ,((Ex "addN_src" 0), int, (In "add_eval" 0)) -- argument
-     ,((Ex "addN_src" 1), add_ty, In "addN1_box" 0) -- from (Source of) outer func to clause
-     ,((Ex "addN_src" 2), int, (In "add_eval" 1)) -- captured
-     ,((Ex "addN_src" 2), int, (In "addN1_box" 1))  -- from (Source of) outer func to clause
-     ,((Ex "add_eval" 0), int, (In "addN_tgt" 0))
+     ,(Ex "addN_src" 0, int, In "add_eval" 0) -- argument
+     ,(Ex "add_eval" 0, int, In "addN_tgt" 0)
      ,(Ex "int_1" 0, star_t, In "kcr-n" 0)
      ,(Ex "int_2" 0, star_t, In "kcr-add-ty" 0)
      ,(Ex "int_3" 0, star_t, In "kcr-add-ty" 1)
@@ -207,7 +248,8 @@ addNmainGraph =
      [("addN_eval", BratNode (Eval (Ex "addN" 0)) [("inp", int)] [("out", int)])
      ,("1", BratNode (Const (Num 1)) [] [("value", int)])
      ,("main", BratNode Id [("a1", int)] [("a1", int)])
-     ] ++ [int_node "xtra_int"])
+     ] ++ [int_node "xtra_int"]
+     )
     ,ws ++ [
       (Ex "1" 0, int, In "addN_eval" 0)
      ,(Ex "addN_eval" 0, int, In "main" 0)
@@ -220,7 +262,7 @@ addNmainGraph =
 extGraph :: Graph
 extGraph
  = (M.fromList (
-    ("add_decl", BratNode (Prim "add") [] [("thunk",
+    ("add_decl", BratNode (Prim ("", "add")) [] [("thunk",
         VFun Braty ((RPr ("a", TInt) (RPr ("b", TInt) R0)) :->> (RPr ("c", TInt) R0)))])
     :ints 3)
    ,[(Ex "int_1" 0, star_t, In "kcr-cty" 0)
@@ -257,23 +299,38 @@ graphDiff act exp = case act =? exp of
   inc :: Maybe Int -> Maybe Int
   inc = Just . maybe 1 (1+)
 
-  thingKey :: Bool -> Thing -> String
-  thingKey k = (if k then ('k':) else id) . \case
-    Prim x     -> "prim_" ++ x
+  thingKey :: Modey m -> Thing m -> String
+  thingKey Braty = \case
+    Prim (ext,op) -> "prim_" ++ (if ext /= "" then ext ++ "." else "") ++ op
     Const x    -> "const_" ++ show x
     Eval _     -> "eval"
     (_ :>>: _) -> "box"
     Source     -> "source"
     Target     -> "target"
     Id         -> "id"
+    TestMatch (TestMatchData _ (MatchSequence ins tests outs)) -> intercalate "_" ["testmatch", show (snd <$> ins), show tests, show (snd <$> outs)]
+    FunClauses cs -> "funclauses_" ++ show (length (toList cs))
     Hypo       -> "hypo"
     Constructor c -> "ctor_" ++ show c
+    Selector c -> "selector_" ++ show c
+    ArithNode op -> "arith_" ++ show op
+  thingKey Kerny = ('k':) . \case
+    Const x    -> "const_" ++ show x
+    Splice _   -> "splice"
+    Source     -> "source"
+    Target     -> "target"
+    Id         -> "id"
+    TestMatch (TestMatchData _ (MatchSequence ins tests outs)) -> intercalate "_" ["testmatch", show (snd <$> ins), show tests, show (snd <$> outs)]
+    FunClauses cs -> "funclauses_" ++ show (length (toList cs))
+    Hypo       -> "hypo"
+    Constructor c -> "ctor_" ++ show c
+    Selector c -> "selector_" ++ show c
 
   nodeKey :: Node -> String
   nodeKey (BratNode thing ins outs)
-    = thingKey False thing ++ (unlines [show ins, show outs])
+    = thingKey Braty thing ++ (unlines [show ins, show outs])
   nodeKey (KernelNode thing ins outs)
-    = thingKey True thing ++ (unlines [show ins, show outs])
+    = thingKey Kerny thing ++ (unlines [show ins, show outs])
 
   nodeSet :: M.Map k Node -> M.Map String Int
   nodeSet ns = foldr (M.alter inc) M.empty (nodeKey <$> (snd <$> M.toList ns))
@@ -299,9 +356,9 @@ graphTest :: String -> String -> Graph -> TestTree
 graphTest name contents expected = goldenTest1 name (pure $ Just expected) actual graphDiff (ShowText . pack . show) update
  where
   actual :: IO Graph
-  actual = runExceptT (loadFiles ("" :| []) name contents) >>= \case
+  actual = runExceptT (loadFiles root ("" :| []) name contents) >>= \case
     -- merge graphs from all functions
-    Right (_, _, _, named_gs) -> pure (fold (map snd named_gs))
+    Right (_, _, _, _, g) -> pure g
     Left err -> assertFailure (show err)
 
   update _ = putStrLn "Can't update golden file"

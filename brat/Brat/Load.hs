@@ -4,13 +4,14 @@ module Brat.Load (loadFilename
                  ,desugarEnv
                  ) where
 
-import Brat.Checker.Clauses
+import Brat.Checker.Clauses (checkBody)
 import Brat.Checker.Helpers (ensureEmpty, showMode, wire)
 import Brat.Checker.Monad
+import Brat.Checker.Types (Store, initStore)
 import Brat.Checker
 import Brat.Elaborator (elabEnv)
 import Brat.Error
-import Brat.FC
+import Brat.FC hiding (end)
 import Brat.Graph (Thing(..))
 import Brat.Naming
 import Brat.Parser
@@ -21,14 +22,12 @@ import Brat.Syntax.Raw
 import Brat.Syntax.Value
 import Brat.UserName
 import Util (duplicates,duplicatesWith)
-import Control.Monad.Freer (req)
 import Hasochism
 
 import Control.Exception (assert)
 import Control.Monad (filterM, foldM, forM, forM_, unless)
 import Control.Monad.Except
 import Control.Monad.Trans.Class (lift)
-import Data.Functor (($>))
 import Data.List (sort)
 import Data.List.HT (viewR)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -39,6 +38,7 @@ import System.Directory (doesFileExist)
 import System.FilePath
 
 import Prelude hiding (last)
+import Data.Functor (($>))
 
 -- A Module is a node in the dependency graph
 type FlatMod = ((FEnv, String) -- data at the node: declarations, and file contents
@@ -46,37 +46,62 @@ type FlatMod = ((FEnv, String) -- data at the node: declarations, and file conte
                ,[Import]) -- other nodes on which this depends
 
 -- Result of checking/compiling a module
-type VMod = (VEnv, [(UserName, VDecl)] -- all symbols from all modules
-           ,[TypedHole]          -- for just the last module
-           ,[(UserName, Graph)]) -- per function, first elem is name
+type VMod = (VEnv
+            ,[(UserName, VDecl)] -- all symbols from all modules
+            ,[TypedHole]          -- for just the last module
+            ,Store  -- Ends declared & defined in the module
+            ,Graph) -- per function, first elem is name
 
 emptyMod :: VMod
-emptyMod = (M.empty, [], [], [])
+emptyMod = (M.empty, [], [], initStore, (M.empty, []))
 
 -- N.B. This should only be passed local functions
+-- If the decl is a function with pattern matching clauses, return the Name of
+-- the box that is created for it. For simple `NoLhs` definitions, we return
+-- Nothing.
 checkDecl :: Prefix -> VDecl -> [(Tgt, BinderType Brat)] -> Checking ()
 checkDecl pre (VDecl Decl{..}) to_define = localFC fnLoc $ do
+  trackM "\nCheckDecl:"
   unless (fnLocality == Local) $ err $ InternalError "checkDecl called on ext function"
-  case fnBody of
-    NoLhs body -> do
-      (((), ()), ((), [])) <- let ?my = Braty in check body ((), to_define)
-      pure ()
-    -- TODO: Unify this with `getThunks` and `check (Th _)` code
-    ThunkOf (WC _ verb) -> do
-      (ty, box_out) <- case fnSig of
-        Some (Flip (RPr u R0)) -> case u of
-          (_, ty@(VFun m@Braty cty)) -> (ty,) <$> let ?my = m in checkBody fnName verb cty
-          (_, ty@(VFun m@Kerny cty)) -> (ty,) <$> let ?my = m in checkBody fnName verb cty
-          _ -> req $ Throw (dumbErr $ ExpectedThunk "" (show u))
-        Some (Flip R0) -> err $ EmptyRow name
-        _ -> err $ MultipleOutputsForThunk name -- also if it's a kind, hmm?
-      case to_define of
-        [(thunk_in, _)] -> wire (box_out, ty, thunk_in)
-        [] -> err $ ExpectedThunk (showMode Braty) "No body"
-        row -> err $ ExpectedThunk (showMode Braty) (showRow row)
-    Undefined -> error "No body in `checkDecl`"
-  pure ()
+  getFunTy fnSig >>= \case
+    -- We must have a row of nouns as the definition
+    Nothing -> case fnBody of
+      NoLhs body -> do
+        (((), ()), ((), [])) <- let ?my = Braty in check body ((), to_define)
+        pure ()
+      Undefined -> error "No body in `checkDecl`"
+      ThunkOf _ -> case fnSig of
+        Some (Flip ro) -> err $ ExpectedThunk (showMode Braty) (show ro)
+    Just (Some (my :* Flip cty)) -> getClauses fnBody (my, cty) >>= \case
+      Right stuff -> do
+        box_out <- case stuff of
+          -- checkBody makes an outer box and wires up FunClauses within.
+          -- We'll wire the output of that box into the Id node representing
+          -- this function (to_define)
+          (Some (Braty :* Flip cty), body) -> let ?my = Braty in checkBody fnName body cty
+          (Some (Kerny :* Flip cty), body) -> let ?my = Kerny in checkBody fnName body cty
+        case to_define of
+          [(thunk_in, _)] -> wire (box_out, VFun my cty, thunk_in)
+          [] -> err $ ExpectedThunk (showMode my) "No body"
+          row -> err $ ExpectedThunk (showMode my) (showRow row)
+      Left body -> let ?my = Braty in check body ((), to_define) $> ()
  where
+  getClauses :: FunBody Term Noun
+             -> (Modey m, CTy m Z)
+             -> Checking (Either
+                          (WC (Term Chk Noun))
+                          (Some (Modey :* Flip CTy Z), FunBody Term UVerb)
+                         )
+  getClauses (ThunkOf (WC _ verb)) (my, cty) = pure (Right (Some (my :* Flip cty), verb))
+  getClauses (NoLhs rhs) _ = pure (Left rhs)
+  getClauses Undefined _ = err (InternalError "No body in `checkDecl`")
+
+
+  getFunTy :: Some (Flip (Ro' m) Z) -> Checking (Maybe (Some (Modey :* (Flip CTy Z))))
+  getFunTy (Some (Flip (RPr (_, VFun my cty) R0))) = pure $ Just (Some (my :* (Flip cty)))
+  getFunTy (Some (Flip R0)) = err $ EmptyRow name
+  getFunTy _ = pure $ Nothing
+
   uname = PrefixName pre fnName
   name = show uname
 
@@ -92,8 +117,8 @@ withAliases :: [TypeAlias] -> Checking a -> Checking a
 withAliases [] m = m
 withAliases (a:as) m = loadAlias a >>= \a -> localAlias a $ withAliases as m
 
-loadStmtsWithEnv :: (VEnv, [(UserName, VDecl)]) -> (FilePath, Prefix, FEnv, String) -> Either SrcErr VMod
-loadStmtsWithEnv (venv, oldDecls) (fname, pre, stmts, cts) = addSrcContext fname cts $ do
+loadStmtsWithEnv :: Namespace -> (VEnv, [(UserName, VDecl)], Store) -> (FilePath, Prefix, FEnv, String) -> Either SrcErr VMod
+loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addSrcContext fname cts $ do
   -- hacky mess - cleanup!
   (decls, aliases) <- desugarEnv =<< elabEnv stmts
   -- Note the duplicates here works for anything Eq, but is O(n^2).
@@ -101,34 +126,37 @@ loadStmtsWithEnv (venv, oldDecls) (fname, pre, stmts, cts) = addSrcContext fname
   let (declNames, _) = unzip oldDecls
   let dups = duplicates (declNames ++ map (PrefixName pre . fnName) decls) in unless (null dups) $
     Left $ dumbErr $ NameClash $ show dups
-  ((venv', vdecls), (holes, graph)) <- run venv root $ withAliases aliases $ do
+  ((venv', vdecls), (holes, newEndData, outerGraph)) <- run venv ns $ withAliases aliases $ do
     -- Generate some stuff for each entry:
     --  * A map from names to VDecls (aka an Env)
     --  * Some overs and outs??
-    entries <- forM decls $ \d -> localFC (fnLoc d) $ do
+    entries <- ("globals" -!) $ forM decls $ \d -> localFC (fnLoc d) $ do
       let name = PrefixName pre (fnName d)
-      (thing, ins :->> outs, sig) <- case (fnLocality d) of
+      (thing, ins :->> outs, sig, prefix) <- case (fnLocality d) of
                         Local -> do
+                          -- kindCheckAnnotation gives the signature of an Id node,
+                          -- hence ins == outs (modulo haskell's knowledge about their scopes)
                           ins :->> outs <- kindCheckAnnotation Braty (show name) (fnSig d)
-                          pure (Id, ins :->> outs, Some (Flip ins))
+                          pure (Id, ins :->> outs, Some (Flip ins), "decl")
                         Extern sym -> do
                           (Some (Flip outs)) <- kindCheckRow Braty (show name) (fnSig d)
-                          pure (Prim sym, R0 :->> outs, Some (Flip outs))
+                          pure (Prim sym, R0 :->> outs, Some (Flip outs), "prim")
       -- In the Extern case, unders will be empty
-      (_, unders, overs, _) <- next (show name) thing (S0, Some (Zy :* S0)) ins outs
+      (_, unders, overs, _) <- prefix -! next (show name) thing (S0, Some (Zy :* S0)) ins outs
       pure ((name, VDecl d{fnSig=sig}), (unders, overs))
+    trackM "finished kind checking"
     -- We used to check there were no holes from that, but for now we do not bother
     -- A list of local functions (read: with bodies) to define with checkDecl
     let to_define = M.fromList [ (name, unders) | ((name, VDecl decl), (unders, _)) <- entries, fnLocality decl == Local ]
     let vdecls = map fst entries
     -- Now generate environment mapping usernames to nodes in the graph
     let env = M.fromList [(name, overs) | ((name, _), (_, overs)) <- entries]
-    localVEnv env $ do
-      remaining <- foldM checkDecl' to_define vdecls
-      pure $ assert (M.null remaining) -- all to_define were defined
+    () <- localVEnv env $ do
+      remaining <- "check_defs" -! foldM checkDecl' to_define vdecls
+      pure $ assert (M.null remaining) () -- all to_defines were defined
     pure (env, vdecls)
 
-  pure (venv <> venv', oldDecls <> vdecls, holes, [(PrefixName [] "main", graph)])
+  pure (venv <> venv', oldDecls <> vdecls, holes, oldEndData <> newEndData, outerGraph)
  where
   checkDecl' :: M.Map UserName [(Tgt, BinderType Brat)]
              -> (UserName, VDecl)
@@ -138,19 +166,22 @@ loadStmtsWithEnv (venv, oldDecls) (fname, pre, stmts, cts) = addSrcContext fname
     case M.updateLookupWithKey (\_ _ -> Nothing) name to_define of
       -- If Nothing: We deleted this from the map, so must have checked it already
       (Nothing, remaining) -> pure remaining
-      (Just decl_defines, remaining) -> checkDecl pre decl decl_defines $> remaining
+      -- Decl defines are the inputs to the Id node which represents a definition
+      (Just decl_defines, remaining) -> do
+        show name -! checkDecl pre decl decl_defines
+        pure remaining
 
-loadFilename :: [FilePath] -> String -> ExceptT SrcErr IO VMod
-loadFilename libDirs file = do
+loadFilename :: Namespace -> [FilePath] -> String -> ExceptT SrcErr IO VMod
+loadFilename ns libDirs file = do
   unless (takeExtension file == ".brat") $ fail $ "Filename " ++ file ++ " must end in .brat"
   let (path, fname) = splitFileName $ dropExtension file
   contents <- lift $ readFile file
-  loadFiles (path :| libDirs) fname contents
+  loadFiles ns (path :| libDirs) fname contents
 
 -- Does not read the main file, but does read any imported files
-loadFiles :: NonEmpty FilePath -> String -> String
+loadFiles :: Namespace -> NonEmpty FilePath -> String -> String
          -> ExceptT SrcErr IO VMod
-loadFiles (cwd :| extraDirs) fname contents = do
+loadFiles ns (cwd :| extraDirs) fname contents = do
   let mainImport = Import { importName = dummyFC (plain fname)
                           , importQualified = True
                           , importAlias = Nothing
@@ -173,9 +204,9 @@ loadFiles (cwd :| extraDirs) fname contents = do
       let main = (cwd </> fname ++ ".brat", [], mainStmts, mainCts)
       pure (deps ++ [main])
     Nothing -> throwError (SrcErr "" $ dumbErr (InternalError "Empty dependency graph"))
-    -- keep (as we fold) and then return only the graphs from the last file in the list
+  -- keep (as we fold) and then return only the graphs from the last file in the list
   liftEither $ foldM
-    (\(venv, decls, _, _) -> loadStmtsWithEnv (venv, decls))
+    (\(venv, decls, _, defs, _) -> loadStmtsWithEnv ns (venv, decls, defs))
     emptyMod
 --     (fname, [], M.empty, contents)
     allStmts'

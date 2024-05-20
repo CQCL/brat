@@ -1,19 +1,25 @@
-module Brat.Compiler (printAST, printDeclsHoles, writeDot, compileFile) where
+module Brat.Compiler (printAST
+                     ,printDeclsHoles
+                     ,writeDot
+                     ,compileFile
+                     ,compileAndPrintFile
+                     ) where
 
-import Brat.UserName
+import Brat.Compile.Hugr
+import Brat.Dot (toDotString)
+import Brat.Elaborator
 import Brat.Error
 import Brat.Load
-import Util
+import Brat.Naming (root, split)
 
+import qualified Data.ByteString.Lazy as BS
 import Control.Monad (when)
 import Control.Monad.Except
-import Brat.Elaborator
-import Brat.Dot (toDotString)
 
 printDeclsHoles :: [FilePath] -> String -> IO ()
 printDeclsHoles libDirs file = do
-  env <- runExceptT $ loadFilename libDirs file
-  (_, decls, holes, _) <- eitherIO env
+  env <- runExceptT $ loadFilename root libDirs file
+  (_, decls, holes, _, _) <- eitherIO env
   putStrLn "Decls:"
   print decls
   putStrLn ""
@@ -45,27 +51,21 @@ printAST printRaw printAST file = do
 
 writeDot :: [FilePath] -> String -> String -> IO ()
 writeDot libDirs file out = do
-  env <- runExceptT $ loadFilename libDirs file
-  (_, _, _, graphs) <- eitherIO env
-  case filter isMain graphs of
-    [(_, g)] -> writeFile out (toDotString g)
-    [] -> error "No main graph found!"
-    _ -> error "More than one main graph found!"
+  env <- runExceptT $ loadFilename root libDirs file
+  (_, _, _, _, graph) <- eitherIO env
+  writeFile out (toDotString graph)
+{-
  where
   isMain (PrefixName [] "main", _) = True
   isMain _ = False
+-}
 
-compileFile :: [FilePath] -> String -> IO ()
+compileFile :: [FilePath] -> String -> IO BS.ByteString
 compileFile libDirs file = do
-  env <- runExceptT $ loadFilename libDirs file
-  (_, decls, _, named_gs) <- eitherIO env
-  -- Check main exists. (Will/should this work if "main" is in an imported module?)
-  _mn <- eitherIO $
-      maybeToRight (addSrcName file $ dumbErr MainNotFound) $
-      lookup (plain "main") decls
+  let (checkRoot, newRoot) = split "checking" root
+  env <- runExceptT $ loadFilename checkRoot libDirs file
+  (venv, _, _, defs, outerGraph) <- eitherIO env
+  pure (compile defs newRoot outerGraph venv)
 
-  (_name, _graph) <- eitherIO $
-      maybeToRight (addSrcName file $ dumbErr $ InternalError "No graph produced for main") $
-      lookupBy ((== PrefixName [] "main") . fst) id named_gs
-
-  pure ()
+compileAndPrintFile :: [FilePath] -> String -> IO ()
+compileAndPrintFile libDirs file = BS.putStr =<< compileFile libDirs file

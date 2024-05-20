@@ -1,0 +1,8 @@
+xs :: Nat, Nat
+xs = 3, 5
+
+add :: {Nat, Nat -> Nat}
+add = {x,y => x + y}
+
+sum_xs :: Nat
+sum_xs = xs |> add

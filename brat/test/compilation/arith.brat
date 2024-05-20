@@ -1,0 +1,8 @@
+f(Int, Int, Int) -> Int
+f(x, y, z) = (x + y) / z * x - 5
+
+g(Nat, Nat, Nat) -> Nat
+g(x, y, z) = (x + y) / z * x - 5
+
+h(Float, Float, Float) -> Float
+h(x, y, z) = (x + y) / z * x - 5.0

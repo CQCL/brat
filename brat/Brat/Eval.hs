@@ -5,7 +5,8 @@ module Brat.Eval (Eval(..)
                  ,ValPat(..)
                  ,NumPat(..)
                  ,apply
-                 ,eqRow
+                 ,eqTest
+                 ,eqRowTest
                  ,kindEq
                  ,kindType
                  ,numVal
@@ -14,14 +15,17 @@ module Brat.Eval (Eval(..)
                  ) where
 
 import Brat.Checker.Monad
+import Brat.Checker.Types (EndType(..))
 import Brat.Error (ErrorMsg(..))
 import Brat.Syntax.Value
 import Brat.Syntax.Common
 import Brat.UserName (plain)
 import Control.Monad.Freer (req)
 import Bwd
-import Hasochism (N(..))
+import Hasochism (N(..), Flip(..), Some(..))
 
+import Control.Monad (zipWithM)
+import Data.Bifunctor (bimap)
 import Data.Functor
 import Data.Kind (Type)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
@@ -97,6 +101,12 @@ instance Eval Val where
     apply f vz
   eval ga (VNum n) = VNum <$> eval ga n
   eval ga (VCon c args) = VCon c <$> traverse (eval ga) args
+  eval ga (VSum Kerny ts) = VSum Kerny <$> traverse (\(Some (Flip ro)) -> eval ga ro <&> \case
+                                                        Left ro -> Some (Flip ro)
+                                                        Right (ro, _) -> Some (Flip ro)) ts
+  eval ga (VSum Braty ts) = VSum Braty <$> traverse (\(Some (Flip ro)) -> eval ga ro <&> \case
+                                                        Left ro -> Some (Flip ro)
+                                                        Right (ro, _) -> Some (Flip ro)) ts
 
 apply :: Val Z -> Bwd (Val Z) -> Checking (Val Z)
 apply f B0 = pure f
@@ -182,9 +192,11 @@ kindEq k k' = Left . TypeErr $ "Unequal kinds " ++ show k ++ " and " ++ show k'
 
 kindOf :: VVar Z -> Checking TypeKind
 kindOf (VLvl _ k) = pure k
-kindOf (VPar e) = req (EndKind e) >>= \case
-  Just k -> pure k
-  Nothing -> typeErr "Kind not found"
+kindOf (VPar e) = req (TypeOf e) >>= \case
+  EndType Braty (Left k) -> pure k
+  EndType my ty -> typeErr $ "End " ++ show e ++ " isn't a kind, it's type is " ++ case my of
+    Braty -> show ty
+    Kerny -> show ty
 kindOf (VInx n) = case n of {}
 
 -- We should have made sure that the two values share the given kind
@@ -194,26 +206,44 @@ eq :: String -- String representation of the term for error reporting
    -> Val Z -- Expected
    -> Val Z -- Actual
    -> Checking ()
-eq tm l k exp act = (k,,) <$> standardise k exp <*> standardise k act >>= \case
+eq str i k exp act = eqTest str i k exp act >>= throwLeft
+
+eqTest :: String -- String representation of the term for error reporting
+       -> Int -- Next available de Bruijn level
+       -> TypeKind -- The kind we're comparing at
+       -> Val Z -- Expected
+       -> Val Z -- Actual
+       -> Checking (Either ErrorMsg ())
+eqTest tm l k exp act = (k,,) <$> standardise k exp <*> standardise k act >>= \case
   (TypeFor m ((_, k):ks), f, g) -> do
     let x = varVal k (VLvl l k)
     f <- apply f (B0 :< x)
     g <- apply g (B0 :< x)
-    eq tm (l + 1) (TypeFor m ks) f g
+    eqTest tm (l + 1) (TypeFor m ks) f g
   -- Nothing else is higher kinded
   -- Invariant: Everything of kind Nat is a VNum
-  (Nat, VNum n, VNum m) | n == m -> pure ()
+  (Nat, VNum n, VNum m) | n == m -> pure (Right ())
   (TypeFor m [], VApp v ss, VApp v' ss')
     | v == v' -> kindOf v >>= \case
         -- eqs should succeed if ks,ss,ss' are all []
-        TypeFor m' ks | m == m' -> eqs tm l (snd <$> ks) (ss <>> []) (ss' <>> [])
-        k' -> err (KindMismatch (show tm) (show k) (show k'))
+        TypeFor m' ks | m == m' -> eqTests tm l (snd <$> ks) (ss <>> []) (ss' <>> [])
+        k' -> pure . Left $ KindMismatch (show tm) (show k) (show k')
   (TypeFor m [], VCon c vs, VCon c' vs')
     | c == c' -> req (TLup (m, c)) >>= \case
-        Just ks -> eqs tm l (snd <$> ks) vs vs'
-        Nothing -> typeErr $ "Type constructor " ++ show c ++ " undefined"
-  (Star [], VFun m0 cty0, VFun m1 cty1) | Just Refl <- testEquality m0 m1 -> evModily m0 $ eqCType tm m0 l cty0 cty1
-  (_, s, t) -> err $ TypeMismatch tm (show s) (show t)
+        Just ks -> eqTests tm l (snd <$> ks) vs vs'
+        Nothing -> pure . Left . TypeErr $ "Type constructor " ++ show c ++ " undefined " ++ " at kind " ++ show (TypeFor m [])
+  (Star [], VFun m0 cty0, VFun m1 cty1) | Just Refl <- testEquality m0 m1 -> evModily m0 $ eqCTypeTest tm m0 l cty0 cty1
+  (TypeFor _m [], VSum my0 ros0, VSum my1 ros1) -> case testEquality my0 my1 of
+    Nothing -> pure (Left (InternalError "Mismatched modes in sums"))
+    Just Refl -> if (length ros0 /= length ros1)
+                 then pure (Left (TypeErr "Mismatched sum lengths"))
+                 else do
+      tests :: [Either ErrorMsg ()] <- zipWithM (\(Some (Flip ro0)) (Some (Flip ro1)) -> bimap id (const ()) <$> modily my0 (eqRowTest "Sum eq" my0 0 ro0 ro1)) ros0 ros1
+      case sequence tests of
+        Right _ -> pure (Right ())
+        Left err -> pure (Left err)
+
+  (_, s, t) -> pure . Left $ TypeMismatch tm (show s) (show t)
 
 typeEq :: String -- String representation of the term for error reporting
    -> TypeKind -- The kind we're comparing at
@@ -222,29 +252,33 @@ typeEq :: String -- String representation of the term for error reporting
    -> Checking ()
 typeEq tm = eq tm 0
 
-eqs :: String -> Int -> [TypeKind] -> [Val Z] -> [Val Z] -> Checking ()
-eqs _ _ [] [] [] = pure ()
-eqs tm l (k:ks) (u:us) (v:vs) = eq tm l k u v *> eqs tm l ks us vs
-eqs _ _ _ us vs = typeErr $ "Arity mismatch in type constructor arguments:\n  "
+eqTests :: String -> Int -> [TypeKind] -> [Val Z] -> [Val Z] -> Checking (Either ErrorMsg ())
+eqTests _ _ [] [] [] = pure (Right ())
+eqTests tm l (k:ks) (u:us) (v:vs) = eqTest tm l k u v >>= \case
+  Right () -> eqTests tm l ks us vs
+  Left e -> pure $ Left e
+eqTests _ _ _ us vs = pure . Left . TypeErr $ "Arity mismatch in type constructor arguments:\n  "
                    ++ show us ++ "\n  " ++ show vs
 
-eqCType :: EvMode m
-        => String
-        -> Modey m
-        -> Int -- Next de Bruijn level
-        -> CTy m Z
-        -> CTy m Z
-        -> Checking ()
-eqCType tm m de (ss0 :->> ts0) (ss1 :->> ts1) = do
-  (de, ga0, ga1) <- eqRow tm m de ss0 ss1
-  -- The environments that we get back from the first eqRow call should make
-  -- the top ends of the CTys zero after evaluation
-  ts0 <- eval ga0 ts0
-  ts1 <- eval ga1 ts1
-  case (ts0, ts1) of
-    (Left ts0, Left ts1) -> () <$ eqRow tm m de ts0 ts1
-    (Right (ts0,_), Right (ts1,_)) -> () <$ eqRow tm m de ts0 ts1
-    _ -> typeErr $ "Mismatched function types! One binds and the other doesn't"
+eqCTypeTest :: EvMode m
+            => String
+            -> Modey m
+            -> Int -- Next de Bruijn level
+            -> CTy m Z
+            -> CTy m Z
+            -> Checking (Either ErrorMsg ())
+eqCTypeTest tm m de (ss0 :->> ts0) (ss1 :->> ts1) = do
+  eqRowTest tm m de ss0 ss1 >>= \case
+    Right (de, ga0, ga1) -> do
+      -- The environments that we get back from the first eqRow call should make
+      -- the top ends of the CTys zero after evaluation
+      ts0 <- eval ga0 ts0
+      ts1 <- eval ga1 ts1
+      case (ts0, ts1) of
+        (Left ts0, Left ts1) -> Right () <$ eqRowTest tm m de ts0 ts1
+        (Right (ts0,_), Right (ts1,_)) -> Right () <$ eqRowTest tm m de ts0 ts1
+        _ -> pure . Left . TypeErr $ "Mismatched function types! One binds and the other doesn't"
+    Left e -> pure (Left e)
 
 -- Type rows have i,j dangling de Bruijn indices, which we instantiate with
 -- de Bruijn levels. As we go under binders in these rows, we add to the scope's
@@ -252,31 +286,35 @@ eqCType tm m de (ss0 :->> ts0) (ss1 :->> ts1) = do
 --
 -- The top ends of both of the rows doesn't have to be equal. The Rows have a
 -- stashed context which doesn't count towards equality
-eqRow :: forall m i j
-       . EvMode m
-      => String
-      -> Modey m
-      -> Int -- Next de Bruijn level
-      -> Ro m Z i
-      -> Ro m Z j
-      -> Checking (Int, Valz i, Valz j)
-eqRow tm my de ro0 ro1 = worker de (S0, ro0) (S0, ro1)
+eqRowTest :: forall m i j
+{-           . EvMode m
+          => String
+-}
+           . String
+          -> Modey m
+          -> Int -- Next de Bruijn level
+          -> Ro m Z i
+          -> Ro m Z j
+          -> Checking (Either ErrorMsg (Int, Valz i, Valz j))
+eqRowTest tm my de ro0 ro1 = worker de (S0, ro0) (S0, ro1)
  where
-  worker :: forall i0 i1 j0 j1. Int -> (Valz i0, Ro m i0 j0) -> (Valz i1, Ro m i1 j1) -> Checking (Int, Valz j0, Valz j1)
-  worker de (env0, R0) (env1, R0) = pure (de, env0, env1)
+  worker :: forall i0 i1 j0 j1. Int -> (Valz i0, Ro m i0 j0) -> (Valz i1, Ro m i1 j1) -> Checking (Either ErrorMsg (Int, Valz j0, Valz j1))
+  worker de (env0, R0) (env1, R0) = pure $ Right (de, env0, env1)
   worker de (env0, RPr (_, ty0) ro0) (env1, RPr (_, ty1) ro1) = do
     ty0 <- eval env0 ty0
     ty1 <- eval env1 ty1
-    () <- case my of
+    r <- case my of
       -- We're comparing types of fields in a row, so the kind is always `Star []`
       -- ... if it were of kind Nat, it wouldn't be the type of a field
-      Braty -> eq tm de (Star []) ty0 ty1
-      Kerny -> eq tm de (Dollar []) ty0 ty1
-    worker de (env0, ro0) (env1, ro1)
+      Braty -> eqTest tm de (Star []) ty0 ty1
+      Kerny -> eqTest tm de (Dollar []) ty0 ty1
+    case r of
+      Right () -> worker de (env0, ro0) (env1, ro1)
+      Left e -> pure (Left e)
   -- ga0 and ga1 are too short by 1
   worker de (env0, REx (_, k0) (ga0 ::- r0)) (env1, REx (_, k1) (ga1 ::- r1))
     | k0 == k1 = let lvl = varVal k0 (VLvl de k0) in
         worker (de + 1) (env0 <<+ ga0 :<< lvl, r0) (env1 <<+ ga1 :<< lvl, r1)
-  worker _ (_, ro0) (_, ro1) = modily my $
-                               typeErr $
-                               "eqRow: failed at " ++ tm ++ " with rows " ++ show ro0 ++ " and " ++ show ro1
+  worker _ (_, _) (_, _) = modily my $
+                           pure . Left . TypeErr $
+                           "eqRow: failed at " ++ tm ++ " with rows " {-++ show ro0 ++ " and " ++ show ro1-}

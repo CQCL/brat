@@ -24,5 +24,5 @@ parseAndCheckXF = expectFailForPaths (expectedParsingFails ++ expectedCheckingFa
 getCheckingTests :: IO TestTree
 getCheckingTests = testGroup "checking" . fmap parseAndCheckXF <$> findByExtension [".brat"] "examples"
 
-runEmpty :: Checking v -> Either Error (v,([TypedHole],Graph))
-runEmpty m = run emptyEnv root m
+runEmpty :: Checking v -> Either Error (v, ([TypedHole], Graph))
+runEmpty m = (\(v, (holes, _, g)) -> (v, (holes, g))) <$> run emptyEnv root m

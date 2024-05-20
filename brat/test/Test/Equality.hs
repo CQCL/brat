@@ -9,16 +9,16 @@ import Brat.Checker.Monad
 import Brat.Checker.Types
 import Brat.Syntax.Common
 import Brat.Syntax.Value
-import Brat.Eval (eqRow)
+import Brat.Eval (eqRowTest)
 import Brat.FC (FC(..), Pos(..))
 import Hasochism (N(..))
 
 -- Check that two indentical functions with a dangling de Bruijn index cause a
 -- type mismatch when their embedded contexts are different
 inequality = testCase "VFun.Inequality" $
-      case runEmpty $ localFC (FC (Pos 0 0) (Pos 0 0)) (eqRow "" Braty 0 exp act) of
-            Right _ -> assertFailure "Should declare different"
-            Left _ -> pure ()
+      case runEmpty $ localFC (FC (Pos 0 0) (Pos 0 0)) (eqRowTest "" Braty 0 exp act) of
+            Right (Right _, _) -> assertFailure "Should declare different"
+            _ -> pure ()
  where
   exp :: Ro Brat Z (S Z)
   exp = REx ("", Star []) (S0 ::- RPr ("", expfn) R0)
@@ -37,7 +37,7 @@ inequality = testCase "VFun.Inequality" $
 -- Check that a VFun's dangling de Bruijn index is resolved by `eqRow`
 -- to the enclosing stash such that it's considered equal to the same type inlined
 equality1 = testCase "VFun.Equality1" $
-           assertChecking $ eqRow "" Braty 0 exp act
+            assertChecking $ eqRowTest "" Braty 0 exp act
  where
   exp :: Ro Brat Z (S (S Z))
   exp = REx ("", Star []) ((S0 :<< TNat) ::- RPr ("", expfn) R0)
@@ -52,7 +52,7 @@ equality1 = testCase "VFun.Equality1" $
   actfn = VFun Braty (RPr ("", TNat) R0 :->> R0)
 
 equality2 = testCase "VFun.Equality2" $
-            assertChecking $ eqRow "" Braty 0 exp exp_stash
+            assertChecking $ eqRowTest "" Braty 0 exp exp_stash
  where
   -- type var refers to "a"
   exp :: Ro Brat Z (S (S Z))

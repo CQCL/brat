@@ -1,0 +1,17 @@
+-- We shouldn't have to do this. Also these aren't defined in the extension
+ext "brat.uncons_q" uncons :: { (n :: #) -> { Vec(Qubit, succ(n)) -o Qubit, Vec(Qubit, n) } }
+ext "brat.recons_q" recons :: { (n :: #) -> { Qubit, Vec(Qubit, n) -o Vec(Qubit, succ(n)) } }
+
+-- Can't remember what hugr quantum extension is called (but it's something like this)
+ext "quantum.H" H :: { Qubit -o Qubit }
+ext "quantum.CRx" CRx :: { Float -> { Qubit, Qubit -o Qubit, Qubit } }
+
+qid(Qubit) -o Qubit
+qid(q) = q
+
+vid(n :: #) -> { Vec(Qubit, n) -o Vec(Qubit, n) }
+vid(_) = { qs => qs }
+
+all_h(n :: #) -> { Vec(Qubit, n) -o Vec(Qubit, n) }
+all_h(zero) = { xs => xs }
+all_h(succ(n)) = { uncons(n); H, all_h(n); recons(n) }

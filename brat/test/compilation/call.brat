@@ -1,0 +1,17 @@
+id(Bool) -> Bool
+id(x) = x
+
+id2(Bool) -> Bool
+id2(x) = id(id(x))
+
+ext "arith.int.ops.add" add :: { Int, Int -> Int }
+
+adder(Int, Int) -> Int
+adder(a, b) = add(a, b)
+
+-- Need lambda lifting to get this far
+--ho(Int) -> { Int -> Int }
+--ho(x) = { y => add(x, y) }
+
+--add5(Int) -> Int
+--add5(x) = ho(5)(x)

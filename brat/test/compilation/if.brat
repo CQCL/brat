@@ -1,0 +1,3 @@
+if(Bit, Bit, Bit) -o Bit
+if(true, x, _) = x
+if(false, _, x) = x

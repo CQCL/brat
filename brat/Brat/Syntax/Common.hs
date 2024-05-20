@@ -61,6 +61,8 @@ data Modey :: Mode -> Type where
   Braty :: Modey Brat
   Kerny :: Modey Kernel
 
+deriving instance Show (Modey m)
+
 class MODEY (m :: Mode) where
   modey :: Modey m
 
@@ -115,6 +117,7 @@ instance Eq ty => Eq (TypeRowElem ty) where
 data TypeKind = TypeFor Mode [(PortName, TypeKind)] | Nat | Row
   deriving (Eq, Show)
 
+pattern Star, Dollar :: [(PortName, TypeKind)] -> TypeKind
 pattern Star ks = TypeFor Brat ks
 pattern Dollar ks = TypeFor Kernel ks
 
@@ -157,7 +160,7 @@ deriving instance Eq io => Eq (CType' io)
 instance Semigroup (CType' (PortName, ty)) where
   (ss :-> ts) <> (us :-> vs) = (ss <> us) :-> (ts <> vs)
 
-data Locality = Extern String | Local deriving (Eq, Show)
+data Locality = Extern (String, String) | Local deriving (Eq, Show)
 
 data Decl' (io :: Type) (body :: Type)
   = Decl { fnName :: String

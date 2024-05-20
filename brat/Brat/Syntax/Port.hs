@@ -9,13 +9,37 @@ data InPort = In Name Int deriving (Eq, Ord, Show)
 
 data NamedPort e = NamedPort {end :: e
                              ,portName :: PortName
-                             } deriving Show
+                             } deriving (Show, Functor)
 
 instance (Eq e) => Eq (NamedPort e) where
   (NamedPort {end=e1}) == NamedPort {end=e2} = e1 == e2
 
 type Src = NamedPort OutPort
 type Tgt = NamedPort InPort
+
+class Connector t where
+  getNode :: t -> Name
+
+instance Connector OutPort where
+  getNode (Ex name _) = name
+
+instance Connector InPort where
+  getNode (In name _) = name
+
+class ToEnd t where
+  toEnd :: t -> End
+
+instance ToEnd Src where
+  toEnd = ExEnd . end
+
+instance ToEnd Tgt where
+  toEnd = InEnd . end
+
+instance ToEnd InPort where
+  toEnd = InEnd
+
+instance ToEnd OutPort where
+  toEnd = ExEnd
 
 data End = InEnd InPort | ExEnd OutPort
  deriving (Eq, Ord)

@@ -39,4 +39,4 @@ main = do
   when (ast || raw) $ printAST raw ast file
   let libDirs = parseLibs libs
   when (dot /= "") $ writeDot libDirs file dot
-  if compile then compileFile libDirs file else printDeclsHoles libDirs file
+  if compile then compileAndPrintFile libDirs file else printDeclsHoles libDirs file

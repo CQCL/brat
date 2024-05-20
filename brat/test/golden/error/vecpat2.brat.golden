@@ -1,10 +1,6 @@
-Error in test/golden/error/vecpat2.brat@FC {start = Pos {line = 1, col = 1}, end = Pos {line = 3, col = 21}}:
-fst3(Vec(Int, 3)) -> Option(Int)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-fst3(cons(x,xs)) = some(x)
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in test/golden/error/vecpat2.brat@FC {start = Pos {line = 3, col = 5}, end = Pos {line = 3, col = 14}}:
 fst3(some(x)) = none
-^^^^^^^^^^^^^^^^^^^^
+    ^^^^^^^^^
 
-  Unification error: Couldn't find constructor some for type Vec(Int, 3)
+  "some" is not a valid constructor for type Vec
 

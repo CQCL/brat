@@ -109,6 +109,10 @@ S0 <<+ stk = stk
 stk <<+ S0 = stk
 stk <<+ (stk' :<< x) = stk <<+ stk' :<< x
 
+stackLen :: Stack Z x n -> Ny n
+stackLen S0 = Zy
+stackLen (s :<< _) = Sy (stackLen s)
+
 infixr 8 <<+
 
 -- Environment of closed values of size `top`
@@ -142,6 +146,8 @@ data Val :: N -> Type where
   VLam :: Scope Val n -> Val n
   VFun :: Modey m -> CTy m n -> Val n
   VApp :: VVar n -> Bwd (Val n) -> Val n
+  -- Sum types
+  VSum :: Modey m -> [Some (Flip (Ro' m) n)] -> Val n
 
 data CTy :: Mode -> N -> Type where
   (:->>) :: Ro m i j -> Ro m j k -> CTy m i
@@ -318,10 +324,15 @@ instance Show (Val n) where
   show (VCon c []) = show c
   show (VCon c vs) = show c ++ "(" ++ intercalate ", " (show <$> vs) ++ ")"
   show (VNum v) = show v
-  -- FIXME
   show (VFun m cty) = "{ " ++ modily m (show cty) ++ " }"
   show (VApp v ctx) = "VApp " ++ show v ++ " " ++ show ctx
   show (VLam (ga ::- x)) = "VLam " ++ show ga ++ " " ++ show x
+  show (VSum my ros) = case my of
+    Braty -> "VSum (" ++ intercalate " + " (helper <$> ros) ++ ")"
+    Kerny -> "VSum (" ++ intercalate " + " (helper <$> ros) ++ ")"
+   where
+    helper :: MODEY m => Some (Flip (Ro' m) n) -> String
+    helper (Some (Flip ro)) = show ro
 
 type family BinderType (m :: Mode) where
   BinderType Brat = KindOr (Val Z)
@@ -419,6 +430,32 @@ valMatches' zv (v:vs) (p:ps) = do
 valMatches' _ _ _ = Left $ InternalError "ragged lists in valMatches"
 
 
+-- A `Thinning i j` embeds i things among j things.
+data Thinning :: N -> N -> Type where
+  ThNull :: Thinning Z Z
+  ThKeep :: Thinning i j -> Thinning (S i) (S j)
+  ThDrop :: Thinning i j -> Thinning i (S j)
+
+thId :: Ny i -> Thinning i i
+thId Zy = ThNull
+thId (Sy n) = ThKeep (thId n)
+
+thEmpty :: Ny i -> Thinning Z i
+thEmpty Zy = ThNull
+thEmpty (Sy n) = ThDrop (thEmpty n)
+
+thCompose :: Thinning i j -> Thinning j k -> Thinning i k
+thCompose th (ThDrop ph) = ThDrop (thCompose th ph)
+thCompose (ThDrop th) (ThKeep ph) = ThDrop (thCompose th ph)
+thCompose (ThKeep th) (ThKeep ph) = ThKeep (thCompose th ph)
+thCompose ThNull ThNull = ThNull
+
+inxThin :: Inx i -> Thinning i j -> Inx j
+inxThin v (ThDrop th) = VS (inxThin v th)
+inxThin VZ (ThKeep _) = VZ
+inxThin (VS v) (ThKeep th) = VS (inxThin v th)
+
+
 class DeBruijn (t :: N -> Type) where
   -- Change the scope of Inx variables
   changeVar :: VarChanger src tgt -> t src -> t tgt
@@ -435,11 +472,15 @@ data VarChanger :: N -> N -> Type where
   InxToLvl :: AddR out inn tot
            -> Stack Z (Int, TypeKind) out -- de Bruijn level for every outer variable
            -> VarChanger tot inn
+  Thinning :: Thinning src tgt
+           -> VarChanger src tgt
+
 
 weakenVC :: VarChanger src tgt -> VarChanger (S src) (S tgt)
 weakenVC (InxToPar a stk) = InxToPar (AddS a) stk
 weakenVC (ParToInx a stk) = ParToInx (AddS a) stk
 weakenVC (InxToLvl a stk) = InxToLvl (AddS a) stk
+weakenVC (Thinning th) = Thinning (ThKeep th)
 
 
 instance DeBruijn VVar where
@@ -453,6 +494,7 @@ instance DeBruijn VVar where
   changeVar (InxToLvl a lvlz) (VInx v) = case outOrInn a v of
     Left out -> uncurry VLvl (proj lvlz out)
     Right inn -> VInx inn
+  changeVar (Thinning th) (VInx v) = VInx (inxThin v th)
   changeVar _ (VPar e) = VPar e
   changeVar _ (VLvl l k) = VLvl l k
 
@@ -483,6 +525,9 @@ instance DeBruijn Val where
     = VFun Braty $ changeVar vc cty
   changeVar vc (VFun Kerny cty)
     = VFun Kerny $ changeVar vc cty
+  changeVar vc (VSum my ros)
+    = VSum my (f <$> ros)
+    where f (Some (Flip ro)) = case varChangerThroughRo vc ro of Some (_ :* Flip ro) -> Some (Flip ro)
 
 varChangerThroughRo :: VarChanger src tgt
                     -> Ro m src src'
@@ -567,3 +612,16 @@ roTop ny (REx _ (stk ::- ro)) = roTop (Sy (stkTop ny stk)) ro
 stkLen :: Stack Z t tot -> Ny tot
 stkLen S0 = Zy
 stkLen (zx :<< _) = Sy (stkLen zx)
+
+stkList :: Stack i a j -> [a]
+stkList S0 = []
+stkList (stk :<< a) = stkList stk ++ [a]
+
+copyable :: Val Z -> Maybe Bool
+copyable TQ = Just False
+copyable TMoney = Just False
+-- If it can be instantiated with something linear, we can't copy it!
+copyable (VApp _ _) = Just False
+copyable (TVec elem _) = copyable elem
+copyable TBit = Just True
+copyable _ = Nothing

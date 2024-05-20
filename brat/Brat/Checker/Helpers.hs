@@ -20,29 +20,25 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
                             ,evalSrcRow, evalTgtRow
                             )-} where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr, captureOuterVars, kindArgRows)
+import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr, kindArgRows)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (Eval(eval), EvMode(..), kindType)
 import Brat.FC (FC)
 import Brat.Graph (Node(..), Thing(..))
-import Brat.Naming (Name)
+import Brat.Naming (Name, FreshMonad(..))
 import Brat.Syntax.Common
 import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Simple
+import Brat.Syntax.Port (ToEnd(..))
 import Brat.Syntax.Value
 import Brat.UserName
 import Bwd
 import Hasochism
-import Util (zip_same_length)
 
-import Control.Monad (forM, unless)
 import Control.Monad.Freer (req, Free(Ret))
 import Control.Arrow ((***))
-import Control.Exception (assert)
-import Data.Bifunctor
 import Data.List (intercalate)
-import Data.Maybe (fromJust)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -178,7 +174,7 @@ mkThunkTy Kerny () ss ts = K (ss :-> ts)
 anext :: forall m i j k
        . EvMode m
       => String
-      -> Thing
+      -> Thing m
       -> (Valz i, Some Endz)
       -> Ro m i j -- Inputs and Outputs use de Bruijn indices
       -> Ro m j k
@@ -188,18 +184,16 @@ anext str th vals0 ins outs = do
   -- Use the new name to generate Ends with which to instantiate types
   (unders, vals1) <- endPorts node InEnd In 0 vals0 ins
   (overs, vals2)  <- endPorts node ExEnd Ex 0 vals1 outs
-  () <- case modey @m of
-    Braty -> sequence_ $
-              [ declareTgt tgt k | (tgt, Left k) <- unders ]
-              ++ [ declareSrc src k | (src, Left k) <- overs ]
-    Kerny -> pure ()
+  () <- sequence_ $
+        [ declareTgt tgt (modey @m) ty | (tgt, ty) <- unders ] ++
+        [ declareSrc src (modey @m) ty | (src, ty) <- overs ]
   let inputs  = [ (portName p, biType @m ty) | (p, ty) <- unders ]
   let outputs = [ (portName p, biType @m ty) | (p, ty) <- overs  ]
 
   () <- req (AddNode node (mkNode (modey @m) th inputs outputs))
   pure (node, unders, overs, vals2)
  where
-  mkNode :: forall m. Modey m -> Thing
+  mkNode :: forall m. Modey m -> Thing m
          -> [(PortName, Val Z)]
          -> [(PortName, Val Z)]
          -> Node
@@ -244,13 +238,13 @@ endPorts node f dir i (vals, ends) ((p, ty):xs) = do
   (xs', vals'') <- endPorts node f dir (i + 1) vals' xs
   pure (((NamedPort (dir node i) p), ty') : xs', vals'')
 -}
-next :: String -> Thing -> (Valz i, Some Endz)
+next :: String -> Thing Brat -> (Valz i, Some Endz)
      -> Ro Brat i j
      -> Ro Brat j k
      -> Checking (Name, Unders Brat Chk, Overs Brat UVerb, (Valz k, Some Endz))
 next = let ?my = Braty in anext
 
-knext :: String -> Thing -> (Valz i, Some Endz)
+knext :: String -> Thing Kernel -> (Valz i, Some Endz)
       -> Ro Kernel i i
       -> Ro Kernel i i
       -> Checking (Name, Unders Kernel Chk, Overs Kernel UVerb, (Valz i, Some Endz))
@@ -290,8 +284,7 @@ getThunks Braty row@((src, Right ty):rest) = eval S0 ty >>= \case
   v -> typeErr $ "Force called on non-thunk: " ++ show v
 getThunks Kerny row@((src, Right ty):rest) = eval S0 ty >>= \case
   (VFun Kerny (ss :->> ts)) -> do
-    (node, unders, overs, _) <- let ?my = Kerny in
-                                  anext "" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
+    (node, unders, overs, _) <- let ?my = Kerny in anext "" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
     (nodes, unders', overs') <- getThunks Kerny rest
     pure (node:nodes, unders <> unders', overs <> overs')
   (VFun _ _) -> err $ ExpectedThunk (showMode Kerny) (showRow row)
@@ -321,11 +314,11 @@ defineSrc src v = req (Define (ExEnd (end src)) v)
 defineTgt :: Tgt -> Val Z -> Checking ()
 defineTgt tgt v = req (Define (InEnd (end tgt)) v)
 
-declareSrc :: Src -> TypeKind -> Checking ()
-declareSrc src v = req (Declare (ExEnd (end src)) v)
+declareSrc :: Src -> Modey m -> BinderType m -> Checking ()
+declareSrc src my ty = req (Declare (ExEnd (end src)) my ty)
 
-declareTgt :: Tgt -> TypeKind -> Checking ()
-declareTgt tgt v = req (Declare (InEnd (end tgt)) v)
+declareTgt :: Tgt -> Modey m -> BinderType m -> Checking ()
+declareTgt tgt my ty = req (Declare (InEnd (end tgt)) my ty)
 
 -- listToRow :: [(PortName, BinderType m)] -> Ro m Z i
 -- listToRow [] = R0
@@ -337,20 +330,35 @@ makeBox :: (?my :: Modey m, EvMode m)
         -> CTy m Z
         -> ((Overs m UVerb, Unders m Chk) -> Checking a) -- checks + builds the body using srcs/tgts from the box
         -> Checking ((Src, BinderType Brat), a)
-makeBox name cty@(ss :->> ts) body = do
+makeBox name cty body = makeBox' name cty (\(_, _, overs, unders, _) -> body (overs, unders))
+
+
+makeBox' :: (?my :: Modey m, EvMode m)
+        => String -- A label for the nodes we create
+        -> CTy m Z
+        -> ((Name, (Name, Name), Overs m UVerb, Unders m Chk, Some Endz) -> Checking a) -- checks + builds the body using srcs/tgts from the box
+        -> Checking ((Src, BinderType Brat), a)
+makeBox' name cty@(ss :->> ts) body = do
   (src, _, overs, ctx) <- anext (name ++ "/in") Source (S0, Some (Zy :* S0)) R0 ss
   (tgt, unders, _, _) <- anext (name ++ "/out") Target ctx ts R0
   case (?my, body) of
     (Kerny, _) -> do
-      bres <- body (overs, unders)
-      (_,_,[thunk],_) <- next (name ++ "_thunk") (src :>>: tgt) (S0, Some (Zy :* S0))
-                              R0 (RPr ("thunk", VFun Kerny cty) R0)
+      (box_node,_,[thunk],_) <- next (name ++ "_thunk") (src :>>: tgt) (S0, Some (Zy :* S0))
+                                R0 (RPr ("thunk", VFun Kerny cty) R0)
+      bres <- name -! body (box_node, (src, tgt), overs, unders, snd ctx)
       pure (thunk, bres)
     (Braty, body) -> do
+      (box_node,_,[thunk],_) <- next (name ++ "_thunk") (src :>>: tgt) (S0, Some (Zy :* S0)) R0 (RPr ("thunk", VFun ?my cty) R0)
+      bres <- name -! body (box_node, (src, tgt), overs, unders, snd ctx)
+{- TODO: Work out if/why this is needed and delete if appropriate
+
       let n_args = length overs
-      (bres, captures) <- captureOuterVars src (length overs) $ body (overs, unders)
+      -- The result, plus all of the outer variables it tried to look up
+      (bres, captures) <- captureOuterVars src (length overs) $ body (overs, unders, snd ctx)
+      -- Lookup the definitions of all the variables accessed in the continuation
       inner_outer_srcs :: [[((Src, BinderType Brat), Src)]] <- forM (M.assocs captures) $ \(var, outports) ->
         fromJust . zip_same_length outports . map fst . fromJust <$> req (VLup var)
+      -- Make a new row for outer variables
       let new_inports = M.fromList $ map
             (\((NamedPort {end = Ex isrc n, portName=pn}, ty), _) -> assert (src == isrc) (n, (pn, ty)))
             (concat inner_outer_srcs)
@@ -369,6 +377,7 @@ makeBox name cty@(ss :->> ts) body = do
           Right ty -> wire (osrc, ty, NamedPort {end=In box_node (n-n_args), portName=p})
           Left _ -> pure ()
         )
+-}
       pure (thunk, bres)
 
 -- Evaluate either mode's BinderType
@@ -381,3 +390,24 @@ evalBinder Braty (Left k) = pure (Left k)
 natEqOrBust :: Ny i -> Ny j -> Either ErrorMsg (i :~: j)
 natEqOrBust n m | Just q <- testEquality n m = pure q
 natEqOrBust _ _ = Left $ InternalError "We can't count"
+
+rowToRo :: ToEnd t => Modey m -> [(String, t, BinderType m)] -> Stack Z End i -> Checking (Some ((Flip (Ro' m) i) :* Stack Z End))
+rowToRo _ [] stk = pure $ Some (Flip R0 :* stk)
+rowToRo Kerny ((p, _, ty):row) S0 = do
+  ty <- eval S0 ty
+  rowToRo Kerny row S0 >>= \case
+    Some (Flip ro :* stk) -> pure . Some $ (Flip (RPr (p, changeVar (ParToInx (AddZ Zy) S0) ty) ro)) :* stk
+rowToRo Kerny _ (_ :<< _) = err $ InternalError "rowToRo - no binding allowed in kernels"
+
+rowToRo Braty ((p, _, Right ty):row) endz = do
+  ty <- eval S0 ty
+  rowToRo Braty row endz >>= \case
+    Some (Flip ro :* stk) -> pure . Some $ (Flip (RPr (p, changeVar (ParToInx (AddZ (stkLen endz)) endz) ty) ro)) :* stk
+rowToRo Braty ((p, tgt, Left k):row) endz = rowToRo Braty row (endz :<< toEnd tgt) >>= \case
+  Some (Flip ro :* stk) -> pure . Some $ (Flip (REx (p, k) (S0 ::- ro)) :* stk)
+
+roToTuple :: Ro m Z Z -> Val Z
+roToTuple R0 = TNil
+roToTuple (RPr (_, ty) ro) = TCons ty (roToTuple ro)
+roToTuple (REx _ ro) = case ro of
+  _ -> error "the impossible happened"

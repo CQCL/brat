@@ -1,0 +1,9 @@
+and(Bit, Bit) -o Bit
+and(true, b) = b
+and(false, _) = false
+
+-- Return "true" if all inputs are the same
+parity3(Bit, Bit, Bit) -o Bit
+parity3(true, a, b) = and(a, b)
+parity3(false, false, false) = true
+parity3(_, _, _) = false

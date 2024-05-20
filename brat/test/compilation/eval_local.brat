@@ -1,0 +1,14 @@
+ext "unknown.some_bool" maybe:: { -> Bool}
+
+inc :: {Nat -> Nat}
+inc(x) = x + 1
+
+treble(Nat) -> Nat
+treble(x) = x * 3
+
+if(Bool, {Nat -> Nat}, {Nat -> Nat}) -> {Nat -> Nat}
+if(true, t, _) = t
+if(false, _, f) = f
+
+y :: Nat
+y = let g = if(maybe(), treble, inc) in g(5)

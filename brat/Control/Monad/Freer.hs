@@ -17,11 +17,8 @@ instance Applicative (Free sig) where
   (Req sig k) <*> ma = Req sig ((<*> ma) . k)
 
 instance Monad (Free sig) where
-  return = Ret
   Ret v >>= k = k v
   Req r j >>= k = Req r (j >=> k)
 
 req :: sig t -> Free sig t
 req s = Req s Ret
-
-

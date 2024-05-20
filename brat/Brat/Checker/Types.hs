@@ -5,7 +5,7 @@ module Brat.Checker.Types (Overs, Unders
                           ,ChkConnectors, SynConnectors
                           ,Mode(..), Modey(..)
                           ,Env, VEnv, KEnv, EnvData
-                          ,Store(..)
+                          ,Store(..), EndType(..)
                           ,TypedHole(..)
                           ,initStore
                           ) where
@@ -63,8 +63,16 @@ data TypedHole
   | VKHole Name FC (ChkConnectors Kernel Chk UVerb)
  deriving Show
 
+data EndType where
+  EndType :: Modey m -> BinderType m -> EndType
+
+instance Show EndType where
+  show (EndType Kerny ty) = show ty
+  show (EndType Braty (Left k)) = show k
+  show (EndType Braty (Right ty)) = show ty
+
 data Store = Store
-  { kindMap :: M.Map End TypeKind
+  { typeMap  :: M.Map End EndType
   , valueMap :: M.Map End (Val Z)
   }
 
@@ -78,3 +86,6 @@ instance Show Store where
 
 initStore :: Store
 initStore = Store M.empty M.empty
+
+instance Semigroup Store where
+  (Store ks vs) <> (Store ks' vs') = Store (ks <> ks') (vs <> vs')

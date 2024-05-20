@@ -6,7 +6,7 @@ import Brat.Constructors (ConstructorMap, CtorArgs)
 import Brat.Error (Error(..), ErrorMsg(..), dumbErr)
 import Brat.FC (FC)
 import Brat.Graph
-import Brat.Naming (fresh, split, Name, Namespace)
+import Brat.Naming (fresh, split, Name, Namespace, FreshMonad(..))
 import Brat.Syntax.Common
 import Brat.Syntax.Value
 import Brat.UserName (UserName)
@@ -20,9 +20,15 @@ import Control.Monad.Fail ()
 import Data.List (intercalate)
 import qualified Data.Map as M
 
-import Debug.Trace
+-- import Debug.Trace
 
-track = const (const id) trace
+trackM :: Monad m => String -> m ()
+trackM = const (pure ())
+-- trackM = traceM
+
+track = const id
+-- track = trace
+trackShowId x = track (show x) x
 
 -- Data for using a type alias. E.g.
 -- type A(x :: *, y :: #, z :: *(a :: *)) = body (with [x,y,z] in scope)
@@ -50,7 +56,8 @@ data Context = Ctx { venv   :: VEnv
 
 data CheckingSig ty where
   Fresh   :: String -> CheckingSig Name
-  FreshSupply :: String -> CheckingSig Namespace
+  -- Run a sub-process on a new namespace-level
+  InLvl   :: String -> Checking a -> CheckingSig a
   Throw   :: Error  -> CheckingSig a
   LogHole :: TypedHole -> CheckingSig ()
   AskFC   :: CheckingSig FC
@@ -72,24 +79,26 @@ data CheckingSig ty where
   ELup    :: End -> CheckingSig (Maybe (Val Z))
   -- Lookup an alias in the table
   ALup    :: UserName -> CheckingSig (Maybe Alias)
-  EndKind :: End -> CheckingSig (Maybe TypeKind)
+  TypeOf  :: End -> CheckingSig EndType
   AddNode :: Name -> Node -> CheckingSig ()
   Wire    :: Wire -> CheckingSig ()
   KDone   :: CheckingSig ()
   AskVEnv :: CheckingSig VEnv
-  Declare :: End -> TypeKind -> CheckingSig ()
+  Declare :: End -> Modey m -> BinderType m -> CheckingSig ()
   Define  :: End -> Val Z -> CheckingSig ()
 
 localAlias :: (UserName, Alias) -> Checking v -> Checking v
 localAlias _ (Ret v) = Ret v
 localAlias con@(name, alias) (Req (ALup u) k)
   | u == name = localAlias con $ k (Just alias)
+localAlias con (Req (InLvl str c) k) = Req (InLvl str (localAlias con c)) (localAlias con . k)
 localAlias con (Req r k) = Req r (localAlias con . k)
 
 localFC :: FC -> Checking v -> Checking v
 localFC _ (Ret v) = Ret v
 localFC f (Req AskFC k) = localFC f (k f)
 localFC f (Req (Throw (e@Err{fc=Nothing})) k) = localFC f (Req (Throw (e{fc=Just f})) k)
+localFC f (Req (InLvl str c) k) = Req (InLvl str (localFC f c)) (localFC f . k)
 localFC f (Req r k) = Req r (localFC f . k)
 
 localEnv :: (?my :: Modey m) => Env (EnvData m) -> Checking v -> Checking v
@@ -102,7 +111,13 @@ localVEnv _   (Ret v) = Ret v
 localVEnv ext (Req (VLup x) k) | Just x <- M.lookup x ext = localVEnv ext (k (Just x))
 localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
                                    localVEnv ext (k (M.union ext env)) -- ext shadows env
+localVEnv ext (Req (InLvl str c) k) = Req (InLvl str (localVEnv ext c)) (localVEnv ext . k)
 localVEnv ext (Req r k) = Req r (localVEnv ext . k)
+
+type CaptureOuterVarsState = (
+    M.Map UserName [(Src, BinderType Brat)]  -- accumulates variables captured
+   ,Int  -- next free outport of input node (sum of lengths of values of previous)
+   )
 
 -- runs a computation, but intercepts uses of outer variables and redirects
 -- them to use new outports of the specified node (expected to be a Source).
@@ -110,23 +125,26 @@ localVEnv ext (Req r k) = Req r (localVEnv ext . k)
 captureOuterVars :: Name -> Int -- Name of Source node and #existing inputs
                  -> Checking v
                  -> Checking (v, M.Map UserName [(Src, BinderType Brat)])
-captureOuterVars src_node = helper M.empty
+captureOuterVars src_node n_inputs c = do
+  (v, (captured, _)) <- helper (M.empty, n_inputs) c
+  pure (v, captured)
  where
-  helper :: M.Map UserName [(Src, BinderType Brat)]  -- accumulates variables captured
-         -> Int                                      -- next free outport of input node (sum of lengths of values of previous)
+  helper :: CaptureOuterVarsState
          -> Checking v
-         -> Checking (v, M.Map UserName [(Src, BinderType Brat)])
-  helper captured _ (Ret v) = Ret (v, captured)
-  helper captured n_inputs (Req (VLup x) k) = do
+         -> Checking (v, CaptureOuterVarsState)
+  helper state (Ret v) = Ret (v, state)
+  helper state (Req (InLvl str c) k) = do
+    (v, state) <- req (InLvl str (helper state c))
+    helper state (k v)
+  helper state@(captured, n_inputs) (Req (VLup x) k) = do
     case M.lookup x captured of
-      j@(Just _) -> helper captured n_inputs (k j)
+      j@(Just _) -> helper state (k j)
       Nothing -> req (VLup x) >>= \case
-          Nothing -> helper captured n_inputs (k Nothing)
+          Nothing -> helper state (k Nothing)
           Just outerVals ->
             let (outPorts, n_inputs') = runState (mapM next_input outerVals) n_inputs
-            in helper (M.insert x outPorts captured) n_inputs' (k $ Just outPorts)
-  helper captured n_inputs (Req r k) =
-    Req r (helper captured n_inputs . k)
+            in helper (M.insert x outPorts captured, n_inputs') (k $ Just outPorts)
+  helper state (Req r k) = Req r (helper state . k)
   -- replaces the end (not portname) with the *next* port of 'src_node', defined by the state
   next_input :: (Src, BinderType Brat) -> State Int (Src, BinderType Brat)
   next_input (src, ty) = state (\n_input -> ((src {end=Ex src_node n_input}, ty), n_input+1))
@@ -134,6 +152,7 @@ captureOuterVars src_node = helper M.empty
 wrapError :: (Error -> Error) -> Checking v -> Checking v
 wrapError _ (Ret v) = Ret v
 wrapError f (Req (Throw e) k) = Req (Throw (f e)) k
+wrapError f (Req (InLvl str c) k) = Req (InLvl str (wrapError f c)) (wrapError f . k)
 wrapError f (Req r k) = Req r (wrapError f . k)
 
 throwLeft :: Either ErrorMsg a -> Checking a
@@ -162,6 +181,16 @@ kclup :: UserName -- Value constructor
       -> Checking (CtorArgs Kernel)
 kclup vcon tycon = req AskFC >>= \fc -> req (KCLup fc vcon tycon)
 
+tlup :: (Mode, UserName) -> Checking [(PortName, TypeKind)]
+tlup (m, c) = req (TLup (m, c)) >>= \case
+  Nothing -> req (TLup (otherMode, c)) >>= \case
+    Nothing -> err $ UnrecognisedTypeCon (show c)
+    Just _ -> err $ WrongModeForType (show c)
+  Just ks -> pure ks
+ where
+  otherMode = case m of
+    Brat -> Kernel
+    Kernel -> Brat
 
 lookupAndUse :: UserName -> KEnv
              -> Either Error (Maybe ((Src, BinderType Kernel), KEnv))
@@ -196,17 +225,20 @@ handler :: Free CheckingSig v
         -> Context
         -> Graph
         -> Namespace
-        -> Either Error (v,([TypedHole],Graph),Namespace)
-handler (Ret v) _ g ns = return (v, ([], g), ns)
+        -> Either Error (v,Context,([TypedHole],Graph),Namespace)
+handler (Ret v) ctx g ns = return (v, ctx, ([], g), ns)
 handler (Req s k) ctx g ns
   = case s of
       Fresh str -> let (name, root) = fresh str ns in
                      handler (k name) ctx g root
-      FreshSupply str -> let (freshNS, newRoot) = split str ns in
-                           handler (k freshNS) ctx g newRoot
+      InLvl str c -> do  -- In Either Error monad
+        let (freshNS, newRoot) = split str ns
+        (v, ctx, (holes1, g), _) <- handler c ctx g freshNS
+        (v, ctx, (holes2, g), ns) <- handler (k v) ctx g newRoot
+        pure (v, ctx, (holes1 ++ holes2, g), ns)
       Throw err -> Left err
-      LogHole hole -> do (v,(holes,g),ns) <- handler (k ()) ctx g ns
-                         return (v,(hole:holes,g),ns)
+      LogHole hole -> do (v,ctx,(holes,g),ns) <- handler (k ()) ctx g ns
+                         return (v,ctx,(hole:holes,g),ns)
       AskFC -> error "AskFC in handler - shouldn't happen, should always be in localFC"
       VLup s -> handler (k $ M.lookup s (venv ctx)) ctx g ns
       ALup s -> handler (k $ M.lookup s (aliasTable ctx)) ctx g ns
@@ -218,21 +250,25 @@ handler (Req s k) ctx g ns
       KDone -> error "KDone in handler - this shouldn't happen"
       AskVEnv -> handler (k (venv ctx)) ctx g ns
       ELup end -> handler (k ((M.lookup end) . valueMap . store $ ctx)) ctx g ns
-      EndKind end -> handler (k ((M.lookup end) . kindMap . store $ ctx)) ctx g ns
-      Declare end kind ->
-        let st@Store{kindMap=m} = store ctx
+      TypeOf end -> case M.lookup end . typeMap . store $ ctx of
+        Just et -> handler (k et) ctx g ns
+        Nothing -> Left (dumbErr . InternalError $ "End " ++ show end ++ " isn't Declared")
+      Declare end my bty ->
+        let st@Store{typeMap=m} = store ctx
         in case M.lookup end m of
           Just _ -> Left $ dumbErr (InternalError $ "Redeclaring " ++ show end)
-          Nothing -> track ("Declared " ++ show end ++ " :: " ++ show kind) $ handler (k ())
-            (ctx { store =
-              st { kindMap = M.insert end kind m }
-            }) g ns
+          Nothing -> let bty_str = case my of { Braty -> show bty; Kerny -> show bty } in
+                       track ("Declared " ++ show end ++ " :: " ++ bty_str) $
+                       handler (k ())
+                       (ctx { store =
+                              st { typeMap = M.insert end (EndType my bty) m }
+                            }) g ns
       Define end v ->
-        let st@Store{kindMap=km, valueMap=vm} = store ctx
+        let st@Store{typeMap=tm, valueMap=vm} = store ctx
         in case track ("Define " ++ show end ++ " = " ++ show v) $ M.lookup end vm of
           Just _ -> Left $ dumbErr (InternalError $ "Redefining " ++ show end)
-          Nothing -> case M.lookup end km of
-            Nothing -> Left $ dumbErr (InternalError $ "Defining un-Declared " ++ show end)
+          Nothing -> case M.lookup end tm of
+            Nothing -> Left $ dumbErr (InternalError $ "Defining un-Declared " ++ show end ++ " in \n" ++ show tm)
             Just _ -> -- TODO can we check the value is of the kind declared?
               handler (k ())
                 (ctx { store =
@@ -273,6 +309,10 @@ err msg = do
 
 typeErr :: String -> Checking a
 typeErr = err . TypeErr
+
+instance FreshMonad Checking where
+  freshName x = req $ Fresh x
+  str -! c = req $ InLvl str c
 
 -- This way we get file contexts when pattern matching fails
 instance MonadFail Checking where

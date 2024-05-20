@@ -76,6 +76,8 @@ data ErrorMsg
  | ArithNotExpected String
  | UnificationError String
  | UnreachableBranch
+ | UnrecognisedTypeCon String
+ | WrongModeForType String
 
 instance Show ErrorMsg where
   show (TypeErr x) = "Type error: " ++ x
@@ -150,6 +152,8 @@ instance Show ErrorMsg where
   show (UnrecognisedConstructor c ty) = unlines ["Unrecognised constructor: " ++ c
                                                 ,"For type: " ++ ty
                                                 ]
+  show (UnrecognisedTypeCon c) = "Unrecognised type constructor: " ++ c
+  show (WrongModeForType c) = "Type constructor " ++ show c ++ " isn't valid in this context"
   show ArithInKernel = "Arithmetic expressions not allowed in kernels"
   show (ArithNotExpected tm) = "Expected " ++ tm ++ " but got arithmetic expression"
   -- TODO: Make all of these use existing errors

@@ -1,0 +1,5 @@
+fst(Bit, Bit) -o Bit
+fst(a, _) = a
+
+snd(Bit, Bit) -o Bit
+snd(a, b) = b

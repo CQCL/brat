@@ -13,7 +13,6 @@ import qualified Data.GraphViz.Attributes.Complete as GV
 import qualified Data.Map as M
 import Data.Text.Lazy (pack, unpack)
 import Data.Bifunctor (first)
-import Data.List (intersect)
 import Data.Graph (reachable, transposeG)
 import Data.Maybe (fromJust)
 import Data.Tuple.HT (snd3)
@@ -46,11 +45,12 @@ toDotString (ns,ws) = unpack . GV.printDotGraph $ GV.graphElemsToDot params vert
     -- Normal edges
     [ (Name' v1, Name' v2, GraphEdge ty) | (Ex v1 _, ty, In v2 _) <- ws ] ++
     -- New edges denoting references in nodes
-    [ edge | (x, node) <- verts, edge <- getRefEdge x (nodeThing node) ]
+    [ edge | (x, node) <- verts, edge <- getRefEdge x node ]
 
-  getRefEdge :: Name' -> Thing -> [(Name', Name', EdgeType)]
-  getRefEdge x (Eval (Ex y _)) = [(Name' y, x, EvalEdge)]
-  getRefEdge x (y :>>: _) = [(x, Name' y, SrcEdge)]
+  getRefEdge :: Name' -> Node -> [(Name', Name', EdgeType)]
+  getRefEdge x (BratNode (Eval (Ex y _)) _ _) = [(Name' y, x, EvalEdge)]
+  getRefEdge x (KernelNode (Splice (Ex y _)) _ _) = [(Name' y, x, EvalEdge)]
+  getRefEdge x (BratNode (y :>>: _) _ _) = [(x, Name' y, SrcEdge)]
   getRefEdge _ _ = []
 
   -- Map all nodes in a `src :>>: tgt` block to the src node
@@ -58,13 +58,13 @@ toDotString (ns,ws) = unpack . GV.printDotGraph $ GV.graphElemsToDot params vert
   clusterMap = foldr f M.empty verts
    where
     (g, toNode, toVert) = toGraph (ns, ws)
-    f (_, node) m = case nodeThing node of
-      (src :>>: tgt) ->
+    f (_, node) m = case node of
+      BratNode (src :>>: tgt) _ _ ->
         -- Find all nodes in the box spanned by src and tgt, i.e. all nodes
         -- reachable from src that can reach tgt
         let srcReaches = reachable g (fromJust (toVert src))
             reachesTgt = reachable (transposeG g) (fromJust (toVert tgt))
-            box = Name' . snd3 . toNode <$> (srcReaches `intersect` reachesTgt) in
+            box = Name' . snd3 . toNode <$> (srcReaches ++ reachesTgt) in
         foldr (`M.insert` Name' src) m box
       _ -> m
 
@@ -72,7 +72,7 @@ toDotString (ns,ws) = unpack . GV.printDotGraph $ GV.graphElemsToDot params vert
   params :: GV.GraphvizParams Name' Node EdgeType Name' Node
   params = GV.defaultParams {
     GV.fmtNode = \(Name' name, node) -> [
-      GV.textLabel (pack $ show name ++ ":\\n" ++ show (nodeThing node)),
+      GV.textLabel (pack $ show name ++ ":\\n" ++ showNodeThing node),
       GV.Color $ GV.toColorList [ color node ],
       GV.Shape GV.BoxShape
     ],
@@ -88,6 +88,10 @@ toDotString (ns,ws) = unpack . GV.printDotGraph $ GV.graphElemsToDot params vert
         Nothing -> GV.N n,
     GV.clusterID = \(Name' name) -> GV.Str (pack $ show name)
   }
+
+  showNodeThing :: Node -> String
+  showNodeThing (BratNode thing _ _) = show thing
+  showNodeThing (KernelNode thing _ _) = show thing
 
   color BratNode {} = GV.RGB 255 0 0
   color KernelNode {} = GV.RGB 0 0 255

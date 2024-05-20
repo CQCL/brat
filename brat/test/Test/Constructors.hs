@@ -362,7 +362,7 @@ kernelProg =
 
 kernelGraph :: Graph
 kernelGraph =
-  (fromList
+  (fromList $
    [("id3"
     ,BratNode Id
      [("a1", ktype)]
@@ -429,6 +429,7 @@ kernelGraph =
   )
  where
   ktype = VFun Kerny ((RPr ("a1", TQ) (RPr ("b1", TQ) (RPr ("c1", TQ) R0))) :->> (RPr ("a1", TVec TQ (VNum (nConstant 3))) R0))
+  three = VNum (nConstant 3)
 
 kernelTest = graphTest "kernel" kernelProg kernelGraph
 

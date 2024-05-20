@@ -1,0 +1,41 @@
+-- We shouldn't have to do this. Also these aren't defined in the extension
+ext "brat.uncons_q" uncons :: { (n :: #) -> { Vec(Qubit, succ(n)) -o Qubit, Vec(Qubit, n) } }
+ext "brat.recons_q" recons :: { (n :: #) -> { Qubit, Vec(Qubit, n) -o Vec(Qubit, succ(n)) } }
+
+-- Can't remember what hugr quantum extension is called (but it's something like this)
+ext "quantum.H" H :: { Qubit -o Qubit }
+ext "quantum.CRx" CRx :: { Float -> { Qubit, Qubit -o Qubit, Qubit } }
+
+qid(Qubit) -o Qubit
+qid(q) = q
+
+vid(n :: #) -> { Vec(Qubit, n) -o Vec(Qubit, n) }
+vid(_) = { qs => qs }
+
+all_h(n :: #) -> { Vec(Qubit, n) -o Vec(Qubit, n) }
+all_h(zero) = { xs => xs }
+all_h(succ(n)) = { uncons(n); H, all_h(n); recons(n) }
+
+swap(Qubit, Qubit) -o Qubit, Qubit
+swap = { a, b => b, a }
+
+-- This doesn't work yet
+
+-- pi :: Float
+-- pi = 3.1415926535384 -- close enough
+
+--entangle(n :: #, Float)
+--      -> { Qubit, Vec(Qubit, n) -o
+--           Qubit, Vec(Qubit, n) }
+---- Need to write the BRAT extension to handle testing of vector args
+--entangle(zero, _) = { q, qs => q, qs }
+--entangle(succ(n), th) = {
+--    qid, uncons(n);
+--    -- Need to compile this arithmetic
+--    CRx(th), vid(n);
+--    swap, vid(n);
+--    -- Need to handle recursion
+--    qid, entangle(n, th / 2.0);
+--    swap, vid(n);
+--    qid, recons(n)
+--}

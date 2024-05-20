@@ -1,0 +1,4 @@
+id(Qubit) -o Qubit
+id = { q => q }
+swap(Qubit, Qubit) -o Qubit, Qubit
+swap = { a, b => b, a }

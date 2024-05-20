@@ -1,0 +1,2 @@
+swap(Qubit, Qubit) -o Qubit, Qubit
+swap(a, b) = b, a
