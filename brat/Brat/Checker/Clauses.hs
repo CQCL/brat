@@ -14,7 +14,7 @@ import Brat.Error
 import Brat.Eval
 import Brat.FC hiding (end)
 import qualified Brat.FC as FC
-import Brat.Graph (Thing(..), MatchSequence(..), PrimTest(..), TestMatchData(..))
+import Brat.Graph (NodeType(..), MatchSequence(..), PrimTest(..), TestMatchData(..))
 import Brat.Naming
 import Brat.Syntax.Abstractor
 import Brat.Syntax.Common

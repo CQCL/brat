@@ -72,7 +72,7 @@ toDotString (ns,ws) = unpack . GV.printDotGraph $ GV.graphElemsToDot params vert
   params :: GV.GraphvizParams Name' Node EdgeType Name' Node
   params = GV.defaultParams {
     GV.fmtNode = \(Name' name, node) -> [
-      GV.textLabel (pack $ show name ++ ":\\n" ++ showNodeThing node),
+      GV.textLabel (pack $ show name ++ ":\\n" ++ showNodeType node),
       GV.Color $ GV.toColorList [ color node ],
       GV.Shape GV.BoxShape
     ],
@@ -89,9 +89,9 @@ toDotString (ns,ws) = unpack . GV.printDotGraph $ GV.graphElemsToDot params vert
     GV.clusterID = \(Name' name) -> GV.Str (pack $ show name)
   }
 
-  showNodeThing :: Node -> String
-  showNodeThing (BratNode thing _ _) = show thing
-  showNodeThing (KernelNode thing _ _) = show thing
+  showNodeType :: Node -> String
+  showNodeType (BratNode thing _ _) = show thing
+  showNodeType (KernelNode thing _ _) = show thing
 
   color BratNode {} = GV.RGB 255 0 0
   color KernelNode {} = GV.RGB 0 0 255

@@ -25,7 +25,7 @@ import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (Eval(eval), EvMode(..), kindType)
 import Brat.FC (FC)
-import Brat.Graph (Node(..), Thing(..))
+import Brat.Graph (Node(..), NodeType(..))
 import Brat.Naming (Name, FreshMonad(..))
 import Brat.Syntax.Common
 import Brat.Syntax.Core (Term(..))
@@ -174,7 +174,7 @@ mkThunkTy Kerny () ss ts = K (ss :-> ts)
 anext :: forall m i j k
        . EvMode m
       => String
-      -> Thing m
+      -> NodeType m
       -> (Valz i, Some Endz)
       -> Ro m i j -- Inputs and Outputs use de Bruijn indices
       -> Ro m j k
@@ -193,7 +193,7 @@ anext str th vals0 ins outs = do
   () <- req (AddNode node (mkNode (modey @m) th inputs outputs))
   pure (node, unders, overs, vals2)
  where
-  mkNode :: forall m. Modey m -> Thing m
+  mkNode :: forall m. Modey m -> NodeType m
          -> [(PortName, Val Z)]
          -> [(PortName, Val Z)]
          -> Node
@@ -238,13 +238,13 @@ endPorts node f dir i (vals, ends) ((p, ty):xs) = do
   (xs', vals'') <- endPorts node f dir (i + 1) vals' xs
   pure (((NamedPort (dir node i) p), ty') : xs', vals'')
 -}
-next :: String -> Thing Brat -> (Valz i, Some Endz)
+next :: String -> NodeType Brat -> (Valz i, Some Endz)
      -> Ro Brat i j
      -> Ro Brat j k
      -> Checking (Name, Unders Brat Chk, Overs Brat UVerb, (Valz k, Some Endz))
 next = let ?my = Braty in anext
 
-knext :: String -> Thing Kernel -> (Valz i, Some Endz)
+knext :: String -> NodeType Kernel -> (Valz i, Some Endz)
       -> Ro Kernel i i
       -> Ro Kernel i i
       -> Checking (Name, Unders Kernel Chk, Overs Kernel UVerb, (Valz i, Some Endz))

@@ -299,8 +299,8 @@ graphDiff act exp = case act =? exp of
   inc :: Maybe Int -> Maybe Int
   inc = Just . maybe 1 (1+)
 
-  thingKey :: Modey m -> Thing m -> String
-  thingKey Braty = \case
+  nodeTypeKey :: Modey m -> NodeType m -> String
+  nodeTypeKey Braty = \case
     Prim (ext,op) -> "prim_" ++ (if ext /= "" then ext ++ "." else "") ++ op
     Const x    -> "const_" ++ show x
     Eval _     -> "eval"
@@ -314,7 +314,7 @@ graphDiff act exp = case act =? exp of
     Constructor c -> "ctor_" ++ show c
     Selector c -> "selector_" ++ show c
     ArithNode op -> "arith_" ++ show op
-  thingKey Kerny = ('k':) . \case
+  nodeTypeKey Kerny = ('k':) . \case
     Const x    -> "const_" ++ show x
     Splice _   -> "splice"
     Source     -> "source"
@@ -328,9 +328,9 @@ graphDiff act exp = case act =? exp of
 
   nodeKey :: Node -> String
   nodeKey (BratNode thing ins outs)
-    = thingKey Braty thing ++ (unlines [show ins, show outs])
+    = nodeTypeKey Braty thing ++ (unlines [show ins, show outs])
   nodeKey (KernelNode thing ins outs)
-    = thingKey Kerny thing ++ (unlines [show ins, show outs])
+    = nodeTypeKey Kerny thing ++ (unlines [show ins, show outs])
 
   nodeSet :: M.Map k Node -> M.Map String Int
   nodeSet ns = foldr (M.alter inc) M.empty (nodeKey <$> (snd <$> M.toList ns))

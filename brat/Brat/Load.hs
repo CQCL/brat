@@ -12,7 +12,7 @@ import Brat.Checker
 import Brat.Elaborator (elabEnv)
 import Brat.Error
 import Brat.FC hiding (end)
-import Brat.Graph (Thing(..))
+import Brat.Graph (NodeType(..))
 import Brat.Naming
 import Brat.Parser
 import Brat.Syntax.Common

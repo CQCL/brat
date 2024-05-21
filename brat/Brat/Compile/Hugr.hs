@@ -398,7 +398,7 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
   default_edges :: NodeId -> Maybe (NodeId, Int, [(PortId NodeId, Int)])
   default_edges nid = Just (nid, 0, [])
 
-  compileNode' :: Thing m -> [(PortName, Val Z)] -> [(PortName, Val Z)]
+  compileNode' :: NodeType m -> [(PortName, Val Z)] -> [(PortName, Val Z)]
                   -- Result is nodeid, port offset, *extra* edges
                -> Compile (Maybe (NodeId, Int, [(PortId NodeId, Int)]))
   compileNode' thing ins outs = case thing of

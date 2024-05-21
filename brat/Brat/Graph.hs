@@ -17,8 +17,8 @@ import Data.Kind (Type)
 
 data Node
   -- Inputs first, then outputs
-  = BratNode (Thing Brat) [(PortName, Val Z)] [(PortName, Val Z)]
-  | KernelNode (Thing Kernel) [(PortName, Val Z)] [(PortName, Val Z)]
+  = BratNode (NodeType Brat) [(PortName, Val Z)] [(PortName, Val Z)]
+  | KernelNode (NodeType Kernel) [(PortName, Val Z)] [(PortName, Val Z)]
  deriving Show
 
 nodeIns :: Node -> [(PortName, Val Z)]
@@ -31,26 +31,26 @@ nodeOuts (KernelNode _ _ outs) = outs
 
 data ComboType = Row | Thunk deriving (Eq, Show)
 
-data Thing :: Mode -> Type where
-  Prim  :: (String, String) -> Thing Brat  -- Something external
-  Const :: SimpleTerm -> Thing a
-  Eval  :: OutPort -> Thing Brat   -- A computation on a wire
-  Splice :: OutPort -> Thing Kernel  -- A computation (classical) to add to this kernel
-  (:>>:) :: Name -> Name -> Thing Brat -- Graph in a box - Names are those of Source and Target nodes
-  Source :: Thing a  -- For building..
-  Target :: Thing a  -- ..boxes
-  Id     :: Thing a  -- Identity node for convenient wiring
-  TestMatch :: TestMatchData a -> Thing a -- pattern match LHS as conjunctive sequence
+data NodeType :: Mode -> Type where
+  Prim  :: (String, String) -> NodeType Brat  -- Something external
+  Const :: SimpleTerm -> NodeType a
+  Eval  :: OutPort -> NodeType Brat   -- A computation on a wire
+  Splice :: OutPort -> NodeType Kernel  -- A computation (classical) to add to this kernel
+  (:>>:) :: Name -> Name -> NodeType Brat -- Graph in a box - Names are those of Source and Target nodes
+  Source :: NodeType a  -- For building..
+  Target :: NodeType a  -- ..boxes
+  Id     :: NodeType a  -- Identity node for convenient wiring
+  TestMatch :: TestMatchData a -> NodeType a -- pattern match LHS as conjunctive sequence
   FunClauses :: (NonEmpty
                  ( Name  -- The node for the LHS test match
                  , Name  -- The node for the RHS box
-                )) -> Thing a
-  Hypo :: Thing a  -- Hypothesis for type checking
-  Constructor :: UserName -> Thing a
-  Selector :: UserName -> Thing a -- TODO: Get rid of this in favour of FunClauses based matching
-  ArithNode :: ArithOp -> Thing Brat
+                )) -> NodeType a
+  Hypo :: NodeType a  -- Hypothesis for type checking
+  Constructor :: UserName -> NodeType a
+  Selector :: UserName -> NodeType a -- TODO: Get rid of this in favour of FunClauses based matching
+  ArithNode :: ArithOp -> NodeType Brat
 
-deriving instance Show (Thing a)
+deriving instance Show (NodeType a)
 
 -- TestMatch nodes take the function's input row as inputs and yield one
 -- output, namely a value in a sum type
@@ -89,7 +89,7 @@ primTestOuts :: PrimTest ty -> [(Src, ty)]
 primTestOuts (PrimCtorTest _ _ _ xs) = xs
 primTestOuts (PrimLitTest _) = []
 
-{- TODO: update the repertoire of available `Thing`s to reflect what hugr lets us do
+{- TODO: update the repertoire of available `NodeType`s to reflect what hugr lets us do
 
 In particular, we need conditional nodes (with a list of pairs of source and target nodes).
 For each primitive test on type tau, we need
