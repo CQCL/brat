@@ -9,6 +9,7 @@ import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Raw (Raw(..), RawVType)
 
 import Data.Bifunctor (second)
+import Data.List.NonEmpty (NonEmpty(..))
 
 unelab :: Diry d -> Kindy k -> Term d k -> Flat
 unelab _ _ (Simple tm) = FSimple tm
@@ -31,7 +32,7 @@ unelab dy ky (top :-: bot) = case ky of
   Nouny -> FInto (unelab Syny Nouny <$> top) (unelab dy UVerby <$> bot)
   _ -> FApp (unelab Syny ky <$> top) (unelab dy UVerby <$> bot)
 unelab dy ky (f :$: s) = FApp (unelab dy KVerby <$> f) (unelab Chky ky <$> s)
-unelab dy _ (abs :\: bod) = FLambda abs (unelab dy Nouny <$> bod)
+unelab dy _ (Lambda (abs,rhs) cs) = FLambda ((abs, unelab dy Nouny <$> rhs) :| (second (fmap (unelab Chky Nouny)) <$> cs))
 unelab _ _ (Con c args) = FCon c (unelab Chky Nouny <$> args)
 unelab _ _ (C (ss :-> ts)) = FFn (toRawRo ss :-> toRawRo ts)
 unelab _ _ (K cty) = FKernel $ fmap (\(p, ty) -> Named p (toRaw ty)) cty
@@ -56,7 +57,7 @@ toRaw (Arith op lhs rhs) = RArith op (toRaw <$> lhs) (toRaw <$> rhs)
 toRaw (tm ::: outs) = (toRaw <$> tm) ::::: toRawRo outs
 toRaw (top :-: bot) = (toRaw <$> top) ::-:: (toRaw <$> bot)
 toRaw (f :$: s) = (toRaw <$> f) ::$:: (toRaw <$> s)
-toRaw (abs :\: body) = abs ::\:: (toRaw <$> body)
+toRaw (Lambda (abs,rhs) cs) = RLambda (abs, toRaw <$> rhs) (second (fmap toRaw) <$> cs)
 toRaw (Con c args) = RCon c (toRaw <$> args)
 toRaw (C (ss :-> ts)) = RFn (toRawRo ss :-> toRawRo ts)
 toRaw (K cty) = RKernel $ (\(p, ty) -> Named p (toRaw ty)) <$> cty

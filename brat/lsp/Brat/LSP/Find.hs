@@ -2,7 +2,7 @@
 
 module Brat.LSP.Find (Context(..), getInfo) where
 
-import Data.List.NonEmpty (NonEmpty(..))
+import Data.List.NonEmpty (NonEmpty(..), toList)
 import Data.Maybe (catMaybes)
 
 import Brat.FC
@@ -70,7 +70,7 @@ subTerms (FJuxt a b) = [a, b]
 subTerms (FThunk th) = [th]
 subTerms (FCompose a b) = [a,  b]
 subTerms (FInto a b) = [a, b]
-subTerms (FLambda _ body) = [body]
+subTerms (FLambda lclauses) = snd <$> toList lclauses
 subTerms (FAnnotation tm _) = [tm]
 subTerms (FLetIn _ a b) = [a, b]
 subTerms (FCon _ arg) = [arg]

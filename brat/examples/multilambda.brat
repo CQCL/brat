@@ -1,0 +1,4 @@
+f :: { Nat -> Bool }
+f = { 0 => true
+    | succ(n) => false
+    }

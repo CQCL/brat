@@ -22,7 +22,7 @@ import Brat.Syntax.Common
 import Brat.Syntax.Core
 import Brat.Syntax.Simple
 import Brat.UserName
-import Util (names)
+import Util (names, (**^))
 
 type family TypeOf (k :: Kind) :: Type where
   TypeOf Noun = [InOut]
@@ -73,7 +73,7 @@ data Raw :: Dir -> Kind -> Type where
   (:::::)   :: WC (Raw Chk Noun) -> [RawIO] -> Raw Syn Noun
   (::-::)   :: WC (Raw Syn k) -> WC (Raw d UVerb) -> Raw d k -- vertical juxtaposition (diagrammatic composition)
   (::$::)   :: WC (Raw d KVerb) -> WC (Raw Chk k) -> Raw d k -- Eval with ChkRaw n argument
-  (::\::)   :: WC Abstractor -> WC (Raw d Noun) -> Raw d UVerb
+  RLambda   :: (WC Abstractor, WC (Raw d Noun)) -> [(WC Abstractor, WC (Raw Chk Noun))] -> Raw d UVerb
   RCon      :: UserName -> WC (Raw Chk Noun) -> Raw Chk Noun
   -- Function types
   RFn       :: RawCType -> Raw Chk Noun
@@ -113,7 +113,10 @@ instance Show (Raw d k) where
   show (fun ::$:: arg) = show fun ++ ('(' : show arg ++ ")")
   show (tm ::::: ty) = show tm ++ " :: " ++ show ty
   show (a ::-:: b) = show a ++ "; " ++ show b
-  show (xs ::\:: bod) = show xs ++ " => " ++ show bod
+  show (RLambda c cs) = unlines $ (showClause c : (("| "++) . showClause <$> cs))
+   where
+    showClause :: forall d k. (WC Abstractor, WC (Raw d k)) -> String
+    showClause (abs, bod) = show abs ++ " => " ++ show bod
   show (RCon c xs) = "Con(" ++ show c ++ "(" ++ show xs ++ "))"
   show (RFn cty) = show cty
   show (RKernel cty) = show cty
@@ -226,7 +229,7 @@ instance (Kindable k) => Desugarable (Raw d k) where
     (tys, ()) <- desugarBind outputs $ pure ()
     pure (tm ::: tys)
   desugar' (syn ::-:: verb) = (:-:) <$> desugar syn <*> desugar verb
-  desugar' (abst ::\:: raw) = (abst :\:) <$> desugar raw
+  desugar' (RLambda c cs) = Lambda <$> (id **^ desugar) c <*> (traverse (id **^ desugar) cs)
   desugar' (RLet abs thing body) = Let abs <$> desugar thing <*> desugar body
   desugar' (RCon c arg) = Con c <$> desugar arg
   desugar' (RFn cty) = C <$> desugar' cty

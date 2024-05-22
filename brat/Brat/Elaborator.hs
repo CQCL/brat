@@ -1,6 +1,8 @@
 module Brat.Elaborator where
 
+import Control.Arrow ((***))
 import Control.Monad (forM, (>=>))
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map (empty)
 
 import Brat.FC
@@ -23,7 +25,7 @@ assertChk s@(WC _ r) = case dir r of
   deepEmb :: WC (Raw Syn k) -> WC (Raw Chk k)
   deepEmb (WC fc (a ::|:: b)) = WC fc (deepEmb a ::|:: deepEmb b)
   deepEmb (WC fc (a ::-:: b)) = WC fc (a ::-:: deepEmb b)
-  deepEmb (WC fc (abs ::\:: a)) = WC fc (abs ::\:: deepEmb a)
+  deepEmb (WC fc (RLambda c cs)) = WC fc (RLambda ((id *** deepEmb) c) cs)
   deepEmb (WC fc (RLet abs a b)) = WC fc (RLet abs a (deepEmb b))
   -- We like to avoid RTypedTh because the body doesn't know whether it's Brat or Kernel
   deepEmb (WC fc (RTypedTh bdy)) = WC fc (RTh (WC fc $ RForget $ deepEmb bdy))
@@ -139,10 +141,18 @@ elaborate' (FCompose a b) = do
     Right a -> pure $ SomeRaw a
     Left _ -> SomeRaw <$> assertUVerb a
   mkCompose a b
-elaborate' (FLambda abs a) = do
-  (SomeRaw a) <- elaborate a
-  a <- assertNoun a
-  pure $ SomeRaw' (abs ::\:: a)
+elaborate' (FLambda ((abs,rhs) :| cs)) = do
+  SomeRaw rhs <- elaborate rhs
+  rhs <- assertNoun rhs
+  cs <- traverse elaborateClause cs
+  pure $ SomeRaw' (RLambda (abs,rhs) cs)
+ where
+  elaborateClause :: (WC Abstractor, WC Flat) -> Either Error (WC Abstractor, WC (Raw Chk Noun))
+  elaborateClause (abs, e) = do
+    SomeRaw a <- elaborate e
+    a <- assertChk =<< assertNoun a
+    pure (abs, a)
+
 elaborate' (FLetIn abs a b) = do
   (SomeRaw a) <- elaborate a
   (SomeRaw b) <- elaborate b

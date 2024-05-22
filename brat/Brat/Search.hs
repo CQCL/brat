@@ -71,7 +71,7 @@ tokenValues fc (VCon tyCon tyArgs) = do
     R0 -> [Con ctor (WC fc Empty)]
     _ -> []
 tokenValues fc (VFun Braty (ss :->> ts)) =
-  [ Th (WC fc (WC fc abs :\: WC fc t)) | t <- rhs ]
+  [ Th (WC fc (Lambda (WC fc abs, WC fc t) [])) | t <- rhs ]
  where
   abs = binders (rowLen ss)
 
@@ -90,7 +90,7 @@ tokenValues fc (VFun Braty (ss :->> ts)) =
 
 
 tokenValues fc (VFun Kerny (ss :->> ts)) =
-  [ Th (WC fc (WC fc abs :\: WC fc t)) | t <- rhs ]
+  [ Th (WC fc (Lambda (WC fc abs, WC fc t) [])) | t <- rhs ]
  where
   abs = binders (rowLen ss)
   rhs = case (kernelNoBind ss, kernelNoBind ts) of

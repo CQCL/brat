@@ -109,7 +109,7 @@ loadAlias :: TypeAlias -> Checking (UserName, Alias)
 loadAlias (TypeAlias fc name args body) = localFC fc $ do
   (_, [(hhungry, Left k)], _, _) <- next "" Hypo (S0,Some (Zy :* S0)) (REx ("type", Star args) (S0 ::- R0)) R0
   let abs = WC fc $ foldr (:||:) AEmpty (APat . Bind . fst <$> args)
-  ([v], unders) <- kindCheck [(hhungry, k)] $ Th (WC fc (abs :\: (WC fc body)))
+  ([v], unders) <- kindCheck [(hhungry, k)] $ Th (WC fc (Lambda (abs, WC fc body) []))
   ensureEmpty "loadAlias unders" unders
   pure (name, (args, v))
 

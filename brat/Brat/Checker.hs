@@ -210,10 +210,11 @@ check' (s :-: t) (overs, unders) = do
   pure ((ins, outs), (rightovers, rightunders))
 check' Pass ([], ()) = typeErr "pass is being given an empty row"
 check' Pass (overs, ()) = pure (((), overs), ([], ()))
-check' (binder :\: body) (overs, unders) = do
+check' (Lambda (binder,  body) []) (overs, unders) = do
   (ext, overs) <- abstract overs (unWC binder)
   (sycs, ((), unders)) <- localEnv ext $ check body ((), unders)
   pure (sycs, (overs, unders))
+check' (Lambda (_binder,  _body) _clauses) (_overs, _unders) = error "Multi clause lambda doesn't check yet"
 check' (Pull ports t) (overs, unders) = do
   unders <- pullPortsRow ports unders
   check t (overs, unders)
@@ -506,7 +507,7 @@ kindCheck ((hungry, Star []):unders) (K (ss :-> ts)) = do
 --
 -- Check a lambda as the body of a higher-order kind
 -- Body will contain Core.Var for things that correspond to variables bound by xs
-kindCheck ((hungry, TypeFor m args):unders) (Th (WC _ (xs :\: (WC fc body)))) = case mkKindRo args of
+kindCheck ((hungry, TypeFor m args):unders) (Th (WC _ (Lambda (xs, WC fc body) []))) = case mkKindRo args of
   Some (Flip ro) -> do
     -- Make some ends (outputs here) to correspond to hypothetical arguments to the alias
     (_, [], kovers, (_, endz)) <- next "aliargs" Hypo (S0, Some (Zy :* S0)) R0 ro

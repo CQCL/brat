@@ -98,7 +98,7 @@ checkClause my fnName cty clause = modily my $ do
       trackM (show abstractor)
       let fc = FC (start (fcOf (lhs clause))) (FC.end (fcOf (rhs clause)))
       let ?my = my in
-        check @m (WC fc (abstractor :\: rhs clause)) (rhsOvers, rhsUnders)
+        check @m (WC fc (Lambda (abstractor, rhs clause) [])) (rhsOvers, rhsUnders)
       pure node
     pure (match, rhsNode)
   pure names

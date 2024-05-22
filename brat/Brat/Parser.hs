@@ -11,6 +11,7 @@ import Brat.Syntax.Raw
 import Brat.Syntax.Simple
 import Brat.UserName ( plain, UserName(..) )
 import Brat.Elaborator
+import Util ((**^))
 
 import Control.Monad (void)
 import Control.Monad.State (State, evalState, runState, get, put)
@@ -321,7 +322,7 @@ cthunk = try bratFn <|> try kernel <|> thunk
       -- If we don't have a `=>` at the start of a kernel, it could (and should)
       -- be a verb, not the RHS of a no-arg lambda
       (e', n) -> let abs = braceSectionAbstractor [0..n-1] in
-                 pure $ FLambda (WC (fcOf e) abs) e'  -- TODO: Which FC to use for the abstracor?
+                 pure $ FLambda (((WC (fcOf e) abs), e') :| [])  -- TODO: Which FC to use for the abstracor?
 
   replaceU :: WC Flat -> State Int (WC Flat)
   replaceU (WC fc x) = WC fc <$> replaceU' x
@@ -337,7 +338,7 @@ cthunk = try bratFn <|> try kernel <|> thunk
   replaceU' (FCompose a b) = FCompose <$> replaceU a <*> replaceU b
   replaceU' (FInto a b) = FInto <$> replaceU a <*> replaceU b
   replaceU' (FLetIn abs a b) = FLetIn abs <$> replaceU a <*> replaceU b
-  replaceU' (FLambda abs a) = FLambda abs <$> replaceU a
+  replaceU' (FLambda lclauses) = FLambda <$> traverse (id **^ replaceU) lclauses
   replaceU' (FAnnotation a t) = (`FAnnotation` t) <$> replaceU a
   replaceU' (FCon x a) = FCon x <$> replaceU a
   replaceU' (FPull ps a) = FPull ps <$> replaceU a
@@ -421,11 +422,18 @@ expr = expr' 0
     body <- withFC expr
     pure $ FLetIn lhs rhs body
 
+  -- Sequence of `abstractor => expr` separated by `|`
   lambda = do
+    firstClause <- lambdaClause
+    otherClauses <- many (match Pipe >> lambdaClause)
+    pure (FLambda (firstClause :| otherClauses))
+
+  -- A single `abstractor => expr`
+  lambdaClause = do
     abs <- withFC (try abstractor <|> pure AEmpty)
     match FatArrow
     body <- withFC expr
-    pure (FLambda abs body)
+    pure (abs, body)
 
   cinto = unWC <$> withFC (expr' 3 <|> pure FEmpty) `chainl1` try into
 

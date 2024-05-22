@@ -53,6 +53,7 @@ data Tok
  | Hash
  | Dollar
  | Underscore
+ | Pipe
  deriving Eq
 
 instance Show Tok where
@@ -90,6 +91,7 @@ instance Show Tok where
   show Hash = "#"
   show Dollar = "$"
   show Underscore = "_"
+  show Pipe = "|"
 
 data Token = Token { fc :: FC
                    , _tok :: Tok
@@ -180,6 +182,7 @@ tok = (   try (char '(' $> LParen)
       <|> try (string "*"  $> Asterisk)
       <|> try (string "-" $> Minus)
       <|> try (string "$" $> Dollar)
+      <|> try (string "|" $> Pipe)
       <|> try (K <$> try keyword)
       <|> try qualified
       <|> Ident <$> ident

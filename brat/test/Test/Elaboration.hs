@@ -10,6 +10,7 @@ import Brat.Syntax.Simple (SimpleTerm(..))
 import Brat.FC
 
 import Data.Functor ((<&>))
+import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.PartialOrd as PO
 import qualified Data.Set as S
 import Test.Tasty
@@ -20,11 +21,12 @@ data DirAndKind = DK Dir Kind deriving (Show, Eq)
 data FlatTest = FT DirAndKind Flat
 
 chkUVerb :: Flat
-chkUVerb = FLambda (dummyFC $ APat (Bind "x")) (dummyFC $ FSimple $ Num 5)
+chkUVerb = FLambda ((dummyFC $ APat (Bind "x"), dummyFC $ FSimple $ Num 5) :| [])
 flats :: [FlatTest]
 flats = [FT (DK Syn Noun) $ FVar $ plain "x"
         ,FT (DK Syn UVerb) $
-            FLambda (dummyFC $ APat (Bind "x")) (dummyFC $ FVar $ plain "x")
+            FLambda ((dummyFC $ APat (Bind "x"), dummyFC $ FVar $ plain "x") :|
+                     [(dummyFC $ APat DontCare, dummyFC $ FSimple $ Num 5)])
         ,FT (DK Syn KVerb) $
             FCompose (dummyFC $ FVar $ plain "f") (dummyFC $ FVar $ plain "g")
         ,FT (DK Chk Noun) $ FSimple (Num 5)

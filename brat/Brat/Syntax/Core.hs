@@ -47,8 +47,10 @@ data Term :: Dir -> Kind -> Type where
   (:-:)    :: WC (Term Syn k) -> WC (Term d UVerb) -> Term d k
   -- Application of function (first) to values coming from argument (second)
   -- of number/type determined by the function. (aka, Reverse Composition)
-  (:$:) :: WC (Term d KVerb) -> WC (Term Chk k) -> Term d k
-  (:\:)    :: WC Abstractor -> WC (Term d Noun) -> Term d UVerb
+  (:$:)    :: WC (Term d KVerb) -> WC (Term Chk k) -> Term d k
+  -- Lambda that matches over a series of patterns.
+  -- In `Syn`, for now, the first clause provides the type.
+  Lambda   :: (WC Abstractor, WC (Term d Noun)) -> [(WC Abstractor, WC (Term Chk Noun))] -> Term d UVerb
   -- Type constructors
   Con      :: UserName -> WC (Term Chk Noun) -> Term Chk Noun
   -- Brat function types
@@ -98,7 +100,9 @@ instance Show (Term d k) where
   show (fun :$: arg) = bracket 4 fun ++ ('(' : show arg ++ ")")
   show (tm ::: ty) = bracket 4 tm ++ " :: " ++ show ty
   show (a :-: b) = bracket 2 a ++ "; " ++ bracket 3 b
-  show (xs :\: bod) = show xs ++ " => " ++ bracket 1 bod
+  show (Lambda c cs) = unlines $ (showClause c : (("| "++) . showClause <$> cs))
+   where
+    showClause (xs, bod) = show xs ++ " => " ++ bracket 1 bod
   show p@(Con c arg) = case prettyPat p of
     Just ps -> show ps
     Nothing -> {-case unWC arg of
@@ -122,7 +126,7 @@ bracket n (WC _ tm) = case precedence tm of
 -- Report tightness of binding, or `Nothing` if not a binary op
 precedence :: Term d k -> Maybe Int
 precedence (Let _ _ _) = Just 0
-precedence (_ :\: _) = Just 1
+precedence (Lambda _ _) = Just 1
 precedence (_ :-: _) = Just 2
 precedence (Pull _ _) = Just 3
 precedence (_ :|: _) = Just 4
