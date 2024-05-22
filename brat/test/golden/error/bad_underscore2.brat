@@ -1,0 +1,2 @@
+uscore :: { Int -> Int }
+uscore(i) = _

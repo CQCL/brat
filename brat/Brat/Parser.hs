@@ -310,13 +310,7 @@ cthunk = try bratFn <|> try kernel <|> thunk
     pure $ FKernel (ss :-> ts)
 
   -- Explicit lambda or brace section
-  thunk = FThunk <$> withFC (curly (try abstracted
-                                    <|> braceSection))
-
-  abstracted = do
-    abs <- withFC $ (try  abstractor <|> pure AEmpty)
-    match FatArrow
-    FLambda abs <$> withFC expr
+  thunk = FThunk <$> withFC (curly braceSection)
 
   braceSection = do
     e <- withFC expr
@@ -422,15 +416,15 @@ expr = expr' 0
     (lhs,rhs) <- inLet $ do
       abs <- withFC abstractor
       match Equal
-      thing <- withFC (try letin <|> expr' 1)
+      thing <- withFC expr
       pure (abs, thing)
-    body <- withFC (try letin <|> expr' 1)
+    body <- withFC expr
     pure $ FLetIn lhs rhs body
 
   lambda = do
-    abs <- withFC abstractor
+    abs <- withFC (try abstractor <|> pure AEmpty)
     match FatArrow
-    body <- withFC (try lambda <|> expr' 2)
+    body <- withFC expr
     pure (FLambda abs body)
 
   cinto = unWC <$> withFC (expr' 3 <|> pure FEmpty) `chainl1` try into
