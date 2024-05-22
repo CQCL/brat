@@ -252,7 +252,7 @@ compileArithNode parent op TFloat  = addNode (show op ++ "_Float") $ OpCustom $ 
 compileArithNode _ _ ty = error $ "compileArithNode: Unexpected type " ++ show ty
 
 -- Parent had better be a FuncDef
-compileFunClauses :: [HugrType] -> NonEmpty (Name, Name) -> NodeId -> Compile ()
+compileFunClauses :: [HugrType] -> NonEmpty (TestMatchData m, Name) -> NodeId -> Compile ()
 compileFunClauses ins cs parent = do
   inputNode <- addNode ("FunClauses.Input") (OpIn (InputNode parent ins))
   ccOuts <- compileClauses parent (zip (Port inputNode <$> [0..]) ins) cs
@@ -278,24 +278,20 @@ dumpJSON = do
   es <- gets edges
   pure $ encode (renameAndSortHugr ns es)
 
-compileClauses :: NodeId -> [TypedPort] -> NonEmpty (Name, Name) -> Compile [TypedPort]
-compileClauses parent ins ((lhs, rhs) :| clauses) = do
+compileClauses :: NodeId -> [TypedPort] -> NonEmpty (TestMatchData m, Name) -> Compile [TypedPort]
+compileClauses parent ins ((matchData, rhs) :| clauses) = do
   (ns, _) <- gets bratGraph
-  -- LHS must be a TestMatch node. Takes the function inputs and returns a
-  -- single sum type.
-  matchSeq <- case ns M.! lhs of
-    BratNode (TestMatch (TestMatchData my matchSeq)) _ _ -> traverse (compileBinderTy my) matchSeq
-    KernelNode (TestMatch (TestMatchData my matchSeq)) _ _ -> traverse (compileBinderTy my) matchSeq
-    _ -> error "compileClauses: LHS is not a TestMatch"
   -- RHS has to be a box, so it must have a function type
   outTys <- case nodeOuts (ns M.! rhs) of
     [(_, VFun _ cty)] -> (body <$> compileSig cty) >>= \(FunctionType _ outs) -> pure outs
     _ -> error "Expected 1 kernel function type from rhs"
 
-  let portTbl = zip (fst <$> matchInputs matchSeq) ins
-
   -- Compile the match: testResult is the port holding the dynamic match result
   -- with the type `sumTy`
+  let TestMatchData my matchSeq = matchData
+  matchSeq <- traverse (compileBinderTy my) matchSeq
+
+  let portTbl = zip (fst <$> matchInputs matchSeq) ins
   testResult <- compileMatchSequence parent portTbl matchSeq
 
   -- Feed the test result into a conditional

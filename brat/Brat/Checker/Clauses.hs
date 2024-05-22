@@ -70,10 +70,10 @@ checkClause :: forall m. (CheckConstraints m UVerb, EvMode m) => Modey m
             -> CTy m Z
             -> Clause
             -> Checking
-               ( Name   -- TestMatch node (LHS)
+               ( TestMatchData m -- TestMatch data (LHS)
                , Name   -- Function node (RHS)
                )
-checkClause my fnName cty@(ins :->> _) clause = modily my $ do
+checkClause my fnName cty clause = modily my $ do
   trackM $ "-------------\n\nCheckClause " ++ show clause
   let clauseName = fnName ++ "." ++ show (index clause)
   -- First, we check the patterns on the LHS. This requires some overs,
@@ -89,13 +89,7 @@ checkClause my fnName cty@(ins :->> _) clause = modily my $ do
     Some (_ :* Flip outRo) <- mkArgRo my patEz (first (fmap toEnd) <$> unders)
 
 
-    -- Package up tests in a node. The output is a sum of the original inputs
-    -- (if the tests failed) or the pattern variables (if the tests succeeded).
-    -- We apply a thinning to weaken the type to the correct scope
-    let insTop = roTopM my Zy ins
-    let testOuts = RPr ("test_out", weaken insTop $ VSum my [Some (Flip ins), Some (Flip patRo)]) R0
-    let match = TestMatch $ TestMatchData my $ MatchSequence overs tests (snd <$> sol)
-    (testNode, _, _, _) <- let ?my = my in anext (clauseName ++ "_lhs") match (S0, Some (Zy :* S0)) ins testOuts
+    let match = TestMatchData my $ MatchSequence overs tests (snd <$> sol)
 
     -- Now actually make a box for the RHS and check it
     let rhsCty = patRo :->> outRo
@@ -106,7 +100,7 @@ checkClause my fnName cty@(ins :->> _) clause = modily my $ do
       let ?my = my in
         check @m (WC fc (abstractor :\: rhs clause)) (rhsOvers, rhsUnders)
       pure node
-    pure (testNode, rhsNode)
+    pure (match, rhsNode)
   pure names
 
 -- The ctype given should have the pattern variables from refining the lhs of the clause as its LHS

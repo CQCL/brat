@@ -38,9 +38,8 @@ data NodeType :: Mode -> Type where
   Source :: NodeType a  -- For building..
   Target :: NodeType a  -- ..boxes
   Id     :: NodeType a  -- Identity node for convenient wiring
-  TestMatch :: TestMatchData a -> NodeType a -- pattern match LHS as conjunctive sequence
   FunClauses :: (NonEmpty
-                 ( Name  -- The node for the LHS test match
+                 ( TestMatchData a  -- pattern match LHS as conjunctive sequence
                  , Name  -- The node for the RHS box
                 )) -> NodeType a
   Hypo :: NodeType a  -- Hypothesis for type checking

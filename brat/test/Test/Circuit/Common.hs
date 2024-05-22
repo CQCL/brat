@@ -52,19 +52,12 @@ singleClauseMatching my (ins, outs) (matchedIns, matchedOuts) =
   ,("didnt_match_src", node Source [] ins)
   ,("didnt_match_tgt", node Target outs [])
 
-  ,("funclauses", node (FunClauses (("box_branch_didnt_match", "box_branch_matched") :| [])) [] [("value", VFun my (makeCTy ins outs))])
-  ,("testmatch", node
-     (TestMatch (TestMatchData my
-                 (MatchSequence
-                   (bimap dummy (valueToBinder my) <$> ins)
-                   []
-                   (bimap dummy (valueToBinder my) <$> matchedIns))
-                ))
-     ins
-     [("test_out", VSum my [(Some (Flip (aux ins)))
-                           ,(Some (Flip (aux matchedIns)))]
-      )]
-   )
+  ,("funclauses", node (FunClauses ((TestMatchData my
+                                     (MatchSequence
+                                       (bimap dummy (valueToBinder my) <$> ins)
+                                       []
+                                       (bimap dummy (valueToBinder my) <$> matchedIns))
+                                   , "box_branch_matched") :| [])) [] [("value", VFun my (makeCTy ins outs))])
   ]
  where
   node = case my of
@@ -308,7 +301,6 @@ graphDiff act exp = case act =? exp of
     Source     -> "source"
     Target     -> "target"
     Id         -> "id"
-    TestMatch (TestMatchData _ (MatchSequence ins tests outs)) -> intercalate "_" ["testmatch", show (snd <$> ins), show tests, show (snd <$> outs)]
     FunClauses cs -> "funclauses_" ++ show (length (toList cs))
     Hypo       -> "hypo"
     Constructor c -> "ctor_" ++ show c
@@ -320,7 +312,6 @@ graphDiff act exp = case act =? exp of
     Source     -> "source"
     Target     -> "target"
     Id         -> "id"
-    TestMatch (TestMatchData _ (MatchSequence ins tests outs)) -> intercalate "_" ["testmatch", show (snd <$> ins), show tests, show (snd <$> outs)]
     FunClauses cs -> "funclauses_" ++ show (length (toList cs))
     Hypo       -> "hypo"
     Constructor c -> "ctor_" ++ show c
