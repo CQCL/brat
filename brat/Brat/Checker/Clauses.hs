@@ -6,7 +6,7 @@ UndecidableInstances
 module Brat.Checker.Clauses (checkBody) where
 
 import Brat.Checker
-import Brat.Checker.Helpers hiding (track, trackM)
+import Brat.Checker.Helpers
 import Brat.Checker.Monad
 import Brat.Checker.Types hiding (Store)
 import Brat.Constructors
@@ -393,59 +393,3 @@ lookupConstructor my c ty = eval S0 ty >>= \case
     Braty -> clup c tycon
     Kerny -> track ("kclup " ++ show c ++ " " ++ show tycon) $ kclup c tycon
   ty -> typeErr $ "Couldn't normalise type " ++ show ty ++ " to a constructor"
-
-{-
-data Test
-  = Zero0Succ1
-  | Nil0Cons1
-  | False0True1
-  | None0Some1
-  | Not0Exactly1 SimpleTerm
-  | Odd0Even1
-  | Not Test
- deriving Show
-
-natTest :: UserName -> Test
-natTest CSucc = Zero0Succ1
-natTest CDoub = Odd0Even1
-natTest CZero = Not (Zero0Succ1)
--}
-
-{-
-data TestTree
-  = Succeed -- An indiscriminate pattern
-  | Fail -- This clause does not apply for the refinement
-  | Test (Src, TestType) -- A wire which we need to run a test on
-    Subst -- A way to relate the original context to the refined one
-    TestTree {- false -} TestTree {- true -}
- deriving Show
-
--- Clauses from either function definitions or case statements (TODO), as we get
--- from the elaborator
-data Clause m = Clause
-  { index :: Int  -- Which clause is this (in the order they're defined in source)
-  , lhs :: WC NormalisedAbstractor
-  , rhs :: WC (Term Chk Noun)
-  }
- deriving Show
-
-
-data RefinedBranch m i j = RBranch
-    -- A sequence of tests to perform to determine whether this branch should fire
-  { tests :: [Maybe (Test, Bool)]
-  , lhs :: WC NormalisedAbstractor
-  , sub :: Subst
-  , sig :: CTy m i j
-  }
-
-
-data Pair (t :: N -> Type) (n :: N) where
-  (:&) :: t n -> t n -> Pair t n
-
-data PatResult m
- = Indiscriminate
- | Discriminate (Test, Bool)
- | forall n. Invalid TypeOrKind (Val n)
-
-type PortTest = (Int, Test)
--}

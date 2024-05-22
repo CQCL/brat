@@ -29,8 +29,6 @@ nodeOuts :: Node -> [(PortName, Val Z)]
 nodeOuts (BratNode _ _ outs) = outs
 nodeOuts (KernelNode _ _ outs) = outs
 
-data ComboType = Row | Thunk deriving (Eq, Show)
-
 data NodeType :: Mode -> Type where
   Prim  :: (String, String) -> NodeType Brat  -- Something external
   Const :: SimpleTerm -> NodeType a
@@ -88,29 +86,6 @@ deriving instance Show ty => Show (PrimTest ty)
 primTestOuts :: PrimTest ty -> [(Src, ty)]
 primTestOuts (PrimCtorTest _ _ _ xs) = xs
 primTestOuts (PrimLitTest _) = []
-
-{- TODO: update the repertoire of available `NodeType`s to reflect what hugr lets us do
-
-In particular, we need conditional nodes (with a list of pairs of source and target nodes).
-For each primitive test on type tau, we need
-  try : tau -> tau + rho
-  retreat : rho -> tau
-
-where try gives you some pieces if you succeed and your input back if you don't, and
-retreat reassembles the input from the pieces in the situation where a test succeeds
-but a subsequent test fails.
-
-We adopt the same style when compiling the left hand side of a clause: we either give
-you the values of the pattern variables or your old data back. These are given as
-right-nested trees of trys, where the left forks retreat.
-
-IN FACT, the Brat graph should have nodes which specify the tests in these trees, not the
-details of how they turn into hugr. We may find ourselves with different sorts of
-special-purpose conditionals, corresponding to the ways compiled Brat uses hugr. We
-should say which trope of hugr construction we need, rather than doing it here and now.
--}
-
-data LogicOp = LNot | LOr | LAnd deriving (Eq, Show)
 
 type Graph = (M.Map Name Node, [Wire])
 emptyGraph :: Graph

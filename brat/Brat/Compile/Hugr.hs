@@ -222,28 +222,6 @@ registerCompiled from to = do
   st <- get
   put (st { compiled = M.insert from to (compiled st) })
 
--- defineDFG :: NodeId -> (NodeId, FunctionType) -> Compile ()
--- defineDFG dfgId _ | track (show ("defineDFG " ++ show dfgId)) False = undefined
--- defineDFG dfgId (parent, funTy) = do
---   nodeMap <- gets nodes
---   gets (M.keys . M.filter (==dfgId) . boxMap) >>= \case
---     [originalName] ->  case fst <$> (filter ((==dfgId) . snd) nodeMap) of
---       [] -> addOp (OpDFG (DFG parent funTy)) dfgId *> registerCompiled originalName dfgId
---       [OpDFG (DFG parent' typ)] -> if parent /= parent'
---                                    then error $ unwords ["DFG"
---                                                         ,show dfgId
---                                                         ,"already defined with parent"
---                                                         ,show parent'
---                                                         ,"instead of"
---                                                         ,show parent
---                                                         ]
---                                    else pure ()
-
---       xs -> error $ "wtf? defineDFG found " ++ show xs ++ " already in the map for " ++ show dfgId
---     [] -> error $ "no entry for " ++ show dfgId ++ " in boxMap"
---     xs -> error $ "multiple entries for " ++ show dfgId ++ " in boxMap? (" ++ show xs ++ ")"
-
-
 compileConst :: NodeId -> SimpleTerm -> Val Z -> Compile NodeId
 compileConst parent tm ty = do
   ty <- compileType ty

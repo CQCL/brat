@@ -29,7 +29,7 @@ import qualified Data.Map as M
 import Data.Type.Equality ((:~:)(..))
 import Prelude hiding (filter)
 
-import Brat.Checker.Helpers hiding (track, trackM)
+import Brat.Checker.Helpers
 import Brat.Checker.Monad
 import Brat.Checker.Quantity
 import Brat.Checker.Types
