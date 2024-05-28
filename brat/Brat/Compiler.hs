@@ -15,6 +15,7 @@ import Brat.Naming (root, split)
 import qualified Data.ByteString.Lazy as BS
 import Control.Monad (when)
 import Control.Monad.Except
+import System.Exit (die)
 
 printDeclsHoles :: [FilePath] -> String -> IO ()
 printDeclsHoles libDirs file = do
@@ -64,8 +65,10 @@ compileFile :: [FilePath] -> String -> IO BS.ByteString
 compileFile libDirs file = do
   let (checkRoot, newRoot) = split "checking" root
   env <- runExceptT $ loadFilename checkRoot libDirs file
-  (venv, _, _, defs, outerGraph) <- eitherIO env
-  pure (compile defs newRoot outerGraph venv)
+  (venv, _, holes, defs, outerGraph) <- eitherIO env
+  case holes of
+    [] -> pure $ compile defs newRoot outerGraph venv
+    xs -> die (show (CompilingHoles (show <$> xs)))
 
 compileAndPrintFile :: [FilePath] -> String -> IO ()
 compileAndPrintFile libDirs file = BS.putStr =<< compileFile libDirs file

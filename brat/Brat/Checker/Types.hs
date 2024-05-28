@@ -6,7 +6,7 @@ module Brat.Checker.Types (Overs, Unders
                           ,Mode(..), Modey(..)
                           ,Env, VEnv, KEnv, EnvData
                           ,Store(..), EndType(..)
-                          ,TypedHole(..)
+                          ,TypedHole(..), HoleTag(..), HoleData(..)
                           ,initStore
                           ) where
 
@@ -56,12 +56,30 @@ type Env e = M.Map UserName e
 type VEnv = Env (EnvData Brat)
 type KEnv = Env (EnvData Kernel)
 
-data TypedHole
-  = NBHole Name FC [String] (ChkConnectors Brat Chk Noun)
-  | VBHole Name FC (ChkConnectors Brat Chk UVerb)
-  | NKHole Name FC (ChkConnectors Kernel Chk Noun)
-  | VKHole Name FC (ChkConnectors Kernel Chk UVerb)
- deriving Show
+data HoleTag :: Mode -> Kind -> Type where
+  NBHole :: HoleTag Brat Noun
+  NKHole :: HoleTag Kernel Noun
+  VBHole :: HoleTag Brat UVerb
+  VKHole :: HoleTag Kernel UVerb
+
+data TypedHole where
+  TypedHole :: HoleTag m k -> HoleData (ChkConnectors m Chk k) -> TypedHole
+
+data HoleData a = HoleData
+  { mnemonic :: String -- The name the user gave
+  , name :: Name -- The name BRAT gave
+  , fc :: FC
+  , suggestions :: Maybe [String] -- Nothing means we didn't try
+  , connectors :: a
+  }
+
+instance Show TypedHole where
+  show (TypedHole tag dat) = ((('?' : mnemonic dat) ++ " :: ") ++) $
+    case (tag, connectors dat) of
+      (NBHole, ((), unders)) -> showRow unders
+      (NKHole, ((), unders)) -> showRow unders
+      (VBHole, (overs, unders)) -> "{ " ++ showRow overs ++ " -> " ++ showRow unders ++ " }"
+      (VKHole, (overs, unders)) -> "{ " ++ showRow overs ++ " -o " ++ showRow unders ++ " }"
 
 data EndType where
   EndType :: Modey m -> BinderType m -> EndType

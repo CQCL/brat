@@ -311,19 +311,17 @@ check' (Let abs x y) conn = do
   (((), dangling), ((), ())) <- check x ((), ())
   env <- abstractAll dangling (unWC abs)
   localEnv env $ check y conn
-check' (NHole name) ((), unders) = req AskFC >>= \fc -> case ?my of
-  Kerny -> do
-    req $ LogHole $ NKHole name fc ((), unders)
-    pure (((), ()), ((), []))
-  Braty -> do
-    suggestions <- getSuggestions fc
-    req $ LogHole $ NBHole name fc suggestions ((), unders)
-    pure (((), ()), ((), []))
-   where
-    getSuggestions :: FC -> Checking [String]
-    getSuggestions _ = pure []
+check' (NHole (mnemonic, name)) connectors = do
+  fc <- req AskFC
+  let suggestions = Nothing
+  () <- case ?my of
+    Kerny -> req $ LogHole $ TypedHole NKHole (HoleData { .. })
+    Braty -> req $ LogHole $ TypedHole NBHole (HoleData { .. })
+  pure (((), ()), ((), []))
 -- TODO: Fix this
 {-
+  where
+   getSuggestions :: FC -> Checking [String]
     do
       matches <- findMatchingNouns
       let sugg = transpose [ [ tm | tm <- vsearch fc ty ]
@@ -347,11 +345,12 @@ check' (NHole name) ((), unders) = req AskFC >>= \fc -> case ?my of
       pure $ fmap fst <$> matches
 -}
 
-check' (VHole name) (overs, unders) = do
+check' (VHole (mnemonic, name)) connectors = do
   fc <- req AskFC
+  let suggestions = Nothing
   req $ LogHole $ case ?my of
-    Braty -> VBHole name fc (overs, unders)
-    Kerny -> VKHole name fc (overs, unders)
+    Braty -> TypedHole VBHole (HoleData { .. })
+    Kerny -> TypedHole VKHole (HoleData { .. })
   pure (((), ()), ([], []))
 -- TODO: Better error message
 check' tm@(Con _ _) ((), []) = typeErr $ "No type to check " ++ show tm ++ " against"

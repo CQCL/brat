@@ -1,0 +1,5 @@
+a(Bit) -o Bit
+a(_) = ?a_hole
+
+b(Int) -> List(Int)
+b = ?b_hole

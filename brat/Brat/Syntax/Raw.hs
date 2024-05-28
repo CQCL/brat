@@ -190,8 +190,8 @@ instance Desugarable ty => Desugarable (TypeRow ty) where
 instance (Kindable k) => Desugarable (Raw d k) where
   type Desugared (Raw d k) = Term d k
   -- TODO: holes need to know their arity for type checking
-  desugar' (RNHole name) = NHole <$> freshM name
-  desugar' (RVHole name) = VHole <$> freshM name
+  desugar' (RNHole strName) = NHole . (strName,) <$> freshM strName
+  desugar' (RVHole strName) = VHole . (strName,) <$> freshM strName
   desugar' RPass = pure Pass
   desugar' (RSimple simp) = pure $ Simple simp
   desugar' REmpty = pure Empty

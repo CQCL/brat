@@ -26,8 +26,9 @@ type Decl = Decl' [InOut] (FunBody Term Noun)
 data Term :: Dir -> Kind -> Type where
   Simple   :: SimpleTerm -> Term Chk Noun
   Let      :: WC Abstractor -> WC (Term Syn Noun) -> WC (Term d k) -> Term d k
-  NHole    :: Name -> Term Chk Noun
-  VHole    :: Name -> Term Chk UVerb
+  -- Takes pair of a user provided mnemonic and a unique name
+  NHole    :: (String, Name) -> Term Chk Noun
+  VHole    :: (String, Name) -> Term Chk UVerb
   Pass     :: Term Syn UVerb
   Empty    :: Term Chk Noun -- The empty row (monoidal unit of :|:)
   -- Parallel composition, aka juxtaposition
@@ -64,10 +65,8 @@ instance Show (Term d k) where
   show (Simple tm) = show tm
   show (Let abs xs body)
     = unwords ["let", show abs, "=", show xs, "in", show body]
-  show (NHole (MkName (name:_))) = '?' : show (MkName [name])
-  show (NHole (MkName [])) = "?<root>"
-  show (VHole (MkName (name:_))) = '?' : show (MkName [name])
-  show (VHole (MkName [])) = "?<root>"
+  show (NHole (name, _)) = '?' : name
+  show (VHole (name, _)) = '?' : name
   show Empty = "()"
   show (a :|: b) = bracket 2 a ++ ", " ++ bracket 2 b
   show Pass = "pass"

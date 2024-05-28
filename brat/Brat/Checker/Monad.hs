@@ -1,7 +1,7 @@
 module Brat.Checker.Monad where
 
 import Brat.Checker.Quantity (Quantity(..), qpred)
-import Brat.Checker.Types
+import Brat.Checker.Types hiding (HoleData(..))
 import Brat.Constructors (ConstructorMap, CtorArgs)
 import Brat.Error (Error(..), ErrorMsg(..), dumbErr)
 import Brat.FC (FC)

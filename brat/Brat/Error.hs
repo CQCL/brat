@@ -78,6 +78,8 @@ data ErrorMsg
  | UnreachableBranch
  | UnrecognisedTypeCon String
  | WrongModeForType String
+ -- TODO: Add file context here
+ | CompilingHoles [String]
 
 instance Show ErrorMsg where
   show (TypeErr x) = "Type error: " ++ x
@@ -159,6 +161,9 @@ instance Show ErrorMsg where
   -- TODO: Make all of these use existing errors
   show (UnificationError str) = "Unification error: " ++ str
   show UnreachableBranch = "Branch cannot be reached"
+  show (CompilingHoles hs) = unlines ("Can't compile file with remaining holes": indent hs)
+   where
+    indent = fmap ("  " ++)
 
 data Error = Err { fc  :: Maybe FC
                  , msg :: ErrorMsg
