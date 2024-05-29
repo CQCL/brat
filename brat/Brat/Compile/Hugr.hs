@@ -38,7 +38,7 @@ import qualified Data.Map as M
 import Data.Maybe (catMaybes, fromJust, fromMaybe, isJust)
 import Data.Ord (comparing)
 import Data.Traversable (for)
-import Data.Tuple.HT (fst3)
+import Data.Tuple.HT (fst3, swap)
 import Control.Monad.State
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import GHC.Base (NonEmpty(..))
@@ -56,7 +56,7 @@ type TypedPort = (PortId NodeId, HugrType)
 data CompilationState = CompilationState
  { bratGraph :: Graph -- the input BRAT Graph; should not be written
  , nameSupply :: Namespace
- , nodes :: [(HugrOp NodeId, NodeId)] -- the two NodeIds are the type of the parent pointer, and the id of this node
+ , nodes :: M.Map NodeId (HugrOp NodeId) -- this node's id => HugrOp containing parent id
  , edges :: [(PortId NodeId, PortId NodeId)]
  , compiled :: M.Map Name NodeId  -- Mapping from Brat nodes to Hugr nodes
  , holes :: Bwd Name -- for Kernel graphs, list of Splices found in order
@@ -72,7 +72,7 @@ data CompilationState = CompilationState
 emptyCS g ns store = CompilationState
   { bratGraph = g
   , nameSupply = ns
-  , nodes = []
+  , nodes = M.empty
   , edges = []
   , compiled = M.empty
   , holes = B0
@@ -103,8 +103,7 @@ addEdge e = do
 addNode :: String -> HugrOp NodeId -> Compile NodeId
 addNode name op = do
   id <- freshNode name
-  st <- get
-  put (st { nodes = (op, id) : nodes st })
+  addOp op id
   pure id
 
 
@@ -214,7 +213,8 @@ addOp :: HugrOp NodeId -> NodeId -> Compile ()
 addOp op name | track ("addOp " ++ show op ++ show name) False = undefined
 addOp op name = do
   st <- get
-  put (st { nodes = (op, name):nodes st })
+  let new_nodes = M.alter (\Nothing -> Just op) name (nodes st) -- fail if key already present
+  put (st { nodes = new_nodes })
 
 registerCompiled :: Name -> NodeId -> Compile ()
 registerCompiled from to | track (show from ++ " |-> " ++ show to) False = undefined
@@ -259,9 +259,9 @@ compileFunClauses ins cs parent = do
   addNodeWithInputs "FunClauses.Output" (OpOut (OutputNode parent (snd <$> ccOuts))) ccOuts []
   pure ()
 
-renameAndSortHugr :: [(HugrOp NodeId, NodeId)] -> [(PortId NodeId, PortId NodeId)] -> Hugr Int
-renameAndSortHugr nodes edges  = fmap update (Hugr (fst <$> sorted_nodes) edges) where
-  sorted_nodes = let ([root], rest) = partition (\(n, nid) -> nid == getParent n) nodes in
+renameAndSortHugr :: M.Map NodeId (HugrOp NodeId) -> [(PortId NodeId, PortId NodeId)] -> Hugr Int
+renameAndSortHugr nodes edges = fmap update (Hugr (fst <$> sorted_nodes) edges) where
+  sorted_nodes = let ([root], rest) = partition (\(n, nid) -> nid == getParent n) (swap <$> M.assocs nodes) in
                    root : sort rest
 
   names2Pos = M.fromList $ zip (snd <$> sorted_nodes) ([0..] :: [Int])
@@ -491,8 +491,7 @@ compileKernBox parent name contents cty = do
           -- Make a DFG node at the root. We can't use `addNode` since the
           -- DFG needs itself as parent
           dfg_id <- freshNode ("KernelBox_" ++ show name)
-          st <- get
-          put (st { nodes = (OpDFG $ DFG dfg_id box_sig, dfg_id) : nodes st })
+          addOp (OpDFG $ DFG dfg_id box_sig) dfg_id
           contents dfg_id
     let holelist = holes templateCtx <>> [] -- index 0 (earliest elem) now outermost
     let templateHugr = renameAndSortHugr (nodes templateCtx) (edges templateCtx)
@@ -647,13 +646,8 @@ makeConditional parent discrim otherInputs cases = do
   unless
     (allRowsEqual outTyss)
     (error "Conditional output types didn't match")
-  st <- get
-  put (st { nodes = (OpConditional
-                     (Conditional parent rows
-                      (snd <$> otherInputs)
-                      (head outTyss))
-                    ,condId)
-                    : nodes st })
+  let condOp = (OpConditional (Conditional parent rows (snd <$> otherInputs) (head outTyss)))
+  addOp condOp condId
   addEdge (fst discrim, Port condId 0)
   traverse_ addEdge (zip (fst <$> otherInputs) (Port condId <$> [1..]))
   pure $ zip (Port condId <$> [0..]) (head outTyss)
@@ -668,8 +662,7 @@ makeConditional parent discrim otherInputs cases = do
     outId <- addNode ("Output" ++ name) (OpOut (OutputNode caseId outTys))
     for (zip (fst <$> outs) (Port outId <$> [0..])) addEdge
 
-    st <- get
-    put (st { nodes = (OpCase (ix, Case parent (FunctionType tys outTys)), caseId) : nodes st })
+    addOp (OpCase (ix, Case parent (FunctionType tys outTys))) caseId
     pure outTys
 
   allRowsEqual :: [[HugrType]] -> Bool
@@ -815,8 +808,7 @@ compileModule venv = do
   mkModuleNode :: Compile NodeId
   mkModuleNode = do
     id <- freshNode "module"
-    st <- get
-    put (st { nodes = (OpMod $ ModuleOp id, id) : nodes st })
+    addOp (OpMod $ ModuleOp id) id
     pure id
 
   funcReturning :: [HugrType] -> PolyFuncType
