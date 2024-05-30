@@ -776,10 +776,11 @@ abstractEndz :: DeBruijn v => Stack Z End n -> v Z -> v n
 abstractEndz ez = changeVar (ParToInx (AddZ (stackLen ez)) ez)
 
 run :: VEnv
+    -> Store
     -> Namespace
     -> Checking a
-    -> Either Error (a, ([TypedHole], Store, Graph))
-run ve ns m =
+    -> Either Error (a, ([TypedHole], Store, Graph, Namespace))
+run ve initStore ns m =
   let ctx = Ctx { venv = ve
                 , store = initStore
                 -- TODO: fill with default constructors
@@ -788,4 +789,4 @@ run ve ns m =
                 , typeConstructors = defaultTypeConstructors
                 , aliasTable = M.empty
                 } in
-    (\(a,ctx,(holes, graph),_) -> (a, (holes, store ctx, graph))) <$> handler m ctx mempty ns
+    (\(a,ctx,(holes, graph),ns) -> (a, (holes, store ctx, graph, ns))) <$> handler m ctx mempty ns

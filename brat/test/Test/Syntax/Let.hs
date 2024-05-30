@@ -12,7 +12,7 @@ import Brat.Syntax.Core
 import Brat.Syntax.Simple
 import Brat.Syntax.Value
 import Brat.UserName
-import Test.Checking (runEmpty)
+import Test.Util (runEmpty)
 
 import Data.String
 import Test.Tasty

@@ -2,6 +2,7 @@ module Test.Util where
 
 import Brat.Checker
 import Brat.Checker.Monad
+import Brat.Checker.Types (initStore)
 import Brat.Error
 import Brat.FC
 import Brat.Load
@@ -15,7 +16,7 @@ import Control.Monad.Except
 import Test.Tasty
 import Test.Tasty.HUnit
 
-runEmpty m = run emptyEnv root m
+runEmpty m = run emptyEnv initStore root m
 
 assertChecking :: Checking a -> Assertion
 assertChecking m = case runEmpty $ localFC (FC (Pos 0 0) (Pos 0 0)) m of

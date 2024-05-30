@@ -18,7 +18,7 @@ import Brat.UserName
 import Bwd
 import Hasochism
 import Test.Circuit.Common
-import Test.Checking (runEmpty)
+import Test.Util (runEmpty)
 
 import qualified Control.Exception as CE (assert)
 import Control.Monad.Except

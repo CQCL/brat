@@ -11,7 +11,7 @@ import Brat.Syntax.Core
 import Brat.Syntax.Simple (SimpleTerm(..))
 import Hasochism (N(..))
 import Util (names)
-import Test.Checking (runEmpty)
+import Test.Util (runEmpty)
 
 import Data.Either (isRight)
 import Data.Functor ((<&>))

@@ -126,11 +126,11 @@ loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addS
   let (declNames, _) = unzip oldDecls
   let dups = duplicates (declNames ++ map (PrefixName pre . fnName) decls) in unless (null dups) $
     Left $ dumbErr $ NameClash $ show dups
-  ((venv', vdecls), (holes, newEndData, outerGraph)) <- run venv ns $ withAliases aliases $ do
-    -- Generate some stuff for each entry:
+  -- Generate some stuff for each entry:
     --  * A map from names to VDecls (aka an Env)
     --  * Some overs and outs??
-    entries <- ("globals" -!) $ forM decls $ \d -> localFC (fnLoc d) $ do
+  (entries, (_holes, kcStore, kcGraph, ns)) <- run venv initStore ns $
+    withAliases aliases $ ("globals" -!) $ forM decls $ \d -> localFC (fnLoc d) $ do
       let name = PrefixName pre (fnName d)
       (thing, ins :->> outs, sig, prefix) <- case (fnLocality d) of
                         Local -> do
@@ -144,19 +144,17 @@ loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addS
       -- In the Extern case, unders will be empty
       (_, unders, overs, _) <- prefix -! next (show name) thing (S0, Some (Zy :* S0)) ins outs
       pure ((name, VDecl d{fnSig=sig}), (unders, overs))
-    trackM "finished kind checking"
-    -- We used to check there were no holes from that, but for now we do not bother
-    -- A list of local functions (read: with bodies) to define with checkDecl
-    let to_define = M.fromList [ (name, unders) | ((name, VDecl decl), (unders, _)) <- entries, fnLocality decl == Local ]
-    let vdecls = map fst entries
-    -- Now generate environment mapping usernames to nodes in the graph
-    let env = M.fromList [(name, overs) | ((name, _), (_, overs)) <- entries]
-    () <- localVEnv env $ do
-      remaining <- "check_defs" -! foldM checkDecl' to_define vdecls
-      pure $ assert (M.null remaining) () -- all to_defines were defined
-    pure (env, vdecls)
-
-  pure (venv <> venv', oldDecls <> vdecls, holes, oldEndData <> newEndData, outerGraph)
+  trackM "finished kind checking"
+  -- We used to check there were no holes from that, but for now we do not bother
+  -- A list of local functions (read: with bodies) to define with checkDecl
+  let to_define = M.fromList [ (name, unders) | ((name, VDecl decl), (unders, _)) <- entries, fnLocality decl == Local ]
+  let vdecls = map fst entries
+  -- Now generate environment mapping usernames to nodes in the graph
+  venv <- pure $ venv <> M.fromList [(name, overs) | ((name, _), (_, overs)) <- entries]
+  ((), (holes, newEndData, graph, _)) <- run venv kcStore ns $ withAliases aliases $ do
+    remaining <- "check_defs" -! foldM checkDecl' to_define vdecls
+    pure $ assert (M.null remaining) () -- all to_defines were defined
+  pure (venv, oldDecls <> vdecls, holes, oldEndData <> newEndData, kcGraph <> graph)
  where
   checkDecl' :: M.Map UserName [(Tgt, BinderType Brat)]
              -> (UserName, VDecl)

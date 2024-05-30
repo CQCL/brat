@@ -12,7 +12,7 @@ import Bwd
 import Control.Monad.Freer
 import Hasochism
 
-import Test.Checking (runEmpty)
+import Test.Util (runEmpty)
 
 import Data.Bifunctor
 import Test.Tasty
