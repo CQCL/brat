@@ -44,11 +44,11 @@ singleClauseMatching :: forall m
                       -> ([(String, Val Z)], [(String, Val Z)])
                       -> [(Name, Node)]
 singleClauseMatching my (ins, outs) (matchedIns, matchedOuts) =
-  [("box_branch_matched", BratNode ("matched_src" :>>: "matched_tgt") [] [("thunk", VFun my matchedKty)])
+  [("box_branch_matched", BratNode (Box M.empty "matched_src" "matched_tgt") [] [("thunk", VFun my matchedKty)])
   ,("matched_src", node Source [] matchedIns)
   ,("matched_tgt", node Target matchedOuts [])
 
-  ,("box_branch_didnt_match", BratNode ("didnt_match_src" :>>: "didnt_match_tgt") [] [("thunk", VFun my kty)])
+  ,("box_branch_didnt_match", BratNode (Box M.empty "didnt_match_src" "didnt_match_tgt") [] [("thunk", VFun my kty)])
   ,("didnt_match_src", node Source [] ins)
   ,("didnt_match_tgt", node Target outs [])
 
@@ -78,7 +78,7 @@ singleClauseMatching my (ins, outs) (matchedIns, matchedOuts) =
 
 idGraph :: Graph
 idGraph = (M.fromList $
-           [("main_box", BratNode ("src" :>>: "tgt") [] [("thunk", kty)])
+           [("main_box", BratNode (Box M.empty "src" "tgt") [] [("thunk", kty)])
            ,("main", BratNode Id [("a1", kty)] [("a1", kty)])
            ,("src", KernelNode Source [] [("a", TQ)])
            ,("tgt", KernelNode Target [("b", TQ)] [])
@@ -98,7 +98,7 @@ idGraph = (M.fromList $
 
 swapGraph :: Graph
 swapGraph = (M.fromList $
-             [("main_box", BratNode ("src" :>>: "tgt") [] [("thunk", kty)])
+             [("main_box", BratNode (Box M.empty "src" "tgt") [] [("thunk", kty)])
              ,("main", BratNode Id [("a1", kty)] [("a1", kty)])
              ,("src", KernelNode Source [] [("a", TQ), ("b", TQ)])
              ,("tgt", KernelNode Target [("b", TQ), ("a", TQ)] [])
@@ -125,7 +125,7 @@ xGraph :: Graph
 xGraph = (M.fromList $
           [("tket.X", BratNode (Prim ("tket", "X")) [] [("a1", xTy)])
           ,("X", KernelNode (Splice (Ex "tket.X" 0)) [("xa", TQ)] [("xb", TQ)])
-          ,("main_box", BratNode ("src" :>>: "tgt") [] [("thunk", mainTy)])
+          ,("main_box", BratNode (Box M.empty "src" "tgt") [] [("thunk", mainTy)])
           ,("main", BratNode Id [("a1", mainTy)] [("a1", mainTy)])
           ,("src", KernelNode Source [] [("a", TQ)])
           ,("tgt", KernelNode Target [("b", TQ)] [])
@@ -156,7 +156,7 @@ rxGraph = (M.fromList
             [("kernel", kernel ((RPr ("a", TQ) R0) :->> (RPr ("b", TQ) R0)))])
            ,("angle", BratNode (Const (Float 30.0)) [("th", TFloat)] [])
            --,KernelNode (Splice "") testProcess
-           ,("main", BratNode ("src" :>>: "tgt") [] [("thunk", kernel ((RPr ("a", TQ) R0) :->> (RPr ("b", TQ) R0)))])
+           ,("main", BratNode (Box M.empty "src" "tgt") [] [("thunk", kernel ((RPr ("a", TQ) R0) :->> (RPr ("b", TQ) R0)))])
            ,("src", KernelNode Source [] [("a", TQ)])
            ,("tgt", KernelNode Target [("b", TQ)] [])
            ,("qubit", BratNode (Constructor CQubit) [] [("value", TUnit)])
@@ -297,7 +297,7 @@ graphDiff act exp = case act =? exp of
     Prim (ext,op) -> "prim_" ++ (if ext /= "" then ext ++ "." else "") ++ op
     Const x    -> "const_" ++ show x
     Eval _     -> "eval"
-    (_ :>>: _) -> "box"
+    (Box _ _ _) -> "box"
     Source     -> "source"
     Target     -> "target"
     Id         -> "id"

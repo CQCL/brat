@@ -309,7 +309,7 @@ compileClauses parent ins ((matchData, rhs) :| clauses) = do
 
   didMatch :: [HugrType] -> NodeId -> [TypedPort] -> Compile [TypedPort]
   didMatch outTys parent ins = gets bratGraph >>= \(ns,_) -> case ns M.! rhs of
-    BratNode (src :>>: tgt) _ _ -> do
+    BratNode (Box _venv src tgt) _ _ -> do
       dfgId <- addNode "DidMatch_DFG" (OpDFG (DFG parent (FunctionType (snd <$> ins) outTys)))
       compileBox (src, tgt) dfgId
       for (zip (fst <$> ins) (Port dfgId <$> [0..])) addEdge
@@ -439,7 +439,7 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
               pure $ Just (callerId, 1, [(Port calleeId outPort, 0)])
             Nothing -> error "Callee has been erased"
 
-    (src :>>: tgt) -> default_edges <$>
+    (Box _ src tgt) -> default_edges <$>
       -- We need to figure out if this thunk contains a brat- or a kernel-computation
       case outs of
         [(_, VFun Kerny cty)] -> nodeId . fst <$> compileKernBox parent name (compileBox (src, tgt)) cty
@@ -763,7 +763,7 @@ compileModule venv = do
         pure (funcReturning outs, True, compileNoun outs (map fst srcPortTys))
 
   canCompileDirect :: Name -> Node -> Compile (Maybe (PolyFuncType, Bool, (NodeId -> Compile ())))
-  canCompileDirect _ (BratNode (src :>>: tgt) _ [(_, VFun Braty cty)]) = do
+  canCompileDirect _ (BratNode (Box _ src tgt) _ [(_, VFun Braty cty)]) = do
     sig <- compileSig cty
     pure $ Just (sig, False, compileBox (src, tgt))
   canCompileDirect _ (BratNode (FunClauses cs) _ [(_, VFun _ cty)]) = do
@@ -778,7 +778,7 @@ compileModule venv = do
     let thunkTy = HTFunc kernTy
     pure $ Just (funcReturning [thunkTy], True, \parent ->
           withIO parent thunkTy $ compileKernBox parent input (compileFunClauses kIns cs) cty)
-  canCompileDirect input (BratNode (src :>>: tgt) [] [(_, VFun Kerny cty)]) = do
+  canCompileDirect input (BratNode (Box _ src tgt) [] [(_, VFun Kerny cty)]) = do
         -- We're compiling, e.g.
         --   f :: { Qubit -o Qubit }
         --   f = { h; circ(pi) }

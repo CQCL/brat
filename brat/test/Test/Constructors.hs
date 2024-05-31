@@ -399,7 +399,7 @@ kernelGraph =
     )
 
    ,("kbox"
-    ,BratNode ("src" :>>: "tgt") [] [("thunk", ktype)]
+    ,BratNode (Box empty "src" "tgt") [] [("thunk", ktype)]
     )
 
    ,("3", BratNode (Const (Num 3)) [] [("value", TNat)])

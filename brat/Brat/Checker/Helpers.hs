@@ -20,7 +20,7 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
                             ,evalSrcRow, evalTgtRow
                             )-} where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), err, typeErr, kindArgRows)
+import Brat.Checker.Monad (Checking, CheckingSig(..), CtxEnv(..), err, typeErr, kindArgRows)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (Eval(eval), EvMode(..), kindType)
@@ -341,14 +341,15 @@ makeBox' :: (?my :: Modey m, EvMode m)
 makeBox' name cty@(ss :->> ts) body = do
   (src, _, overs, ctx) <- anext (name ++ "/in") Source (S0, Some (Zy :* S0)) R0 ss
   (tgt, unders, _, _) <- anext (name ++ "/out") Target ctx ts R0
+  locals <- locals <$> req AskVEnv
   case (?my, body) of
     (Kerny, _) -> do
-      (box_node,_,[thunk],_) <- next (name ++ "_thunk") (src :>>: tgt) (S0, Some (Zy :* S0))
+      (box_node,_,[thunk],_) <- next (name ++ "_thunk") (Box locals src tgt) (S0, Some (Zy :* S0))
                                 R0 (RPr ("thunk", VFun Kerny cty) R0)
       bres <- name -! body (box_node, (src, tgt), overs, unders, snd ctx)
       pure (thunk, bres)
     (Braty, body) -> do
-      (box_node,_,[thunk],_) <- next (name ++ "_thunk") (src :>>: tgt) (S0, Some (Zy :* S0)) R0 (RPr ("thunk", VFun ?my cty) R0)
+      (box_node,_,[thunk],_) <- next (name ++ "_thunk") (Box locals src tgt) (S0, Some (Zy :* S0)) R0 (RPr ("thunk", VFun ?my cty) R0)
       bres <- name -! body (box_node, (src, tgt), overs, unders, snd ctx)
 {- TODO: Work out if/why this is needed and delete if appropriate
 

@@ -781,7 +781,7 @@ run :: VEnv
     -> Checking a
     -> Either Error (a, ([TypedHole], Store, Graph, Namespace))
 run ve initStore ns m =
-  let ctx = Ctx { venv = ve
+  let ctx = Ctx { globalVEnv = ve
                 , store = initStore
                 -- TODO: fill with default constructors
                 , constructors = defaultConstructors

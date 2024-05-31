@@ -46,8 +46,13 @@ kindArgRows argKinds = (helper argKinds R0
   helper S0 ro = ro
   helper (zx :<< (p,k)) ro = helper zx (REx (p,k) (S0 ::- ro))
 
-data Context = Ctx { venv   :: VEnv
-                   , store  :: Store
+data CtxEnv = CtxEnv
+  { globals :: VEnv
+  , locals :: VEnv
+  }
+
+data Context = Ctx { globalVEnv :: VEnv
+                   , store :: Store
                    , constructors :: ConstructorMap Brat
                    , kconstructors :: ConstructorMap Kernel
                    , typeConstructors :: M.Map (Mode, UserName) [(PortName, TypeKind)]
@@ -83,7 +88,7 @@ data CheckingSig ty where
   AddNode :: Name -> Node -> CheckingSig ()
   Wire    :: Wire -> CheckingSig ()
   KDone   :: CheckingSig ()
-  AskVEnv :: CheckingSig VEnv
+  AskVEnv :: CheckingSig CtxEnv
   Declare :: End -> Modey m -> BinderType m -> CheckingSig ()
   Define  :: End -> Val Z -> CheckingSig ()
 
@@ -110,7 +115,8 @@ localVEnv :: VEnv -> Checking v -> Checking v
 localVEnv _   (Ret v) = Ret v
 localVEnv ext (Req (VLup x) k) | Just x <- M.lookup x ext = localVEnv ext (k (Just x))
 localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
-                                   localVEnv ext (k (M.union ext env)) -- ext shadows env
+                                   -- ext shadows local vars
+                                   localVEnv ext (k (env { locals = M.union ext (locals env) }))
 localVEnv ext (Req (InLvl str c) k) = Req (InLvl str (localVEnv ext c)) (localVEnv ext . k)
 localVEnv ext (Req r k) = Req r (localVEnv ext . k)
 
@@ -240,7 +246,7 @@ handler (Req s k) ctx g ns
       LogHole hole -> do (v,ctx,(holes,g),ns) <- handler (k ()) ctx g ns
                          return (v,ctx,(hole:holes,g),ns)
       AskFC -> error "AskFC in handler - shouldn't happen, should always be in localFC"
-      VLup s -> handler (k $ M.lookup s (venv ctx)) ctx g ns
+      VLup s -> handler (k $ M.lookup s (globalVEnv ctx)) ctx g ns
       ALup s -> handler (k $ M.lookup s (aliasTable ctx)) ctx g ns
       AddNode name node -> handler (k ()) ctx ((M.singleton name node, []) <> g) ns
       Wire w -> handler (k ()) ctx ((M.empty,[w]) <> g) ns
@@ -248,7 +254,7 @@ handler (Req s k) ctx g ns
       KLup _ -> handler (k Nothing) ctx g ns
       -- Receiving KDone may become possible when merging the two check functions
       KDone -> error "KDone in handler - this shouldn't happen"
-      AskVEnv -> handler (k (venv ctx)) ctx g ns
+      AskVEnv -> handler (k (CtxEnv { globals = globalVEnv ctx, locals = M.empty })) ctx g ns
       ELup end -> handler (k ((M.lookup end) . valueMap . store $ ctx)) ctx g ns
       TypeOf end -> case M.lookup end . typeMap . store $ ctx of
         Just et -> handler (k et) ctx g ns

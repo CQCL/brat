@@ -135,7 +135,7 @@ Having solved the problem, we end up with two artifacts:
    Bound "zs" to $xs_tl_tl :: Vec($X, doub($n_pred))
    ```
 
-We use the map from (2) to prepare the environment to check the RHS of the clause, yielding a `:>>:` box node.
+We use the map from (2) to prepare the environment to check the RHS of the clause, yielding a `Box` node.
 Also, we create a `TestMatchSequence` storing the tests from (1), which forms the LHS of the clause, via `TestMatchData`.
 Furthermore, the `TestMatchSequence` fixes an ordering for the input sources we created at the very start and an ordering for the bound sources we got out at the end:
 
@@ -147,7 +147,7 @@ TestMatchSequence {
 }
 ```
 
-Finally, once we have checked all clauses, we collect them in a `FunClauses` node that holds references to the LHS `TestMatchData` and RHS `:>>:` box nodes for each clause.
+Finally, once we have checked all clauses, we collect them in a `FunClauses` node that holds references to the LHS `TestMatchData` and RHS `Box` nodes for each clause.
 
 
 ## Compiling to Hugr
@@ -158,7 +158,7 @@ Below we describe the compilation process for a function from the top down.
 ### Compiling `FunClauses`
 
 The `FunClauses` Brat node is the main entry point when compiling a function.
-For each clause, it holds the LHS (in form of `TestMatchData`) and the RHS (in form of a `:>>:` node). For each clause in the `FunClauses` node, we have `TestMatchData` which determines whether the corresponding branch is valid for the inputs dynamically given to the function. If no branches match, we create a `Panic` node, which should raise an error in hugr.
+For each clause, it holds the LHS (in form of `TestMatchData`) and the RHS (in form of a `Box` node). For each clause in the `FunClauses` node, we have `TestMatchData` which determines whether the corresponding branch is valid for the inputs dynamically given to the function. If no branches match, we create a `Panic` node, which should raise an error in hugr.
 
 We assume that we can compile each LHS `TestMatchData` into a Hugr node that takes the function arguments as input and returns a single sum as output.
 The sum has two options:
