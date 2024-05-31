@@ -9,6 +9,7 @@ fi
 
 declare -a FAILED_TEST_NAMES
 declare -a FAILED_TEST_MSGS
+UNEXPECTED_PASSES=
 NUM_FAILURES=0
 
 for json in test/compilation/output/*.json; do
@@ -21,9 +22,17 @@ for json in test/compilation/output/*.json; do
     fi
 done
 
+for invalid_json in test/compilation/output/*.json.invalid; do
+    if (hugr_validator < $invalid_json 2>/dev/null > /dev/null); then
+        UNEXPECTED_PASSES="$UNEXPECTED_PASSES $invalid_json"
+    fi
+done
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 NO_COLOUR='\033[0m'
+
+RESULT=0 # I.e., an "ok" exit value
 
 if [ $NUM_FAILURES -gt 0 ]; then
     echo -e $RED
@@ -33,8 +42,13 @@ if [ $NUM_FAILURES -gt 0 ]; then
     done
 
     echo $NUM_FAILURES failures. $NO_COLOUR
-    exit 1
+    RESULT=1 # I.e. a "bad" exit value
 else
-    echo -e $GREEN All tests passed $NO_COLOUR
-    exit 0
+    echo -e $GREEN All Hugrs validated $NO_COLOUR
 fi
+
+if [ "$UNEXPECTED_PASSES" != "" ]; then
+    echo -e $RED "There were unexpected passes: $UNEXPECTED_PASSES" $NO_COLOUR
+    RESULT=1
+fi
+exit $RESULT

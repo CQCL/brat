@@ -189,6 +189,7 @@ compileTypeWorker hts lvl (VSum my ros) = case my of
     ros <- traverse (\(Some (Flip ro)) -> fst3 <$> (compileRo hts (lvl, S0) ro)) ros
     pure $ HTSum (SG (GeneralSum (HTTuple <$> ros)))
 compileTypeWorker hts lvl (TVec el _) = hugrList <$> (compileTypeWorker hts lvl el)
+compileTypeWorker hts lvl (TList el)  = hugrList <$> (compileTypeWorker hts lvl el)
 compileTypeWorker tys _ (VApp (VLvl i _) _) = case tys !! i of
                                            Nothing -> error "Can't resolve reference to type variable"
                                            Just ty -> pure ty

@@ -1,4 +1,4 @@
-module Test.Checking (getCheckingTests) where
+module Test.Checking (getCheckingTests, expectedCheckingFails) where
 
 import Brat.Checker (run, emptyEnv, Checking, TypedHole)
 import Brat.Error (Error)
