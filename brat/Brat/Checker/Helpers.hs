@@ -258,7 +258,7 @@ getThunks :: Modey m
                       ,Overs m UVerb
                       )
 getThunks _ [] = pure ([], [], [])
-getThunks Braty row@((src, Right ty):rest) = eval S0 ty >>= \case
+getThunks Braty row@((src, Right ty):rest) = (vectorise <$> eval S0 ty) >>= \case
   (VFun Braty (ss :->> ts)) -> do
     (node, unders, overs, _) <- let ?my = Braty in
                                   anext "" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
@@ -266,6 +266,24 @@ getThunks Braty row@((src, Right ty):rest) = eval S0 ty >>= \case
     pure (node:nodes, unders <> unders', overs <> overs')
   (VFun _ _) -> err $ ExpectedThunk (showMode Braty) (showRow row)
   v -> typeErr $ "Force called on non-thunk: " ++ show v
+ where
+  vectorise :: Val Z -> Val Z
+  vectorise (TVec ty n) = case vectorise ty of
+    VFun m (ss :->> ts) -> let (ss', ny) = vectoriseRo n Zy ss
+                               (ts', _) = vectoriseRo n ny ts
+                           in  VFun m (ss' :->> ts')
+    ty -> TVec ty n
+  vectorise v = v
+
+  vectoriseRo :: Val Z -> Ny i -> Ro m i j -> (Ro m i j, Ny j)
+  vectoriseRo _ ny R0 = (R0, ny)
+  vectoriseRo n ny (REx k (stk ::- ro)) = case stkTop ny stk of
+    ny -> let (ro', ny') = vectoriseRo n (Sy ny) ro in
+            (REx k (stk ::- ro'), ny')
+  vectoriseRo n ny (RPr (p, ty) ro) =
+    let (ro', ny') = vectoriseRo n ny ro in
+      (RPr (p, TVec ty (changeVar (Thinning (thEmpty ny)) n)) ro', ny')
+
 getThunks Kerny row@((src, Right ty):rest) = eval S0 ty >>= \case
   (VFun Kerny (ss :->> ts)) -> do
     (node, unders, overs, _) <- let ?my = Kerny in anext "" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts

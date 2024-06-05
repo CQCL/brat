@@ -1,0 +1,16 @@
+replicate(X :: *, n :: #, X) -> Vec(X, n)
+replicate(_, n, x) = n of x
+
+map(X :: *, Y :: *, { X -> Y }, n :: #, Vec(X, n)) -> Vec(Y, n)
+map(_, _, f, n, xs) = (n of f)(xs)
+
+map'(X :: *, Y :: *, { X -> Y }, n :: #, Vec(X, n)) -> Vec(Y, n)
+map'(_, _, f, n, xs) = xs |> n of f
+
+mkPair(X :: *, Y :: *, X, Y) -> [X, Y]
+mkPair(_, _, x, y) = [x,y]
+
+zip(X :: *, Y :: *, n :: #, Vec(X, n), Vec(Y, n)) -> Vec([X, Y], n)
+zip(X, Y, n, xs, ys) =
+ xs, ys |>
+ (n of ({[_,_]} :: { X, Y -> [X,Y] }))

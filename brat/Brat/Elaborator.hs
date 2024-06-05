@@ -179,6 +179,12 @@ elaborate' (FAnnotation a ts) = do
   a <- assertNoun a
   pure $ SomeRaw' (a ::::: ts)
 elaborate' (FInto a b) = elaborate' (FApp b a)
+elaborate' (FOf n e) = do
+  SomeRaw n <- elaborate n
+  n <- assertNoun =<< assertChk n
+  SomeRaw e <- elaborate e
+  e <- assertNoun e
+  pure $ SomeRaw' (ROf n e)
 elaborate' (FFn cty) = pure $ SomeRaw' (RFn cty)
 elaborate' (FKernel sty) = pure $ SomeRaw' (RKernel sty)
 elaborate' FIdentity = pure $ SomeRaw' RIdentity

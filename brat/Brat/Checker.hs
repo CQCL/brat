@@ -8,7 +8,8 @@ module Brat.Checker (checkBody
                     ) where
 
 import Control.Arrow (first)
-import Control.Monad (foldM)
+import Control.Exception (assert)
+import Control.Monad (foldM, zipWithM)
 import Control.Monad.Freer
 import Data.Bifunctor (second)
 import Data.Functor (($>), (<&>))
@@ -17,6 +18,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
+import Data.Traversable (for)
 import Data.Type.Equality ((:~:)(..))
 import Prelude hiding (filter)
 
@@ -181,6 +183,7 @@ checkThunk m name cty tm = do
   pure dangling
 
 check :: (CheckConstraints m k
+         ,DIRY d
          ,EvMode m
          ,TensorOutputs (Outputs m d)
          ,?my :: Modey m
@@ -193,6 +196,7 @@ check (WC fc tm) conn = localFC fc (check' tm conn)
 
 check' :: forall m d k
         . (CheckConstraints m k
+          ,DIRY d
           ,EvMode m
           ,TensorOutputs (Outputs m d)
           ,?my :: Modey m
@@ -553,6 +557,93 @@ check' FanIn (overs, ((tgt, ty):unders)) = do
     wire (danglingResult, binderToValue ?my ty, hungry)
     faninNodes my (n - 1) (hungryTail, tailTy) elTy overs
 check' Identity ((this:leftovers), ()) = pure (((), [this]), (leftovers, ()))
+check' (Of n e) ((), unders) = case ?my of
+  Kerny -> typeErr $ "`of` not supported in kernel contexts"
+  Braty -> do
+    -- TODO: Our expectations about Id nodes in compilation might need updated?
+    (_, [(natUnder,Left k)], [(natOver, _)], _) <- anext "Of_len" Id (S0, Some (Zy :* S0))
+                                                   (REx ("value", Nat) (S0 ::- R0))
+                                                   (REx ("value", Nat) (S0 ::- R0))
+    ([n], leftovers) <- kindCheck [(natUnder, k)] (unWC n)
+    defineSrc natOver n
+    ensureEmpty "" leftovers
+    case diry @d of
+      Chky -> getVecs n unders >>= \case
+        (elemUnders, vecUnders, rightUnders) -> do
+          (Some (_ :* stk)) <- rowToRo ?my [ (portName tgt, tgt, Right ty) | (tgt, ty) <- elemUnders ] S0
+          case stk of
+            S0 -> do
+              (repConns, tgtMap) <- mkReplicateNodes n elemUnders
+              let (lenIns, repUnders, repOvers) = unzip3 repConns
+              -- Wire the length into all the replicate nodes
+              for lenIns $ \(tgt, _) -> do
+                wire (natOver, kindType Nat, tgt)
+                defineTgt tgt n
+              -- There might be rightunders, which need glued to the start of the remaining rightunders
+              (((), ()), ((), elemRightUnders)) <- check e ((), repUnders)
+              let unusedElemTgts :: [Tgt] = (fromJust . flip lookup tgtMap . fst) <$> elemRightUnders
+              let usedVecUnders :: [(Tgt, Val Z)]= [ u | u@(tgt, _) <- vecUnders, not (tgt `elem` unusedElemTgts) ]
+              assert (length repOvers == length usedVecUnders) $ do
+                zipWithM (\(dangling, _) (hungry, ty) -> wire (dangling, ty, hungry)) repOvers usedVecUnders
+                let finalRightUnders = [ (tgt, Right ty) | (tgt, ty) <- vecUnders, not (tgt `elem` unusedElemTgts) ]
+                                       ++ rightUnders
+                pure (((), ()), ((), finalRightUnders))
+
+            _ -> localFC (fcOf e) $ typeErr "No type dependency allowed when using `of`"
+      Syny -> do
+        (((), outputs), ((), ())) <- check e ((), ())
+        Some (_ :* stk) <- rowToRo ?my [(portName src, src, ty) | (src, ty) <- outputs] S0
+        case stk of
+          S0 -> do
+            -- Use of `outputs` and the map returned here are nonsensical, but we're
+            -- ignoring the map anyway
+            outputs <- getVals outputs
+            (conns, _) <- mkReplicateNodes n outputs
+            let (lenIns, elemIns, vecOuts) = unzip3 conns
+            for lenIns $ \(tgt,_) -> do
+              wire (natOver, kindType Nat, tgt)
+              defineTgt tgt n
+            zipWithM (\(dangling, ty) (hungry, _) -> wire (dangling, ty, hungry)) outputs elemIns
+            pure (((), vecOuts), ((), ()))
+          _ -> localFC (fcOf e) $ typeErr "No type dependency allowed when using `of`"
+ where
+  getVals :: [(t, BinderType Brat)] -> Checking [(t, Val Z)]
+  getVals [] = pure []
+  getVals ((t, Right ty):rest) = ((t, ty):) <$> getVals rest
+  getVals ((_, Left _):_) = localFC (fcOf e) $ typeErr "No type dependency allowed when using `of`"
+
+  mkReplicateNodes :: forall t
+                    . ToEnd t
+                   => Val Z
+                   -> [(t, Val Z)] -- The unders from getVec, only used for building the map
+                   -> Checking ([((Tgt, BinderType Brat) -- The Tgt for the vector length
+                                 ,(Tgt, BinderType Brat) -- The Tgt for the element
+                                 ,(Src, BinderType Brat) -- The vectorised element output
+                                 )]
+                               ,[(Tgt, t)] -- A map from element tgts to the original vector tgts
+                               )
+  mkReplicateNodes _ [] = pure ([], [])
+  mkReplicateNodes len ((t, ty):unders) = do
+    let weakTy = changeVar (Thinning (ThDrop ThNull)) ty
+    (_, [lenUnder, repUnder], [repOver], _) <- anext "replicate" Replicate (S0, Some (Zy :* S0))
+                                               (REx ("n", Nat) (S0 ::- (RPr ("elem", weakTy) R0))) -- the type of e
+                                               (RPr ("vec", TVec weakTy (VApp (VInx VZ) B0)) R0) -- a vector of e's of length n??
+    (conns, tgtMap) <- mkReplicateNodes len unders
+    pure ((lenUnder, repUnder, repOver):conns, ((fst repUnder), t):tgtMap)
+
+  getVecs :: Val Z -- The length of vectors we're looking for
+          -> [(Tgt, BinderType Brat)]
+          -> Checking ([(Tgt, Val Z)] -- element types for which we need vecs of the given length
+                      ,[(Tgt, Val Z)] -- The vector type unders which we'll wire to
+                      ,[(Tgt, BinderType Brat)] -- Rightunders
+                      )
+  getVecs len ((tgt, Right ty@(TVec el n)):unders) = eqTest "" 0 Nat len n >>= \case
+    Left _ -> pure ([], [], (tgt, Right ty):unders)
+    Right () -> do
+      (elems, unders, rightUnders) <- getVecs len unders
+      pure ((tgt, el):elems, (tgt, ty):unders, rightUnders)
+  getVecs _ unders = pure ([], [], unders)
+
 check' tm _ = error $ "check' " ++ show tm
 
 
