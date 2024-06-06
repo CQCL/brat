@@ -266,25 +266,7 @@ getThunks Braty row@((src, Right ty):rest) = (vectorise <$> eval S0 ty) >>= \cas
     pure (node:nodes, unders <> unders', overs <> overs')
   (VFun _ _) -> err $ ExpectedThunk (showMode Braty) (showRow row)
   v -> typeErr $ "Force called on non-thunk: " ++ show v
- where
-  vectorise :: Val Z -> Val Z
-  vectorise (TVec ty n) = case vectorise ty of
-    VFun m (ss :->> ts) -> let (ss', ny) = vectoriseRo n Zy ss
-                               (ts', _) = vectoriseRo n ny ts
-                           in  VFun m (ss' :->> ts')
-    ty -> TVec ty n
-  vectorise v = v
-
-  vectoriseRo :: Val Z -> Ny i -> Ro m i j -> (Ro m i j, Ny j)
-  vectoriseRo _ ny R0 = (R0, ny)
-  vectoriseRo n ny (REx k (stk ::- ro)) = case stkTop ny stk of
-    ny -> let (ro', ny') = vectoriseRo n (Sy ny) ro in
-            (REx k (stk ::- ro'), ny')
-  vectoriseRo n ny (RPr (p, ty) ro) =
-    let (ro', ny') = vectoriseRo n ny ro in
-      (RPr (p, TVec ty (changeVar (Thinning (thEmpty ny)) n)) ro', ny')
-
-getThunks Kerny row@((src, Right ty):rest) = eval S0 ty >>= \case
+getThunks Kerny row@((src, Right ty):rest) = (vectorise <$> eval S0 ty) >>= \case
   (VFun Kerny (ss :->> ts)) -> do
     (node, unders, overs, _) <- let ?my = Kerny in anext "" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
     (nodes, unders', overs') <- getThunks Kerny rest
@@ -300,6 +282,24 @@ getThunks Braty ((src, Left (Star args)):rest) = do
   (nodes, unders', overs') <- getThunks Braty rest
   pure (node:nodes, unders <> unders', overs <> overs')
 getThunks m ro = err $ ExpectedThunk (showMode m) (showRow ro)
+
+vectorise :: Val Z -> Val Z
+vectorise (TVec ty n) = case vectorise ty of
+  VFun m (ss :->> ts) -> let (ss', ny) = vectoriseRo n Zy ss
+                             (ts', _) = vectoriseRo n ny ts
+                         in  VFun m (ss' :->> ts')
+  ty -> TVec ty n
+ where
+  vectoriseRo :: Val Z -> Ny i -> Ro m i j -> (Ro m i j, Ny j)
+  vectoriseRo _ ny R0 = (R0, ny)
+  vectoriseRo n ny (REx k (stk ::- ro)) = case stkTop ny stk of
+    ny -> let (ro', ny') = vectoriseRo n (Sy ny) ro in
+            (REx k (stk ::- ro'), ny')
+  vectoriseRo n ny (RPr (p, ty) ro) =
+    let (ro', ny') = vectoriseRo n ny ro in
+      (RPr (p, TVec ty (changeVar (Thinning (thEmpty ny)) n)) ro', ny')
+vectorise v = v
+
 
 binderToValue :: Modey m -> BinderType m -> Val Z
 binderToValue Braty (Left k) = kindType k
