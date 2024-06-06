@@ -29,7 +29,6 @@ import Hasochism
 import Control.Monad (unless)
 import Data.Bifunctor
 import Data.Foldable (traverse_)
-import Data.Functor (($>))
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
@@ -46,7 +45,7 @@ checkBody :: (CheckConstraints m UVerb, EvMode m, ?my :: Modey m)
           -> Checking Src
 checkBody fnName body cty = case body of
   NoLhs tm -> do
-    ((src, _), _) <- makeBox' fnName cty $ \(parent, _, overs, unders, _) -> check tm (overs, unders) $> parent
+    ((src, _), _) <- makeBox fnName cty $ \(overs, unders) -> check tm (overs, unders)
     pure src
   Clauses cs -> checkClauses ?my fnName (mkClause <$> (NE.zip (NE.fromList [0..]) cs)) cty
   Undefined -> err (InternalError "Checking undefined clause")
@@ -93,13 +92,13 @@ checkClause my fnName cty clause = modily my $ do
 
     -- Now actually make a box for the RHS and check it
     let rhsCty = patRo :->> outRo
-    (_, rhsNode) <- makeBox' (clauseName ++ "_rhs") rhsCty $ \(node, _, rhsOvers, rhsUnders, _) -> do
+    ((boxPort, _ty), _) <- makeBox (clauseName ++ "_rhs") rhsCty $ \(rhsOvers, rhsUnders) -> do
       let abstractor = WC (fcOf (lhs clause)) $ foldr ((:||:) . APat . Bind . fst) AEmpty sol
       trackM (show abstractor)
       let fc = FC (start (fcOf (lhs clause))) (FC.end (fcOf (rhs clause)))
       let ?my = my in
         check @m (WC fc (Lambda (abstractor, rhs clause) [])) (rhsOvers, rhsUnders)
-      pure node
+    let NamedPort {end=Ex rhsNode _} = boxPort
     pure (match, rhsNode)
   pure names
 

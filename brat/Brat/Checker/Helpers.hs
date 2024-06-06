@@ -330,27 +330,19 @@ makeBox :: (?my :: Modey m, EvMode m)
         -> CTy m Z
         -> ((Overs m UVerb, Unders m Chk) -> Checking a) -- checks + builds the body using srcs/tgts from the box
         -> Checking ((Src, BinderType Brat), a)
-makeBox name cty body = makeBox' name cty (\(_, _, overs, unders, _) -> body (overs, unders))
-
-
-makeBox' :: (?my :: Modey m, EvMode m)
-        => String -- A label for the nodes we create
-        -> CTy m Z
-        -> ((Name, (Name, Name), Overs m UVerb, Unders m Chk, Some Endz) -> Checking a) -- checks + builds the body using srcs/tgts from the box
-        -> Checking ((Src, BinderType Brat), a)
-makeBox' name cty@(ss :->> ts) body = do
+makeBox name cty@(ss :->> ts) body = do
   (src, _, overs, ctx) <- anext (name ++ "/in") Source (S0, Some (Zy :* S0)) R0 ss
   (tgt, unders, _, _) <- anext (name ++ "/out") Target ctx ts R0
   locals <- locals <$> req AskVEnv
   case (?my, body) of
     (Kerny, _) -> do
-      (box_node,_,[thunk],_) <- next (name ++ "_thunk") (Box locals src tgt) (S0, Some (Zy :* S0))
+      (_,_,[thunk],_) <- next (name ++ "_thunk") (Box locals src tgt) (S0, Some (Zy :* S0))
                                 R0 (RPr ("thunk", VFun Kerny cty) R0)
-      bres <- name -! body (box_node, (src, tgt), overs, unders, snd ctx)
+      bres <- name -! body (overs, unders)
       pure (thunk, bres)
     (Braty, body) -> do
-      (box_node,_,[thunk],_) <- next (name ++ "_thunk") (Box locals src tgt) (S0, Some (Zy :* S0)) R0 (RPr ("thunk", VFun ?my cty) R0)
-      bres <- name -! body (box_node, (src, tgt), overs, unders, snd ctx)
+      (_,_,[thunk],_) <- next (name ++ "_thunk") (Box locals src tgt) (S0, Some (Zy :* S0)) R0 (RPr ("thunk", VFun ?my cty) R0)
+      bres <- name -! body (overs, unders)
 {- TODO: Work out if/why this is needed and delete if appropriate
 
       let n_args = length overs
