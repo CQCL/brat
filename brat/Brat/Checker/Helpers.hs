@@ -39,6 +39,7 @@ import Util (log2)
 
 import Control.Monad.Freer (req, Free(Ret))
 import Control.Arrow ((***))
+import Data.Bifunctor (first)
 import Data.List (intercalate)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
@@ -283,6 +284,65 @@ getThunks Braty ((src, Left (Star args)):rest) = do
   pure (node:nodes, unders <> unders', overs <> overs')
 getThunks m ro = err $ ExpectedThunk (showMode m) (showRow ro)
 
+-- The type given here should be normalised
+vecLayers :: Val Z -> Checking ([(Src, NumVal Z)] -- The sizes of the vector layers
+                               ,Some (Modey :* Flip CTy Z) -- The function type at the end
+                               )
+vecLayers (TVec ty (VNum n)) = do
+  src <- mkStaticNum n
+  (layers, fun) <- vecLayers ty
+  pure ((src, n):layers, fun)
+vecLayers (VFun my cty) = pure ([], Some (my :* Flip cty))
+vecLayers ty = typeErr $ "Expected a function or vector of functions, got " ++ show ty
+
+mkStaticNum :: NumVal Z -> Checking Src
+mkStaticNum n@(NumValue c gro) = do
+  (_, [], [(constSrc,_)], _) <- next "const" (Const (Num (fromIntegral c))) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
+  src <- case gro of
+    Constant0 -> pure constSrc
+    StrictMonoFun sm -> do
+      (_, [(lhs,_),(rhs,_)], [(src,_)], _) <- next "add_const" (ArithNode Add) (S0, Some (Zy :* S0))
+                                              (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0))
+                                              (RPr ("value", TNat) R0)
+      smSrc <- mkStrictMono sm
+      wire (constSrc, TNat, lhs)
+      wire (smSrc, TNat, rhs)
+      pure src
+  defineSrc src (VNum n)
+  pure src
+ where
+  mkStrictMono :: StrictMono Z -> Checking Src
+  mkStrictMono (StrictMono k mono) = do
+    (_, [], [(constSrc,_)], _) <- next "2^k" (Const (Num (2^k))) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
+    (_, [(lhs,_),(rhs,_)], [(src,_)], _) <- next "mult_const" (ArithNode Mul) (S0, Some (Zy :* S0))
+                                            (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0))
+                                            (RPr ("value", TNat) R0)
+    monoSrc <- mkMono mono
+    wire (constSrc, TNat, lhs)
+    wire (monoSrc, TNat, rhs)
+    pure src
+
+  mkMono :: Monotone Z -> Checking Src
+  mkMono (Linear (VPar (ExEnd e))) = pure (NamedPort e "mono")
+  mkMono (Full sm) = do
+    (_, [], [(twoSrc,_)], _) <- next "2" (Const (Num 2)) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
+    (_, [(lhs,_),(rhs,_)], [(powSrc,_)], _) <- next "2^" (ArithNode Pow) (S0, Some (Zy :* S0))
+                                               (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0))
+                                               (RPr ("value", TNat) R0)
+    smSrc <- mkStrictMono sm
+    wire (twoSrc, TNat, lhs)
+    wire (smSrc, TNat, rhs)
+
+    (_, [], [(oneSrc,_)], _) <- next "1" (Const (Num 1)) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
+    (_, [(lhs,_),(rhs,_)], [(src,_)], _) <- next "n-1" (ArithNode Sub) (S0, Some (Zy :* S0))
+                                            (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0))
+                                            (RPr ("value", TNat) R0)
+    wire (powSrc, TNat, lhs)
+    wire (oneSrc, TNat, rhs)
+    pure src
+
+-- FIXME!!: Doing this type transormation without changing the graph is massively
+-- bad and wrong!
 vectorise :: Val Z -> Val Z
 vectorise (TVec ty n) = case vectorise ty of
   VFun m (ss :->> ts) -> let (ss', ny) = vectoriseRo n Zy ss
@@ -298,6 +358,7 @@ vectorise (TVec ty n) = case vectorise ty of
   vectoriseRo n ny (RPr (p, ty) ro) =
     let (ro', ny') = vectoriseRo n ny ro in
       (RPr (p, TVec ty (changeVar (Thinning (thEmpty ny)) n)) ro', ny')
+-- Try harder to discriminate against things which don't make sense here
 vectorise v = v
 
 
