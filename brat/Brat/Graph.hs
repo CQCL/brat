@@ -52,6 +52,7 @@ data NodeType :: Mode -> Type where
   Selector :: UserName -> NodeType a -- TODO: Get rid of this in favour of pattern matching
   ArithNode :: ArithOp -> NodeType Brat
   Replicate :: NodeType Brat
+  MapFun :: NodeType a
 
 deriving instance Show (NodeType a)
 

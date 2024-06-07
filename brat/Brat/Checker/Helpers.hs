@@ -39,7 +39,6 @@ import Util (log2)
 
 import Control.Monad.Freer (req, Free(Ret))
 import Control.Arrow ((***))
-import Data.Bifunctor (first)
 import Data.List (intercalate)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
@@ -259,20 +258,21 @@ getThunks :: Modey m
                       ,Overs m UVerb
                       )
 getThunks _ [] = pure ([], [], [])
-getThunks Braty row@((src, Right ty):rest) = (vectorise <$> eval S0 ty) >>= \case
-  (VFun Braty (ss :->> ts)) -> do
+getThunks Braty row@((src, Right ty):rest) = ((src,) <$> eval S0 ty) >>= vectorise >>= \case
+  (src, VFun Braty (ss :->> ts)) -> do
     (node, unders, overs, _) <- let ?my = Braty in
                                   anext "" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
     (nodes, unders', overs') <- getThunks Braty rest
     pure (node:nodes, unders <> unders', overs <> overs')
-  (VFun _ _) -> err $ ExpectedThunk (showMode Braty) (showRow row)
+  -- These shouldn't happen
+  (_, VFun _ _) -> err $ ExpectedThunk (showMode Braty) (showRow row)
   v -> typeErr $ "Force called on non-thunk: " ++ show v
-getThunks Kerny row@((src, Right ty):rest) = (vectorise <$> eval S0 ty) >>= \case
-  (VFun Kerny (ss :->> ts)) -> do
+getThunks Kerny row@((src, Right ty):rest) = ((src,) <$> eval S0 ty) >>= vectorise >>= \case
+  (src, VFun Kerny (ss :->> ts)) -> do
     (node, unders, overs, _) <- let ?my = Kerny in anext "" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
     (nodes, unders', overs') <- getThunks Kerny rest
     pure (node:nodes, unders <> unders', overs <> overs')
-  (VFun _ _) -> err $ ExpectedThunk (showMode Kerny) (showRow row)
+  (_, VFun _ _) -> err $ ExpectedThunk (showMode Kerny) (showRow row)
   v -> typeErr $ "Force called on non-(kernel)-thunk: " ++ show v
 getThunks Braty ((src, Left (Star args)):rest) = do
   (node, unders, overs) <- case bwdStack (B0 <>< args) of
@@ -341,26 +341,41 @@ mkStaticNum n@(NumValue c gro) = do
     wire (oneSrc, TNat, rhs)
     pure src
 
--- FIXME!!: Doing this type transormation without changing the graph is massively
--- bad and wrong!
-vectorise :: Val Z -> Val Z
-vectorise (TVec ty n) = case vectorise ty of
-  VFun m (ss :->> ts) -> let (ss', ny) = vectoriseRo n Zy ss
-                             (ts', _) = vectoriseRo n ny ts
-                         in  VFun m (ss' :->> ts')
-  ty -> TVec ty n
+vectorise :: (Src, Val Z) -> Checking (Src, Val Z)
+vectorise (src, ty) = do
+  (layers, Some (my :* Flip cty)) <- vecLayers ty
+  mkMapFuns (src, VFun my cty) layers
  where
-  vectoriseRo :: Val Z -> Ny i -> Ro m i j -> (Ro m i j, Ny j)
+  mkMapFuns :: (Src, Val Z) -- The input to the mapfun
+            -> [(Src, NumVal Z)] -- Remaining layers
+            -> Checking (Src, Val Z)
+  mkMapFuns over [] = pure over
+  mkMapFuns (valSrc, ty) ((lenSrc, len):layers) = do
+    (valSrc, ty@(VFun my cty)) <- mkMapFuns (valSrc, ty) layers
+    let weak1 = changeVar (Thinning (ThDrop ThNull))
+    (_, [(lenTgt,_), (valTgt, _)], [(vectorSrc, Right vecTy)], _) <-
+      next "" MapFun (S0, Some (Zy :* S0))
+      (REx ("len", Nat) (S0 ::- (RPr ("value", weak1 ty) R0)))
+      (RPr ("vector", weak1 (vectorisedFun len my cty)) R0)
+    defineTgt lenTgt (VNum len)
+    wire (lenSrc, kindType Nat, lenTgt)
+    wire (valSrc, ty, valTgt)
+    pure (vectorSrc, vecTy)
+
+  vectorisedFun :: NumVal Z -> Modey m -> CTy m Z -> Val Z
+  vectorisedFun nv my (ss :->> ts) =
+    let (ss', ny) = vectoriseRo nv Zy ss
+        (ts', _) = vectoriseRo nv ny ts
+    in  VFun my (ss' :->> ts')
+
+  vectoriseRo :: NumVal Z -> Ny i -> Ro m i j -> (Ro m i j, Ny j)
   vectoriseRo _ ny R0 = (R0, ny)
   vectoriseRo n ny (REx k (stk ::- ro)) = case stkTop ny stk of
     ny -> let (ro', ny') = vectoriseRo n (Sy ny) ro in
             (REx k (stk ::- ro'), ny')
   vectoriseRo n ny (RPr (p, ty) ro) =
     let (ro', ny') = vectoriseRo n ny ro in
-      (RPr (p, TVec ty (changeVar (Thinning (thEmpty ny)) n)) ro', ny')
--- Try harder to discriminate against things which don't make sense here
-vectorise v = v
-
+      (RPr (p, TVec ty (VNum (changeVar (Thinning (thEmpty ny)) n))) ro', ny')
 
 binderToValue :: Modey m -> BinderType m -> Val Z
 binderToValue Braty (Left k) = kindType k
