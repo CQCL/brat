@@ -353,29 +353,34 @@ vectorise (src, ty) = do
   mkMapFuns (valSrc, ty) ((lenSrc, len):layers) = do
     (valSrc, ty@(VFun my cty)) <- mkMapFuns (valSrc, ty) layers
     let weak1 = changeVar (Thinning (ThDrop ThNull))
+    vecFun <- vectorisedFun len my cty
     (_, [(lenTgt,_), (valTgt, _)], [(vectorSrc, Right vecTy)], _) <-
       next "" MapFun (S0, Some (Zy :* S0))
       (REx ("len", Nat) (S0 ::- (RPr ("value", weak1 ty) R0)))
-      (RPr ("vector", weak1 (vectorisedFun len my cty)) R0)
+      (RPr ("vector", weak1 vecFun) R0)
     defineTgt lenTgt (VNum len)
     wire (lenSrc, kindType Nat, lenTgt)
     wire (valSrc, ty, valTgt)
     pure (vectorSrc, vecTy)
 
-  vectorisedFun :: NumVal Z -> Modey m -> CTy m Z -> Val Z
-  vectorisedFun nv my (ss :->> ts) =
-    let (ss', ny) = vectoriseRo nv Zy ss
-        (ts', _) = vectoriseRo nv ny ts
-    in  VFun my (ss' :->> ts')
+  vectorisedFun :: NumVal Z -> Modey m -> CTy m Z -> Checking (Val Z)
+  vectorisedFun nv my (ss :->> ts) = do
+    (ss', ny) <- vectoriseRo True nv Zy ss
+    (ts', _)  <- vectoriseRo False nv ny ts
+    pure $ VFun my (ss' :->> ts')
 
-  vectoriseRo :: NumVal Z -> Ny i -> Ro m i j -> (Ro m i j, Ny j)
-  vectoriseRo _ ny R0 = (R0, ny)
-  vectoriseRo n ny (REx k (stk ::- ro)) = case stkTop ny stk of
-    ny -> let (ro', ny') = vectoriseRo n (Sy ny) ro in
-            (REx k (stk ::- ro'), ny')
-  vectoriseRo n ny (RPr (p, ty) ro) =
-    let (ro', ny') = vectoriseRo n ny ro in
-      (RPr (p, TVec ty (VNum (changeVar (Thinning (thEmpty ny)) n))) ro', ny')
+  -- We don't allow existentials in vectorised functions, so the boolean says
+  -- whether we are in the input row and can allow binding
+  vectoriseRo :: Bool -> NumVal Z -> Ny i -> Ro m i j -> Checking (Ro m i j, Ny j)
+  vectoriseRo _ _ ny R0 = pure (R0, ny)
+  vectoriseRo True n ny (REx k (stk ::- ro)) = case stkTop ny stk of
+    ny -> do (ro', ny') <- vectoriseRo True n (Sy ny) ro
+             pure (REx k (stk ::- ro'), ny')
+  vectoriseRo False _ _ (REx _ _) =
+    typeErr "Type variable binding not allowed in the output type of a vectorised function"
+  vectoriseRo b n ny (RPr (p, ty) ro) = do
+    (ro', ny') <- vectoriseRo b n ny ro
+    pure (RPr (p, TVec ty (VNum (changeVar (Thinning (thEmpty ny)) n))) ro', ny')
 
 binderToValue :: Modey m -> BinderType m -> Val Z
 binderToValue Braty (Left k) = kindType k
