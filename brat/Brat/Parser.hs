@@ -418,7 +418,7 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
 
   ofExpr :: Parser Flat
   ofExpr = do
-    lhs <- withFC (atomExpr' 0)
+    lhs <- withFC (subExpr POf)
     optional (kmatch KOf) >>= \case
       Nothing -> pure (unWC lhs)
       Just () -> FOf lhs <$> (withFC ofExpr)

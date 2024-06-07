@@ -183,7 +183,6 @@ checkThunk m name cty tm = do
   pure dangling
 
 check :: (CheckConstraints m k
-         ,DIRY d
          ,EvMode m
          ,TensorOutputs (Outputs m d)
          ,?my :: Modey m
@@ -196,7 +195,6 @@ check (WC fc tm) conn = localFC fc (check' tm conn)
 
 check' :: forall m d k
         . (CheckConstraints m k
-          ,DIRY d
           ,EvMode m
           ,TensorOutputs (Outputs m d)
           ,?my :: Modey m
@@ -562,8 +560,8 @@ check' (Of n e) ((), unders) = case ?my of
   Braty -> do
     -- TODO: Our expectations about Id nodes in compilation might need updated?
     (_, [(natUnder,Left k)], [(natOver, _)], _) <- anext "Of_len" Id (S0, Some (Zy :* S0))
-                                                   (REx ("value", Nat) (S0 ::- R0))
-                                                   (REx ("value", Nat) (S0 ::- R0))
+                                                   (REx ("value", Nat) R0)
+                                                   (REx ("value", Nat) R0)
     ([n], leftovers) <- kindCheck [(natUnder, k)] (unWC n)
     defineSrc natOver n
     ensureEmpty "" leftovers
@@ -626,7 +624,7 @@ check' (Of n e) ((), unders) = case ?my of
   mkReplicateNodes len ((t, ty):unders) = do
     let weakTy = changeVar (Thinning (ThDrop ThNull)) ty
     (_, [lenUnder, repUnder], [repOver], _) <- anext "replicate" Replicate (S0, Some (Zy :* S0))
-                                               (REx ("n", Nat) (S0 ::- (RPr ("elem", weakTy) R0))) -- the type of e
+                                               (REx ("n", Nat) (RPr ("elem", weakTy) R0)) -- the type of e
                                                (RPr ("vec", TVec weakTy (VApp (VInx VZ) B0)) R0) -- a vector of e's of length n??
     (conns, tgtMap) <- mkReplicateNodes len unders
     pure ((lenUnder, repUnder, repOver):conns, ((fst repUnder), t):tgtMap)
@@ -637,7 +635,7 @@ check' (Of n e) ((), unders) = case ?my of
                       ,[(Tgt, Val Z)] -- The vector type unders which we'll wire to
                       ,[(Tgt, BinderType Brat)] -- Rightunders
                       )
-  getVecs len ((tgt, Right ty@(TVec el n)):unders) = eqTest "" 0 Nat len n >>= \case
+  getVecs len ((tgt, Right ty@(TVec el n)):unders) = eqTest "" Nat len n >>= \case
     Left _ -> pure ([], [], (tgt, Right ty):unders)
     Right () -> do
       (elems, unders, rightUnders) <- getVecs len unders

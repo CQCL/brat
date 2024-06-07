@@ -285,7 +285,7 @@ getThunks Braty ((src, Left (Star args)):rest) = do
 getThunks m ro = err $ ExpectedThunk (showMode m) (showRow ro)
 
 -- The type given here should be normalised
-vecLayers :: Val Z -> Checking ([(Src, NumVal Z)] -- The sizes of the vector layers
+vecLayers :: Val Z -> Checking ([(Src, NumVal (VVar Z))] -- The sizes of the vector layers
                                ,Some (Modey :* Flip CTy Z) -- The function type at the end
                                )
 vecLayers (TVec ty (VNum n)) = do
@@ -295,7 +295,7 @@ vecLayers (TVec ty (VNum n)) = do
 vecLayers (VFun my cty) = pure ([], Some (my :* Flip cty))
 vecLayers ty = typeErr $ "Expected a function or vector of functions, got " ++ show ty
 
-mkStaticNum :: NumVal Z -> Checking Src
+mkStaticNum :: NumVal (VVar Z) -> Checking Src
 mkStaticNum n@(NumValue c gro) = do
   (_, [], [(constSrc,_)], _) <- next "const" (Const (Num (fromIntegral c))) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
   src <- case gro of
@@ -311,7 +311,7 @@ mkStaticNum n@(NumValue c gro) = do
   defineSrc src (VNum n)
   pure src
  where
-  mkStrictMono :: StrictMono Z -> Checking Src
+  mkStrictMono :: StrictMono (VVar Z) -> Checking Src
   mkStrictMono (StrictMono k mono) = do
     (_, [], [(constSrc,_)], _) <- next "2^k" (Const (Num (2^k))) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
     (_, [(lhs,_),(rhs,_)], [(src,_)], _) <- next "mult_const" (ArithNode Mul) (S0, Some (Zy :* S0))
@@ -322,7 +322,7 @@ mkStaticNum n@(NumValue c gro) = do
     wire (monoSrc, TNat, rhs)
     pure src
 
-  mkMono :: Monotone Z -> Checking Src
+  mkMono :: Monotone (VVar Z) -> Checking Src
   mkMono (Linear (VPar (ExEnd e))) = pure (NamedPort e "mono")
   mkMono (Full sm) = do
     (_, [], [(twoSrc,_)], _) <- next "2" (Const (Num 2)) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
@@ -344,10 +344,10 @@ mkStaticNum n@(NumValue c gro) = do
 vectorise :: (Src, Val Z) -> Checking (Src, Val Z)
 vectorise (src, ty) = do
   (layers, Some (my :* Flip cty)) <- vecLayers ty
-  mkMapFuns (src, VFun my cty) layers
+  modily my $ mkMapFuns (src, VFun my cty) layers
  where
   mkMapFuns :: (Src, Val Z) -- The input to the mapfun
-            -> [(Src, NumVal Z)] -- Remaining layers
+            -> [(Src, NumVal (VVar Z))] -- Remaining layers
             -> Checking (Src, Val Z)
   mkMapFuns over [] = pure over
   mkMapFuns (valSrc, ty) ((lenSrc, len):layers) = do
@@ -356,31 +356,30 @@ vectorise (src, ty) = do
     vecFun <- vectorisedFun len my cty
     (_, [(lenTgt,_), (valTgt, _)], [(vectorSrc, Right vecTy)], _) <-
       next "" MapFun (S0, Some (Zy :* S0))
-      (REx ("len", Nat) (S0 ::- (RPr ("value", weak1 ty) R0)))
+      (REx ("len", Nat) (RPr ("value", weak1 ty) R0))
       (RPr ("vector", weak1 vecFun) R0)
     defineTgt lenTgt (VNum len)
     wire (lenSrc, kindType Nat, lenTgt)
     wire (valSrc, ty, valTgt)
     pure (vectorSrc, vecTy)
 
-  vectorisedFun :: NumVal Z -> Modey m -> CTy m Z -> Checking (Val Z)
+  vectorisedFun :: NumVal (VVar Z) -> Modey m -> CTy m Z -> Checking (Val Z)
   vectorisedFun nv my (ss :->> ts) = do
     (ss', ny) <- vectoriseRo True nv Zy ss
     (ts', _)  <- vectoriseRo False nv ny ts
-    pure $ VFun my (ss' :->> ts')
+    pure $ modily my $ VFun my (ss' :->> ts')
 
   -- We don't allow existentials in vectorised functions, so the boolean says
   -- whether we are in the input row and can allow binding
-  vectoriseRo :: Bool -> NumVal Z -> Ny i -> Ro m i j -> Checking (Ro m i j, Ny j)
+  vectoriseRo :: Bool -> NumVal (VVar Z) -> Ny i -> Ro m i j -> Checking (Ro m i j, Ny j)
   vectoriseRo _ _ ny R0 = pure (R0, ny)
-  vectoriseRo True n ny (REx k (stk ::- ro)) = case stkTop ny stk of
-    ny -> do (ro', ny') <- vectoriseRo True n (Sy ny) ro
-             pure (REx k (stk ::- ro'), ny')
+  vectoriseRo True n ny (REx k ro) = do (ro', ny') <- vectoriseRo True n (Sy ny) ro
+                                        pure (REx k ro', ny')
   vectoriseRo False _ _ (REx _ _) =
     typeErr "Type variable binding not allowed in the output type of a vectorised function"
   vectoriseRo b n ny (RPr (p, ty) ro) = do
     (ro', ny') <- vectoriseRo b n ny ro
-    pure (RPr (p, TVec ty (VNum (changeVar (Thinning (thEmpty ny)) n))) ro', ny')
+    pure (RPr (p, TVec ty (VNum (changeVar (Thinning (thEmpty ny)) <$> n))) ro', ny')
 
 binderToValue :: Modey m -> BinderType m -> Val Z
 binderToValue Braty (Left k) = kindType k

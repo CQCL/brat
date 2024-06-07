@@ -109,10 +109,10 @@ instance Show (Term d k) where
    where
     showList [] = "[]:"
     showList ps = concatMap (++":") ps
-  show tm@(Of n e) = unwords [bracket POf n
-                             ,"of"
-                             ,bracket POf e
-                             ]
+  show (Of n e) = unwords [bracket POf n
+                          ,"of"
+                          ,bracket POf e
+                          ]
   show (Var x) = show x
   show Identity = "|"
   -- Nested applications should be bracketed too, hence 4 instead of 3
