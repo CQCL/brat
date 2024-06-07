@@ -30,13 +30,14 @@ invalidExamples = map ((++ ".brat") . ("examples" </>)) ["vector", "pass", "thun
 -- examples that we expect not to compile
 -- Note this includes those with remaining holes; it would be better
 -- to detect those automatically (as this is not a bug, they *shouldn't* compile)
+-- N.B. many of these are victims of #389
 noncompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   map ((++ ".brat") . ("examples" </>)) [
   "alias", "app", "arith", "bell", "composition", "cons", "cqcconf",
   "dollar_kind", "first", "fzbz", "graph", "holes", "imports", "into",
-  "kernel", "kernel-syntax", "kinds", "klet",
+  "ising", "kernel", "kernel-syntax", "kinds", "klet",
   "let", "lib/kernel", "list", "listpair", "one",
-  "patterns", "portpulling", "qft", "repeated_app", "second",
+  "patterns", "portpulling", "qft", "repeated_app", "rus", "second",
   "test", "tups", "teleportation", "unified", "vec_check", "vector", "vlup_covering"])
 
 compileToOutput :: FilePath -> TestTree

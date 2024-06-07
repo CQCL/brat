@@ -1,0 +1,15 @@
+open import lib.kernel (Rx, qid, recons, uncons, vid)
+
+ext "" ZZ(Float) -> { Qubit, Qubit -o Qubit, Qubit }
+
+nn_ising(sites :: #, Float, Float)
+     -> { Vec(Qubit, sites) -o Vec(Qubit, sites) }
+nn_ising(0, _, _) = { [] => [] }
+nn_ising(1, x, y) = { [q] => [(Rx(x))(q)] }
+nn_ising(succ(succ(n)), x, y) = { qs => qs |>
+  uncons(succ(n));
+  Rx(x), uncons(n);
+  ZZ(y), ..;
+  qid, (recons(n); nn_ising(succ(n), x, y));
+  recons(succ(n))
+}

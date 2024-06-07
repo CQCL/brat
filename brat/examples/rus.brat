@@ -1,0 +1,18 @@
+open import lib.kernel
+
+
+rus(Money, Qubit) -o Money, Qubit
+rus = {
+  fresh, ..;
+  (H;T), ..;
+      CX;
+    H,   ..;
+      CX;
+  (T;H), ..;
+  measure, ..;
+  rus'
+}
+
+rus'(Money, Bit, Qubit) -o Money, Qubit
+rus'(m, false, q) = m, q      -- success
+rus'(m, true, q) = rus(m, q)  -- try again
