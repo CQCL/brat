@@ -31,10 +31,10 @@ invalidExamples = map ((++ ".brat") . ("examples" </>)) ["vector", "pass", "thun
 -- Note this includes those with remaining holes; it would be better
 -- to detect those automatically (as this is not a bug, they *shouldn't* compile)
 -- N.B. many of these are victims of #389
-noncompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
+nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   map ((++ ".brat") . ("examples" </>)) [
   "alias", "app", "arith", "bell", "composition", "cons", "cqcconf",
-  "dollar_kind", "first", "fzbz", "graph", "holes", "imports", "into",
+  "dollar_kind", "first", "full", "fzbz", "graph", "holes", "imports", "into",
   "ising", "kernel", "kernel-syntax", "kinds", "klet",
   "let", "lib/kernel", "list", "listpair", "one",
   "patterns", "portpulling", "qft", "repeated_app", "rus", "second",
@@ -43,7 +43,7 @@ noncompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
 compileToOutput :: FilePath -> TestTree
 compileToOutput file = testCase (show file) $ do
   -- for non-compiling examples we end up writing out an empty file so that's invalid too
-  let isValid = not (file `elem` noncompilingExamples || file `elem` invalidExamples)
+  let isValid = not (file `elem` nonCompilingExamples || file `elem` invalidExamples)
   let outputExt = if isValid  then "json" else "json.invalid"
   let outFile = outputDir </> replaceExtension (takeFileName file) outputExt
   bs <- compileFile [] file
@@ -55,6 +55,6 @@ setupCompilationTests = do
   examples <- findByExtension [".brat"] examplesPrefix
   createDirectoryIfMissing False outputDir
   let compileTests = compileToOutput <$> tests
-  let examplesTests = testGroup "examples" $ expectFailForPaths noncompilingExamples compileToOutput <$> examples
+  let examplesTests = testGroup "examples" $ expectFailForPaths nonCompilingExamples compileToOutput <$> examples
 
   pure $ testGroup "compilation" (examplesTests:compileTests)

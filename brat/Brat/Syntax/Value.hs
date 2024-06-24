@@ -226,7 +226,7 @@ data Monotone n
 
 instance Show (Monotone n) where
   show (Linear v) = show v
-  show (Full sm) = "2^(" ++ show sm ++ ") - 1"
+  show (Full sm) = "(2^(" ++ show sm ++ ") - 1)"
 
 -- Reference semantics for NumValue types
 class NumFun (t :: N -> Type) where
@@ -289,9 +289,11 @@ n2PowTimes n NumValue{..}
 nFull :: NumVal n -> NumVal n
 nFull NumValue{..} = case upshift of
   0 -> case grower of
-    Constant0 -> NumValue 1 Constant0
+    -- 2^0 - 1 = 0
+    Constant0 -> NumValue 0 Constant0
     StrictMonoFun sm -> NumValue 0 (StrictMonoFun (StrictMono 0 (Full sm)))
-  n -> n2PowTimes 1 (nFull (NumValue (n - 1) grower))
+  -- 2^(n + x) - 1  =  1 + 2 * (2^(n + x - 1) - 1)
+  n -> nPlus 1 (n2PowTimes 1 (nFull (NumValue (n - 1) grower)))
 
 pattern TNat, TInt, TFloat, TBool, TText, TUnit, TNil :: Val n
 pattern TNat = VCon  (PrefixName [] "Nat") []
