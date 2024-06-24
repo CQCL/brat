@@ -28,13 +28,16 @@ pattern CSucc, CDoub, CNil, CCons, CSome, CNone, CTrue, CFalse, CZero, CSnoc :: 
 pattern CSucc = PrefixName [] "succ"
 pattern CDoub = PrefixName [] "doub"
 pattern CNil = PrefixName [] "nil"
-pattern CCons = PrefixName [] "cons"
 pattern CSome = PrefixName [] "some"
 pattern CNone = PrefixName [] "none"
 pattern CTrue = PrefixName [] "true"
 pattern CFalse = PrefixName [] "false"
 pattern CZero = PrefixName [] "zero"
+pattern CCons = PrefixName [] "cons"
 pattern CSnoc = PrefixName [] "snoc"
+pattern CConcatEqEven = PrefixName [] "concatEqEven"
+pattern CConcatEqOdd = PrefixName [] "concatEqOdd"
+pattern CRiffle = PrefixName [] "riffle"
 
 pattern CList, CVec, CNat, CInt, COption, CBool, CBit, CFloat, CString :: UserName
 pattern CList = PrefixName [] "List"
@@ -97,6 +100,28 @@ defaultConstructors = M.fromList
        (REx ("elementType", Star []) (S0 ::- (REx ("tailLength", Nat) (S0 ::- R0))))
        (RPr ("tail", TVec (VApp (VInx (VS VZ)) B0) (VNum $ nVar (VInx VZ)))
         (RPr ("head", VApp (VInx (VS VZ)) B0) R0)))
+     ])
+  ,(CConcatEqEven, M.fromList
+     [(CVec, CArgs [VPVar, VPNum (NP2Times NPVar)] (Sy (Sy Zy))
+      -- Star should be a TypeFor m forall m?
+      (REx ("elementType", Star []) (S0 ::- (REx ("halfLength", Nat) (S0 ::- R0))))
+      (RPr ("lhs", TVec (VApp (VInx (VS VZ)) B0) (VApp (VInx VZ) B0))
+        (RPr ("rhs", TVec (VApp (VInx (VS VZ)) B0) (VApp (VInx VZ) B0)) R0)))
+     ])
+  ,(CRiffle, M.fromList
+     [(CVec, CArgs [VPVar, VPNum (NP2Times NPVar)] (Sy (Sy Zy))
+      -- Star should be a TypeFor m forall m?
+      (REx ("elementType", Star []) (S0 ::- (REx ("halfLength", Nat) (S0 ::- R0))))
+      (RPr ("evens", TVec (VApp (VInx (VS VZ)) B0) (VApp (VInx VZ) B0))
+        (RPr ("odds", TVec (VApp (VInx (VS VZ)) B0) (VApp (VInx VZ) B0)) R0)))
+     ])
+  ,(CConcatEqOdd, M.fromList
+     [(CVec, CArgs [VPVar, VPNum (NP1Plus (NP2Times NPVar))] (Sy (Sy Zy))
+      -- Star should be a TypeFor m forall m?
+      (REx ("elementType", Star []) (S0 ::- (REx ("halfLength", Nat) (S0 ::- R0))))
+      (RPr ("lhs", TVec (VApp (VInx (VS VZ)) B0) (VApp (VInx VZ) B0))
+        (RPr ("mid", VApp (VInx (VS VZ)) B0)
+          (RPr ("rhs", TVec (VApp (VInx (VS VZ)) B0) (VApp (VInx VZ) B0)) R0))))
      ])
   ,(CNone, M.fromList
      [(COption, CArgs [VPVar] (Sy Zy) (REx ("ty", Star []) (S0 ::- R0)) R0)])

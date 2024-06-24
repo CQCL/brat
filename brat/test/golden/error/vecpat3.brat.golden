@@ -2,5 +2,5 @@ Error in test/golden/error/vecpat3.brat@FC {start = Pos {line = 3, col = 5}, end
 fst3([a,b]) = none
     ^^^^^^^
 
-  Unification error: Couldn't unify 0 with 1
+  Unification error: Couldn't force 1 to be 0
 

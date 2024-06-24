@@ -2,5 +2,5 @@ Error in test/golden/error/vecpat.brat@FC {start = Pos {line = 3, col = 5}, end 
 fst3(nil) = none
     ^^^^^
 
-  Unification error: Couldn't unify 0 with 3
+  Unification error: Couldn't force 3 to be 0
 

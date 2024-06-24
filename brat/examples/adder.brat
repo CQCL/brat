@@ -1,0 +1,66 @@
+xor(Bool, Bool) -> Bool
+xor(false, b) = b
+xor(a, false) = a
+xor(true, true) = false
+
+and(Bool, Bool) -> Bool
+and(true, b) = b
+and(false, b) = false
+
+id(Bool) -> Bool
+id(b) = b
+
+halfAdder(Bool, Bool) -> twos :: Bool, ones :: Bool
+halfAdder(a, b) = and(a,b), xor(a,b)
+
+fullAdder(Bool, Bool, Bool) -> twos :: Bool, ones :: Bool
+fullAdder = halfAdder, id;
+            id, halfAdder;
+            xor, id
+
+adder(n :: #, Vec(Bool, n), Vec(Bool, n), carryIn :: Bool) -> carryOut :: Bool, Vec(Bool, n)
+adder(0, [], [], b) = b, []
+adder(succ(n), x ,- xs, y ,- ys, b) =
+  let c, zs = adder(n, xs, ys, b) in
+   let d, z = fullAdder(x, y, c) in
+    d, z ,- zs
+
+adderSnoc(n :: #, Vec(Bool, n), Vec(Bool, n), carryIn :: Bool) -> carryOut :: Bool, Vec(Bool, n)
+adderSnoc(0, [], [], b) = b, []
+adderSnoc(succ(n), xs -, x, ys -, y, b) =
+  let c, z = fullAdder(x, y, b) in
+   let d, zs = adderSnoc(n, xs, ys, c) in
+    d, zs -, z
+
+adderDivConquer(n :: #, Vec(Bool, n), Vec(Bool, n), carryIn :: Bool) -> carryOut :: Bool, Vec(Bool, n)
+adderDivConquer(0, [], [], b) = b, []
+adderDivConquer(doub(succ(n)), xsh =,= xsl, ysh =,= ysl, b) =
+  let c, zsl = adderDivConquer(succ(n), xsl, ysl, b) in
+   let d, zsh = adderDivConquer(succ(n), xsh, ysh, c) in
+    d, zsh =,= zsl
+adderDivConquer(succ(doub(n)), xsh =, xmid ,= xsl, ysh =, ymid ,= ysl, b) =
+  let c, zsl = adderDivConquer(n, xsl, ysl, b) in
+   let d, zmid = fullAdder(xmid, ymid, c) in
+    let e, zsh = adderDivConquer(n, xsh, ysh, d) in
+     e, zsh =, zmid ,= zsl
+
+if(X :: *, Bool, X, X) -> X
+if(_, true, then, _) = then
+if(_, false, _, else) = else
+
+fastAdder(n :: #, Vec(Bool, succ(full(n))), Vec(Bool, succ(full(n))), carryIn :: Bool) -> carryOut :: Bool, Vec(Bool, succ(full(n)))
+fastAdder(0, [x], [y], b) = let c, z = fullAdder(x, y, b) in c, [z]
+fastAdder(succ(n), xsh =,= xsl, ysh =,= ysl, b) =
+  fastAdder(n, xsh, ysh, true), fastAdder(n, xsh, ysh, false), fastAdder(n, xsl, ysl, b) |>
+  (d1, zsh1, d0, zsh0, c, zsl => if(Bool, c, d1, d0), if(Vec(Bool, succ(full(n))), c, zsh1, zsh0) =,= zsl)
+
+chop(n :: #, Vec(Bool, doub(n))) -> Vec(Bool, n), Vec(Bool, n)
+chop(n, hi =,= lo) = hi, lo
+
+multAndAddTwo(n :: #, mul1 :: Vec(Bool, succ(full(n))), mul2 :: Vec(Bool, succ(full(n))), add1 :: Vec(Bool, succ(full(n))), add2 :: Vec(Bool, succ(full(n))))
+            -> Vec(Bool, succ(full(succ(n))))
+multAndAddTwo(0, [m1], [m2], [a1], [a2]) = let b, a = fullAdder(and(m1, m2), a1, a2) in [b,a]
+multAndAddTwo(succ(n), msh1 =,= msl1, msh2 =,= msl2, ash1 =,= asl1, ash2 =,= asl2)
+ = let hilo1, lohi1, lohi2, lolo = chop(succ(full(n)), multAndAddTwo(n, msh1, msl2, ash1, ash2)), chop(succ(full(n)), multAndAddTwo(n, msl1, msl2, asl1, asl2)) in
+    let hilo2, lohi = chop(succ(full(n)), multAndAddTwo(n, msl1, msh2, lohi1, lohi2)) in
+     multAndAddTwo(n, msh1, msh2, hilo1, hilo2) =,= lohi =,= lolo

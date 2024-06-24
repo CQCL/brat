@@ -1,0 +1,42 @@
+sort(n :: #, Vec(Nat, succ(full(n)))) -> Vec(Nat, succ(full(n)))
+sort(0, [x]) = [x]
+sort(succ(n), xs =,= ys) = merge(n, sort(n, xs), sort(n, ys))
+
+-- Compare And Swap
+cas(Nat, Nat) -> Nat, Nat
+cas(0, b) = 0, b
+cas(a, 0) = 0, a
+cas(succ(a), succ(b)) = let a', b' = cas(a, b) in succ(a'), succ(b')
+-- Quite annoying that we can't write this version!
+-- cas(succ(a), succ(b)) = cas(a, b) |> { succ(_), succ(_) }
+
+-- Should make some syntactic sugar for 2^n
+-- Merging two sorted vectors into one
+merge(n :: #, Vec(Nat, succ(full(n))), Vec(Nat, succ(full(n)))) -> Vec(Nat, succ(full(succ(n))))
+merge(0, [x], [y]) = cas(x, y) |> (x, y => [x, y]) -- Need to merge fan{in,out}!
+merge(succ(n), xs0 =%= xs1, ys0 =%= ys1)
+ = fixOffBy1(succ(n), merge(n, xs0, ys0) =%= merge(n, xs1, ys1))
+
+-- It would be nice to write:
+-- = merge(n, xs0, ys0) =%= merge(n, xs1, ys1) |>
+--   {fixOffBy1(n, _)}
+-- or even:
+-- = merge(n, xs0, ys0) =%= merge(n, xs1, ys1) |>
+--   (zs => fixOffBy1(n, zs))
+
+
+-- Example of how to write with vectorising `of`
+--fixOffBy1(n :: #, Vec(Nat, succ(full(succ(n))))) -> Vec(Nat, succ(full(succ(n))))
+--fixOffBy1(n, lo ,- (mid0 =%= mid1) -, hi) =
+-- Example of how to write with vectorising `of`
+--  let mid0, mid1 = (full(n) of cas)(mid0, mid1)
+--  in  lo, (mid0' =%= mid1'), hi
+
+fixOffBy1(n :: #, Vec(Nat, succ(full(succ(n))))) -> Vec(Nat, succ(full(succ(n))))
+fixOffBy1(n, lo ,- mid -, hi) = lo ,- casses(full(n), mid) -, hi
+
+casses(m :: #, Vec(Nat, doub(m))) -> Vec(Nat, doub(m))
+casses(0, []) = []
+casses(succ(m), a ,- b ,- cs) =
+  let a', b' = cas(a, b) in
+    a' ,- b' ,- casses(m, cs)

@@ -38,8 +38,15 @@ pattern PSome x     = PCon (PrefixName [] "some") (APat x)
 pattern POnePlus x  = PCon (PrefixName [] "succ") (APat x)
 pattern PTwoTimes x = PCon (PrefixName [] "doub") (APat x)
 
-pattern PCons :: Pattern -> Pattern -> Pattern
+-- Vector Patterns
+pattern PCons, PSnoc, PConcatEqEven, PRiffle :: Pattern -> Pattern -> Pattern
 pattern PCons x xs  = PCon (PrefixName [] "cons") (APat x :||: APat xs)
+pattern PSnoc xs x = PCon (PrefixName [] "snoc") (APat xs :||: APat x)
+pattern PConcatEqEven xs ys = PCon (PrefixName [] "concatEqEven") (APat xs :||: APat ys)
+pattern PRiffle xs ys = PCon (PrefixName [] "riffle") (APat xs :||: APat ys)
+
+pattern PConcatEqOdd :: Pattern -> Pattern -> Pattern -> Pattern
+pattern PConcatEqOdd xs y zs = PCon (PrefixName [] "concatEqOdd") (APat xs :||: APat y :||: APat zs)
 
 -- Ways to bind a row of things
 data Abstractor

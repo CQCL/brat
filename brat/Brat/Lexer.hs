@@ -54,6 +54,12 @@ data Tok
  | Dollar
  | Underscore
  | Pipe
+ | Cons
+ | Snoc
+ | ConcatEqEven
+ | ConcatEqOddL
+ | ConcatEqOddR
+ | Riffle
  deriving Eq
 
 instance Show Tok where
@@ -92,6 +98,13 @@ instance Show Tok where
   show Dollar = "$"
   show Underscore = "_"
   show Pipe = "|"
+  show Cons = ",-"
+  show Snoc = "-,"
+  show ConcatEqEven = "=,="
+  show ConcatEqOddL = "=,"
+  show ConcatEqOddR = ",="
+  show Riffle = "=%="
+
 
 data Token = Token { fc :: FC
                    , _tok :: Tok
@@ -172,9 +185,15 @@ tok = (   try (char '(' $> LParen)
       <|> try (Hole <$> (char '?' *> ident))
       <|> try (string "::" $> TypeColon)
       <|> try (char ':' $> PortColon)
-      <|> try (char '=' $> Equal)
       <|> try (char ';' $> Semicolon)
       <|> try (string "|>" $> Into)
+      <|> try (string ",-" $> Cons)
+      <|> try (string "-," $> Snoc)
+      <|> try (string "=,=" $> ConcatEqEven)
+      <|> try (string "=," $> ConcatEqOddL)
+      <|> try (string ",=" $> ConcatEqOddR)
+      <|> try (string "=%=" $> Riffle)
+      <|> try (char '=' $> Equal)
       <|> try (char ',' $> Comma)
       <|> try (string ".." $> DotDot)
       <|> try (string "<-" $> KindColon)

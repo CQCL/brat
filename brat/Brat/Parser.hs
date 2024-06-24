@@ -1,9 +1,15 @@
 module Brat.Parser (parseFile) where
 
+import Brat.Constructors (pattern CCons,
+                          pattern CSnoc,
+                          pattern CConcatEqEven,
+                          pattern CConcatEqOdd,
+                          pattern CRiffle)
 import Brat.Error
 import Brat.FC
 import Brat.Lexer
 import qualified Brat.Lexer as Lexer
+import Brat.Syntax.Abstractor
 import Brat.Syntax.Common hiding (end)
 import qualified Brat.Syntax.Common as Syntax
 import Brat.Syntax.Concrete
@@ -169,8 +175,8 @@ abstractor = do ps <- many (try portPull)
                 pure $ if null ps then xs else APull ps xs
  where
   binding :: Parser Abstractor
-  binding = (try (APat <$> pat) <|> round abstractor)
-  vecPat = square (binding `sepBy`  (match Comma)) >>= list2Cons
+  binding = (try (APat <$> bigPat) <|> round abstractor)
+  vecPat = square (binding `sepBy` (match Comma)) >>= list2Cons
 
   list2Cons :: [Abstractor] -> Parser Pattern
   list2Cons [] = pure PNil
@@ -182,13 +188,30 @@ abstractor = do ps <- many (try portPull)
   binderComma :: Parser (Abstractor -> Abstractor -> Abstractor)
   binderComma = match Comma $> (:||:)
 
-  pat :: Parser Pattern
-  pat = try vecPat
+  -- For simplicity, we can say for now that all of our infix vector patterns have
+  -- the same precedence and associate to the right
+  bigPat :: Parser Pattern
+  bigPat = do
+    lhs <- weePat
+    rest <- optional $
+            PCons lhs <$ match Cons
+            <|> PSnoc lhs <$ match Snoc
+            <|> PConcatEqEven lhs <$ match ConcatEqEven
+            <|> PConcatEqOdd lhs <$ match ConcatEqOddL <*> weePat <* match ConcatEqOddR
+            <|> PRiffle lhs <$ match Riffle
+    case rest of
+      Just f -> f <$> bigPat
+      Nothing -> pure lhs
+
+
+  weePat :: Parser Pattern
+  weePat = try vecPat
     <|> (match Underscore $> DontCare)
     <|> try (Lit <$> simpleTerm)
     <|> try constructorsWithArgs
     <|> try nullaryConstructors
     <|> (Bind <$> simpleName)
+    <|> (round bigPat)
    where
     constructor :: Parser Abstractor -> String -> Parser Pattern
     constructor pabs c = do
@@ -351,14 +374,35 @@ cthunk = try bratFn <|> try kernel <|> thunk
 
 -- Expressions that can occur inside juxtapositions and vectors (i.e. everything with a higher
 -- precedence than juxtaposition). Precedence table (loosest to tightest binding):
+--    -, ,- =,= =,_,= =%=  (vector builders) (all right-assoc (for now!) and same precedence)
 --    + -  (left-assoc)
 --    * /  (left-assoc)
 --    ^    (left-assoc)
 --    ::   (no associativity, i.e. explicit parenthesis required for chaining)
 --    app  (left-assoc)
 atomExpr :: Parser Flat
-atomExpr = atomExpr' 0
+atomExpr = vectorBuild
  where
+  -- Top level parser, looks for vector constructors with `atomExpr'`s as their
+  -- elements.
+  vectorBuild :: Parser Flat
+  vectorBuild = do
+    lhs <- withFC (atomExpr' 0)
+    rest <- optional $
+            (CCons, [lhs]) <$ match Cons
+            <|> (CSnoc, [lhs]) <$ match Snoc
+            <|> (CConcatEqEven, [lhs]) <$ match ConcatEqEven
+            <|> (CConcatEqOdd,) . ([lhs] ++) . (:[]) <$ match ConcatEqOddL <*> withFC (atomExpr' 0) <* match ConcatEqOddR
+            <|> (CRiffle, [lhs]) <$ match Riffle
+    case rest of
+      Just (c, args) -> do
+        rhs <- withFC vectorBuild
+        pure (FCon c (mkJuxt (args ++ [rhs])))
+      Nothing -> pure (unWC lhs)
+
+  mkJuxt [x] = x
+  mkJuxt (x:xs) = let rest = mkJuxt xs in WC (FC (start (fcOf x)) (end (fcOf rest))) (FJuxt x rest)
+
   atomExpr' n = choice $ drop n [
     try (addSub <?> "addition or subtraction"),
     try (mulDiv <?> "multiplication or division"),

@@ -30,15 +30,55 @@ invalidExamples = map ((++ ".brat") . ("examples" </>)) ["vector", "pass", "thun
 -- examples that we expect not to compile
 -- Note this includes those with remaining holes; it would be better
 -- to detect those automatically (as this is not a bug, they *shouldn't* compile)
--- N.B. many of these are victims of #389
 nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
-  map ((++ ".brat") . ("examples" </>)) [
-  "alias", "app", "arith", "bell", "composition", "cons", "cqcconf",
-  "dollar_kind", "first", "full", "fzbz", "graph", "holes", "imports", "into",
-  "ising", "kernel", "kernel-syntax", "kinds", "klet",
-  "let", "lib/kernel", "list", "listpair", "one",
-  "patterns", "portpulling", "qft", "repeated_app", "rus", "second",
-  "test", "tups", "teleportation", "unified", "vec_check", "vector", "vlup_covering"])
+  map ((++ ".brat") . ("examples" </>))
+  ["alias"
+  ,"app"
+  ,"composition"
+  ,"cons"
+  ,"dollar_kind"
+  ,"first"
+  ,"fzbz"
+  ,"full"
+  ,"graph"
+  ,"holes"
+  ,"into"
+  ,"ising"
+  ,"kernel"
+  ,"kernel-syntax"
+  ,"kinds"
+  ,"let"
+  ,"lib/kernel"
+  ,"list"
+  ,"listpair"
+  ,"one"
+  ,"patterns"
+  ,"portpulling"
+  ,"qft"
+  ,"repeated_app"
+  ,"second"
+  ,"test"
+  ,"tups"
+  ,"unified"
+  ,"vec_check"
+  ,"vector"
+  -- Conjecture: These examples don't compile because number patterns in type
+  -- signatures causes `kindCheck` to call `abstract`, creating "Selector"
+  -- nodes, which we don't attempt to compile because we want to get rid of them
+  ,"adder"
+  ,"batcher-merge-sort"
+  ,"vec-pats"
+  -- Victims of #389
+  ,"arith"
+  ,"bell"
+  ,"cqcconf"
+  ,"imports"
+  ,"ising"
+  ,"klet"
+  ,"rus"
+  ,"teleportation"
+  ,"vlup_covering"
+  ])
 
 compileToOutput :: FilePath -> TestTree
 compileToOutput file = testCase (show file) $ do
