@@ -32,6 +32,8 @@ main = do
 
   runServer $ ServerDefinition
       { defaultConfig = ()
+      , configSection = ""
+      , parseConfig = \() _ -> Right ()
       , onConfigChange = \() -> pure ()
       , doInitialize = \env _ -> pure (Right env)
       -- Ignore ClientCapabilities argument
