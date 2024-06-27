@@ -1,5 +1,6 @@
 module Brat.Error (ParseError(..)
                   ,LengthConstraintF(..), LengthConstraint
+                  ,BracketErrMsg(..)
                   ,ErrorMsg(..)
                   ,Error(..), showError
                   ,SrcErr(..)
@@ -9,6 +10,7 @@ module Brat.Error (ParseError(..)
                   ) where
 
 import Brat.FC
+import Data.Bracket
 
 import Data.List (intercalate)
 import System.Exit
@@ -24,6 +26,27 @@ instance Show a => Show (LengthConstraintF a) where
   show (LongerThan a) = "(> " ++ show a ++ ")"
 
 type LengthConstraint = LengthConstraintF Int
+
+data BracketErrMsg
+  = EOFInBracket BracketType -- FC points to the open bracket
+  | OpenCloseMismatch (FC, BracketType) BracketType -- Closer FC is in the `Err` fc
+  | UnexpectedClose BracketType
+
+instance Show BracketErrMsg where
+  show (EOFInBracket b) = "File ended before this " ++ showOpen b ++ " was closed"
+  show (OpenCloseMismatch (openFC, bOpen) bClose) = unwords ["This"
+                                                            ,showClose bClose
+                                                            ,"doesn't match the"
+                                                            ,showOpen bOpen
+                                                            ,"at"
+                                                            ,show openFC
+                                                            ]
+  show (UnexpectedClose b) = unwords ["There is no"
+                                     ,showOpen b
+                                     ,"for this"
+                                     ,showClose b
+                                     ,"to close"
+                                     ]
 
 data ErrorMsg
  = TypeErr String
@@ -80,6 +103,7 @@ data ErrorMsg
  | WrongModeForType String
  -- TODO: Add file context here
  | CompilingHoles [String]
+ | BracketErr BracketErrMsg
 
 instance Show ErrorMsg where
   show (TypeErr x) = "Type error: " ++ x

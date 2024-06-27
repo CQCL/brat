@@ -4,6 +4,7 @@ import Brat.Constructors.Patterns
 import Brat.Error
 import Brat.FC
 import Brat.Lexer (lex)
+import Brat.Lexer.Bracketed (BToken(..), brackets)
 import Brat.Lexer.Token (Keyword(..), Token(..), Tok(..))
 import qualified Brat.Lexer.Token as Lexer
 import Brat.Syntax.Abstractor
@@ -15,16 +16,18 @@ import Brat.Syntax.Raw
 import Brat.Syntax.Simple
 import Brat.UserName ( plain, UserName(..) )
 import Brat.Elaborator
+import Data.Bracket
 import Util ((**^))
 
 import Control.Monad (void)
 import Control.Monad.State (State, evalState, runState, get, put)
 import Data.Bifunctor
+import Data.Either.HT (maybeRight)
+import Data.Foldable (msum)
+import Data.Functor (($>), (<&>))
 import Data.List (intercalate)
 import Data.List.HT (chop, viewR)
 import Data.List.NonEmpty (toList, NonEmpty(..), nonEmpty)
-import Data.Foldable (msum)
-import Data.Functor (($>), (<&>))
 import Data.Maybe (fromJust, maybeToList, fromMaybe)
 import Data.Set (empty)
 import Prelude hiding (lex, round)
@@ -34,83 +37,112 @@ import qualified Text.Megaparsec as M (parse)
 newtype CustomError = Custom String deriving (Eq, Ord)
 
 -- the State is the (FC) Position of the last token *consumed*
-type Parser a = ParsecT CustomError [Token] (State Pos) a
+type Parser a = ParsecT CustomError [BToken] (State Pos) a
 
-parse :: Parser a -> String -> [Token] -> Either (ParseErrorBundle [Token] CustomError) a
+parse :: Parser a -> String -> [BToken] -> Either (ParseErrorBundle [BToken] CustomError) a
 parse p s tks = evalState (runParserT p s tks) (Pos 0 0)
 
 instance ShowErrorComponent CustomError where
   showErrorComponent (Custom s) = s
 
-
+{-
 withFC :: Parser a -> Parser (WC a)
 withFC p = do
-  (Token (FC start _) _) <- nextToken
+  fc <- nextToken <&> \case
+    Bracketed fc _ _ -> fc
+    FlatTok (Token fc _) -> fc
   thing <- p
   end <- get
-  pure (WC (FC start end) thing)
+  pure (WC (FC (start fc) end) thing)
+-}
+withFC :: Parser a -> Parser (WC a)
+withFC p = undefined
 
-nextToken :: Parser Token
+nextToken :: Parser BToken
 nextToken = lookAhead $ token Just empty
+
+matchTokFC :: (Tok -> Maybe a) -> Parser (WC a)
+matchTokFC f = token (matchTok f) empty
 
 token0 :: (Tok -> Maybe a) -> Parser a
 token0 f = do
-  (fc, r) <- token (\(Token fc t) -> (fc,) <$> f t) empty
+  WC fc r <- token (matchTok f) empty
   -- token matched condition f
   put (end fc)
   pure r
 
+matchFC :: Tok -> Parser (WC ())
+matchFC tok = label (show tok) $ token (matchTok f) empty
+ where
+  f :: Tok -> Maybe ()
+  f t | t == tok = Just ()
+      | otherwise = Nothing
+
 match :: Tok -> Parser ()
-match tok = label (show tok) $ token0 $ \t -> if t == tok then Just () else Nothing
+match = fmap unWC . matchFC
+
+matchTok :: (Tok -> Maybe a) -> BToken -> Maybe (WC a)
+matchTok f (FlatTok (Token fc t)) = (WC fc) <$> f t
+-- Returns the FC at the beginning of the token
+matchTok f (Bracketed _ Paren [t]) = matchTok f t
+matchTok _ _ = Nothing
+
+kmatchFC :: Keyword -> Parser (WC ())
+kmatchFC = matchFC . K
 
 kmatch :: Keyword -> Parser ()
 kmatch = match . K
 
-matchString :: String -> Parser ()
-matchString s = ident $ \x -> if x == s then Just () else Nothing
+matchString :: String -> Parser (WC ())
+matchString s = label (show s) $ matchTokFC $ \case
+  Ident ident | ident == s -> Just ()
+  _ -> Nothing
+
 
 ident :: (String -> Maybe a) -> Parser a
 ident f = label "identifier" $ token0 $ \case
   Ident str -> f str
   _ -> Nothing
 
-hole :: Parser String
-hole = label "hole" $ token0 $ \case
+hole :: Parser (WC String)
+hole = label "hole" $ matchTokFC $ \case
   Hole h -> Just h
   _ -> Nothing
 
-simpleName :: Parser String
-simpleName = token0 $ \case
+simpleName :: Parser (WC String)
+simpleName = matchTokFC $ \case
   Ident str -> Just str
   _ -> Nothing
 
-qualifiedName :: Parser UserName
-qualifiedName = (<?> "qualified name") . token0 $ \case
+qualifiedName :: Parser (WC UserName)
+qualifiedName = label "qualified name" $ matchTokFC $ \case
   QualifiedId prefix str -> Just (PrefixName (toList prefix) str)
   _ -> Nothing
 
-userName :: Parser UserName
-userName = (<?> "name") $ try qualifiedName <|> (PrefixName [] <$> simpleName)
+userName :: Parser (WC UserName)
+userName = (<?> "name") $ try qualifiedName <|> (fmap (PrefixName []) <$> simpleName)
 
-round :: Parser a -> Parser a
-round p = label "(...)" $ match LParen *> p <* match RParen
+inBrackets :: BracketType -> Parser a -> Parser a
+inBrackets b p = unWC <$> inBracketsFC b p
 
-square :: Parser a -> Parser a
-square p = label "[...]" $ match LBracket *> p <* match RBracket
+inBracketsFC :: BracketType -> Parser a -> Parser (WC a)
+inBracketsFC b p = label lbl $ flip token empty $ \case
+  Bracketed fc b' xs | b == b' -> (WC fc) <$> maybeRight (parse p "" xs)
+  _ -> Nothing
+ where
+  lbl = showOpen b ++ "..." ++ showClose b
 
-curly :: Parser a -> Parser a
-curly p = label "{...}" $ match LBrace *> p <* match RBrace
+--  f :: Parser a -> BToken -> Maybe (WC a)
+--  f p (Bracketed fc b' xs) | b == b' = (WC fc) <$> parseMaybe p xs
+--  f _ _ = Nothing
 
-inLet :: Parser a -> Parser a
-inLet p = label "let ... in" $ kmatch KLet *> p <* kmatch KIn
-
-number :: Parser Int
-number = label "nat" $ token0 $ \case
+number :: Parser (WC Int)
+number = label "nat" $ matchTokFC $ \case
   Number n -> Just n
   _ -> Nothing
 
-float :: Parser Double
-float = label "float" $ token0 $ \case
+float :: Parser (WC Double)
+float = label "float" $ matchTokFC $ \case
   FloatLit x -> Just x
   _ -> Nothing
 
@@ -119,21 +151,21 @@ comment = label "Comment" $ token0 $ \case
   Comment _ -> Just ()
   _ -> Nothing
 
-string :: Parser String
-string = token0 $ \case
+string :: Parser (WC String)
+string = matchTokFC $ \case
   Quoted txt -> Just txt
   _ -> Nothing
 
-var :: Parser Flat
-var = FVar <$> userName
+var :: Parser (WC Flat)
+var = fmap FVar <$> userName
 
+port :: Parser (WC String)
 port = simpleName
 
 comma :: Parser (WC Flat -> WC Flat -> WC Flat)
 comma = token0 $ \case
   Comma -> Just $ \a b ->
-    let fc = FC (start (fcOf a)) (end (fcOf b))
-    in  WC fc (FJuxt a b)
+    WC (spanFCOf a b) (FJuxt a b)
   _ -> Nothing
 
 arith :: ArithOp -> Parser (WC Flat -> WC Flat -> WC Flat)
@@ -158,109 +190,151 @@ chainl1 px pf = px >>= rest
     Just (f, y) -> rest (f x y)
     Nothing     -> pure x
 
-abstractor :: Parser Abstractor
+abstractor :: Parser (WC Abstractor)
 abstractor = do ps <- many (try portPull)
-                xs <- binding `chainl1` try binderComma
-                pure $ if null ps then xs else APull ps xs
+                abs <- binders
+                pure $ if null ps
+                       then abs
+                       else let fc = spanFCOf (head ps) abs in WC fc (APull (unWC <$> ps) (unWC abs))
  where
-  binding :: Parser Abstractor
-  binding = (try (APat <$> bigPat) <|> round abstractor)
-  vecPat = square (binding `sepBy` (match Comma)) >>= list2Cons
+  -- Minus port pulling
+  binders = try (joinBinders <$> ((:|) <$> binding <*> (many (match Comma *> binding))))
+   where
+    joinBinders xs = let (abs, startFC, endFC) = joinBindersAux xs in WC (spanFC startFC endFC) abs
+
+    joinBindersAux (WC fc x :| []) = (x, fc, fc)
+    joinBindersAux (WC fc x :| (y:ys)) = let (abs, startFC, endFC) = joinBindersAux (y :| ys) in
+                                           (x :||: abs, fc, endFC)
+
+  binding :: Parser (WC Abstractor)
+  binding = try (fmap APat <$> bigPat) <|> inBrackets Paren abstractor
+
+  vecPat :: Parser (WC Pattern)
+  vecPat = do
+    WC fc elems <- inBracketsFC Bracket ((unWC <$> binding) `sepBy` (match Comma))
+    WC fc <$> list2Cons elems
 
   list2Cons :: [Abstractor] -> Parser Pattern
   list2Cons [] = pure PNil
   list2Cons (APat x:xs) = PCons x <$> (list2Cons xs)
   list2Cons _ = customFailure (Custom "Internal error list2Cons")
 
-  portPull = simpleName <* match PortColon
+  portPull = port <* match PortColon
 
-  binderComma :: Parser (Abstractor -> Abstractor -> Abstractor)
   binderComma = match Comma $> (:||:)
 
   -- For simplicity, we can say for now that all of our infix vector patterns have
   -- the same precedence and associate to the right
-  bigPat :: Parser Pattern
+  bigPat :: Parser (WC Pattern)
   bigPat = do
-    lhs <- weePat
+    WC lfc lhs <- weePat
     rest <- optional $
             PCons lhs <$ match Cons
             <|> PSnoc lhs <$ match Snoc
             <|> PConcatEqEven lhs <$ match ConcatEqEven
-            <|> PConcatEqOdd lhs <$ match ConcatEqOddL <*> weePat <* match ConcatEqOddR
+            <|> PConcatEqOdd lhs <$ match ConcatEqOddL <*> (unWC <$> weePat) <* match ConcatEqOddR
             <|> PRiffle lhs <$ match Riffle
     case rest of
-      Just f -> f <$> bigPat
-      Nothing -> pure lhs
+      Just f -> do
+        WC rfc rhs <- bigPat
+        pure $ WC (spanFC lfc rfc) (f rhs)
+      Nothing -> pure (WC lfc lhs)
 
 
-  weePat :: Parser Pattern
+  weePat :: Parser (WC Pattern)
   weePat = try vecPat
-    <|> (match Underscore $> DontCare)
-    <|> try (Lit <$> simpleTerm)
-    <|> try constructorsWithArgs
+    <|> (fmap (const DontCare) <$> matchFC Underscore)
+    <|> try (fmap Lit <$> simpleTerm)
+    <|> try (constructorsWithArgs)
     <|> try nullaryConstructors
-    <|> (Bind <$> simpleName)
-    <|> (round bigPat)
+    <|> (fmap Bind <$> simpleName)
+    <|> (inBrackets Paren bigPat)
    where
-    constructor :: Parser Abstractor -> String -> Parser Pattern
-    constructor pabs c = do
-      matchString c
-      PCon (plain c) <$> pabs
+    nullaryConstructor c = do
+      WC fc () <- matchString c
+      pure $ WC fc (PCon (plain c) AEmpty)
 
-    nullaryConstructors = msum (try . constructor (pure AEmpty) <$> ["zero", "nil", "none", "true", "false"])
+    nullaryConstructors = msum (try . nullaryConstructor <$> ["zero", "nil", "none", "true", "false"])
 
-    constructorsWithArgs = msum (try . constructor (round abstractor) <$> ["succ", "doub", "cons", "some"])
+    constructorWithArgs :: String -> Parser (WC Pattern)
+    constructorWithArgs c = do
+      str <- matchString c
+      abs <- inBracketsFC Paren (unWC <$> abstractor)
+      pure $ WC (spanFCOf str abs) (PCon (plain c) (unWC abs))
 
-simpleTerm :: Parser SimpleTerm
+    constructorsWithArgs = msum (try . constructorWithArgs <$> ["succ", "doub", "cons", "some"])
+
+simpleTerm :: Parser (WC SimpleTerm)
 simpleTerm =
-  (Text <$> string <?> "string")
-  <|> try (Float . negate <$> (match Minus *> float) <?> "float")
-  <|> try (Float <$> float <?> "float")
-  <|> (Num . negate <$> (match Minus *> number) <?> "nat")
-  <|> (Num <$> number <?> "nat")
+  (fmap Text <$> string <?> "string")
+  <|> try (maybeNegative Float float <?> "float")
+  <|> maybeNegative Num number <?> "nat"
 
-outputs :: Parser [RawIO]
-outputs = rawIO (unWC <$> vtype)
-
-typekind :: Parser TypeKind
-typekind = try (match Hash $> Nat) <|> kindHelper Lexer.Dollar Syntax.Dollar <|> kindHelper Asterisk Star
  where
-  kindHelper tok c  = do
-    match tok
-    margs <- optional (round row)
-    pure $ c (concat $ maybeToList margs)
+  maybeNegative :: Num a => (a -> SimpleTerm) -> Parser (WC a)
+                -> Parser (WC SimpleTerm)
+  maybeNegative f p = do
+    minusFC <- fmap fcOf <$> optional (matchFC Minus)
+    WC nFC n <- p
+    pure $ case minusFC of
+      Nothing -> WC nFC (f n)
+      Just minusFC -> WC (spanFC minusFC nFC) (f (negate n))
 
-  row = (`sepBy` match Comma)  $ do
-    p <- port
+typekind :: Parser (WC TypeKind)
+typekind = try (fmap (const Nat) <$> matchFC Hash) <|> kindHelper Lexer.Dollar Syntax.Dollar <|> kindHelper Asterisk Star
+ where
+  kindHelper tok con  = do
+    WC conFC () <- matchFC tok
+    margs <- optional (inBracketsFC Paren row)
+    let (fc, args) = maybe
+                     (conFC, [])
+                     (\(WC argsFC args) -> (FC (start conFC) (end argsFC), args))
+                     margs
+    pure $ WC fc (con args)
+
+
+  row :: Parser [(PortName, TypeKind)]
+  row = (`sepBy` match Comma) $ do
+    p <- unWC <$> port
     match TypeColon
-    (p,) <$> typekind
+    ((p,) . unWC) <$> typekind
 
 vtype :: Parser (WC (Raw Chk Noun))
 vtype = cnoun (expr' PApp)
 
 -- Parse a row of type and kind parameters
 -- N.B. kinds must be named
-rawIO :: Parser ty -> Parser (TypeRow (KindOr ty))
-rawIO tyP = rowElem `sepBy` void (try comma)
+-- TODO: Update definitions so we can retain the FC info, instead of forgetting it
+rawIOFC :: Parser (TypeRow (WC (KindOr RawVType)))
+rawIOFC = rowElem `sepBy` void (try comma)
  where
-  rowElem = try (round rowElem') <|> rowElem'
+  rowElem :: Parser (TypeRowElem (WC (KindOr RawVType)))
+  rowElem = try (inBrackets Paren rowElem') <|> rowElem'
 
-  rowElem' = try namedKind <|> try namedType <|> (Anon . Right <$> tyP)
+  rowElem' :: Parser (TypeRowElem (WC (KindOr RawVType)))
+  rowElem' = try namedKind <|> try namedType <|> ((\(WC tyFC ty) -> Anon (WC tyFC (Right ty))) <$> vtype)
 
+  namedType :: Parser (TypeRowElem (WC (KindOr RawVType)))
   namedType = do
-    p <- port
+    WC pFC p <- port
     match TypeColon
-    Named p . Right <$> tyP
+    WC tyFC ty <- vtype
+    pure (Named p (WC (spanFC pFC tyFC) (Right ty)))
 
+  namedKind :: Parser (TypeRowElem (WC (KindOr ty)))
   namedKind = do
-    p <- port
+    WC pFC p <- port
     match TypeColon
-    Named p . Left <$> typekind
+    WC kFC k <- typekind
+    pure (Named p (WC (spanFC pFC kFC) (Left k)))
+
+rawIO :: Parser [RawIO]
+rawIO = fmap (fmap unWC) <$> rawIOFC
 
 rawIO' :: Parser ty -> Parser (TypeRow ty)
 rawIO' tyP = rowElem `sepBy` void (try comma)
  where
-  rowElem = try (round rowElem') <|> rowElem'
+  rowElem = try (inBrackets Paren rowElem') <|> rowElem'
 
   -- Look out if we can find ::. If not, backtrack and just do tyP.
   -- For example, if we get an invalid primitive type (e.g. `Int` in
@@ -268,33 +342,44 @@ rawIO' tyP = rowElem `sepBy` void (try comma)
   -- error message from tyP instead of complaining about a missing ::
   -- (since the invalid type can be parsed as a port name)
   rowElem' = optional (try $ port <* match TypeColon) >>= \case
-       Just p -> Named p <$> tyP
+       Just (WC _ p) -> Named p <$> tyP
        Nothing -> Anon <$> tyP
 
-functionType :: Parser RawVType
-functionType = try (RFn <$> ctype) <|> (RKernel <$> kernel)
+spanningFC :: TypeRow (WC ty) -> Parser (WC (TypeRow ty))
+spanningFC [] = customFailure (Custom "Internal: RawIO shouldn't be empty")
+spanningFC [x] = pure (WC (fcOf $ forgetPortName x) [unWC <$> x])
+spanningFC (x:xs) = pure (WC (spanFC (fcOf $ forgetPortName x) (fcOf . forgetPortName $ last xs)) (fmap unWC <$> (x:xs)))
+
+rawIOWithSpanFC :: Parser (WC [RawIO])
+rawIOWithSpanFC = spanningFC =<< rawIOFC
+
+functionType :: Parser (WC RawVType)
+functionType = try (fmap RFn <$> ctype) <|> (fmap RKernel <$> kernel)
  where
-  ctype :: Parser RawCType
+  ctype :: Parser (WC RawCType)
   ctype = do
-    ins <- round $ rawIO (unWC <$> vtype)
+    WC startFC ins <- inBracketsFC Paren $ rawIO
     match Arrow
-    outs <- rawIO (unWC <$> vtype)
-    pure (ins :-> outs)
+    WC endFC outs <- rawIOWithSpanFC
+    pure (WC (spanFC startFC endFC) (ins :-> outs))
 
-  kernel :: Parser RawKType
+  kernel :: Parser (WC RawKType)
   kernel = do
-    ins <- round $ rawIO' (unWC <$> vtype)
+    WC startFC ins <- inBracketsFC Paren $ rawIO' (unWC <$> vtype)
     match Lolly
-    outs <- rawIO' (unWC <$> vtype)
-    pure (ins :-> outs)
+    WC endFC outs <- spanningFC =<< rawIO' vtype
+    pure (WC (spanFC startFC endFC) (ins :-> outs))
 
 
-vec :: Parser Flat
-vec = (\(WC fc x) -> unWC $ vec2Cons (end fc) x) <$>  withFC (square elems)
+vec :: Parser (WC Flat)
+vec = (\(WC fc x) -> vec2Cons (end fc) x) <$> (inBracketsFC Bracket elems)
   where
     elems = (element `chainl1` (try vecComma)) <|> pure []
     vecComma = match Comma $> (++)
-    element = (:[]) <$> withFC (expr' (succ PJuxtPull))
+
+    element :: Parser [WC Flat]
+    element = (:[]) <$> (expr' (succ PJuxtPull))
+
     mkNil fc = FCon (plain "nil") (WC fc FEmpty)
 
     vec2Cons :: Pos -> [WC Flat] -> WC Flat
@@ -306,34 +391,39 @@ vec = (\(WC fc x) -> unWC $ vec2Cons (end fc) x) <$>  withFC (square elems)
       WC fc $ FCon (plain "cons") (WC fc (FJuxt x (vec2Cons end xs)))
 
 
-cthunk :: Parser Flat
+cthunk :: Parser (WC Flat)
 cthunk = try bratFn <|> try kernel <|> thunk
  where
-  bratFn = curly $ do
-    ss <- rawIO (unWC <$> vtype)
+  bratFn = inBracketsFC Brace $ do
+    ss <- rawIO
     match Arrow
-    ts <- rawIO (unWC <$> vtype)
+    ts <- rawIO
     pure $ FFn (ss :-> ts)
 
-  kernel = curly $ do
+  kernel = inBracketsFC Brace $ do
     ss <- rawIO' (unWC <$> vtype)
     match Lolly
     ts <- rawIO' (unWC <$> vtype)
     pure $ FKernel (ss :-> ts)
 
-  -- Explicit lambda or brace section
-  thunk = FThunk <$> withFC (curly braceSection)
 
+  -- Explicit lambda or brace section
+  thunk :: Parser (WC Flat)
+  thunk = do
+    WC bracesFC th <- inBracketsFC Brace braceSection
+    pure (WC bracesFC (FThunk th))
+
+  braceSection :: Parser (WC Flat)
   braceSection = do
-    e <- withFC expr
+    e <- expr
     -- Replace underscores with invented variable names '1, '2, '3 ...
     -- which are illegal for the user to use as variables
     case runState (replaceU e) 0 of
-      (e', 0) -> pure (unWC e')
+      (e', 0) -> pure e'
       -- If we don't have a `=>` at the start of a kernel, it could (and should)
       -- be a verb, not the RHS of a no-arg lambda
-      (e', n) -> let abs = braceSectionAbstractor [0..n-1] in
-                 pure $ FLambda (((WC (fcOf e) abs), e') :| [])  -- TODO: Which FC to use for the abstracor?
+      (e', n) -> let abs = braceSectionAbstractor [0..n-1]
+                 in pure $ WC (fcOf e) $ FLambda (((WC (fcOf e) abs), e') :| [])
 
   replaceU :: WC Flat -> State Int (WC Flat)
   replaceU (WC fc x) = WC fc <$> replaceU' x
@@ -360,6 +450,21 @@ cthunk = try bratFn <|> try kernel <|> thunk
                               (\x -> APat (Bind ('\'': show x))) <$> ns
 
 
+-- Expressions that can occur inside juxtapositions and vectors (i.e. everything with a higher
+-- precedence than juxtaposition). Precedence table (loosest to tightest binding):
+atomExpr :: Parser (WC Flat)
+atomExpr = simpleExpr <|> inBrackets Paren expr
+ where
+  simpleExpr :: Parser (WC Flat)
+  simpleExpr = fmap FHole <$> hole
+            <|> try (fmap FSimple <$> simpleTerm)
+            <|> vec
+            <|> cthunk
+            <|> fmap (const FPass) <$> matchFC DotDot
+            <|> var
+            <|> fmap (const FUnderscore) <$> matchFC Underscore
+
+
 {- Infix operator precedence table (See Brat.Syntax.Common.Precedence)
 (loosest to tightest binding):
    =>
@@ -375,12 +480,12 @@ cthunk = try bratFn <|> try kernel <|> thunk
 -}
 expr = expr' minBound
 
-expr' :: Precedence -> Parser Flat
+expr' :: Precedence -> Parser (WC Flat)
 expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
  where
-  getParser :: Precedence -> Parser Flat
+  getParser :: Precedence -> Parser (WC Flat)
   getParser = \case
-    PLetIn -> letin <?> "let ... in"
+    PLetIn -> letIn <?> "let ... in"
     PLambda -> lambda <?> "lambda"
     PInto -> (emptyInto <|> into) <?> "into"
     PComp -> composition <?> "composition"
@@ -393,116 +498,122 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
     PApp -> application <?> "application"
 
   -- Take the precedence level and return a parser for everything with a higher precedence
-  subExpr :: Precedence -> Parser Flat
+  subExpr :: Precedence -> Parser (WC Flat)
   subExpr PApp = atomExpr
   subExpr p = choice $ (try . getParser <$> enumFrom (succ p)) ++ [atomExpr]
 
   -- Top level parser, looks for vector constructors with `atomExpr'`s as their
   -- elements.
-  vectorBuild :: Parser Flat
+  vectorBuild :: Parser (WC Flat)
   vectorBuild = do
-    lhs <- withFC (subExpr PVecPat)
+    lhs <- subExpr PVecPat
     rest <- optional $
             (CCons, [lhs]) <$ match Cons
             <|> (CSnoc, [lhs]) <$ match Snoc
             <|> (CConcatEqEven, [lhs]) <$ match ConcatEqEven
-            <|> (CConcatEqOdd,) . ([lhs] ++) . (:[]) <$ match ConcatEqOddL <*> withFC (subExpr (succ PVecPat)) <* match ConcatEqOddR
-            <|> (CRiffle, [lhs]) <$ match Riffle
+            <|> (CConcatEqOdd,) . ([lhs] ++) . (:[]) <$ match ConcatEqOddL <*> subExpr (succ PVecPat) <* match ConcatEqOddR
+            <|> (CRiffle, [lhs]) <$ matchFC Riffle
     case rest of
       Just (c, args) -> do
-        rhs <- withFC vectorBuild
-        pure (FCon c (mkJuxt (args ++ [rhs])))
-      Nothing -> pure (unWC lhs)
+        rhs <- vectorBuild
+        pure (WC (spanFCOf lhs rhs) (FCon c (mkJuxt (args ++ [rhs]))))
+      Nothing -> pure lhs
+   where
+    matchConstructor lhs = matchFC Cons
 
+  mkJuxt :: [WC Flat] -> WC Flat
   mkJuxt [x] = x
   mkJuxt (x:xs) = let rest = mkJuxt xs in WC (FC (start (fcOf x)) (end (fcOf rest))) (FJuxt x rest)
 
-  application = withFC atomExpr >>= applied
+  application :: Parser (WC Flat)
+  application = atomExpr >>= applied
    where
-    applied :: WC Flat -> Parser Flat
+    applied :: WC Flat -> Parser (WC Flat)
     applied f = do
-      first <- withFC (round $ expr <|> pure FEmpty)
-      let one = FApp f first
-      let combinedFC = FC (start (fcOf f)) (end (fcOf first))
-      optional (applied $ WC combinedFC one) <&> fromMaybe one
+      first <- inBracketsFC Paren $ (unWC <$> expr) <|> pure FEmpty
+      let one = WC (spanFCOf f first) (FApp f first)
+      optional (applied $ one) <&> fromMaybe one
 
-  binary ops lvl = unWC <$> withFC (subExpr lvl) `chainl1` choice (try . arith <$> ops)
+  binary :: [ArithOp] -> Precedence -> Parser (WC Flat)
+  binary ops lvl = subExpr lvl `chainl1` choice (try . arith <$> ops)
+
   addSub = binary [Add, Sub] PAddSub
   mulDiv = binary [Mul, Div] PMulDiv
   pow = binary [Pow] PPow
 
-  annotation = FAnnotation <$> withFC (subExpr PAnn) <* match TypeColon <*> rawIO (unWC <$> vtype)
+  annotation :: Parser (WC Flat)
+  annotation = do
+    tm <- subExpr PAnn
+    colon <- matchFC TypeColon
+    tys <- rawIO
+    pure $ WC (spanFCOf tm colon) (FAnnotation tm tys)
 
-  letin = do
-    (lhs,rhs) <- inLet $ do
-      abs <- withFC abstractor
+  letIn :: Parser (WC Flat)
+  letIn = label "let ... in" $ do
+    let_ <- kmatchFC KLet
+    (lhs, rhs) <- letInBinding
+    kmatch KIn
+    body <- expr
+    pure (WC (spanFCOf let_ body) (FLetIn lhs rhs body))
+   where
+    letInBinding = do
+      abs <- abstractor
       match Equal
-      thing <- withFC expr
+      thing <- expr
       pure (abs, thing)
-    body <- withFC expr
-    pure $ FLetIn lhs rhs body
 
   -- Sequence of `abstractor => expr` separated by `|`
+  lambda :: Parser (WC Flat)
   lambda = do
     firstClause <- lambdaClause
     otherClauses <- many (match Pipe >> lambdaClause)
-    pure (FLambda (firstClause :| otherClauses))
+    let endPos = case otherClauses of
+          [] -> end (fcOf (snd firstClause))
+    let fc = FC (start (fcOf (fst firstClause))) endPos
+    pure (WC fc (FLambda (firstClause :| otherClauses)))
 
   -- A single `abstractor => expr`
+  lambdaClause :: Parser (WC Abstractor, WC Flat)
   lambdaClause = do
-    abs <- withFC (try abstractor <|> pure AEmpty)
-    match FatArrow
-    body <- withFC expr
+    mabs <- (try (Right <$> abstractor) <|> pure (Left AEmpty))
+    WC arrowFC () <- matchFC FatArrow
+    let abs = either (WC arrowFC) id mabs
+    body <- expr
     pure (abs, body)
 
+  emptyInto :: Parser (WC Flat)
   emptyInto = do
     -- It's tricky to come up with an FC for empty syntax
-    WC lhs () <- withFC $ match Into
-    rhs <- withFC (subExpr (pred PInto))
-    pure $ FInto (WC lhs FEmpty) rhs
+    WC lhs () <- matchFC Into
+    rhs <- subExpr (pred PInto)
+    pure $ WC (spanFC lhs (fcOf rhs)) $ FInto (WC lhs FEmpty) rhs
 
-  into = unWC <$> withFC (subExpr PInto) `chainl1` (divider Into FInto)
+  into :: Parser (WC Flat)
+  into = subExpr PInto `chainl1` (divider Into FInto)
 
-  composition = unWC <$> withFC (subExpr PComp) `chainl1` (divider Semicolon FCompose)
+  composition :: Parser (WC Flat)
+  composition = subExpr PComp `chainl1` divider Semicolon FCompose
 
   divider :: Tok -> (WC Flat -> WC Flat -> Flat) -> Parser (WC Flat -> WC Flat -> WC Flat)
   divider tok f = token0 $ \case
     t | t == tok -> Just $ \a b ->
-      let fc = FC (start (fcOf a)) (end (fcOf b))
-      in  WC fc (f a b)
+      WC (spanFCOf a b) (f a b)
     _ -> Nothing
 
+  pullAndJuxt = pull <|> juxt
 
-  pullAndJuxt = do
-    ports <- many (try (port <* match PortColon))
-    case ports of
-      [] -> juxtRhsWithPull
-      _ -> FPull ports <$> withFC juxtRhsWithPull
-   where
-    -- Juxtaposition here includes port pulling, since they have the same precedence
-    juxtRhsWithPull = do
-      expr <- withFC (subExpr PJuxtPull)
-      rest <- optional (match Comma *> withFC pullAndJuxt)
-      pure $ case rest of
-        Nothing -> unWC expr
-        Just rest -> FJuxt expr rest
+  pull :: Parser (WC Flat)
+  pull = do
+    ports <- some (try (port <* match PortColon))
+    body <- subExpr PJuxtPull
+    pure $ WC (spanFCOf (head ports) body) (FPull (unWC <$> ports) body)
 
-  -- Expressions which don't contain juxtaposition or operators
-  atomExpr :: Parser Flat
-  atomExpr = simpleExpr <|> round expr
-   where
-    simpleExpr = FHole <$> hole
-              <|> try (FSimple <$> simpleTerm)
-              <|> vec
-              <|> cthunk
-              <|> try (match DotDot $> FPass)
-              <|> var
-              <|> match Underscore $> FUnderscore
+  juxt :: Parser (WC Flat)
+  juxt = (try pull <|> subExpr PJuxtPull) `chainl1` try comma
 
-
-cnoun :: Parser Flat -> Parser (WC (Raw 'Chk 'Noun))
+cnoun :: Parser (WC Flat) -> Parser (WC (Raw 'Chk 'Noun))
 cnoun pe = do
-  e <- withFC pe
+  e <- pe
   case elaborate e of
     Left err -> fail (showError err)
     Right (SomeRaw r) -> case do
@@ -517,9 +628,9 @@ cnoun pe = do
 decl :: Parser FDecl
 decl = do
       (WC fc (nm, ty, body)) <- withFC (do
-        nm <- simpleName
-        ty <- try (functionType <&> \ty -> [Named "thunk" (Right ty)])
-              <|> (match TypeColon >> outputs)
+        WC _ nm <- simpleName
+        ty <- try (functionType <&> \(WC _ ty) -> [Named "thunk" (Right ty)])
+              <|> (match TypeColon >> rawIO)
         let allow_clauses = case ty of
                                  [Named _ (Right t)] -> is_fun_ty t
                                  [Anon (Right t)] -> is_fun_ty t
@@ -545,7 +656,7 @@ decl = do
         label (nm ++ "(...) = ...") $
           matchString nm
         match Equal
-        withFC expr
+        expr
 
 class FCStream a where
   getFC :: Int -> PosState a -> FC
@@ -564,10 +675,18 @@ instance FCStream [Token] where
     [] -> sp_to_fc pstateSourcePos
     (Token fc _):_ -> fc
 
+instance FCStream [BToken] where
+  getFC o PosState{..} = case drop (o - pstateOffset) pstateInput of
+    [] -> sp_to_fc pstateSourcePos
+    (Bracketed fc _ _):_ -> fc
+    (FlatTok (Token fc _)):_ -> fc
+
+
 parseFile :: String -> String -> Either SrcErr ([Import], FEnv)
 parseFile fname contents = addSrcContext fname contents $ do
   toks <- first (wrapParseErr LexErr) (M.parse lex fname contents)
-  first (wrapParseErr ParseErr) (parse pfile fname toks)
+  btoks <- brackets toks
+  first (wrapParseErr ParseErr) (parse pfile fname btoks)
  where
   wrapParseErr :: (VisualStream t, FCStream t, ShowErrorComponent e)
                => (ParseError -> ErrorMsg) -> ParseErrorBundle t e -> Error
@@ -585,19 +704,20 @@ clauses declName = label "clauses" $
                    fmap (fromJust . nonEmpty) $
                    some (try branch)
  where
+  branch :: Parser (WC Abstractor, WC Flat)
   branch = do
     label (declName ++ "(...) = ...") $
       matchString declName
-    lhs <- withFC $ round (abstractor <?> "binder")
+    lhs <- inBrackets Paren (abstractor <?> "binder")
     match Equal
-    rhs <- withFC expr
+    rhs <- expr
     pure (lhs,rhs)
 
 pimport :: Parser Import
 pimport = do
   o <- open
   kmatch KImport
-  x <- withFC userName
+  x <- userName
   a <- alias
   s <- selection
   pure (Import x (not o) a s)
@@ -610,7 +730,7 @@ pimport = do
   alias :: Parser (Maybe (WC String))
   alias = optional (matchString "as") >>= \case
      Nothing -> pure Nothing
-     Just _ -> Just <$> withFC (ident Just)
+     Just _ -> Just <$> simpleName
 
   selection :: Parser ImportSelection
   selection = optional (try $ matchString "hiding") >>= \case
@@ -620,7 +740,7 @@ pimport = do
        Just ss -> pure (ImportPartial ss)
 
   list :: Parser [WC String]
-  list = round $ ((:[]) <$> withFC (ident Just)) `chainl1` try (match Comma $> (++))
+  list = inBrackets Paren $ ((:[]) <$> simpleName) `chainl1` try (match Comma $> (++))
 
 pstmt :: Parser FEnv
 pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
@@ -635,10 +755,10 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
   aliasContents :: Parser (UserName, [(String, TypeKind)], RawVType)
   aliasContents = do
     match (K KType)
-    alias <- userName
-    args <- option [] $ round $ (simpleName `sepBy` (match Comma))
+    WC _ alias <- userName
+    args <- option [] $ inBrackets Paren $ ((unWC <$> simpleName) `sepBy` (match Comma))
 {- future stuff
-    args <- option [] $ round $ (`sepBy` (match Comma)) $ do
+    args <- option [] $ inBrackets Paren $ (`sepBy` (match Comma)) $ do
       port <- port
       match TypeColon
       (port,) <$> typekind
@@ -653,18 +773,18 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
     pure (alias, (,Star []) <$> args, unWC ty)
 
   extDecl :: Parser FDecl
-  extDecl = do (WC fc (fnName, ty, symbol)) <- withFC $ do
-                  match (K KExt)
-                  symbol <- string
-                  fnName <- simpleName
-                  ty <- try nDecl <|> vDecl
+  extDecl = do (fc, fnName, ty, symbol) <- do
+                  WC startFC () <- matchFC (K KExt)
+                  symbol <- unWC <$> string
+                  fnName <- unWC <$> simpleName
+                  WC tyFC ty <- try nDecl <|> vDecl
                   -- When external ops are used, we expect it to be in the form:
                   -- extension.op for the hugr extension used and the op name
                   let bits = chop (=='.') symbol
                   (ext, op) <- case viewR bits of
                                  Just (ext, op) -> pure (intercalate "." ext, op)
                                  Nothing -> fail $ "Malformed op name: " ++ symbol
-                  pure (fnName, ty, (ext, op))
+                  pure (spanFC startFC tyFC, fnName, ty, (ext, op))
                pure FuncDecl
                  { fnName = fnName
                  , fnSig = ty
@@ -673,8 +793,8 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
                  , fnLocality = Extern symbol
                  }
    where
-    nDecl = match TypeColon >> outputs
-    vDecl = (:[]) . Named "thunk" . Right <$> functionType
+    nDecl = match TypeColon >> rawIOWithSpanFC
+    vDecl = functionType <&> fmap (\ty -> [Named "thunk" (Right ty)])
 
 pfile :: Parser ([Import], FEnv)
 pfile = do
