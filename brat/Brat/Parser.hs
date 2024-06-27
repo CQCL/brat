@@ -7,8 +7,9 @@ import Brat.Constructors (pattern CCons,
                           pattern CRiffle)
 import Brat.Error
 import Brat.FC
-import Brat.Lexer
-import qualified Brat.Lexer as Lexer
+import Brat.Lexer (lex)
+import Brat.Lexer.Token (Keyword(..), Token(..), Tok(..))
+import qualified Brat.Lexer.Token as Lexer
 import Brat.Syntax.Abstractor
 import Brat.Syntax.Common hiding (end)
 import qualified Brat.Syntax.Common as Syntax
@@ -52,20 +53,18 @@ withFC p = do
   end <- get
   pure (WC (FC start end) thing)
 
-
 nextToken :: Parser Token
 nextToken = lookAhead $ token Just empty
 
-token0 :: (Token -> Maybe a) -> Parser a
-token0 x = do
-  (Token fc _) <- nextToken
-  r <- token x empty
-  -- token matched condition x
+token0 :: (Tok -> Maybe a) -> Parser a
+token0 f = do
+  (fc, r) <- token (\(Token fc t) -> (fc,) <$> f t) empty
+  -- token matched condition f
   put (end fc)
   pure r
 
 match :: Tok -> Parser ()
-match tok = label (show tok) $ token0 $ \(Token _ t) -> if t == tok then Just () else Nothing
+match tok = label (show tok) $ token0 $ \t -> if t == tok then Just () else Nothing
 
 kmatch :: Keyword -> Parser ()
 kmatch = match . K
@@ -75,22 +74,22 @@ matchString s = ident $ \x -> if x == s then Just () else Nothing
 
 ident :: (String -> Maybe a) -> Parser a
 ident f = label "identifier" $ token0 $ \case
-  (Token _ (Ident str)) -> f str
+  Ident str -> f str
   _ -> Nothing
 
 hole :: Parser String
 hole = label "hole" $ token0 $ \case
-  Token _ (Hole h) -> Just h
+  Hole h -> Just h
   _ -> Nothing
 
 simpleName :: Parser String
 simpleName = token0 $ \case
-  Token _ (Ident str) -> Just str
+  Ident str -> Just str
   _ -> Nothing
 
 qualifiedName :: Parser UserName
 qualifiedName = (<?> "qualified name") . token0 $ \case
-  Token _ (QualifiedId prefix str) -> Just (PrefixName (toList prefix) str)
+  QualifiedId prefix str -> Just (PrefixName (toList prefix) str)
   _ -> Nothing
 
 userName :: Parser UserName
@@ -110,22 +109,22 @@ inLet p = label "let ... in" $ kmatch KLet *> p <* kmatch KIn
 
 number :: Parser Int
 number = label "nat" $ token0 $ \case
-  Token _ (Number n) -> Just n
+  Number n -> Just n
   _ -> Nothing
 
 float :: Parser Double
 float = label "float" $ token0 $ \case
-  Token _ (FloatLit x) -> Just x
+  FloatLit x -> Just x
   _ -> Nothing
 
-comment :: Parser Token
+comment :: Parser ()
 comment = label "Comment" $ token0 $ \case
-  tok@(Token _ (Comment _)) -> Just tok
+  Comment _ -> Just ()
   _ -> Nothing
 
 string :: Parser String
 string = token0 $ \case
-  (Token _ (Quoted txt)) -> Just txt
+  Quoted txt -> Just txt
   _ -> Nothing
 
 var :: Parser Flat
@@ -135,20 +134,20 @@ port = simpleName
 
 comma :: Parser (WC Flat -> WC Flat -> WC Flat)
 comma = token0 $ \case
-  Token _ Comma -> Just $ \a b ->
+  Comma -> Just $ \a b ->
     let fc = FC (start (fcOf a)) (end (fcOf b))
     in  WC fc (FJuxt a b)
   _ -> Nothing
 
 into :: Parser (WC Flat -> WC Flat -> WC Flat)
 into = token0 $ \case
-  Token _ Into -> Just $ \a b ->
+  Into -> Just $ \a b ->
     let fc = FC (start (fcOf a)) (end (fcOf b))
     in  WC fc (FInto a b)
   _ -> Nothing
 
 arith :: ArithOp -> Parser (WC Flat -> WC Flat -> WC Flat)
-arith op = token0 $ \(Token _ tok) -> case (op, tok) of
+arith op = token0 $ \tok -> case (op, tok) of
   (Add, Plus) -> Just make
   (Sub, Minus) -> Just make
   (Mul, Asterisk) -> Just make
@@ -491,7 +490,7 @@ expr = expr' 0
 
   semicolon :: Parser (WC Flat -> WC Flat -> WC Flat)
   semicolon = token0 $ \case
-    Token _ Semicolon -> Just $ \a b ->
+    Semicolon -> Just $ \a b ->
       let fc = FC (start (fcOf a)) (end (fcOf b))
       in  WC fc (FCompose a b)
     _ -> Nothing
