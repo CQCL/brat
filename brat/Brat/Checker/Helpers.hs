@@ -333,14 +333,14 @@ makeBox :: (?my :: Modey m, EvMode m)
 makeBox name cty@(ss :->> ts) body = do
   (src, _, overs, ctx) <- anext (name ++ "/in") Source (S0, Some (Zy :* S0)) R0 ss
   (tgt, unders, _, _) <- anext (name ++ "/out") Target ctx ts R0
-  locals <- locals <$> req AskVEnv
   case (?my, body) of
     (Kerny, _) -> do
-      (_,_,[thunk],_) <- next (name ++ "_thunk") (Box locals src tgt) (S0, Some (Zy :* S0))
+      (_,_,[thunk],_) <- next (name ++ "_thunk") (Box M.empty src tgt) (S0, Some (Zy :* S0))
                                 R0 (RPr ("thunk", VFun Kerny cty) R0)
       bres <- name -! body (overs, unders)
       pure (thunk, bres)
     (Braty, body) -> do
+      locals <- locals <$> req AskVEnv
       (_,_,[thunk],_) <- next (name ++ "_thunk") (Box locals src tgt) (S0, Some (Zy :* S0)) R0 (RPr ("thunk", VFun ?my cty) R0)
       bres <- name -! body (overs, unders)
 {- TODO: Work out if/why this is needed and delete if appropriate

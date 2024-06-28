@@ -29,7 +29,7 @@ import Hasochism
 import Control.Exception (assert)
 import Control.Monad (unless)
 import Data.Aeson
-import Data.Bifunctor (second)
+import Data.Bifunctor (first, second)
 import qualified Data.ByteString.Lazy as BS
 import Data.Foldable (traverse_, for_)
 import Data.Functor ((<&>), ($>))
@@ -38,11 +38,12 @@ import qualified Data.Map as M
 import Data.Maybe (catMaybes, fromJust, fromMaybe, isJust)
 import Data.Ord (comparing)
 import Data.Traversable (for)
-import Data.Tuple.HT (fst3, swap)
+import Data.Tuple.HT (fst3)
 import Control.Monad.State
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import GHC.Base (NonEmpty(..))
 import Brat.Syntax.Simple (SimpleTerm)
+import Data.Tuple (swap)
 
 {-
 For each top level function definition or value in BRAT: we should have a FuncDef node in
@@ -59,6 +60,10 @@ data CompilationState = CompilationState
  , nodes :: M.Map NodeId (HugrOp NodeId) -- this node's id => HugrOp containing parent id
  , edges :: [(PortId NodeId, PortId NodeId)]
  , compiled :: M.Map Name NodeId  -- Mapping from Brat nodes to Hugr nodes
+ -- When lambda lifting, captured variables become extra function inputs.
+ -- This maps from the captured value (in the BRAT graph, perhaps outside the current func/lambda)
+ -- to the Hugr port capturing it in the current context.
+ , liftedOutPorts :: M.Map OutPort (PortId NodeId)
  , holes :: Bwd Name -- for Kernel graphs, list of Splices found in order
  , store :: Store -- Kinds and values of global variables, for compiling types
  -- A map from Id nodes representing functions and values in the brat graph,
@@ -76,6 +81,7 @@ emptyCS g ns store = CompilationState
   , edges = []
   , compiled = M.empty
   , holes = B0
+  , liftedOutPorts = M.empty
   , store = store
   , decls = M.empty
   }
@@ -105,7 +111,6 @@ addNode name op = do
   id <- freshNode name
   addOp op id
   pure id
-
 
 type Compile = State CompilationState
 
@@ -261,16 +266,39 @@ compileFunClauses ins cs parent = do
   pure ()
 
 renameAndSortHugr :: M.Map NodeId (HugrOp NodeId) -> [(PortId NodeId, PortId NodeId)] -> Hugr Int
-renameAndSortHugr nodes edges = fmap update (Hugr (fst <$> sorted_nodes) edges) where
+renameAndSortHugr nodes edges = fmap update (Hugr (fst <$> sorted_nodes) (edges ++ orderEdges)) where
   sorted_nodes = let ([root], rest) = partition (\(n, nid) -> nid == getParent n) (swap <$> M.assocs nodes) in
                    root : sort rest
 
   names2Pos = M.fromList $ zip (snd <$> sorted_nodes) ([0..] :: [Int])
+  parentOf n = getParent (nodes M.! n)
 
   update :: NodeId -> Int
   update name = case M.lookup name names2Pos of
                   Just ans -> ans
                   Nothing -> error ("Couldn't find node " ++ show name ++ "???")
+  
+  orderEdges :: [(PortId NodeId, PortId NodeId)]
+  orderEdges =
+    -- Nonlocal edges (from a node to another which is a *descendant* of a sibling of the source)
+    -- require an extra order edge from the source to the sibling that is ancestor of the target
+    let interEdges = [(n1, n2) | (Port n1 _, Port n2 _) <- edges,
+            parentOf n1 /= parentOf n2 ,
+            requiresOrderEdge (nodes M.! n1),
+            requiresOrderEdge (nodes M.! n2) ] in
+    [(Port src orderEdgeOffset, Port tgt orderEdgeOffset) | (src, tgt) <- (walkUp <$> interEdges)]
+  
+  requiresOrderEdge :: HugrOp NodeId -> Bool
+  requiresOrderEdge (OpMod _) = False
+  requiresOrderEdge (OpDefn _) = False
+  requiresOrderEdge (OpConst _) = False
+  requiresOrderEdge _ = True
+
+  -- Walk up the hierarchy from the tgt until we hit a node at the same level as src
+  walkUp :: (NodeId, NodeId) -> (NodeId, NodeId)
+  walkUp (src, tgt) | parentOf src == parentOf tgt = (src, tgt)
+  walkUp (_, tgt) | parentOf tgt == tgt = error "Tgt was not descendant of Src-parent"
+  walkUp (src, tgt) = walkUp (src, parentOf tgt)
 
 
 dumpJSON :: Compile BS.ByteString
@@ -333,8 +361,6 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
         for edges (\(src, tgtPort) -> addEdge (src, Port tgtNodeId tgtPort))
         pure $ Just tgtNodeId
  where
-  walkGraph n = compileWithInputs parent n
-
   -- If we only care about the node for typechecking, then drop it and return `Nothing`.
   -- Otherwise, NodeId of compiled node, and list of Hugr in-edges (source and target-port)
   compileNode :: [((OutPort, Val Z), Int)] -> Compile (Maybe (NodeId, [(PortId NodeId, Int)]))
@@ -365,9 +391,8 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
     case nod_edge_info of
       Nothing -> pure Nothing
       Just (node, tgtOffset, extra_edges) -> do
-        trans_edges <- catMaybes <$> for in_edges (\((Ex src srcPort, _), tgtPort) ->
-            walkGraph src <&> fmap (\srcNodeId -> (Port srcNodeId srcPort, tgtPort + tgtOffset))
-          )
+        trans_edges <- catMaybes <$> for in_edges (\((src, _), tgtPort) ->
+            getOutPort parent src <&> fmap (, tgtPort + tgtOffset))
         pure $ Just (node, extra_edges ++ trans_edges)
 
   default_edges :: NodeId -> Maybe (NodeId, Int, [(PortId NodeId, Int)])
@@ -439,12 +464,13 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
               pure $ Just (callerId, 1, [(Port calleeId outPort, 0)])
             Nothing -> error "Callee has been erased"
 
-    (Box _ src tgt) -> default_edges <$>
-      -- We need to figure out if this thunk contains a brat- or a kernel-computation
-      case outs of
-        [(_, VFun Kerny cty)] -> nodeId . fst <$> compileKernBox parent name (compileBox (src, tgt)) cty
-        [(_, VFun Braty _)] -> error "todo: variables captured by thunk - lambda-lift, partial"
-        _ -> error $ "Unexpected out-ports on thunk: " ++ show outs
+    -- We need to figure out if this thunk contains a brat- or a kernel-computation
+    (Box venv src tgt) -> case outs of
+      [(_, VFun Kerny cty)] -> default_edges . nodeId . fst <$>
+           compileKernBox parent name (assert (M.null venv) $ compileBox (src, tgt)) cty
+      [(_, VFun Braty cty)] -> compileBratBox parent name (venv, src, tgt) cty <&>
+          (\(partialNode, captures) -> Just (partialNode, 1, captures)) -- 1 is arbitrary, Box has no real inputs
+      outs -> error $ "Unexpected outs of box: " ++ show outs
 
     Source -> default_edges <$> do
       outs <- traverse (compileType . snd) outs
@@ -465,15 +491,82 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
             _ -> error $ "Don't know how to compile " ++ show c
       -- A boolean value is a tuple and a tag
       -- This is the same thing that happens in Brat.Checker.Clauses (makeDiscriminator)
-      makeTuple <- freshNode "bool.MakeTuple"
-      addOp (OpMakeTuple (MakeTupleOp parent [])) makeTuple
-      tag <- freshNode "bool.tag"
-      addOp (OpTag (TagOp parent (if b then 1 else 0) [HTTuple [], HTTuple []])) tag
+      makeTuple <- addNode "bool.MakeTuple" (OpMakeTuple (MakeTupleOp parent []))
+      tag <- addNode "bool.tag" (OpTag (TagOp parent (if b then 1 else 0) [HTTuple [], HTTuple []]))
       addEdge (Port makeTuple 0, Port tag 0)
       pure tag
     ArithNode op -> default_edges <$> compileArithNode parent op (snd $ head ins)
     Selector _c -> error "Todo: selector"
     x -> error $ show x ++ " should have been compiled outside of compileNode"
+
+getOutPort :: NodeId -> OutPort -> Compile (Maybe (PortId NodeId))
+getOutPort parent p@(Ex srcNode srcPort) = do
+    -- Check if we should actually be using a different port because we're
+    -- inside a lambda-lifted function and src comes in from the outside?
+    lifted <- gets liftedOutPorts
+    trackM $ show lifted
+    case M.lookup p lifted of
+      Just intercept -> pure $ Just intercept
+      Nothing -> compileWithInputs parent srcNode <&> (\maybe -> maybe <&> (flip Port srcPort))
+
+-- Execute a compilation (which takes a DFG parent) in a nested monad;
+-- produce a Const node containing the resulting Hugr, and a LoadConstant,
+-- and return the latter.
+compileConstDfg :: NodeId -> String -> FunctionType -> (NodeId -> Compile a) -> Compile (TypedPort, a)
+compileConstDfg parent desc box_sig contents = do
+  st <- gets store
+  g <- gets bratGraph
+  -- First, we fork off a new namespace
+  (res, cs) <- desc -! do
+    ns <- gets nameSupply
+    pure $ flip runState (emptyCS g ns st) $ do
+      -- make a DFG node at the root. We can't use `addNode` since the
+      -- DFG needs itself as parent
+      dfg_id <- freshNode ("Box_" ++ show desc)
+      addOp (OpDFG $ DFG dfg_id box_sig) dfg_id
+      contents dfg_id
+  let nestedHugr = renameAndSortHugr (nodes cs) (edges cs)
+  let ht = HTFunc $ PolyFuncType [] box_sig
+
+  constNode <- addNode ("ConstTemplate_" ++ desc) (OpConst (ConstOp parent (HCFunction nestedHugr) ht))
+  lcPort <- head <$> addNodeWithInputs ("LoadTemplate_" ++ desc) (OpLoadConstant (LoadConstantOp parent ht))
+            [(Port constNode 0, ht)] [ht]
+  pure (lcPort, res)
+
+-- Brat computations may capture some local variables. Thus, we need
+-- to lambda-lift, producing (as results) a Partial node and a list of
+-- extra arguments i.e. the captured values
+compileBratBox :: NodeId -> Name -> (VEnv, Name, Name) -> CTy Brat Z -> Compile (NodeId, [(PortId NodeId, Int)])
+compileBratBox parent name (venv, src, tgt) cty = do
+  -- we'll "Partial" over every value in the environment.
+  -- (TODO in the future capture which ones are actually used in the sub-hugr. We may need
+  -- to put captured values after the original params, and have a reversed Partial.)
+  let params :: [(OutPort, BinderType Brat)] = map (first end) (concat $ M.elems venv)
+  parmTys <- sequence $ map (compileBinderTy Braty . snd) params
+
+  -- Create a FuncDefn for the lambda that takes the params as first inputs
+  (FunctionType inputTys outputTys) <- body <$> compileSig cty
+  let allInputTys = parmTys ++ inputTys
+  let box_sig = FunctionType allInputTys outputTys
+
+  (templatePort, _) <- compileConstDfg parent ("BB" ++ show name) box_sig $ \dfg_id -> do
+    src_id <- addNode ("LiftedCapturesInputs" ++ show name) (OpIn (InputNode dfg_id allInputTys))
+    -- Now map ports in the BRAT Graph to their Hugr equivalents.
+          -- Each captured value is read from an element of src_id, starting from 0
+    let lifted = ([(src, Port src_id i) | ((src, _ty), i) <- zip params [0..]]
+          -- and the original BRAT-Graph Src outports become the Hugr Input node ports *after* the captured values
+          ++ [(Ex src i, Port src_id (i + length params)) | i <- [0..length inputTys]])
+    st <- get
+    put $ st {liftedOutPorts = M.fromList lifted}
+    -- no need to return any holes
+    compileWithInputs dfg_id tgt
+
+  -- Finally, we add a `Partial` node to supply the captured params.
+  partialNode <- addNode "Partial" (OpCustom $ partialOp parent (box_sig) (length params))
+  addEdge (fst templatePort, Port partialNode 0)
+  edge_srcs <- for (map fst params) $ getOutPort parent
+  pure (partialNode, zip (map fromJust edge_srcs) [1..])
+    -- error on Nothing, the Partial is expecting a value
 
 compileKernBox :: NodeId -> Name -> (NodeId -> Compile ()) -> CTy Kernel Z -> Compile TypedPort
 compileKernBox parent name contents cty = do
@@ -482,31 +575,15 @@ compileKernBox parent name contents cty = do
   -- return a Hugr with holes
   box_sig <- body <$> compileSig cty
   let box_ty = HTFunc $ PolyFuncType [] box_sig
-  st <- gets store
-  g <- gets bratGraph
-  -- Build a template Hugr with a new run of the Monad.
-  -- First, we fork off a new namespace
-  (holelist, templateHugr) <- "KernelBox" -! do
-    ns <- gets nameSupply
-    let templateCtx = flip execState (emptyCS g ns st) $ do
-          -- Make a DFG node at the root. We can't use `addNode` since the
-          -- DFG needs itself as parent
-          dfg_id <- freshNode ("KernelBox_" ++ show name)
-          addOp (OpDFG $ DFG dfg_id box_sig) dfg_id
-          contents dfg_id
-    let holelist = holes templateCtx <>> [] -- index 0 (earliest elem) now outermost
-    let templateHugr = renameAndSortHugr (nodes templateCtx) (edges templateCtx)
-    pure (holelist, templateHugr)
+  (templatePort, holelist) <- compileConstDfg parent ("KB" ++ show name) box_sig $ \dfg_id -> do
+    contents dfg_id
+    gets holes
 
-  -- now make classical func
-  templateConstNode <- addNode ("ConstTemplate_" ++ show name) (OpConst (ConstOp parent (HCFunction templateHugr) box_ty))
-  templatePort <- head <$> addNodeWithInputs ("LoadTemplate_" ++ show name) (OpLoadConstant (LoadConstantOp parent box_ty))
-                  [(Port templateConstNode 0, box_ty)] [box_ty]
-
-  -- For each hole in the template, compile the kernel that should be spliced
-  -- in and record its signature.
-  hole_ports <- for holelist (\splice -> do
-    let (KernelNode (Splice (Ex kernel_src port)) ins outs) = (fst g) M.! splice
+  -- For each hole in the template (index 0 i.e. earliest, first)
+  -- compile the kernel that should be spliced in and record its signature.
+  ns <- gets (fst . bratGraph)
+  hole_ports <- for (holelist <>> []) (\splice -> do
+    let (KernelNode (Splice (Ex kernel_src port)) ins outs) = ns M.! splice
     ins <- traverse (compileType . snd) ins
     outs <- traverse (compileType . snd) outs
     kernel_src <- compileWithInputs parent kernel_src <&> fromJust

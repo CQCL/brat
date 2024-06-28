@@ -24,6 +24,7 @@ use crate::ctor::Ctor;
 pub enum BratOpDef {
     Hole,
     Substitute,
+    Partial,
     Panic,
     Ctor(BratCtor),
     PrimCtorTest(BratCtor),
@@ -35,6 +36,7 @@ impl OpName for BratOpDef {
         match self {
             Hole => "Hole".into(),
             Substitute => "Substitute".into(),
+            Partial => "Partial".into(),
             Panic => "Panic".into(),
             Ctor(ctor) => format_smolstr!("Ctor::{}", ctor.name()),
             PrimCtorTest(ctor) => format_smolstr!("PrimCtorTest::{}", ctor.name()),
@@ -50,6 +52,7 @@ impl FromStr for BratOpDef {
         match v.as_slice() {
             ["Hole"] => Ok(BratOpDef::Hole),
             ["Substitute"] => Ok(BratOpDef::Substitute),
+            ["Partial"] => Ok(BratOpDef::Partial),
             ["Panic"] => Ok(BratOpDef::Panic),
             ["Ctor", ctor] => Ok(BratOpDef::Ctor(BratCtor::from_str(ctor)?)),
             ["PrimCtorTest", ctor] => Ok(BratOpDef::PrimCtorTest(BratCtor::from_str(ctor)?)),
@@ -68,6 +71,7 @@ impl MakeOpDef for BratOpDef {
         match self {
             Hole => SignatureFunc::CustomFunc(Box::new(HoleSigFun())),
             Substitute => SignatureFunc::CustomFunc(Box::new(SubstituteSigFun())),
+            Partial => SignatureFunc::CustomFunc(Box::new(PartialSigFun())),
             Panic => SignatureFunc::CustomFunc(Box::new(PanicSigFun())),
             Ctor(ctor) => ctor.signature().into(),
             PrimCtorTest(ctor) => {
@@ -135,7 +139,39 @@ impl SignatureFromArgs for SubstituteSigFun {
     }
 }
 
-/// Binary compute_signature function for the `Hole` op
+/// Binary compute_signature function for the `Partial` op
+struct PartialSigFun();
+impl SignatureFromArgs for PartialSigFun {
+    fn compute_signature(&self, arg_values: &[TypeArg]) -> Result<PolyFuncType, SignatureError> {
+        // The Partial op expects a type sequence specifying the supplied partial inputs, a type
+        // sequence specifiying the remaining inputs and a type sequence for the function outputs.
+        match arg_values {
+            [partial_inputs, other_inputs, outputs] => {
+                let partial_inputs = row_from_arg(partial_inputs)?;
+                let other_inputs = row_from_arg(other_inputs)?;
+                let outputs = row_from_arg(outputs)?;
+                let res_func =
+                    Type::new_function(FunctionType::new(other_inputs.clone(), outputs.clone()));
+                let mut inputs = vec![Type::new_function(FunctionType::new(
+                    [partial_inputs.clone(), other_inputs].concat(),
+                    outputs,
+                ))];
+                inputs.extend(partial_inputs);
+                Ok(FunctionType::new(inputs, vec![res_func]).into())
+            }
+            _ => Err(SignatureError::InvalidTypeArgs),
+        }
+    }
+
+    fn static_params(&self) -> &[TypeParam] {
+        lazy_static! {
+            static ref PARAMS: [TypeParam; 3] = [list_of_type(), list_of_type(), list_of_type()];
+        }
+        PARAMS.as_slice()
+    }
+}
+
+/// Binary compute_signature function for the `Panic` op
 struct PanicSigFun();
 impl SignatureFromArgs for PanicSigFun {
     fn compute_signature(&self, arg_values: &[TypeArg]) -> Result<PolyFuncType, SignatureError> {

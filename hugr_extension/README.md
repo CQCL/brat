@@ -38,4 +38,5 @@ In the following, we use `int` as a shorthand for the Hugr `arithmetic.int.types
 
 | Name | Type Arguments | Inputs | Outputs | Meaning |
 | ---- | -------------- | ------ | --------| ------- |
+| `Partial` | `Us: List<Type>` <br> `Ss: List<Type>` <br> `Ts: List<Type>` | `(*Us, *Ss -> *Ts), *Us`| `*Ss -> *Ts` | A partial function application node. |
 | `Panic` | `Ss: List<Type>` <br> `Ts: List<Type>` | `*Ss`| `*Ts` | A panic op with parametrised signature |

@@ -96,6 +96,12 @@ mod test {
         };
         assert_eq!(round_trip(&substitute), substitute);
 
+        let partial = BratOp::Partial {
+            inputs: vec![Type::UNIT].into(),
+            output_sig: sig1.clone(),
+        };
+        assert_eq!(round_trip(&partial), partial);
+
         let panic = BratOp::Panic { sig: sig1.clone() };
         assert_eq!(round_trip(&panic), panic);
 

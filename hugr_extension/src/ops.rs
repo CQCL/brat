@@ -22,6 +22,10 @@ pub enum BratOp {
         func_sig: FunctionType,
         hole_sigs: Vec<FunctionType>,
     },
+    Partial {
+        inputs: TypeRow,
+        output_sig: FunctionType,
+    },
     Panic {
         sig: FunctionType,
     },
@@ -41,6 +45,7 @@ impl OpName for BratOp {
         match self {
             Hole { .. } => "Hole".into(),
             Substitute { .. } => "Substitute".into(),
+            Partial { .. } => "Partial".into(),
             Panic { .. } => "Panic".into(),
             Ctor { ctor, .. } => format_smolstr!("Ctor::{}", ctor.name()),
             PrimCtorTest { ctor, .. } => format_smolstr!("PrimCtorTest::{}", ctor.name()),
@@ -74,6 +79,18 @@ impl MakeExtensionOp for BratOp {
                     Ok(BratOp::Substitute {
                         func_sig: func_sig.body().clone(),
                         hole_sigs: hole_sigs?,
+                    })
+                }
+                _ => Err(OpLoadError::InvalidArgs(SignatureError::InvalidTypeArgs)),
+            },
+            BratOpDef::Partial => match (sig.input().as_ref(), sig.output().as_ref()) {
+                ([_, partial_inputs @ ..], [output_sig]) => {
+                    let TypeEnum::Function(output_sig) = output_sig.as_type_enum() else {
+                        return Err(SignatureError::InvalidTypeArgs.into());
+                    };
+                    Ok(BratOp::Partial {
+                        inputs: partial_inputs.to_vec().into(),
+                        output_sig: output_sig.body().clone(),
                     })
                 }
                 _ => Err(OpLoadError::InvalidArgs(SignatureError::InvalidTypeArgs)),
@@ -115,6 +132,11 @@ impl MakeExtensionOp for BratOp {
                         })
                         .collect(),
                 },
+            ],
+            BratOp::Partial { inputs, output_sig } => vec![
+                arg_from_row(inputs),
+                arg_from_row(output_sig.input()),
+                arg_from_row(output_sig.output()),
             ],
             BratOp::Panic { sig } => vec![arg_from_row(sig.input()), arg_from_row(sig.output())],
             BratOp::Ctor { args, .. } => args.clone(),

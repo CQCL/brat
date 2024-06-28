@@ -288,16 +288,28 @@ substOp parent outerSig innerSigs
   = CustomOp parent "Brat" "Substitute" sig args
  where
   sig = FunctionType (toFunc <$> (outerSig : innerSigs)) [toFunc outerSig]
+  args = [funcToSeq outerSig, TASequence (funcToSeq <$> innerSigs)]
 
-  toFunc :: FunctionType -> HugrType
-  toFunc = HTFunc . PolyFuncType []
+  funcToSeq (FunctionType ins outs) = TASequence [toSeq ins, toSeq outs]
 
-  toSeq :: FunctionType -> TypeArg
-  toSeq (FunctionType ins outs) = TASequence [TASequence (TAType <$> ins)
-                                             ,TASequence (TAType <$> outs)
-                                             ]
+toFunc :: FunctionType -> HugrType
+toFunc = HTFunc . PolyFuncType []
 
-  args = [toSeq outerSig, TASequence (toSeq <$> innerSigs)]
+toSeq :: [HugrType] -> TypeArg
+toSeq tys = TASequence (TAType <$> tys)
+
+partialOp :: node  -- Parent
+          -> FunctionType  -- Signature of the function that is partially evaluated
+          -> Int  -- Number of arguments that are evaluated
+          -> CustomOp node
+partialOp parent funcSig numSupplied = CustomOp parent "Brat" "Partial" sig args
+ where
+  sig = FunctionType (toFunc funcSig : partialInputs) [toFunc $ FunctionType otherInputs (output funcSig)]
+  args = [toSeq partialInputs, toSeq otherInputs, toSeq (output funcSig)]
+
+  partialInputs = take numSupplied (input funcSig)
+  otherInputs = drop numSupplied (input funcSig)
+
 
 data LoadConstantOp node = LoadConstantOp
   { parent :: node
@@ -394,6 +406,9 @@ instance ToJSON node => ToJSON (Hugr node) where
                                ,"edges" .= es
                                ]
 
+orderEdgeOffset :: Int
+orderEdgeOffset = -1
+
 data PortId node = Port
   { nodeId :: node
   , offset :: Int
@@ -401,4 +416,5 @@ data PortId node = Port
  deriving (Eq, Functor, Show)
 
 instance ToJSON node => ToJSON (PortId node) where
-  toJSON (Port node offset) = toJSON (node, offset)
+  toJSON (Port node offset) = toJSON (node, offset')
+    where offset' = if offset == orderEdgeOffset then Nothing else Just offset

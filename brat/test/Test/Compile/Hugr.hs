@@ -25,7 +25,7 @@ outputDir = prefix </> "output"
 
 -- examples that we expect to compile, but then to fail validation
 invalidExamples :: [FilePath]
-invalidExamples = map ((++ ".brat") . ("examples" </>)) ["vector", "pass", "thunks"]
+invalidExamples = map ((++ ".brat") . ("examples" </>)) ["pass", "thunks"]
 
 -- examples that we expect not to compile
 -- Note this includes those with remaining holes; it would be better
@@ -42,7 +42,6 @@ nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   ,"full"
   ,"graph"
   ,"holes"
-  ,"into"
   ,"ising"
   ,"kernel"
   ,"kernel-syntax"
