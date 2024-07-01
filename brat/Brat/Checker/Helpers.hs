@@ -20,7 +20,7 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
                             ,evalSrcRow, evalTgtRow
                             )-} where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), CtxEnv(..), err, typeErr, kindArgRows)
+import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (Eval(eval), EvMode(..), kindType)
@@ -340,37 +340,9 @@ makeBox name cty@(ss :->> ts) body = do
       bres <- name -! body (overs, unders)
       pure (thunk, bres)
     (Braty, body) -> do
-      locals <- locals <$> req AskVEnv
-      (_,_,[thunk],_) <- next (name ++ "_thunk") (Box locals src tgt) (S0, Some (Zy :* S0)) R0 (RPr ("thunk", VFun ?my cty) R0)
-      bres <- name -! body (overs, unders)
-{- TODO: Work out if/why this is needed and delete if appropriate
-
-      let n_args = length overs
-      -- The result, plus all of the outer variables it tried to look up
-      (bres, captures) <- captureOuterVars src (length overs) $ body (overs, unders, snd ctx)
-      -- Lookup the definitions of all the variables accessed in the continuation
-      inner_outer_srcs :: [[((Src, BinderType Brat), Src)]] <- forM (M.assocs captures) $ \(var, outports) ->
-        fromJust . zip_same_length outports . map fst . fromJust <$> req (VLup var)
-      -- Make a new row for outer variables
-      let new_inports = M.fromList $ map
-            (\((NamedPort {end = Ex isrc n, portName=pn}, ty), _) -> assert (src == isrc) (n, (pn, ty)))
-            (concat inner_outer_srcs)
-      unless ((M.keys new_inports) == [n_args..n_args + length new_inports - 1]) $ err $ InternalError "wrong port numbers"
-      new_inports <- pure $ M.elems new_inports -- sorted
-      -- This *replaces* the earlier 'src' node with the same name, just
-      -- updating the ports to include some for captured variables
-      req $ AddNode src (BratNode Source [] (map (second $ biType @Brat) ((first portName <$> overs) ++ new_inports)))
-      new_inports <- pure $ foldr RPr R0 (second (biType @Brat) <$> new_inports)
-      -- Now make the box. This has inputs *only* for the captured variables
-      -- (not the arguments - those are supplied in addition to the box when it's eval'd)
-      (box_node,_,[thunk],_) <- next (name ++ "_thunk") (src :>>: tgt) (S0, Some (Zy :* S0)) new_inports (RPr ("thunk", VFun ?my cty) R0)
-      -- Finally, wire captured values into box
-      forM (concat inner_outer_srcs) (
-        \((NamedPort {end=Ex _ n, portName=p}, ty), osrc) -> case ty of
-          Right ty -> wire (osrc, ty, NamedPort {end=In box_node (n-n_args), portName=p})
-          Left _ -> pure ()
-        )
--}
+      (bres, captures) <- name -! (captureOuterLocals $ body (overs, unders))
+      (_, [], [thunk], _) <- next (name ++ "_thunk") (Box captures src tgt) (S0, Some (Zy :* S0))
+                                     R0 (RPr ("thunk", VFun ?my cty) R0)
       pure (thunk, bres)
 
 -- Evaluate either mode's BinderType

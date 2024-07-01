@@ -14,7 +14,6 @@ import Hasochism
 import Util
 
 import Control.Monad.Freer
-import Control.Monad.State (State, runState, state)
 
 import Control.Monad.Fail ()
 import Data.List (intercalate)
@@ -119,41 +118,24 @@ localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
                                    localVEnv ext (k (env { locals = M.union ext (locals env) }))
 localVEnv ext (Req (InLvl str c) k) = Req (InLvl str (localVEnv ext c)) (localVEnv ext . k)
 localVEnv ext (Req r k) = Req r (localVEnv ext . k)
-
-type CaptureOuterVarsState = (
-    M.Map UserName [(Src, BinderType Brat)]  -- accumulates variables captured
-   ,Int  -- next free outport of input node (sum of lengths of values of previous)
-   )
-
--- runs a computation, but intercepts uses of outer variables and redirects
+   
+-- runs a computation, but intercepts uses of outer *locals* variables and redirects
 -- them to use new outports of the specified node (expected to be a Source).
 -- Returns a list of captured variables and their generated (Source-node) outports
-captureOuterVars :: Name -> Int -- Name of Source node and #existing inputs
-                 -> Checking v
-                 -> Checking (v, M.Map UserName [(Src, BinderType Brat)])
-captureOuterVars src_node n_inputs c = do
-  (v, (captured, _)) <- helper (M.empty, n_inputs) c
-  pure (v, captured)
+captureOuterLocals :: Checking v -> Checking (v, VEnv)
+captureOuterLocals c = do
+  outerLocals <- locals <$> req AskVEnv
+  helper (outerLocals, M.empty) c
  where
-  helper :: CaptureOuterVarsState
-         -> Checking v
-         -> Checking (v, CaptureOuterVarsState)
-  helper state (Ret v) = Ret (v, state)
-  helper state (Req (InLvl str c) k) = do
-    (v, state) <- req (InLvl str (helper state c))
-    helper state (k v)
-  helper state@(captured, n_inputs) (Req (VLup x) k) = do
-    case M.lookup x captured of
-      j@(Just _) -> helper state (k j)
-      Nothing -> req (VLup x) >>= \case
-          Nothing -> helper state (k Nothing)
-          Just outerVals ->
-            let (outPorts, n_inputs') = runState (mapM next_input outerVals) n_inputs
-            in helper (M.insert x outPorts captured, n_inputs') (k $ Just outPorts)
+  helper :: (VEnv, VEnv) -> Checking v
+         -> Checking (v, M.Map UserName [(Src, BinderType Brat)])
+  helper (_, captured) (Ret v) = Ret (v, captured)
+  helper state@(avail,_) (Req (InLvl str c) k) = do
+    (v, captured) <- req (InLvl str (helper state c))
+    helper (avail, captured) (k v)
+  helper (avail, captured) (Req (VLup x) k) | j@(Just new) <- M.lookup x avail =
+    helper (avail, M.insert x new captured) (k j)
   helper state (Req r k) = Req r (helper state . k)
-  -- replaces the end (not portname) with the *next* port of 'src_node', defined by the state
-  next_input :: (Src, BinderType Brat) -> State Int (Src, BinderType Brat)
-  next_input (src, ty) = state (\n_input -> ((src {end=Ex src_node n_input}, ty), n_input+1))
 
 wrapError :: (Error -> Error) -> Checking v -> Checking v
 wrapError _ (Ret v) = Ret v
