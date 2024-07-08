@@ -10,10 +10,13 @@ cas(succ(a), succ(b)) = let a', b' = cas(a, b) in succ(a'), succ(b')
 -- Quite annoying that we can't write this version!
 -- cas(succ(a), succ(b)) = cas(a, b) |> { succ(_), succ(_) }
 
--- Should make some syntactic sugar for 2^n
 -- Merging two sorted vectors into one
 merge(n :: #, Vec(Nat, 2^n), Vec(Nat, 2^n)) -> Vec(Nat, 2^(n + 1))
-merge(0, [x], [y]) = cas(x, y) |> (x, y => [x, y]) -- Need to merge fan{in,out}!
+merge(0, [x], [y]) = cas(x, y) |> (x, y => [x, y])
+-- OR:
+-- merge(0, [x], [y])
+--  = cas(x, y) |>
+--    [\/] -- Need to merge fan{in,out}!
 merge(succ(n), xs0 =%= xs1, ys0 =%= ys1)
  = fixOffBy1(succ(n), merge(n, xs0, ys0) =%= merge(n, xs1, ys1))
 
@@ -26,17 +29,7 @@ merge(succ(n), xs0 =%= xs1, ys0 =%= ys1)
 
 
 -- Example of how to write with vectorising `of`
---fixOffBy1(n :: #, Vec(Nat, succ(full(succ(n))))) -> Vec(Nat, succ(full(succ(n))))
---fixOffBy1(n, lo ,- (mid0 =%= mid1) -, hi) =
--- Example of how to write with vectorising `of`
---  let mid0, mid1 = (full(n) of cas)(mid0, mid1)
---  in  lo, (mid0' =%= mid1'), hi
-
 fixOffBy1(n :: #, Vec(Nat, 2^(n + 1))) -> Vec(Nat, 2^(n + 1))
-fixOffBy1(n, lo ,- mid -, hi) = lo ,- casses(full(n), mid) -, hi
-
-casses(m :: #, Vec(Nat, 2 * m)) -> Vec(Nat, 2 * m)
-casses(0, []) = []
-casses(succ(m), a ,- b ,- cs) =
-  let a', b' = cas(a, b) in
-    a' ,- b' ,- casses(m, cs)
+fixOffBy1(n, lo ,- (mid0 =%= mid1) -, hi) =
+  let mid0', mid1' = (full(n) of cas)(mid0, mid1)
+  in  lo ,- (mid0' =%= mid1') -, hi
