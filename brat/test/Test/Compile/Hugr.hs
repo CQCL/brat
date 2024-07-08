@@ -57,6 +57,8 @@ nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   ,"type_alias"
   ,"vector"
   ,"fanout" -- Contains Selectors
+  ,"vectorise" -- Generates MapFun nodes which aren't implemented yet
+  ,"batcher-merge-sort" -- Generates MapFun nodes which aren't implemented yet
   -- Conjecture: These examples don't compile because number patterns in type
   -- signatures causes `kindCheck` to call `abstract`, creating "Selector"
   -- nodes, which we don't attempt to compile because we want to get rid of them
