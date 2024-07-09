@@ -1,0 +1,2 @@
+f(n :: #, Vec(Nat, n * n)) -> Bool
+f = ?f

@@ -52,7 +52,7 @@ tokenValues fc (TList ty) = concat $ do
   [[vec fc (WC fc <$> list)]]
 tokenValues fc (TVec ty (VNum (NumValue n Constant0))) = do
   tm <- tokenValues fc ty
-  [vec fc (replicate n $ WC fc tm)]
+  [vec fc (replicate (fromIntegral n) $ WC fc tm)]
 tokenValues _ (TVec _ _) = [] -- not enough info
 -- HACK: Lookup in the default constructor table, rather than using the Checking
 -- monad to look up definitions.
@@ -102,7 +102,7 @@ tokenValues fc (VFun Kerny (ss :->> ts)) =
   tokenSType (TVec TQ _) = []
   tokenSType (TVec sty (VNum (NumValue n Constant0))) = do
     tm <- tokenSType sty
-    [vec fc (replicate n $ WC fc tm)]
+    [vec fc (replicate (fromIntegral n) $ WC fc tm)]
   tokenSType _ = []
 tokenValues _ _ = []
 

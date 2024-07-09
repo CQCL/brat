@@ -41,7 +41,7 @@ arbitrarySValue d = case d of
   vec d = do
     n <- chooseInt bounds
     ty <- arbitrarySValue d
-    pure (TVec ty (VNum (NumValue n Constant0))) -- Only the simplest values of `n`
+    pure (TVec ty (VNum (NumValue (fromIntegral n) Constant0))) -- Only the simplest values of `n`
 
 
 instance Arbitrary (Val Z) where

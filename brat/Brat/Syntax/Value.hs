@@ -188,7 +188,7 @@ instance forall m top bot. MODEY m => Show (Ro' m top bot) where
 
 -------------------------------- Number Values ---------------------------------
 data NumVal n = NumValue
-  { upshift :: Int
+  { upshift :: Integer
   , grower  :: Fun00 n
   } deriving Eq
 
@@ -209,7 +209,7 @@ instance Show (Fun00 n) where
 
 -- Strictly increasing function
 data StrictMono n = StrictMono
- { multBy2ToThe :: Int
+ { multBy2ToThe :: Integer
  , monotone :: Monotone n
  } deriving Eq
 
@@ -234,7 +234,7 @@ class NumFun (t :: N -> Type) where
   numValue :: t n -> NumVal n
 
 instance NumFun NumVal where
-  numEval NumValue{..} = ((fromIntegral upshift) +) . numEval grower
+  numEval NumValue{..} = (upshift +) . numEval grower
   numValue = id
 
 instance NumFun Fun00 where
@@ -267,16 +267,16 @@ nVar v = NumValue
                })
   }
 
-nConstant :: Int -> NumVal n
+nConstant :: Integer -> NumVal n
 nConstant n = NumValue n Constant0
 
 nZero :: NumVal n
 nZero = nConstant 0
 
-nPlus :: Int -> NumVal n -> NumVal n
+nPlus :: Integer -> NumVal n -> NumVal n
 nPlus n (NumValue up g) = NumValue (up + n) g
 
-n2PowTimes :: Int -> NumVal n -> NumVal n
+n2PowTimes :: Integer -> NumVal n -> NumVal n
 n2PowTimes n NumValue{..}
   = NumValue { upshift = upshift * (2 ^ n)
              , grower  = mult2PowGrower grower

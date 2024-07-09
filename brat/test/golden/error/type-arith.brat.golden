@@ -1,0 +1,6 @@
+Error in test/golden/error/type-arith.brat@FC {start = Pos {line = 1, col = 20}, end = Pos {line = 1, col = 25}}:
+f(n :: #, Vec(Nat, n ^ 3)) -> Bool
+                   ^^^^^
+
+  Type error: Type level arithmetic too confusing
+

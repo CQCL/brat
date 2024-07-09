@@ -172,7 +172,7 @@ solve my ((src, Lit tm):p) = do
     (Braty, Left Nat)
       | Num n <- tm -> do
           unless (n >= 0) $ typeErr "Negative Nat kind"
-          unifyNum (nConstant n) (nVar (VPar (ExEnd (end src))))
+          unifyNum (nConstant (fromIntegral n)) (nVar (VPar (ExEnd (end src))))
     (Braty, Right ty) -> do
       throwLeft (simpleCheck Braty ty tm)
     _ -> typeErr $ "Literal " ++ show tm ++ " isn't valid at this type"

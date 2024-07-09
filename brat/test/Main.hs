@@ -15,6 +15,7 @@ import Test.Parsing
 import Test.Search
 import Test.Substitution
 import Test.Syntax.Let
+import Test.TypeArith
 
 main = do
   failureTests  <- getFailureTests
@@ -35,4 +36,5 @@ main = do
                                 ,abstractorTests
                                 ,eqTests
                                 ,compilationTests
+                                ,typeArithTests
                                 ]

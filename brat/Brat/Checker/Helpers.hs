@@ -35,6 +35,7 @@ import Brat.Syntax.Value
 import Brat.UserName
 import Bwd
 import Hasochism
+import Util (log2)
 
 import Control.Monad.Freer (req, Free(Ret))
 import Control.Arrow ((***))
@@ -376,3 +377,53 @@ roToTuple R0 = TNil
 roToTuple (RPr (_, ty) ro) = TCons ty (roToTuple ro)
 roToTuple (REx _ ro) = case ro of
   _ -> error "the impossible happened"
+
+-- Low hanging fruit that we can easily do to our normal forms of numbers
+runArith :: NumVal Z -> ArithOp -> NumVal Z -> Maybe (NumVal Z)
+runArith (NumValue upl grol) Add (NumValue upr gror)
+-- We can add when one of the sides is a constant...
+ | Constant0 <- grol = pure $ NumValue (upl + upr) gror
+ | Constant0 <- gror = pure $ NumValue (upl + upr) grol
+ -- ... or when Fun00s are the same
+ | grol == gror = pure $ NumValue (upl + upr) grol
+runArith (NumValue upl grol) Sub (NumValue upr gror)
+-- We can subtract when the rhs is a constant...
+ | Constant0 <- gror, upl >= upr = pure $ NumValue (upl - upr) grol
+ -- ... or when the Fun00s are the same...
+ | grol == gror, upl >= upr = pure $ NumValue (upl - upr) Constant0
+ -- ... or we have (c + 2^(k + 1) * x) - (c' + 2^k * x)
+ | StrictMonoFun (StrictMono k m) <- grol
+ , StrictMonoFun (StrictMono k' m') <- gror
+ , m == m'
+ , k == (k' + 1)
+ , upl >= upr = pure $ NumValue (upl - upr) gror
+runArith (NumValue upl grol) Mul (NumValue upr gror)
+ -- We can multiply two constants...
+ | Constant0 <- grol
+ , Constant0 <- gror = pure $ NumValue (upl * upr) grol
+ -- ... or we can multiply by a power of 2
+ | Constant0 <- grol
+ , StrictMonoFun (StrictMono k' m) <- gror
+ , Just k <- log2 upl = pure $ NumValue (upl * upr) (StrictMonoFun (StrictMono (k + k') m))
+ | Constant0 <- gror
+ , StrictMonoFun (StrictMono k' m) <- grol
+ , Just k <- log2 upr = pure $ NumValue (upl * upr) (StrictMonoFun (StrictMono (k + k') m))
+runArith (NumValue upl grol) Pow (NumValue upr gror)
+ -- We can take constants to the power of constants...
+ | Constant0 <- grol
+ , Constant0 <- gror = pure $ NumValue (upl ^ upr) Constant0
+ -- ... or we can take a constant to the power of a NumValue if the constant
+ -- is 2^(2^c)
+ | Constant0 <- grol
+ , Just l <- log2 upl
+ , Just k <- log2 l
+ , StrictMonoFun (StrictMono k' mono) <- gror
+ -- 2^(2^k) ^ (upr + (2^k' * mono))
+ -- (2^(2^k))^upr * (2^(2^k))^(2^k' * mono)
+ -- 2^(2^k * upr) * 2^(2^k * (2^k' * mono))
+ -- 2^(2^k * upr) * (1 + 2^(2^k * (2^k' * mono)) - 1)
+ -- 2^(2^k * upr) + 2^(2^k * upr) * (2^(2^k * (2^k' * mono)) - 1)
+ -- 2^(2^k * upr) + 2^(2^k * upr) * (full(2^k * (2^k' * mono))
+ -- 2^(2^k * upr) + 2^(2^k * upr) * (full(2^(k + k') * mono))
+ = pure $ NumValue (upl ^ upr) (StrictMonoFun (StrictMono (l * upr) (Full (StrictMono (k + k') mono))))
+runArith _ _ _ = Nothing

@@ -37,6 +37,7 @@ import Brat.Constructors
 import Brat.Error
 import Brat.Eval
 import Brat.FC hiding (end)
+import qualified Brat.FC as FC
 import Brat.Graph
 import Brat.Naming
 -- import Brat.Search
@@ -395,7 +396,7 @@ check' (Simple tm) ((), ((hungry, ty):unders)) = do
     (Braty, Left Nat, Num n) -> do
       (_, _, [(dangling, _)], _) <- next "" (Const (Num n)) (S0,Some (Zy :* S0))
                                     R0 (REx ("value", Nat) (S0 ::- R0))
-      let val = VNum (nConstant n)
+      let val = VNum (nConstant (fromIntegral n))
       defineSrc dangling val
       defineTgt hungry val
       wire (dangling, kindType Nat, hungry)
@@ -543,11 +544,29 @@ kindCheck unders (Emb (WC fc (Var v))) = localFC fc $ vlup v >>= f unders
 -- TODO: Add other operations on numbers
 kindCheck ((hungry, Nat):unders) (Simple (Num n)) | n >= 0 = do
   (_, _, [(dangling, _)], _) <- next "" (Const (Num n)) (S0,Some (Zy :* S0)) R0 (REx ("value", Nat) (S0 ::- R0))
-  let value = VNum (nConstant n)
+  let value = VNum (nConstant (fromIntegral n))
   defineTgt hungry value
   defineSrc dangling value
   wire (dangling, TNat, hungry)
   pure ([value], unders)
+kindCheck ((hungry, Nat):unders) (Arith op lhs rhs) = do
+  (_, arithUnders, [(dangling,_)], _) <- next ("arith_" ++ show op) (ArithNode op) (S0, Some (Zy :* S0))
+                                         (REx ("lhs", Nat) (S0 ::- (REx ("rhs", Nat) (S0 ::- R0))))
+                                         (REx ("value", Nat) (S0 ::- R0))
+  ([vlhs, vrhs], []) <- kindCheck [ (p, k) | (p, Left k) <- arithUnders ] (lhs :|: rhs)
+  let arithFC = FC (FC.start (fcOf lhs)) (FC.end (fcOf rhs))
+  localFC arithFC $ case (vlhs, vrhs) of
+    (VNum lhs, VNum rhs) -> do
+      case runArith lhs op rhs of
+        Nothing -> typeErr "Type level arithmetic too confusing"
+        Just result -> do
+          defineTgt hungry (VNum result)
+          defineSrc dangling (VNum result)
+          wire (dangling, kindType Nat, hungry)
+          pure ([VNum result], unders)
+    (VNum _, x) -> localFC (fcOf rhs) . typeErr $ "Expected numeric expression, found " ++ show x
+    (x, VNum _) -> localFC (fcOf lhs) . typeErr $ "Expected numeric expression, found " ++ show x
+    _ -> typeErr "Expected arguments to arithmetic operators to have kind #"
 kindCheck ((hungry, Nat):unders) (Con c arg)
  | Just (_, f) <- M.lookup c natConstructors = do
      -- All nat constructors have one input and one output
@@ -562,7 +581,8 @@ kindCheck ((hungry, Nat):unders) (Con c arg)
      defineTgt hungry v
      pure ([v], unders)
 
-kindCheck unders tm = err $ Unimplemented "kindCheck" [showRow unders, show tm]
+kindCheck ((_, k):_) tm = typeErr $ "Expected " ++ show tm ++ " to have kind " ++ show k
+
 
 -- Checks the kinds of the types in a dependent row
 kindCheckRow :: Modey m
@@ -713,7 +733,7 @@ abstractPattern Braty (dangling, Left k) pat = abstractKind k pat
   abstractKind _ (Bind x) = let ?my = Braty in singletonEnv x (dangling, Left k)
   abstractKind _ (DontCare) = pure emptyEnv
   abstractKind k (Lit x) = case (k, x) of
-    (Nat, Num n) -> defineSrc dangling (VNum (nConstant n)) $> emptyEnv
+    (Nat, Num n) -> defineSrc dangling (VNum (nConstant (fromIntegral n))) $> emptyEnv
     (Star _, _) -> err MatchingOnTypes
     _ -> err (PattErr $ "Couldn't resolve pattern " ++ show pat ++ " with kind " ++ show k)
 --  abstractKind Braty Nat p = abstractPattern Braty (src, Right TNat) p

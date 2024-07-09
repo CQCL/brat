@@ -167,6 +167,7 @@ test-suite tests
                        Test.Search,
                        Test.Substitution,
                        Test.Syntax.Let,
+                       Test.TypeArith,
                        Test.Util
 
   build-depends:       base <5,

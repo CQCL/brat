@@ -44,3 +44,8 @@ names = do
 
 infixr 3 **^
 infixr 3 ^**
+
+log2 :: Integer -> Maybe Integer
+log2 m | m > 1, (n, 0) <- m `divMod` 2 = (1+) <$> log2 n
+log2 1 = pure 0
+log2 _ = Nothing

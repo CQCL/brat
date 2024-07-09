@@ -48,17 +48,17 @@ if(X :: *, Bool, X, X) -> X
 if(_, true, then, _) = then
 if(_, false, _, else) = else
 
-fastAdder(n :: #, Vec(Bool, succ(full(n))), Vec(Bool, succ(full(n))), carryIn :: Bool) -> carryOut :: Bool, Vec(Bool, succ(full(n)))
+fastAdder(n :: #, Vec(Bool, 2^n), Vec(Bool, 2^n), carryIn :: Bool) -> carryOut :: Bool, Vec(Bool, 2^n)
 fastAdder(0, [x], [y], b) = let c, z = fullAdder(x, y, b) in c, [z]
 fastAdder(succ(n), xsh =,= xsl, ysh =,= ysl, b) =
   fastAdder(n, xsh, ysh, true), fastAdder(n, xsh, ysh, false), fastAdder(n, xsl, ysl, b) |>
   (d1, zsh1, d0, zsh0, c, zsl => if(Bool, c, d1, d0), if(Vec(Bool, succ(full(n))), c, zsh1, zsh0) =,= zsl)
 
-chop(n :: #, Vec(Bool, doub(n))) -> Vec(Bool, n), Vec(Bool, n)
+chop(n :: #, Vec(Bool, 2 * n)) -> Vec(Bool, n), Vec(Bool, n)
 chop(n, hi =,= lo) = hi, lo
 
-multAndAddTwo(n :: #, mul1 :: Vec(Bool, succ(full(n))), mul2 :: Vec(Bool, succ(full(n))), add1 :: Vec(Bool, succ(full(n))), add2 :: Vec(Bool, succ(full(n))))
-            -> Vec(Bool, succ(full(succ(n))))
+multAndAddTwo(n :: #, mul1 :: Vec(Bool, 2^n), mul2 :: Vec(Bool, 2^n), add1 :: Vec(Bool, 2^n), add2 :: Vec(Bool, 2^n))
+            -> Vec(Bool, 2^(n + 1))
 multAndAddTwo(0, [m1], [m2], [a1], [a2]) = let b, a = fullAdder(and(m1, m2), a1, a2) in [b,a]
 multAndAddTwo(succ(n), msh1 =,= msl1, msh2 =,= msl2, ash1 =,= asl1, ash2 =,= asl2)
  = let hilo1, lohi1, lohi2, lolo = chop(succ(full(n)), multAndAddTwo(n, msh1, msl2, ash1, ash2)), chop(succ(full(n)), multAndAddTwo(n, msl1, msl2, asl1, asl2)) in
