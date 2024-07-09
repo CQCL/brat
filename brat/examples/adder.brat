@@ -7,16 +7,13 @@ and(Bool, Bool) -> Bool
 and(true, b) = b
 and(false, b) = false
 
-id(Bool) -> Bool
-id(b) = b
-
 halfAdder(Bool, Bool) -> twos :: Bool, ones :: Bool
 halfAdder(a, b) = and(a,b), xor(a,b)
 
 fullAdder(Bool, Bool, Bool) -> twos :: Bool, ones :: Bool
-fullAdder = halfAdder, id;
-            id, halfAdder;
-            xor, id
+fullAdder = halfAdder, |;
+            |, halfAdder;
+            xor, |
 
 adder(n :: #, Vec(Bool, n), Vec(Bool, n), carryIn :: Bool) -> carryOut :: Bool, Vec(Bool, n)
 adder(0, [], [], b) = b, []
