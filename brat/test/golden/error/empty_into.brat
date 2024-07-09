@@ -1,0 +1,5 @@
+makeInt() -> Int
+makeInt = { => 42 }
+
+intoErr :: Bool
+intoErr = |> makeInt

@@ -4,8 +4,15 @@ module Brat.Syntax.Core (Term(..)
                         ,InOut
                         ,CType
                         ,Decl
+                        ,Precedence(..)
+                        ,precedence
                         ) where
 
+import Brat.Constructors.Patterns (pattern CCons,
+                                   pattern CSnoc,
+                                   pattern CConcatEqEven,
+                                   pattern CConcatEqOdd,
+                                   pattern CRiffle)
 import Brat.FC
 import Brat.Naming
 import Brat.Syntax.Common
@@ -61,6 +68,9 @@ data Term :: Dir -> Kind -> Type where
 
 deriving instance Eq (Term d k)
 
+-- N.B. The effort going into making a nice show instance for Term should also
+-- go into the Show instance for Flat, which should be the user facing format,
+-- constructed using `unelaborate`
 instance Show (Term d k) where
   show (Simple tm) = show tm
   show (Let abs xs body)
@@ -68,7 +78,7 @@ instance Show (Term d k) where
   show (NHole (name, _)) = '?' : name
   show (VHole (name, _)) = '?' : name
   show Empty = "()"
-  show (a :|: b) = bracket 2 a ++ ", " ++ bracket 2 b
+  show (a :|: b) = bracket PJuxtPull a ++ ", " ++ bracket PJuxtPull b
   show Pass = "pass"
   show (Th comp) = '{' : show comp ++ "}"
   show (TypedTh comp) = "{:" ++ show comp ++ ":}"
@@ -80,7 +90,7 @@ instance Show (Term d k) where
                                          ,showOp op
                                          -- Arith ops are left nested, so call
                                          -- the rhs with `prec + 1`
-                                         ,bracket (prec + 1) rhs
+                                         ,bracket (succ prec) rhs
                                          ]
    where
     showOp = \case
@@ -89,19 +99,19 @@ instance Show (Term d k) where
       Pow -> "^"
       Sub -> "-"
       Div -> "/"
-  show (Pull ps x) = showList ps ++ bracket 1 x
+  show (Pull ps x) = showList ps ++ bracket PJuxtPull x
    where
     showList [] = "[]:"
     showList ps = concatMap (++":") ps
 
   show (Var x) = show x
   -- Nested applications should be bracketed too, hence 4 instead of 3
-  show (fun :$: arg) = bracket 4 fun ++ ('(' : show arg ++ ")")
-  show (tm ::: ty) = bracket 4 tm ++ " :: " ++ show ty
-  show (a :-: b) = bracket 2 a ++ "; " ++ bracket 3 b
+  show (fun :$: arg) = bracket PApp fun ++ ('(' : show arg ++ ")")
+  show (tm ::: ty) = bracket PAnn tm ++ " :: " ++ show ty
+  show (a :-: b) = bracket PComp a ++ "; " ++ bracket PComp b
   show (Lambda c cs) = unlines $ (showClause c : (("| "++) . showClause <$> cs))
    where
-    showClause (xs, bod) = show xs ++ " => " ++ bracket 1 bod
+    showClause (xs, bod) = show xs ++ " => " ++ bracket PLambda bod
   show p@(Con c arg) = case prettyPat p of
     Just ps -> show ps
     Nothing -> {-case unWC arg of
@@ -117,24 +127,26 @@ instance Show (Term d k) where
   show (K (ss :-> ts)) = "{" ++ showSig ss ++ " -o " ++ showSig ts ++ "}"
 
 -- Wrap a term in brackets if its `precedence` is looser than `n`
-bracket :: Int -> WC (Term d k) -> String
+bracket :: Precedence -> WC (Term d k) -> String
 bracket n (WC _ tm) = case precedence tm of
   Just m | m < n -> '(' : show tm ++ ")"
   _ -> show tm
 
 -- Report tightness of binding, or `Nothing` if not a binary op
-precedence :: Term d k -> Maybe Int
-precedence (Let _ _ _) = Just 0
-precedence (Lambda _ _) = Just 1
-precedence (_ :-: _) = Just 2
-precedence (Pull _ _) = Just 3
-precedence (_ :|: _) = Just 4
-precedence (_ :$: _) = Just 5
-precedence (_ ::: _) = Just 6
-precedence (Arith op _ _) = case op of
-  Add -> Just 7
-  Sub -> Just 7
-  Div -> Just 8
-  Mul -> Just 8
-  Pow -> Just 9
+precedence :: Term d k -> Maybe Precedence
+precedence (Let _ _ _)  = Just PLetIn
+precedence (Lambda _ _) = Just PLambda
+precedence (_ :-: _)    = Just PComp
+precedence (Pull _ _)   = Just PJuxtPull
+precedence (_ :|: _)    = Just PJuxtPull
+precedence (Con c _)
+  | c `elem` [CCons,CSnoc,CConcatEqEven,CConcatEqOdd,CRiffle] = Just PVecPat
+precedence (_ :$: _)    = Just PApp
+precedence (_ ::: _)    = Just PAnn
+precedence (Arith op _ _) = Just $ case op of
+  Add -> PAddSub
+  Sub -> PAddSub
+  Div -> PMulDiv
+  Mul -> PMulDiv
+  Pow -> PPow
 precedence _ = Nothing

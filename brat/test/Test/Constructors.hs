@@ -2,17 +2,7 @@
 
 module Test.Constructors (constructorTests) where
 
-import Brat.Constructors (pattern CNil
-                         ,pattern CCons
-                         ,pattern CSucc
-                         ,pattern CDoub
-                         ,pattern CTrue
-                         ,pattern CVec
-                         ,pattern CInt
-                         ,pattern CNat
-                         ,pattern CBool
-                         ,pattern CQubit
-                         )
+import Brat.Constructors.Patterns
 import Brat.Load
 import Brat.FC
 import Brat.Graph

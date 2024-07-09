@@ -9,7 +9,7 @@
 
 module Brat.Compile.Hugr (compile) where
 
-import Brat.Constructors (pattern CFalse, pattern CTrue)
+import Brat.Constructors.Patterns (pattern CFalse, pattern CTrue)
 import Brat.Checker.Monad (track, trackM, CheckingSig(..))
 import Brat.Checker.Helpers (binderToValue)
 import Brat.Checker.Types (EndType(..), Store(..), VEnv)

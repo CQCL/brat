@@ -2,9 +2,10 @@ module Brat.Constructors where
 
 import qualified Data.Map as M
 
+import Brat.Constructors.Patterns
 import Brat.Syntax.Common
 import Brat.Syntax.Value
-import Brat.UserName
+import Brat.UserName (UserName, plain)
 import Bwd
 import Hasochism (N(..), Ny(..))
 
@@ -23,36 +24,6 @@ type ConstructorMap m
     (M.Map UserName -- The name of the type we're checking against "Ty"
      (CtorArgs m)
     )
-
-pattern CSucc, CDoub, CNil, CCons, CSome, CNone, CTrue, CFalse, CZero, CSnoc :: UserName
-pattern CSucc = PrefixName [] "succ"
-pattern CDoub = PrefixName [] "doub"
-pattern CNil = PrefixName [] "nil"
-pattern CSome = PrefixName [] "some"
-pattern CNone = PrefixName [] "none"
-pattern CTrue = PrefixName [] "true"
-pattern CFalse = PrefixName [] "false"
-pattern CZero = PrefixName [] "zero"
-pattern CCons = PrefixName [] "cons"
-pattern CSnoc = PrefixName [] "snoc"
-pattern CConcatEqEven = PrefixName [] "concatEqEven"
-pattern CConcatEqOdd = PrefixName [] "concatEqOdd"
-pattern CRiffle = PrefixName [] "riffle"
-
-pattern CList, CVec, CNat, CInt, COption, CBool, CBit, CFloat, CString :: UserName
-pattern CList = PrefixName [] "List"
-pattern CVec = PrefixName [] "Vec"
-pattern CNat = PrefixName [] "Nat"
-pattern CInt = PrefixName [] "Int"
-pattern COption = PrefixName [] "Option"
-pattern CBool = PrefixName [] "Bool"
-pattern CBit = PrefixName [] "Bit"
-pattern CFloat = PrefixName [] "Float"
-pattern CString = PrefixName [] "String"
-
-pattern CQubit, CMoney :: UserName
-pattern CQubit = PrefixName [] "Qubit"
-pattern CMoney = PrefixName [] "Money"
 
 defaultConstructors :: ConstructorMap Brat
 defaultConstructors = M.fromList

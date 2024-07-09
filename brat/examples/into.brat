@@ -8,8 +8,14 @@ test1(x,f,g) = x |> f |> g
 test2(A, {A -> B}, {B -> C}) -> C
 test2(x,f,g) = (x |> f) |> g
 
-test3(A, {A -> B}, {A -> {B -> C}}) -> C
-test3(x,f,g) = x |> f ; (x |> g)
+test3a(A, {A -> B}, {A -> {B -> C}}) -> C
+test3a(x,f,g) = x |> f ; (x |> g)
+
+test3b(A, {A -> B}, {A -> {B -> C}}) -> C
+test3b(x,f,g) = (x |> f) |> (x |> g)
+
+test3c(A, {A -> B}, {A -> {B -> C}}) -> C
+test3c(x,f,g) = x |> f |> (x |> g)
 
 test4(A, {A -> B}, {A -> {B -> C}}) -> {A -> C}
 test4(x,f,g) = { f ; (x |> g) }

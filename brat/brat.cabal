@@ -70,6 +70,7 @@ library
                        Brat.Checker.Types,
                        Brat.Compile.Hugr,
                        Brat.Constructors,
+                       Brat.Constructors.Patterns,
                        Brat.Error,
                        Brat.Graph,
                        Brat.Load,

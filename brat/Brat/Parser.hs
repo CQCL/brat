@@ -1,10 +1,6 @@
 module Brat.Parser (parseFile) where
 
-import Brat.Constructors (pattern CCons,
-                          pattern CSnoc,
-                          pattern CConcatEqEven,
-                          pattern CConcatEqOdd,
-                          pattern CRiffle)
+import Brat.Constructors.Patterns
 import Brat.Error
 import Brat.FC
 import Brat.Lexer (lex)
@@ -139,13 +135,6 @@ comma = token0 $ \case
     in  WC fc (FJuxt a b)
   _ -> Nothing
 
-into :: Parser (WC Flat -> WC Flat -> WC Flat)
-into = token0 $ \case
-  Into -> Just $ \a b ->
-    let fc = FC (start (fcOf a)) (end (fcOf b))
-    in  WC fc (FInto a b)
-  _ -> Nothing
-
 arith :: ArithOp -> Parser (WC Flat -> WC Flat -> WC Flat)
 arith op = token0 $ \tok -> case (op, tok) of
   (Add, Plus) -> Just make
@@ -229,7 +218,6 @@ simpleTerm =
   <|> (Num . negate <$> (match Minus *> number) <?> "nat")
   <|> (Num <$> number <?> "nat")
 
-
 outputs :: Parser [RawIO]
 outputs = rawIO (unWC <$> vtype)
 
@@ -247,7 +235,7 @@ typekind = try (match Hash $> Nat) <|> kindHelper Lexer.Dollar Syntax.Dollar <|>
     (p,) <$> typekind
 
 vtype :: Parser (WC (Raw Chk Noun))
-vtype = cnoun atomExpr
+vtype = cnoun (expr' PApp)
 
 -- Parse a row of type and kind parameters
 -- N.B. kinds must be named
@@ -305,7 +293,7 @@ vec = (\(WC fc x) -> unWC $ vec2Cons (end fc) x) <$>  withFC (square elems)
   where
     elems = (element `chainl1` (try vecComma)) <|> pure []
     vecComma = match Comma $> (++)
-    element = (:[]) <$> withFC atomExpr
+    element = (:[]) <$> withFC (expr' (succ PJuxtPull))
     mkNil fc = FCon (plain "nil") (WC fc FEmpty)
 
     vec2Cons :: Pos -> [WC Flat] -> WC Flat
@@ -371,27 +359,53 @@ cthunk = try bratFn <|> try kernel <|> thunk
                               (\x -> APat (Bind ('\'': show x))) <$> ns
 
 
--- Expressions that can occur inside juxtapositions and vectors (i.e. everything with a higher
--- precedence than juxtaposition). Precedence table (loosest to tightest binding):
---    -, ,- =,= =,_,= =%=  (vector builders) (all right-assoc (for now!) and same precedence)
---    + -  (left-assoc)
---    * /  (left-assoc)
---    ^    (left-assoc)
---    ::   (no associativity, i.e. explicit parenthesis required for chaining)
---    app  (left-assoc)
-atomExpr :: Parser Flat
-atomExpr = vectorBuild
+{- Infix operator precedence table (See Brat.Syntax.Common.Precedence)
+(loosest to tightest binding):
+   =>
+   |> (left-assoc)
+   ;  (left-assoc)
+   , & port-pull
+   -, ,- =,= =,_,= =%=  (vector builders) (all right-assoc (for now!) and same precedence)
+   + -  (left-assoc)
+   * /  (left-assoc)
+   ^    (left-assoc)
+   ::   (no associativity, i.e. explicit parenthesis required for chaining)
+   app  (left-assoc)
+-}
+expr = expr' minBound
+
+expr' :: Precedence -> Parser Flat
+expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
  where
+  getParser :: Precedence -> Parser Flat
+  getParser = \case
+    PLetIn -> letin <?> "let ... in"
+    PLambda -> lambda <?> "lambda"
+    PInto -> (emptyInto <|> into) <?> "into"
+    PComp -> composition <?> "composition"
+    PJuxtPull -> pullAndJuxt <?> "juxtaposition"
+    PVecPat -> vectorBuild <?> "vector pattern"
+    PAddSub -> addSub <?> "addition or subtraction"
+    PMulDiv -> mulDiv <?> "multiplication or division"
+    PPow -> pow <?> "power"
+    PAnn -> annotation <?> "type annotation"
+    PApp -> application <?> "application"
+
+  -- Take the precedence level and return a parser for everything with a higher precedence
+  subExpr :: Precedence -> Parser Flat
+  subExpr PApp = atomExpr
+  subExpr p = choice $ (try . getParser <$> enumFrom (succ p)) ++ [atomExpr]
+
   -- Top level parser, looks for vector constructors with `atomExpr'`s as their
   -- elements.
   vectorBuild :: Parser Flat
   vectorBuild = do
-    lhs <- withFC (atomExpr' 0)
+    lhs <- withFC (subExpr PVecPat)
     rest <- optional $
             (CCons, [lhs]) <$ match Cons
             <|> (CSnoc, [lhs]) <$ match Snoc
             <|> (CConcatEqEven, [lhs]) <$ match ConcatEqEven
-            <|> (CConcatEqOdd,) . ([lhs] ++) . (:[]) <$ match ConcatEqOddL <*> withFC (atomExpr' 0) <* match ConcatEqOddR
+            <|> (CConcatEqOdd,) . ([lhs] ++) . (:[]) <$ match ConcatEqOddL <*> withFC (subExpr (succ PVecPat)) <* match ConcatEqOddR
             <|> (CRiffle, [lhs]) <$ match Riffle
     case rest of
       Just (c, args) -> do
@@ -402,59 +416,21 @@ atomExpr = vectorBuild
   mkJuxt [x] = x
   mkJuxt (x:xs) = let rest = mkJuxt xs in WC (FC (start (fcOf x)) (end (fcOf rest))) (FJuxt x rest)
 
-  atomExpr' n = choice $ drop n [
-    try (addSub <?> "addition or subtraction"),
-    try (mulDiv <?> "multiplication or division"),
-    try (pow <?> "power"),
-    try (annotation <?> "type annotation"),
-    try (app <?> "application"),
-    simpleExpr,
-    round expr ]
+  application = withFC atomExpr >>= applied
+   where
+    applied :: WC Flat -> Parser Flat
+    applied f = do
+      first <- withFC (round $ expr <|> pure FEmpty)
+      let one = FApp f first
+      let combinedFC = FC (start (fcOf f)) (end (fcOf first))
+      optional (applied $ WC combinedFC one) <&> fromMaybe one
 
-  binary ops lvl = unWC <$> withFC (atomExpr' lvl) `chainl1` choice (try . arith <$> ops)
-  addSub = binary [Add, Sub] 1
-  mulDiv = binary [Mul, Div] 2
-  pow = binary [Pow] 3
+  binary ops lvl = unWC <$> withFC (subExpr lvl) `chainl1` choice (try . arith <$> ops)
+  addSub = binary [Add, Sub] PAddSub
+  mulDiv = binary [Mul, Div] PMulDiv
+  pow = binary [Pow] PPow
 
-  annotation = FAnnotation <$> withFC (atomExpr' 4) <* match TypeColon <*> rawIO (unWC <$> vtype)
-
-  app = withFC (atomExpr' 5) >>= applied
-  applied :: WC Flat -> Parser Flat
-  applied f = do
-    first <- withFC (round $ expr <|> pure FEmpty)
-    let one = FApp f first
-    let combinedFC = FC (start (fcOf f)) (end (fcOf first))
-    optional (applied $ WC combinedFC one) <&> fromMaybe one
-
-  simpleExpr = FHole <$> hole
-            <|> try (FSimple <$> simpleTerm)
-            <|> vec
-            <|> cthunk
-            <|> try (match DotDot $> FPass)
-            <|> var
-            <|> match Underscore $> FUnderscore
-
-
-{- Infix operator precedence table
-(loosest to tightest binding):
-   =>
-   |> (left-assoc)
-   ;
-   , & port-pull
-   atomExpr
--}
-expr :: Parser Flat
-expr = expr' 0
- where
-  expr' :: Int -> Parser Flat
-  expr' n = choice $ drop n [
-    try (letin <?> "let ... in"),
-    try (lambda <?> "abstraction"),
-    try (cinto <?> "into"),
-    try (composition <?> "composition"),
-    try (pull <?> "port pull"),
-    try (juxt <?> "juxtaposition"),
-    atomExpr ]
+  annotation = FAnnotation <$> withFC (subExpr PAnn) <* match TypeColon <*> rawIO (unWC <$> vtype)
 
   letin = do
     (lhs,rhs) <- inLet $ do
@@ -478,22 +454,50 @@ expr = expr' 0
     body <- withFC expr
     pure (abs, body)
 
-  cinto = unWC <$> withFC (expr' 3 <|> pure FEmpty) `chainl1` try into
+  emptyInto = do
+    -- It's tricky to come up with an FC for empty syntax
+    WC lhs () <- withFC $ match Into
+    rhs <- withFC (subExpr (pred PInto))
+    pure $ FInto (WC lhs FEmpty) rhs
 
-  composition = unWC <$> withFC (expr' 4) `chainl1` try semicolon
+  into = unWC <$> withFC (subExpr PInto) `chainl1` (divider Into FInto)
 
-  pull = do
-    ports <- some (try (port <* match PortColon))
-    FPull ports <$> withFC (expr' 5)
+  composition = unWC <$> withFC (subExpr PComp) `chainl1` (divider Semicolon FCompose)
 
-  juxt = unWC <$> withFC (try pull <|> expr' 6) `chainl1` try comma
-
-  semicolon :: Parser (WC Flat -> WC Flat -> WC Flat)
-  semicolon = token0 $ \case
-    Semicolon -> Just $ \a b ->
+  divider :: Tok -> (WC Flat -> WC Flat -> Flat) -> Parser (WC Flat -> WC Flat -> WC Flat)
+  divider tok f = token0 $ \case
+    t | t == tok -> Just $ \a b ->
       let fc = FC (start (fcOf a)) (end (fcOf b))
-      in  WC fc (FCompose a b)
+      in  WC fc (f a b)
     _ -> Nothing
+
+
+  pullAndJuxt = do
+    ports <- many (try (port <* match PortColon))
+    case ports of
+      [] -> juxtRhsWithPull
+      _ -> FPull ports <$> withFC juxtRhsWithPull
+   where
+    -- Juxtaposition here includes port pulling, since they have the same precedence
+    juxtRhsWithPull = do
+      expr <- withFC (subExpr PJuxtPull)
+      rest <- optional (match Comma *> withFC pullAndJuxt)
+      pure $ case rest of
+        Nothing -> unWC expr
+        Just rest -> FJuxt expr rest
+
+  -- Expressions which don't contain juxtaposition or operators
+  atomExpr :: Parser Flat
+  atomExpr = simpleExpr <|> round expr
+   where
+    simpleExpr = FHole <$> hole
+              <|> try (FSimple <$> simpleTerm)
+              <|> vec
+              <|> cthunk
+              <|> try (match DotDot $> FPass)
+              <|> var
+              <|> match Underscore $> FUnderscore
+
 
 cnoun :: Parser Flat -> Parser (WC (Raw 'Chk 'Noun))
 cnoun pe = do

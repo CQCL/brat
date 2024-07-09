@@ -3,6 +3,6 @@ f(n, Vec([], n) -> Vec([], n) -- First bracket never closed
                 ^^
 
   Parse error unexpected -> 
-expecting (...), ), ,-, -,, =%=, =,, or =,=
+expecting (...) or )
 
 

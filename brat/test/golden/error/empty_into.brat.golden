@@ -1,0 +1,9 @@
+Error in test/golden/error/empty_into.brat@FC {start = Pos {line = 5, col = 11}, end = Pos {line = 5, col = 21}}:
+intoErr = |> makeInt
+          ^^^^^^^^^^
+
+  Type mismatch when checking makeInt()(())
+Expected: (a1 :: Bool)
+But got:  (a1 :: Int)
+
+

@@ -42,6 +42,7 @@ module Brat.Syntax.Common (PortName,
                            ArithOp(..),
                            pattern Dollar,
                            pattern Star,
+                           Precedence(..)
                           ) where
 
 import Brat.FC
@@ -233,3 +234,19 @@ showRow = showSig . fmap (first portName)
 
 
 data ArithOp = Add | Sub | Mul | Div | Pow deriving (Eq, Show)
+
+-- Operator precedence for non-atomic expressions
+-- First constructor (=0) has loosest binding
+data Precedence
+ = PLetIn
+ | PLambda
+ | PInto
+ | PComp
+ | PJuxtPull -- Juxtaposition has the same precedence as port pulling
+ | PVecPat
+ | PAddSub
+ | PMulDiv
+ | PPow
+ | PAnn
+ | PApp
+ deriving (Bounded, Enum, Eq, Ord, Show)

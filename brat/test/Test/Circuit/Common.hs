@@ -19,7 +19,7 @@ import Test.Tasty.HUnit
 import Test.Tasty.Silver.Advanced (goldenTest1, GDiff(..), GShow(ShowText))
 
 import Brat.Checker.Helpers (valueToBinder)
-import Brat.Constructors (pattern CQubit)
+import Brat.Constructors.Patterns (pattern CQubit)
 import Brat.Eval (EvMode, kindType)
 import Brat.Graph
 import Brat.Load (loadFiles)

@@ -10,6 +10,7 @@ import Brat.Checker.Helpers
 import Brat.Checker.Monad
 import Brat.Checker.Types hiding (Store)
 import Brat.Constructors
+import Brat.Constructors.Patterns
 import Brat.Error
 import Brat.Eval
 import Brat.FC hiding (end)
