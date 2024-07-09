@@ -48,6 +48,7 @@ data Term :: Dir -> Kind -> Type where
   Forget   :: WC (Term d KVerb) -> Term d UVerb
   Pull     :: [PortName] -> WC (Term Chk k) -> Term Chk k
   Var      :: UserName -> Term Syn Noun  -- Look up in noun (value) env
+  Identity :: Term Syn UVerb
   Arith    :: ArithOp -> WC (Term Chk Noun) -> WC (Term Chk Noun) -> Term Chk Noun
   -- Type annotations (annotating a term with its outputs)
   (:::)    :: WC (Term Chk Noun) -> [Output] -> Term Syn Noun
@@ -106,6 +107,7 @@ instance Show (Term d k) where
     showList ps = concatMap (++":") ps
 
   show (Var x) = show x
+  show Identity = "|"
   -- Nested applications should be bracketed too, hence 4 instead of 3
   show (fun :$: arg) = bracket PApp fun ++ ('(' : show arg ++ ")")
   show (tm ::: ty) = bracket PAnn tm ++ " :: " ++ show ty

@@ -485,6 +485,7 @@ check' (Simple tm) ((), ((hungry, ty):unders)) = do
                                      R0 (RPr ("value", vty) R0)
       wire (dangling, vty, hungry)
       pure (((), ()), ((), unders))
+check' Identity ((this:leftovers), ()) = pure (((), [this]), (leftovers, ()))
 check' tm _ = error $ "check' " ++ show tm
 
 
