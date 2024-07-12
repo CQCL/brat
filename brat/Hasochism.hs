@@ -1,3 +1,4 @@
+{-# LANGUAGE QuantifiedConstraints #-}
 module Hasochism where
 
 import Data.Kind (Type)
@@ -20,6 +21,7 @@ instance TestEquality Ny where
 data Some (t :: a -> Type) :: Type where
   -- Stashing some a
   Some :: t a -> Some t
+deriving instance (forall n. Show (t n)) => Show (Some t)
 
 data (:*) (l :: a -> Type) (r :: a -> Type) :: a -> Type where
   (:*) :: l a -> r a -> (l :* r) a

@@ -18,19 +18,19 @@ import Test.Tasty.QuickCheck hiding ((^))
 -- A dummy variable to make NumVals with
 var = VPar (ExEnd (Ex (MkName []) 0))
 
-instance Arbitrary (NumVal Z) where
+instance Arbitrary (NumVal (VVar Z)) where
   arbitrary = NumValue <$> (abs <$> arbitrary) <*> arbitrary
 
-instance Arbitrary (Fun00 Z) where
+instance Arbitrary (Fun00 (VVar Z)) where
   arbitrary = sized aux
    where
     aux 0 = pure Constant0
     aux n = oneof [pure Constant0, StrictMonoFun <$> resize (n `div` 2) arbitrary]
 
-instance Arbitrary (StrictMono Z) where
+instance Arbitrary (StrictMono (VVar Z)) where
   arbitrary = StrictMono <$> (abs <$> arbitrary) <*> arbitrary
 
-instance Arbitrary (Monotone Z) where
+instance Arbitrary (Monotone (VVar Z)) where
   arbitrary = sized aux
    where
     aux 0 = pure (Linear var)

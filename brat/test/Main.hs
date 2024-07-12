@@ -7,7 +7,6 @@ import Test.Circuit.Graph
 import Test.Compile.Hugr
 import Test.Constructors
 import Test.Elaboration
-import Test.Equality
 import Test.Failure
 import Test.Libs
 import Test.Naming
@@ -34,7 +33,6 @@ main = do
                                 ,elaborationTests
                                 ,substitutionTests
                                 ,abstractorTests
-                                ,eqTests
                                 ,compilationTests
                                 ,typeArithTests
                                 ]

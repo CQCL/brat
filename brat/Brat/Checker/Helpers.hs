@@ -23,7 +23,7 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
 import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
-import Brat.Eval (Eval(eval), EvMode(..), kindType)
+import Brat.Eval (eval, EvMode(..), kindType)
 import Brat.FC (FC)
 import Brat.Graph (Node(..), NodeType(..))
 import Brat.Naming (Name, FreshMonad(..))
@@ -84,7 +84,7 @@ pull1PortRo m p stuff (RPr (p', ty) ro)
   portNameExists m p (RPr (p', _) ro)
    | p == p' = True
    | otherwise = portNameExists m p ro
-  portNameExists Braty p (REx (p', _) (_ ::- ro))
+  portNameExists Braty p (REx (p', _) ro)
    | p == p' = True
    | otherwise = portNameExists Braty p ro
 -- TODO: Make an `Error` for this
@@ -176,10 +176,10 @@ anext :: forall m i j k
        . EvMode m
       => String
       -> NodeType m
-      -> (Valz i, Some Endz)
+      -> (Semz i, Some Endz)
       -> Ro m i j -- Inputs and Outputs use de Bruijn indices
       -> Ro m j k
-      -> Checking (Name, Unders m Chk, Overs m UVerb, (Valz k, Some Endz))
+      -> Checking (Name, Unders m Chk, Overs m UVerb, (Semz k, Some Endz))
 anext str th vals0 ins outs = do
   node <- req (Fresh str) -- Pick a name for the thunk
   -- Use the new name to generate Ends with which to instantiate types
@@ -208,47 +208,30 @@ endPorts :: forall m i j port
           . EvMode m
          => Name -> (port -> End) -> (Name -> Int -> port)
          -> Int -- Next free port on the node
-         -> (Valz i, Some Endz)
+         -> (Semz i, Some Endz)
          -> Ro m i j
-         -> Checking ([(NamedPort port, BinderType m)], (Valz j, Some Endz))
+         -> Checking ([(NamedPort port, BinderType m)], (Semz j, Some Endz))
 endPorts _ _ _ _ stuff R0 = pure ([], stuff)
 endPorts node port2End mkPort n (ga, ez) (RPr (p,ty) ro) = do
-  ty <- mEval @m ga ty
+  ty <- eval ga ty
   (row, stuff) <- endPorts node port2End mkPort (n + 1) (ga, ez) ro
   pure ((NamedPort (mkPort node n) p, tyBinder @m ty):row, stuff)
-endPorts node port2End mkPort n (ga, Some (ny :* endz)) (REx (p, k) (de ::- ro)) = do
+endPorts node port2End mkPort n (ga, Some (ny :* endz)) (REx (p, k) ro) = do
   let port = mkPort node n
   let end = port2End port
   (row, stuff) <- endPorts node port2End mkPort (n + 1)
-                  (ga <<+ de :<< endVal k end, Some (Sy ny :* (endz :<< end))) ro
+                  (ga :<< SApp (SPar end) B0, Some (Sy ny :* (endz :<< end))) ro
   pure ((NamedPort port p, Left k):row, stuff)
-{-
-endPorts :: (?my :: Modey m, DeBruijn (BinderType m))
-          => Name -> (port -> End) -> (Name -> Int -> port)
-          -> Int -> (Bwd Value, Bwd End)
-          -> [(PortName, BinderType m)]
-          -> Checking ([(NamedPort port, BinderType m)], (Bwd Value, Bwd End))
-endPorts _ _ _ _ vals [] = pure ([], vals)
-endPorts node f dir i (vals, ends) ((p, ty):xs) = do
-  (ty', vals') <- case doesItBind ?my ty of
-    Just k -> let end = f (dir node i)
-              in pure (ty, (vals :< (endVal k end), ends :< end))
-    Nothing -> (,(vals, ends)) <$> case ?my of
-      Braty -> eval (req . ELup) vals ty
-      Kerny -> eval (req . ELup) vals ty
-  (xs', vals'') <- endPorts node f dir (i + 1) vals' xs
-  pure (((NamedPort (dir node i) p), ty') : xs', vals'')
--}
-next :: String -> NodeType Brat -> (Valz i, Some Endz)
+next :: String -> NodeType Brat -> (Semz i, Some Endz)
      -> Ro Brat i j
      -> Ro Brat j k
-     -> Checking (Name, Unders Brat Chk, Overs Brat UVerb, (Valz k, Some Endz))
+     -> Checking (Name, Unders Brat Chk, Overs Brat UVerb, (Semz k, Some Endz))
 next = let ?my = Braty in anext
 
-knext :: String -> NodeType Kernel -> (Valz i, Some Endz)
+knext :: String -> NodeType Kernel -> (Semz i, Some Endz)
       -> Ro Kernel i i
       -> Ro Kernel i i
-      -> Checking (Name, Unders Kernel Chk, Overs Kernel UVerb, (Valz i, Some Endz))
+      -> Checking (Name, Unders Kernel Chk, Overs Kernel UVerb, (Semz i, Some Endz))
 knext = let ?my = Kerny in anext
 
 wire :: (Src, Val Z, Tgt) -> Checking ()
@@ -357,20 +340,20 @@ natEqOrBust :: Ny i -> Ny j -> Either ErrorMsg (i :~: j)
 natEqOrBust n m | Just q <- testEquality n m = pure q
 natEqOrBust _ _ = Left $ InternalError "We can't count"
 
-rowToRo :: ToEnd t => Modey m -> [(String, t, BinderType m)] -> Stack Z End i -> Checking (Some ((Flip (Ro' m) i) :* Stack Z End))
-rowToRo _ [] stk = pure $ Some (Flip R0 :* stk)
+rowToRo :: ToEnd t => Modey m -> [(String, t, BinderType m)] -> Stack Z End i -> Checking (Some ((Ro m i) :* Stack Z End))
+rowToRo _ [] stk = pure $ Some (R0 :* stk)
 rowToRo Kerny ((p, _, ty):row) S0 = do
   ty <- eval S0 ty
   rowToRo Kerny row S0 >>= \case
-    Some (Flip ro :* stk) -> pure . Some $ (Flip (RPr (p, changeVar (ParToInx (AddZ Zy) S0) ty) ro)) :* stk
+    Some (ro :* stk) -> pure . Some $ ((RPr (p, changeVar (ParToInx (AddZ Zy) S0) ty) ro)) :* stk
 rowToRo Kerny _ (_ :<< _) = err $ InternalError "rowToRo - no binding allowed in kernels"
 
 rowToRo Braty ((p, _, Right ty):row) endz = do
   ty <- eval S0 ty
   rowToRo Braty row endz >>= \case
-    Some (Flip ro :* stk) -> pure . Some $ (Flip (RPr (p, changeVar (ParToInx (AddZ (stkLen endz)) endz) ty) ro)) :* stk
+    Some (ro :* stk) -> pure . Some $ (RPr (p, changeVar (ParToInx (AddZ (stackLen endz)) endz) ty) ro) :* stk
 rowToRo Braty ((p, tgt, Left k):row) endz = rowToRo Braty row (endz :<< toEnd tgt) >>= \case
-  Some (Flip ro :* stk) -> pure . Some $ (Flip (REx (p, k) (S0 ::- ro)) :* stk)
+  Some (ro :* stk) -> pure . Some $ (REx (p, k) ro) :* stk
 
 roToTuple :: Ro m Z Z -> Val Z
 roToTuple R0 = TNil
@@ -379,7 +362,7 @@ roToTuple (REx _ ro) = case ro of
   _ -> error "the impossible happened"
 
 -- Low hanging fruit that we can easily do to our normal forms of numbers
-runArith :: NumVal Z -> ArithOp -> NumVal Z -> Maybe (NumVal Z)
+runArith :: NumVal (VVar Z) -> ArithOp -> NumVal (VVar Z) -> Maybe (NumVal (VVar Z))
 runArith (NumValue upl grol) Add (NumValue upr gror)
 -- We can add when one of the sides is a constant...
  | Constant0 <- grol = pure $ NumValue (upl + upr) gror

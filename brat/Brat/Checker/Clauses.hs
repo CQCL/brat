@@ -84,9 +84,9 @@ checkClause my fnName cty clause = modily my $ do
     (tests, sol) <- localFC (fcOf (lhs clause)) $ solve my problem
     -- The solution gives us the variables bound by the patterns.
     -- We turn them into a row
-    Some (patEz :* Flip patRo) <- mkArgRo my S0 ((\(n, (src, ty)) -> (NamedPort (toEnd src) n, ty)) <$> sol)
+    Some (patEz :* patRo) <- mkArgRo my S0 ((\(n, (src, ty)) -> (NamedPort (toEnd src) n, ty)) <$> sol)
     -- Also make a row for the refined outputs (shifted by the pattern environment)
-    Some (_ :* Flip outRo) <- mkArgRo my patEz (first (fmap toEnd) <$> unders)
+    Some (_ :* outRo) <- mkArgRo my patEz (first (fmap toEnd) <$> unders)
 
 
     let match = TestMatchData my $ MatchSequence overs tests (snd <$> sol)
@@ -200,7 +200,7 @@ solve my ((src, PCon c abs):p) = do
         Just (Just _, relationToInner) -> do
           (node, [], kids@[(dangling, _)], _) <- next "unpacked_nat" Hypo (S0, Some (Zy :* S0))
             R0 -- we don't need to wire the src in; we just need the inner stuff
-            (REx ("inner", Nat) (S0 ::- R0))
+            (REx ("inner", Nat) R0)
           unifyNum
            (nVar (VPar (ExEnd (end src))))
            (relationToInner (nVar (VPar (ExEnd (end dangling)))))
@@ -261,7 +261,7 @@ unify :: Val Z -> TypeKind -> Val Z -> Checking ()
 unify l k r = do
   -- Only complain normalised terms
   (l, r) <- (,) <$> eval S0 l <*> eval S0 r
-  eqTest "unify" 0 k l r >>= \case
+  eqTest "unify" k l r >>= \case
     Right () -> pure ()
     Left _ -> case (l, r, k) of
       (VCon c args, VCon c' args', Star [])
@@ -295,7 +295,7 @@ doesntOccur e (VNum nv) = case getNumVar nv of
   Just e' -> collision e e'
   _ -> pure ()
  where
-  getNumVar :: NumVal n -> Maybe End
+  getNumVar :: NumVal (VVar n) -> Maybe End
   getNumVar (NumValue _ (StrictMonoFun (StrictMono _ mono))) = case mono of
     Linear v -> case v of
       VPar e -> Just e
@@ -306,15 +306,11 @@ doesntOccur e (VApp var args) = case var of
   VPar e' -> collision e e' *> traverse_ (doesntOccur e) args
   _ -> pure ()
 doesntOccur e (VCon _ args) = traverse_ (doesntOccur e) args
-doesntOccur e (VLam (stash ::- body)) = doesntOccurStash stash *> doesntOccur e body
- where
-  doesntOccurStash :: Stack i (Val Z) j -> Either ErrorMsg ()
-  doesntOccurStash S0 = pure ()
-  doesntOccurStash (zx :<< x) = doesntOccur e x *> doesntOccurStash zx
+doesntOccur e (VLam body) = doesntOccur e body
 doesntOccur e (VFun my (ins :->> outs)) = case my of
   Braty -> doesntOccurRo my e ins *> doesntOccurRo my e outs
   Kerny -> doesntOccurRo my e ins *> doesntOccurRo my e outs
-doesntOccur e (VSum my rows) = traverse_ (\(Some (Flip ro)) -> doesntOccurRo my e ro) rows
+doesntOccur e (VSum my rows) = traverse_ (\(Some ro) -> doesntOccurRo my e ro) rows
 
 collision :: End -> End -> Either ErrorMsg ()
 collision e v | e == v = Left . UnificationError $
@@ -324,24 +320,24 @@ collision e v | e == v = Left . UnificationError $
 doesntOccurRo :: Modey m -> End -> Ro m i j -> Either ErrorMsg ()
 doesntOccurRo _ _ R0 = pure ()
 doesntOccurRo my e (RPr (_, ty) ro) = doesntOccur e ty *> doesntOccurRo my e ro
-doesntOccurRo Braty e (REx _ (_ ::- ro)) = doesntOccurRo Braty e ro
+doesntOccurRo Braty e (REx _ ro) = doesntOccurRo Braty e ro
 
-unifyNum :: NumVal Z -> NumVal Z -> Checking ()
+unifyNum :: NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
 unifyNum (NumValue lup lgro) (NumValue rup rgro)
   | lup <= rup = lhsFun00 lgro (NumValue (rup - lup) rgro)
   | otherwise  = lhsFun00 rgro (NumValue (lup - rup) lgro)
  where
-  lhsFun00 :: Fun00 Z -> NumVal Z -> Checking ()
+  lhsFun00 :: Fun00 (VVar Z) -> NumVal (VVar Z) -> Checking ()
   lhsFun00 Constant0 num = demand0 num
   lhsFun00 (StrictMonoFun sm) num = lhsStrictMono sm num
 
-  lhsStrictMono :: StrictMono Z -> NumVal Z -> Checking ()
+  lhsStrictMono :: StrictMono (VVar Z) -> NumVal (VVar Z) -> Checking ()
   lhsStrictMono (StrictMono 0 mono) num = lhsMono mono num
   lhsStrictMono (StrictMono n mono) num = do
     num <- demandEven num
     lhsStrictMono (StrictMono (n - 1) mono) num
 
-  lhsMono :: Monotone Z -> NumVal Z -> Checking ()
+  lhsMono :: Monotone (VVar Z) -> NumVal (VVar Z) -> Checking ()
   lhsMono (Linear v) num = case v of
     VPar e -> instantiateMeta e (VNum num)
     _ -> case num of -- our only hope is to instantiate the RHS
@@ -354,7 +350,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     smPred <- demandSucc sm
     unifyNum (n2PowTimes 1 (nFull smPred)) (NumValue (up - 1) gro)
 
-  demand0 :: NumVal Z -> Checking ()
+  demand0 :: NumVal (VVar Z) -> Checking ()
   demand0 (NumValue 0 Constant0) = pure ()
   demand0 n@(NumValue 0 (StrictMonoFun (StrictMono _ mono))) = case mono of
     Linear (VPar e) -> instantiateMeta e (VNum (nConstant 0))
@@ -363,7 +359,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   demand0 n = err . UnificationError $ "Couldn't force " ++ show n ++ " to be 0"
 
   -- Complain if a number isn't a successor, else return its predecessor
-  demandSucc :: StrictMono Z -> Checking (NumVal Z)
+  demandSucc :: StrictMono (VVar Z) -> Checking (NumVal (VVar Z))
   --   2^k * x
   -- = 2^k * (y + 1)
   -- = 2^k + 2^k * y
@@ -379,12 +375,12 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   demandSucc n = err . UnificationError $ "Couldn't force " ++ show n ++ " to be a successor"
 
   -- Complain if a number isn't even, otherwise return half
-  demandEven :: NumVal Z -> Checking (NumVal Z)
+  demandEven :: NumVal (VVar Z) -> Checking (NumVal (VVar Z))
   demandEven n@(NumValue up gro) = case up `divMod` 2 of
     (up, 0) -> NumValue up <$> evenGro gro
     (up, 1) -> nPlus (up + 1) <$> oddGro gro
    where
-    evenGro :: Fun00 Z -> Checking (Fun00 Z)
+    evenGro :: Fun00 (VVar Z) -> Checking (Fun00 (VVar Z))
     evenGro Constant0 = pure Constant0
     evenGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
       Linear (VPar (ExEnd out)) -> do
@@ -395,7 +391,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     evenGro (StrictMonoFun (StrictMono n mono)) = pure (StrictMonoFun (StrictMono (n - 1) mono))
 
     -- Check a numval is odd, and return its rounded down half
-    oddGro :: Fun00 Z -> Checking (NumVal Z)
+    oddGro :: Fun00 (VVar Z) -> Checking (NumVal (VVar Z))
     oddGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
       Linear (VPar (ExEnd out)) -> mkPred out >>= demandEven
       Linear _ -> err . UnificationError $ "Can't force " ++ show n ++ " to be even"
@@ -422,7 +418,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   -- Add dynamic logic to compute the predecessor of a variable, and return that
   -- predecessor.
   -- The variable must be a non-zero nat!!
-  mkPred :: OutPort -> Checking (NumVal Z)
+  mkPred :: OutPort -> Checking (NumVal (VVar Z))
   mkPred out = do
     (_, [], [(const1,_)], _) <- next "const1" (Const (Num 1)) (S0, Some (Zy :* S0))
                                 R0
@@ -448,7 +444,7 @@ patVals (vp:vps) ends = case patVal vp ends of
     (vs, ends) -> (v:vs, ends)
 patVals [] ends = ([], ends)
 
-numPatVal :: NumPat -> [End] -> (NumVal Z, [End])
+numPatVal :: NumPat -> [End] -> (NumVal (VVar Z), [End])
 numPatVal NPVar (e:es) = (nVar (VPar e), es)
 numPatVal NP0 es = (nConstant 0, es)
 numPatVal (NP1Plus np) es = case numPatVal np es of (nv, es) -> (nPlus 1 nv, es)

@@ -38,12 +38,12 @@ type Alias = ([(PortName, TypeKind)] -- The arguments to A, e.g. [("x", Star [])
 
 kindArgRows :: Stack Z (PortName, TypeKind) i -> (Ro Brat Z i, Ro Brat i (S i))
 kindArgRows argKinds = (helper argKinds R0
-                    ,REx ("type", Star []) (S0 ::- R0)
+                    ,REx ("type", Star []) R0
                     )
  where
   helper :: forall i j. Stack Z (PortName, TypeKind) i -> Ro Brat i j -> Ro Brat Z j
   helper S0 ro = ro
-  helper (zx :<< (p,k)) ro = helper zx (REx (p,k) (S0 ::- ro))
+  helper (zx :<< (p,k)) ro = helper zx (REx (p,k) ro)
 
 data CtxEnv = CtxEnv
   { globals :: VEnv

@@ -38,7 +38,7 @@ instance IsString Name where
 kernel cty = VFun Kerny cty
 
 singleClauseMatching :: forall m
-                      . Show (BinderType m)
+                      . (Show (BinderType m), MODEY m)
                       => Modey m
                       -> ([(String, Val Z)], [(String, Val Z)])
                       -> ([(String, Val Z)], [(String, Val Z)])

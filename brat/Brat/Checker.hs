@@ -23,7 +23,7 @@ import Control.Arrow (first)
 import Control.Monad (foldM)
 import Control.Monad.Freer
 import Data.Bifunctor (second)
-import Data.Functor (($>))
+import Data.Functor (($>), (<&>))
 -- import Data.List (filter, intercalate, transpose)
 import qualified Data.Map as M
 import Data.Type.Equality ((:~:)(..))
@@ -49,6 +49,13 @@ import Brat.Syntax.Value
 import Brat.UserName
 import Bwd
 import Hasochism
+
+-- Put things into a standard form in a kind-directed manner, such that it is
+-- meaningful to do case analysis on them
+standardise :: TypeKind -> Val Z -> Checking (Val Z)
+standardise k val = eval S0 val <&> (k,) >>= \case
+  (Nat, val) -> pure . VNum $ numVal val
+  (_, val) -> pure val
 
 mergeEnvs :: [Env a] -> Checking (Env a)
 mergeEnvs = foldM combineDisjointEnvs M.empty
@@ -260,8 +267,8 @@ check' (TypedTh t) ((), ()) = case ?my of
               -> Checking (SynConnectors Brat Syn Noun
                           ,ChkConnectors Brat Syn Noun)
   createThunk (ins, outs) = do
-    Some (ez :* Flip inR) <- mkArgRo ?my S0 (first (fmap toEnd) <$> ins)
-    Some (_ :* Flip outR) <- mkArgRo ?my ez (first (fmap toEnd) <$> outs)
+    Some (ez :* inR) <- mkArgRo ?my S0 (first (fmap toEnd) <$> ins)
+    Some (_ :* outR) <- mkArgRo ?my ez (first (fmap toEnd) <$> outs)
     (thunkOut, ()) <- makeBox "thunk" (inR :->> outR) $
         \(thOvers, thUnders) -> do
           -- if these ensureEmpty's fail then its a bug!
@@ -376,6 +383,7 @@ check' tm@(Con vcon vargs) ((), ((hungry, ty):unders)) = case (?my, ty) of
     -- Weaken the scope of ty from Z to the top end of argTypeRo
     -- in the kernel case the bottom and top of the row are the same
     let ty' = weaken topy ty
+    env <- traverseStack (sem S0) env
     (_, argUnders, [(dangling, _)], _) <- anext (show vcon) (Constructor vcon)
                                           (env, Some (Zy :* S0))
                                           argTypeRo (RPr ("value", ty') R0)
@@ -395,7 +403,7 @@ check' (Simple tm) ((), ((hungry, ty):unders)) = do
     -- The only SimpleType that checks against a kind is a Nat
     (Braty, Left Nat, Num n) -> do
       (_, _, [(dangling, _)], _) <- next "" (Const (Num n)) (S0,Some (Zy :* S0))
-                                    R0 (REx ("value", Nat) (S0 ::- R0))
+                                    R0 (REx ("value", Nat) R0)
       let val = VNum (nConstant (fromIntegral n))
       defineSrc dangling val
       defineTgt hungry val
@@ -414,23 +422,23 @@ check' tm _ = error $ "check' " ++ show tm
 -- Constructs row from a list of ends and types. Uses standardize to ensure that dependency is
 -- detected. Fills in the first bot ends from a stack. The stack grows every time we go under
 -- a binder. The final stack is returned, so we can compute an output row after an input row.
-mkArgRo :: Modey m -> Stack Z End bot -> [(NamedPort End, BinderType m)] -> Checking (Some (Stack Z End :* Flip (Ro' m) bot))
-mkArgRo _ ez [] = pure $ Some (ez :* Flip R0)
+mkArgRo :: Modey m -> Stack Z End bot -> [(NamedPort End, BinderType m)] -> Checking (Some (Stack Z End :* Ro m bot))
+mkArgRo _ ez [] = pure $ Some (ez :* R0)
 mkArgRo Braty ez ((p, Left k):rest) = mkArgRo Braty (ez :<< end p) rest >>= \case
-  Some (ez' :* Flip ro) -> pure $ Some $ ez' :* Flip (REx (portName p, k) (S0 ::- ro))
+  Some (ez' :* ro) -> pure $ Some $ ez' :* (REx (portName p, k) ro)
 mkArgRo Braty ez ((p, Right t):rest) = mkArgRo Braty ez rest >>= \case
-  Some (ez' :* Flip ro) -> do
+  Some (ez' :* ro) -> do
     t <- standardise (TypeFor Brat []) t
-    pure $ Some $ ez' :* Flip (RPr (portName p, abstractEndz ez t) ro)
+    pure $ Some $ ez' :* (RPr (portName p, abstractEndz ez t) ro)
 mkArgRo Kerny ez ((p, t):rest) = mkArgRo Kerny ez rest >>= \case
-  Some (ez' :* Flip ro) -> do
+  Some (ez' :* ro) -> do
     t <- standardise (TypeFor Brat []) t
-    pure $ Some $ ez' :* Flip (RPr (portName p, abstractEndz ez t) ro)
+    pure $ Some $ ez' :* (RPr (portName p, abstractEndz ez t) ro)
 
-mkKindRo :: [(PortName, TypeKind)] -> Some (Flip (Ro' Brat) bot)
-mkKindRo [] = Some (Flip R0)
+mkKindRo :: [(PortName, TypeKind)] -> Some (Ro Brat bot)
+mkKindRo [] = Some R0
 mkKindRo ((p,k):rest) = case mkKindRo rest of
-  Some (Flip ro) -> Some $ Flip $ REx (p,k) (S0 ::- ro)
+  Some ro -> Some $ REx (p,k) ro
 
 -- Check a type against a row of kinds, and evaluate it
 -- define the ends from unders when appropriate
@@ -449,10 +457,10 @@ kindCheck _ (Pull _ _) = err $ Unimplemented "Port pulling in kinds" [] -- FIXME
 kindCheck ((hungry, k@(TypeFor m [])):unders) (Con c arg) = req (TLup (m, c)) >>= \case
   -- This must be either a type constructor...
   Just args -> case mkKindRo args of
-    Some (Flip args) -> do
+    Some args -> do
       (_, argUnders, [(dangling, _)], _) <- next (show c) (Constructor c) (S0, Some (Zy :* S0))
                                               args --[(p, Left k) | (p, k) <- args])
-                                              (REx ("value", TypeFor m []) (S0 ::- R0))
+                                              (REx ("value", TypeFor m []) R0)
       let kindArgs = [ (tgt, k) | (tgt, Left k) <- argUnders ]
       -- recurse first so we Define the necessary argUnders
       (_, emptyUnders) <- kindCheck kindArgs (unWC arg)
@@ -467,17 +475,17 @@ kindCheck ((hungry, k@(TypeFor m [])):unders) (Con c arg) = req (TLup (m, c)) >>
   -- (only allow aliases to be of kind `Star`)
   Nothing | m == Brat -> req (ALup c) >>= \case
     Just (aliasArgs, aliasLam) -> case mkKindRo aliasArgs of
-      Some (Flip aliasArgs) -> do
+      Some aliasArgs -> do
         -- It only looks weird that we don't use this `va`
         -- va = endVal of (end kindOut), so not as useful as
         -- the thing we *do* define kindOut as
 
         (_, argUnders, [(kindOut,_)], ((_ :<< _va), _)) <-
-          next "" Hypo (S0, Some (Zy :* S0)) aliasArgs (REx ("type",Star []) (S0 ::- R0))
+          next "" Hypo (S0, Some (Zy :* S0)) aliasArgs (REx ("type",Star []) R0)
         -- arg is a juxtaposition
         (args, emptyUnders) <- kindCheck (second (\(Left k) -> k) <$> argUnders) (unWC arg)
         ensureEmpty "alias args" emptyUnders
-        val <- apply aliasLam (B0 <>< args)
+        val <- apply aliasLam args
         defineSrc kindOut val
         defineTgt hungry val
         wire (kindOut, kindType k, hungry)
@@ -487,8 +495,8 @@ kindCheck ((hungry, k@(TypeFor m [])):unders) (Con c arg) = req (TLup (m, c)) >>
 kindCheck ((hungry, Star []):unders) (C (ss :-> ts)) = do
   name <- req (Fresh "__kcc")
   kindCheckRow' Braty (Zy :* S0) M.empty (name,0) ss >>= \case
-    (i, env, Some (ez :* Flip inRo)) -> kindCheckRow' Braty ez env (name, i) ts >>= \case
-      (_, _, Some (_ :* Flip outRo)) -> do
+    (i, env, Some (ez :* inRo)) -> kindCheckRow' Braty ez env (name, i) ts >>= \case
+      (_, _, Some (_ :* outRo)) -> do
         let val = VFun Braty (inRo :->> outRo)
         defineTgt hungry val
         pure ([val], unders)
@@ -497,7 +505,7 @@ kindCheck ((hungry, Star []):unders) (K (ss :-> ts)) = do
   ss <- kindCheckRow Kerny "" ss
   ts <- kindCheckRow Kerny "" ts
   case (ss, ts) of
-    (Some (Flip ss), Some (Flip ts)) -> case kernelNoBind ss of
+    (Some ss, Some ts) -> case kernelNoBind ss of
       Refl -> do
         let val = VFun Kerny (ss :->> ts)
         defineTgt hungry val
@@ -508,13 +516,13 @@ kindCheck ((hungry, Star []):unders) (K (ss :-> ts)) = do
 -- Check a lambda as the body of a higher-order kind
 -- Body will contain Core.Var for things that correspond to variables bound by xs
 kindCheck ((hungry, TypeFor m args):unders) (Th (WC _ (Lambda (xs, WC fc body) []))) = case mkKindRo args of
-  Some (Flip ro) -> do
+  Some ro -> do
     -- Make some ends (outputs here) to correspond to hypothetical arguments to the alias
     (_, [], kovers, (_, endz)) <- next "aliargs" Hypo (S0, Some (Zy :* S0)) R0 ro
     ext <- let ?my = Braty in abstractAll kovers (unWC xs)
     -- kindCheck the alias with those arguments into a second Hypo node
     (_, [(p, Left k)], _, _) <- next "alias" Hypo (S0, Some (Zy :* S0))
-                                   (REx ("type", TypeFor m []) (S0 ::- R0)) R0
+                                   (REx ("type", TypeFor m []) R0) R0
     ([vbody], emptyUnders) <- localFC fc $ localVEnv ext $ kindCheck [(p, k)] body
     ensureEmpty "kindCheck unders" emptyUnders
     vbody <- eval S0 vbody
@@ -525,7 +533,7 @@ kindCheck ((hungry, TypeFor m args):unders) (Th (WC _ (Lambda (xs, WC fc body) [
  where
   lambdify :: Stack Z End i -> Val i -> Val Z
   lambdify S0 v = v
-  lambdify (zx :<< _) v = lambdify zx (VLam (S0 ::- v))
+  lambdify (zx :<< _) v = lambdify zx (VLam v)
 kindCheck unders (Emb (WC fc (Var v))) = localFC fc $ vlup v >>= f unders
  where
   f :: [(Tgt, TypeKind)]
@@ -543,7 +551,7 @@ kindCheck unders (Emb (WC fc (Var v))) = localFC fc $ vlup v >>= f unders
   f _ (x:_) = err $ InternalError $ "Kindchecking a row which contains " ++ show x
 -- TODO: Add other operations on numbers
 kindCheck ((hungry, Nat):unders) (Simple (Num n)) | n >= 0 = do
-  (_, _, [(dangling, _)], _) <- next "" (Const (Num n)) (S0,Some (Zy :* S0)) R0 (REx ("value", Nat) (S0 ::- R0))
+  (_, _, [(dangling, _)], _) <- next "" (Const (Num n)) (S0,Some (Zy :* S0)) R0 (REx ("value", Nat) R0)
   let value = VNum (nConstant (fromIntegral n))
   defineTgt hungry value
   defineSrc dangling value
@@ -551,8 +559,8 @@ kindCheck ((hungry, Nat):unders) (Simple (Num n)) | n >= 0 = do
   pure ([value], unders)
 kindCheck ((hungry, Nat):unders) (Arith op lhs rhs) = do
   (_, arithUnders, [(dangling,_)], _) <- next ("arith_" ++ show op) (ArithNode op) (S0, Some (Zy :* S0))
-                                         (REx ("lhs", Nat) (S0 ::- (REx ("rhs", Nat) (S0 ::- R0))))
-                                         (REx ("value", Nat) (S0 ::- R0))
+                                         (REx ("lhs", Nat) (REx ("rhs", Nat) R0))
+                                         (REx ("value", Nat) R0)
   ([vlhs, vrhs], []) <- kindCheck [ (p, k) | (p, Left k) <- arithUnders ] (lhs :|: rhs)
   let arithFC = FC (FC.start (fcOf lhs)) (FC.end (fcOf rhs))
   localFC arithFC $ case (vlhs, vrhs) of
@@ -571,8 +579,8 @@ kindCheck ((hungry, Nat):unders) (Con c arg)
  | Just (_, f) <- M.lookup c natConstructors = do
      -- All nat constructors have one input and one output
      (_, [(chungry,_)], [(cdangling,_)], _) <- next (show c) (Constructor c) (S0, Some (Zy :* S0))
-                                               (REx ("in", Nat) (S0 ::- R0))
-                                               (REx ("out", Nat) (S0 ::- R0))
+                                               (REx ("in", Nat) R0)
+                                               (REx ("out", Nat) R0)
      wire (cdangling, TNat, hungry)
      ([VNum nv], us) <- kindCheck [(chungry, Nat)] (unWC arg)
      ensureEmpty "kindCheck unders" us
@@ -588,7 +596,7 @@ kindCheck ((_, k):_) tm = typeErr $ "Expected " ++ show tm ++ " to have kind " +
 kindCheckRow :: Modey m
              -> String -- for node name
              -> [(PortName, ThunkRowType m)] -- The row to process
-             -> Checking (Some (Flip (Ro' m) Z))
+             -> Checking (Some (Ro m Z))
 kindCheckRow my name r = do
   name <- req $ Fresh $ "__kcr_" ++ name
   kindCheckRow' my (Zy :* S0) M.empty (name, 0) r >>= \case
@@ -604,14 +612,14 @@ kindCheckAnnotation my name outs = do
   trackM "kca"
   name <- req (Fresh $ "__kca_" ++ name)
   kindCheckRow' my (Zy :* S0) M.empty (name, 0) outs >>= \case
-    (_, _, Some ((n :* s) :* Flip ins)) ->
+    (_, _, Some ((n :* s) :* ins)) ->
       -- Make a copy of ins whose free indices claim to start where the
       -- first left off. Since any references to the Ends in `s` have
       -- already been converted to (bound) Inx's, this does nothing,
       -- but persuades the Haskell typechecker it's ok to use the copy
       -- as return types (that happen not to mention the argument types).
       case varChangerThroughRo (ParToInx (AddZ n) s) ins of
-        Some (_ :* Flip outs) -> pure (ins :->> outs)
+        Some (_ :* outs) -> pure (ins :->> outs)
 
 kindCheckRow' :: forall m n
                . Modey m
@@ -619,24 +627,21 @@ kindCheckRow' :: forall m n
               -> VEnv -- from string variable names to VPar's
               -> (Name, Int) -- node name and next free input (under to 'kindCheck' a type)
               -> [(PortName, ThunkRowType m)]
-              -> Checking (Int, VEnv, Some (Endz :* Flip (Ro' m) n))
-kindCheckRow' _ ez env (_,i) [] = pure (i, env, Some (ez :* Flip R0))
+              -> Checking (Int, VEnv, Some (Endz :* Ro m n))
+kindCheckRow' _ ez env (_,i) [] = pure (i, env, Some (ez :* R0))
 kindCheckRow' Braty (ny :* s) env (name,i) ((p, Left k):rest) = do -- s is Stack Z n
   let dangling = Ex name (ny2int ny)
   req (Declare (ExEnd dangling) Braty (Left k))
   env <- pure $ M.insert (plain p) [(NamedPort dangling p, Left k)] env
   (i, env, ser) <- kindCheckRow' Braty (Sy ny :* (s :<< ExEnd dangling)) env (name, i) rest
   case ser of
-    Some (s_m :* Flip ro) -> -- for some m>=S(n), there is Stack S(n) m, ro is Ro Brat S(n) m
-      -- The Some we return quantifies over the same m, but the ::- allows us to
-      -- return a Ro starting at n rather than ro starting at S(n)
-      pure (i, env, Some (s_m :* Flip (REx (p,k) (S0 ::- ro))))
+    Some (s_m :* ro) -> pure (i, env, Some (s_m :* (REx (p,k) ro)))
 kindCheckRow' my ez@(ny :* s) env (name, i) ((p, bty):rest) = case (my, bty) of
   (Braty, Right ty) -> helper ty (Star [])
   (Kerny, ty) -> helper ty (Dollar [])
 
  where
-  helper :: Term Chk Noun -> TypeKind -> Checking (Int, VEnv, Some (Endz :* Flip (Ro' m) n))
+  helper :: Term Chk Noun -> TypeKind -> Checking (Int, VEnv, Some (Endz :* Ro m n))
   helper ty kind = do
     let hungry = NamedPort (In name i) p -- or always call it "type"?
     declareTgt hungry Braty (Left kind)
@@ -645,7 +650,7 @@ kindCheckRow' my ez@(ny :* s) env (name, i) ((p, bty):rest) = case (my, bty) of
     v <- pure $ changeVar (ParToInx (AddZ ny) s) v
     (i, env, ser) <- kindCheckRow' my ez env (name, i+1) rest
     case ser of
-      Some (s_m :* Flip ro) -> pure (i, env, Some (s_m :* Flip (RPr (p, v) ro)))
+      Some (s_m :* ro) -> pure (i, env, Some (s_m :* (RPr (p, v) ro)))
 
 -- Look for vectors to produce better error messages for mismatched lengths
 -- in terms or patterns.
@@ -683,7 +688,7 @@ getVecErr (Left tm) = VecLength (show tm)
 getVecErr (Right pat) = VecPatLength (show pat)
 
 -- Wrapper extending an error occurring on the RHS of a cons to the whole vector
-consError :: FC -> Either (Term d k) Pattern -> String -> NumVal n -> Error -> Error
+consError :: Show v => FC -> Either (Term d k) Pattern -> String -> NumVal v -> Error -> Error
 consError fc tp ty exp err = case (tp, msg err) of
     (Left _, VecLength _ _ _ act) -> mkVecError act
     (Right _, VecPatLength _ _ _ act) -> mkVecError act
@@ -742,7 +747,7 @@ abstractPattern Braty (dangling, Left k) pat = abstractKind k pat
       Just (Just p, rel) -> case numMatch B0 (nVar (VPar (ExEnd (end dangling)))) p of
         -- TODO: Make some Nat deconstructor node for the wiring here
         Right (B0 :< VNum v) -> do
-          (_, [], [(newDangling, _)], _) <- next "Nat pat destructor" Hypo (S0, Some (Zy :* S0)) R0 (REx ("", Nat) (S0 ::- R0))
+          (_, [], [(newDangling, _)], _) <- next "Nat pat destructor" Hypo (S0, Some (Zy :* S0)) R0 (REx ("", Nat) R0)
           defineSrc newDangling (VNum v)
           defineSrc dangling (VNum (rel v))
           let ?my = Braty in abstractAll [(newDangling, Left Nat)] parg
@@ -784,6 +789,7 @@ abstractPattern my (dangling, bty) pat@(PCon pcon abst) = case (my, bty) of
     -- ty is Inx-closed, but `next` expects it to have <ny> free vars,
     -- so persuade the type system of that
     let ty' = weaken ny ty
+    zv <- traverseStack (sem S0) zv
     (_, [(hungry, _)], overs, _) <- anext (show pcon) (Selector pcon) (zv, Some (Zy :* S0)) (RPr ("value", ty') R0) unders
     wire (dangling, ty, hungry)
     wrapError wrap $ let ?my = my in abstractAll overs abst

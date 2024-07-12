@@ -12,12 +12,13 @@ module Brat.Compile.Hugr (compile) where
 import Brat.Constructors.Patterns (pattern CFalse, pattern CTrue)
 import Brat.Checker.Monad (track, trackM, CheckingSig(..))
 import Brat.Checker.Helpers (binderToValue)
-import Brat.Checker.Types (EndType(..), Store(..), VEnv)
-import Brat.Eval (eval, kindType)
+import Brat.Checker.Types (Store(..), VEnv)
+import Brat.Eval (eval, evalCTy, kindType)
 import Brat.Graph hiding (lookupNode)
 import Brat.Naming
 import Brat.Syntax.Port
 import Brat.Syntax.Common
+import Brat.Syntax.Simple (SimpleTerm)
 import Brat.Syntax.Value
 import Brat.UserName
 import Bwd
@@ -35,14 +36,12 @@ import Data.Foldable (traverse_, for_)
 import Data.Functor ((<&>), ($>))
 import Data.List (partition, sort, sortBy)
 import qualified Data.Map as M
-import Data.Maybe (catMaybes, fromJust, fromMaybe, isJust)
+import Data.Maybe (catMaybes, fromJust, isJust)
 import Data.Ord (comparing)
 import Data.Traversable (for)
-import Data.Tuple.HT (fst3)
 import Control.Monad.State
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import GHC.Base (NonEmpty(..))
-import Brat.Syntax.Simple (SimpleTerm)
 import Data.Tuple (swap)
 
 {-
@@ -137,83 +136,53 @@ runCheckingInCompile (Req (ELup e) k) = do
   runCheckingInCompile (k (M.lookup e emap))
 runCheckingInCompile (Req _ _) = error $ "Compile monad found a command it can't handle"
 
-compileSig :: CTy m Z -> Compile PolyFuncType
-compileSig cty = PolyFuncType [] <$> compileSigWorker [] 0 cty
+-- To be called on top-level signatures which are already Inx-closed, but not
+-- necessarily normalised.
+compileSig :: Modey m -> CTy m Z -> Compile PolyFuncType
+compileSig my cty = do
+  runCheckingInCompile (evalCTy S0 my cty) <&> compileCTy
 
-compileSigWorker :: [Maybe HugrType] -> Int -> CTy m Z -> Compile FunctionType
-compileSigWorker hts lvl (ss :->> ts) = do
-  (inRo, hts, acc) <- compileRo hts (lvl, S0) ss
-  (outRo, _, _) <- compileRo hts acc ts
-  pure $ FunctionType inRo outRo
+compileCTy (ss :->> ts )= PolyFuncType [] (FunctionType (compileRo ss) (compileRo ts))
 
-compileRo :: forall m i j
-           . [Maybe HugrType] -- The binders that we've gone under
-          -> (Int, Valz i)    -- Next de Bruijn level, and context for evaluation
-          -> Ro m i j -- The Ro that we're processing
-          -> Compile ([HugrType]       -- The hugr type of the row
-                     ,[Maybe HugrType] -- Things to instantiate our de Bruijn levels in
-                     ,(Int, Valz j)
-                     )
-compileRo hts acc R0 = pure ([], hts, acc)
-compileRo hts (lvl, stk) (RPr (_, ty) ro) = do
-  ty <- runCheckingInCompile (eval stk ty) >>= compileTypeWorker hts lvl
-  (tys, hts, stuff) <- compileRo hts (lvl, stk) ro
-  pure (ty:tys, hts, stuff)
-compileRo hts (lvl, stk) (REx (_, k) (ga ::- ro)) = do
-  ty <- compileTypeWorker hts lvl (kindType k)
-  (tys, hts, acc) <- compileRo (hts ++ [stashKind k]) (lvl + 1, stk <<+ ga :<< VApp (VLvl lvl k) B0) ro
-  pure (ty:tys, hts, acc)
- where
-  -- What to substitute a de Bruijn reference to this argument for
-  stashKind :: TypeKind -> Maybe HugrType
-  stashKind Nat = Nothing -- We only expect to lookup types in compileType, not #
-  stashKind (TypeFor _ _) = Just (HTTuple []) -- Star and dollar become unit type
+compileRo :: Ro m i j -- The Ro that we're processing
+          -> [HugrType]       -- The hugr type of the row
+compileRo R0 = []
+compileRo (RPr (_, ty) ro) = (compileType ty):(compileRo ro)
+compileRo (REx (_, k) ro) = (compileType (kindType k)):(compileRo ro)
 
 -- Val Z should already be eval'd at this point
-compileTypeWorker :: [(Maybe HugrType)]
-            -> Int -- The next de Bruijn level, for calling compileRo
-            -> Val Z
-            -> Compile HugrType
-compileTypeWorker _ _ TQ = pure HTQubit
-compileTypeWorker _ _ TMoney = pure HTQubit
-compileTypeWorker _ _ TBit = pure $ HTSum (SU (UnitSum 2))
-compileTypeWorker _ _ TBool = pure $ HTSum (SU (UnitSum 2))
-compileTypeWorker _ _ TInt = pure hugrInt
-compileTypeWorker _ _ TNat = pure hugrInt
-compileTypeWorker _ _ TFloat = pure hugrFloat
-compileTypeWorker hts lvl ty@(TCons _ _) = HTTuple <$> (tuple ty)
+compileType :: Val n -> HugrType
+compileType TQ = HTQubit
+compileType TMoney = HTQubit
+compileType TBit = HTSum (SU (UnitSum 2))
+compileType TBool = HTSum (SU (UnitSum 2))
+compileType TInt = hugrInt
+compileType TNat = hugrInt
+compileType TFloat = hugrFloat
+compileType ty@(TCons _ _) = HTTuple (tuple ty)
  where
-  tuple :: Val Z -> Compile [HugrType]
-  tuple (TCons hd rest) = (:) <$> compileTypeWorker hts lvl hd <*> tuple rest
-  tuple TNil = pure []
+  tuple :: Val n -> [HugrType]
+  tuple (TCons hd rest) = (compileType hd):(tuple rest)
+  tuple TNil = []
   tuple ty = error $ "Found " ++ show ty  ++ " in supposed tuple type"
-compileTypeWorker _ _ TNil = pure $ HTTuple []
-compileTypeWorker hts lvl (VSum my ros) = case my of
+compileType TNil = HTTuple []
+compileType (VSum my ros) = case my of
   Braty -> error "Todo: compileTypeWorker for BRAT"
-  Kerny -> do
-    ros <- traverse (\(Some (Flip ro)) -> fst3 <$> (compileRo hts (lvl, S0) ro)) ros
-    pure $ HTSum (SG (GeneralSum (HTTuple <$> ros)))
-compileTypeWorker hts lvl (TVec el _) = hugrList <$> (compileTypeWorker hts lvl el)
-compileTypeWorker hts lvl (TList el)  = hugrList <$> (compileTypeWorker hts lvl el)
-compileTypeWorker tys _ (VApp (VLvl i _) _) = case tys !! i of
-                                           Nothing -> error "Can't resolve reference to type variable"
-                                           Just ty -> pure ty
-compileTypeWorker _ _ (VApp (VPar e) _) = gets ((M.! e) . typeMap . store) >>= \case
-  -- We're not doing anything special for higher order kinds
-  EndType Braty (Left (TypeFor _ _)) -> do
-    res <- gets (M.lookup e . valueMap . store)
-    res <- traverse compileType res
-    pure $ fromMaybe (HTTuple []) res
-  EndType Braty ty -> error $ "Trying to compile ill-kinded type (" ++ show ty ++ ")"
-  EndType Kerny ty -> error $ "Trying to compile ill-kinded type (" ++ show ty ++ ")"
+  Kerny -> HTSum (SG (GeneralSum $ map (\(Some ro) -> HTTuple (compileRo ro)) ros))
+compileType (TVec el _) = hugrList (compileType el)
+compileType (TList el)  = hugrList (compileType el)
+-- All variables are of kind `TypeFor m xs`, we already checked in `kindCheckRow`
+compileType (VApp _ _) = HTTuple []
+-- VFun is already evaluated here, so we don't need to call `compileSig`
+compileType (VFun _ cty) = HTFunc $ compileCTy cty
+compileType ty = error $ "todo: compile type " ++ show ty
 
-compileTypeWorker hts lvl (VFun _ cty) = do
-  fun_ty <- compileSigWorker hts lvl cty
-  pure . HTFunc $ PolyFuncType [] fun_ty
-compileTypeWorker _ _ ty = error $ "todo: compile type " ++ show ty
+compileGraphTypes :: Traversable t => t (Val Z) -> Compile (t HugrType)
+compileGraphTypes = traverse ((<&> compileType) . runCheckingInCompile . eval S0)
 
-compileType :: Val Z -> Compile HugrType
-compileType = compileTypeWorker [] 0
+-- Compile a list of types from the inputs or outputs of a node in the BRAT graph
+compilePorts :: [(a, Val Z)] -> Compile [HugrType]
+compilePorts = compileGraphTypes . (map snd)
 
 addOp :: HugrOp NodeId -> NodeId -> Compile ()
 addOp op name | track ("addOp " ++ show op ++ show name) False = undefined
@@ -228,9 +197,8 @@ registerCompiled from to = do
   st <- get
   put (st { compiled = M.insert from to (compiled st) })
 
-compileConst :: NodeId -> SimpleTerm -> Val Z -> Compile NodeId
+compileConst :: NodeId -> SimpleTerm -> HugrType -> Compile NodeId
 compileConst parent tm ty = do
-  ty <- compileType ty
   constId <- addNode "Const" (OpConst (ConstOp parent (constFromSimple tm) ty))
   loadId <- addNode "LoadConst" (OpLoadConstant (LoadConstantOp parent ty))
   addEdge (Port constId 0, Port loadId 0)
@@ -277,7 +245,7 @@ renameAndSortHugr nodes edges = fmap update (Hugr (fst <$> sorted_nodes) (edges 
   update name = case M.lookup name names2Pos of
                   Just ans -> ans
                   Nothing -> error ("Couldn't find node " ++ show name ++ "???")
-  
+
   orderEdges :: [(PortId NodeId, PortId NodeId)]
   orderEdges =
     -- Nonlocal edges (from a node to another which is a *descendant* of a sibling of the source)
@@ -287,7 +255,7 @@ renameAndSortHugr nodes edges = fmap update (Hugr (fst <$> sorted_nodes) (edges 
             requiresOrderEdge (nodes M.! n1),
             requiresOrderEdge (nodes M.! n2) ] in
     [(Port src orderEdgeOffset, Port tgt orderEdgeOffset) | (src, tgt) <- (walkUp <$> interEdges)]
-  
+
   requiresOrderEdge :: HugrOp NodeId -> Bool
   requiresOrderEdge (OpMod _) = False
   requiresOrderEdge (OpDefn _) = False
@@ -312,13 +280,13 @@ compileClauses parent ins ((matchData, rhs) :| clauses) = do
   (ns, _) <- gets bratGraph
   -- RHS has to be a box, so it must have a function type
   outTys <- case nodeOuts (ns M.! rhs) of
-    [(_, VFun _ cty)] -> (body <$> compileSig cty) >>= \(FunctionType _ outs) -> pure outs
+    [(_, VFun my cty)] -> (body <$> compileSig my cty) >>= \(FunctionType _ outs) -> pure outs
     _ -> error "Expected 1 kernel function type from rhs"
 
   -- Compile the match: testResult is the port holding the dynamic match result
   -- with the type `sumTy`
   let TestMatchData my matchSeq = matchData
-  matchSeq <- traverse (compileBinderTy my) matchSeq
+  matchSeq <- compileGraphTypes (fmap (binderToValue my) matchSeq)
 
   let portTbl = zip (fst <$> matchInputs matchSeq) ins
   testResult <- compileMatchSequence parent portTbl matchSeq
@@ -368,8 +336,8 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
     -- reference to a top-level decl. Every such should be in the decls map.
     -- We need to return value of each type (perhaps to be indirectCalled by successor).
     -- Note this is where we must compile something different *for each caller* by clearing out the `compiled` map for each function
-    let inTys = map (snd . fst) $ sortBy (comparing snd) in_edges
-    hTys <- for inTys compileType
+    let hTys = map (compileType . snd . fst) $ sortBy (comparing snd) in_edges
+    
     decls <- gets decls
     let (funcDef, extra_call) = decls M.! name
     nod <- case extra_call of
@@ -402,10 +370,10 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
                   -- Result is nodeid, port offset, *extra* edges
                -> Compile (Maybe (NodeId, Int, [(PortId NodeId, Int)]))
   compileNode' thing ins outs = case thing of
-    Const tm -> default_edges <$> compileConst parent tm (snd $ head outs)
+    Const tm -> default_edges <$> (compilePorts outs >>= (compileConst parent tm . head))
     Splice (Ex outNode _) -> default_edges <$> do
-      ins <- traverse (compileType . snd) ins
-      outs <- traverse (compileType . snd) outs
+      ins <- compilePorts ins
+      outs <- compilePorts outs
       let sig = FunctionType ins outs
       case hasPrefix ["checking", "globals", "prim"] outNode of
         -- If we're evaling a Prim, we add it directly into the kernel graph
@@ -432,8 +400,8 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
 
     -- Check if the node has prefix "globals", hence should be a direct call
     Eval (Ex outNode outPort) -> do
-      ins <- traverse (compileType . snd) ins
-      outs <- traverse (compileType . snd) outs
+      ins <- compilePorts ins
+      outs <- compilePorts outs
       (ns, _) <- gets bratGraph
       decls <- gets decls
       case hasPrefix ["checking", "globals", "prim"] outNode of
@@ -473,17 +441,17 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
       outs -> error $ "Unexpected outs of box: " ++ show outs
 
     Source -> default_edges <$> do
-      outs <- traverse (compileType . snd) outs
+      outs <- compilePorts outs
       addNode "Input" (OpIn (InputNode parent outs))
     Target -> default_edges <$> do
-      ins <- traverse (compileType . snd) ins
+      ins <- compilePorts ins
       addNode "Output" (OpOut (OutputNode parent ins))
 
     Id | Nothing <- hasPrefix ["checking", "globals", "decl"] name -> default_edges <$> do
       -- not a top-level decl, just compile it as an Id (TLDs handled in compileNode)
       let [(_,ty)] = ins -- fail if more than one input
-      ty <- compileType ty
-      addNode "Id" (OpNoop (NoopOp parent ty))
+      addNode "Id" (OpNoop (NoopOp parent (compileType ty)))
+
     Constructor c -> default_edges <$> do
       let b = case c of
             CFalse -> False
@@ -542,10 +510,10 @@ compileBratBox parent name (venv, src, tgt) cty = do
   -- (TODO in the future capture which ones are actually used in the sub-hugr. We may need
   -- to put captured values after the original params, and have a reversed Partial.)
   let params :: [(OutPort, BinderType Brat)] = map (first end) (concat $ M.elems venv)
-  parmTys <- sequence $ map (compileBinderTy Braty . snd) params
+  parmTys <- compileGraphTypes (map (binderToValue Braty . snd) params)
 
   -- Create a FuncDefn for the lambda that takes the params as first inputs
-  (FunctionType inputTys outputTys) <- body <$> compileSig cty
+  (FunctionType inputTys outputTys) <- body <$> compileSig Braty cty
   let allInputTys = parmTys ++ inputTys
   let box_sig = FunctionType allInputTys outputTys
 
@@ -573,7 +541,7 @@ compileKernBox parent name contents cty = do
   -- compile kernel nodes only into a Hugr with "Holes"
   -- when we see a Splice, we'll record the func-port onto a list
   -- return a Hugr with holes
-  box_sig <- body <$> compileSig cty
+  box_sig <- body <$> compileSig Kerny cty
   let box_ty = HTFunc $ PolyFuncType [] box_sig
   (templatePort, holelist) <- compileConstDfg parent ("KB" ++ show name) box_sig $ \dfg_id -> do
     contents dfg_id
@@ -584,8 +552,8 @@ compileKernBox parent name contents cty = do
   ns <- gets (fst . bratGraph)
   hole_ports <- for (holelist <>> []) (\splice -> do
     let (KernelNode (Splice (Ex kernel_src port)) ins outs) = ns M.! splice
-    ins <- traverse (compileType . snd) ins
-    outs <- traverse (compileType . snd) outs
+    ins <- compilePorts ins
+    outs <- compilePorts outs
     kernel_src <- compileWithInputs parent kernel_src <&> fromJust
     pure (Port kernel_src port, HTFunc (PolyFuncType [] (FunctionType ins outs))))
 
@@ -796,10 +764,6 @@ undoPrimTest parent inPorts outTy (PrimLitTest tm) = do
   head <$> addNodeWithInputs "LitLoad" (OpLoadConstant (LoadConstantOp parent outTy))
            [(Port constId 0, outTy)] [outTy]
 
-compileBinderTy :: Modey m -> BinderType m -> Compile HugrType
-compileBinderTy m = compileType . binderToValue m
-
-
 -- Create a module and FuncDecl nodes inside it for all of the functions given as argument
 compileModule :: VEnv
               -> Compile ()
@@ -836,21 +800,21 @@ compileModule venv = do
     case maybeDirect of
        Just func -> pure func
        Nothing -> do -- a computation, or several values
-        outs <- for (map snd srcPortTys) compileType -- note compiling already-erased types, is this right?
+        outs <- compilePorts srcPortTys -- note compiling already-erased types, is this right?
         pure (funcReturning outs, True, compileNoun outs (map fst srcPortTys))
 
   canCompileDirect :: Name -> Node -> Compile (Maybe (PolyFuncType, Bool, (NodeId -> Compile ())))
   canCompileDirect _ (BratNode (Box _ src tgt) _ [(_, VFun Braty cty)]) = do
-    sig <- compileSig cty
+    sig <- compileSig Braty cty
     pure $ Just (sig, False, compileBox (src, tgt))
-  canCompileDirect _ (BratNode (FunClauses cs) _ [(_, VFun _ cty)]) = do
-    sig <- compileSig cty
+  canCompileDirect _ (BratNode (FunClauses cs) _ [(_, VFun my cty)]) = do
+    sig <- compileSig my cty
     let (FunctionType ins _) = body sig
     pure $ Just (sig, False, compileFunClauses ins cs)
   -- Really these two are not compiled direct, and should be dealt with via compileNoun,
   -- but until compileNode correctly handles each of these, we have to do so here:
   canCompileDirect input (KernelNode (FunClauses cs) _ [(_, VFun Kerny cty)]) = do
-    kernTy <- compileSig cty
+    kernTy <- compileSig Kerny cty
     let (FunctionType kIns _) = body kernTy
     let thunkTy = HTFunc kernTy
     pure $ Just (funcReturning [thunkTy], True, \parent ->
@@ -862,7 +826,7 @@ compileModule venv = do
         -- Although this looks like a constant kernel, we'll have to compile the
         -- computation that produces this constant. We do so by making a FuncDefn
         -- that takes no arguments and produces the constant kernel graph value.
-        thunkTy <- HTFunc <$> compileSig cty
+        thunkTy <- HTFunc <$> compileSig Kerny cty
         pure $ Just (funcReturning [thunkTy], True, \parent ->
           withIO parent thunkTy $ compileKernBox parent input (compileBox (src, tgt)) cty)
   canCompileDirect _ _ = pure Nothing

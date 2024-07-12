@@ -71,17 +71,19 @@ checkDecl pre (VDecl Decl{..}) to_define = localFC fnLoc $ do
         pure ()
       Undefined -> error "No body in `checkDecl`"
       ThunkOf _ -> case fnSig of
-        Some (Flip ro) -> err $ ExpectedThunk (showMode Braty) (show ro)
+        Some ro -> err $ ExpectedThunk (showMode Braty) (show ro)
     Just (Some (my :* Flip cty)) -> getClauses fnBody (my, cty) >>= \case
       Right stuff -> do
-        box_out <- case stuff of
+        box_out :: Src <- case stuff of
           -- checkBody makes an outer box and wires up FunClauses within.
           -- We'll wire the output of that box into the Id node representing
           -- this function (to_define)
           (Some (Braty :* Flip cty), body) -> let ?my = Braty in checkBody fnName body cty
           (Some (Kerny :* Flip cty), body) -> let ?my = Kerny in checkBody fnName body cty
         case to_define of
-          [(thunk_in, _)] -> wire (box_out, VFun my cty, thunk_in)
+          [(thunk_in, _)] -> case my of
+            Braty -> wire (box_out, VFun my cty, thunk_in)
+            Kerny -> wire (box_out, VFun my cty, thunk_in)
           [] -> err $ ExpectedThunk (showMode my) "No body"
           row -> err $ ExpectedThunk (showMode my) (showRow row)
       Left body -> let ?my = Braty in check body ((), to_define) $> ()
@@ -97,9 +99,9 @@ checkDecl pre (VDecl Decl{..}) to_define = localFC fnLoc $ do
   getClauses Undefined _ = err (InternalError "No body in `checkDecl`")
 
 
-  getFunTy :: Some (Flip (Ro' m) Z) -> Checking (Maybe (Some (Modey :* (Flip CTy Z))))
-  getFunTy (Some (Flip (RPr (_, VFun my cty) R0))) = pure $ Just (Some (my :* (Flip cty)))
-  getFunTy (Some (Flip R0)) = err $ EmptyRow name
+  getFunTy :: Some (Ro m Z) -> Checking (Maybe (Some (Modey :* Flip CTy Z)))
+  getFunTy (Some (RPr (_, VFun my cty) R0)) = pure $ Just (Some (my :* Flip cty))
+  getFunTy (Some R0) = err $ EmptyRow name
   getFunTy _ = pure $ Nothing
 
   uname = PrefixName pre fnName
@@ -107,7 +109,7 @@ checkDecl pre (VDecl Decl{..}) to_define = localFC fnLoc $ do
 
 loadAlias :: TypeAlias -> Checking (UserName, Alias)
 loadAlias (TypeAlias fc name args body) = localFC fc $ do
-  (_, [(hhungry, Left k)], _, _) <- next "" Hypo (S0,Some (Zy :* S0)) (REx ("type", Star args) (S0 ::- R0)) R0
+  (_, [(hhungry, Left k)], _, _) <- next "" Hypo (S0,Some (Zy :* S0)) (REx ("type", Star args) R0) R0
   let abs = WC fc $ foldr (:||:) AEmpty (APat . Bind . fst <$> args)
   ([v], unders) <- kindCheck [(hhungry, k)] $ Th (WC fc (Lambda (abs, WC fc body) []))
   ensureEmpty "loadAlias unders" unders
@@ -137,10 +139,10 @@ loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addS
                           -- kindCheckAnnotation gives the signature of an Id node,
                           -- hence ins == outs (modulo haskell's knowledge about their scopes)
                           ins :->> outs <- kindCheckAnnotation Braty (show name) (fnSig d)
-                          pure (Id, ins :->> outs, Some (Flip ins), "decl")
+                          pure (Id, ins :->> outs, Some ins, "decl")
                         Extern sym -> do
-                          (Some (Flip outs)) <- kindCheckRow Braty (show name) (fnSig d)
-                          pure (Prim sym, R0 :->> outs, Some (Flip outs), "prim")
+                          (Some outs) <- kindCheckRow Braty (show name) (fnSig d)
+                          pure (Prim sym, R0 :->> outs, Some outs, "prim")
       -- In the Extern case, unders will be empty
       (_, unders, overs, _) <- prefix -! next (show name) thing (S0, Some (Zy :* S0)) ins outs
       pure ((name, VDecl d{fnSig=sig}), (unders, overs))

@@ -12,7 +12,7 @@ import Hasochism
 constNode :: Modey m -> BinderType m -> SimpleTerm -> Checking Src
 constNode Braty ty tm = case ty of
   Left k -> do
-    (_, _, [(value,_)], _) <- next (show tm) (Const tm) (S0, Some (Zy :* S0)) R0 (REx ("value", k) (S0 ::- R0))
+    (_, _, [(value,_)], _) <- next (show tm) (Const tm) (S0, Some (Zy :* S0)) R0 (REx ("value", k) R0)
     pure value
   Right ty -> do
     (_, _, [(value,_)], _) <- next (show tm) (Const tm) (S0, Some (Zy :* S0)) R0 (RPr ("value", ty) R0)

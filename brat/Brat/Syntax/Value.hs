@@ -34,16 +34,16 @@ import Data.Ord (comparing)
 import Data.Kind (Type)
 import Data.Type.Equality ((:~:)(..))
 
-newtype VDecl = VDecl (Decl' (Some (Flip (Ro' Brat) Z)) (FunBody Term Noun))
+newtype VDecl = VDecl (Decl' (Some (Ro Brat Z)) (FunBody Term Noun))
 
 instance MODEY Brat => Show VDecl where
   show (VDecl decl) = show $ aux decl
    where
-    aux :: Decl' (Some (Flip (Ro' Brat) Z)) body -> Decl' String body
+    aux :: Decl' (Some (Ro Brat Z)) body -> Decl' String body
     aux (Decl { .. }) = case fnSig of
       Some sig -> Decl { fnName = fnName, fnSig = (show sig), fnBody = fnBody, fnLoc = fnLoc, fnRT = fnRT, fnLocality = fnLocality }
 
------------------------------------- Values ------------------------------------
+------------------------------------ Variable Indices ------------------------------------
 -- Well scoped de Bruijn indices
 data Inx :: N -> Type where
   -- We need `S n`, to say that there are >0 variables to choose the 0th from
@@ -86,6 +86,8 @@ injInn (AddS a) (VS v) = VS $ injInn a v
 impossible :: Inx Z -> a
 impossible v = case v of {}
 
+------------------------------------ Stack ------------------------------------
+
 findInx :: Eq x => Stack Z x n -> x -> Maybe (Inx n)
 findInx S0 _ = Nothing
 findInx (xz :<< x) x'
@@ -97,6 +99,10 @@ data Stack :: N -> Type -> N -> Type where
   (:<<) :: Stack n x m -> x -> Stack n x (S m)
 infixl 7 :<<
 deriving instance Show t => Show (Stack n t m)
+
+traverseStack :: Monad m => (s -> m t) -> Stack i s j -> m (Stack i t j)
+traverseStack _ S0 = pure S0
+traverseStack f (zx :<< x) = (:<<) <$> traverseStack f zx <*> f x
 
 -- Having a valid `Inx n` guarantees the Stack isn't empty
 proj :: Stack Z x n -> Inx n -> x
@@ -113,41 +119,58 @@ stackLen :: Stack Z x n -> Ny n
 stackLen S0 = Zy
 stackLen (s :<< _) = Sy (stackLen s)
 
+stkList :: Stack i a j -> [a]
+stkList S0 = []
+stkList (stk :<< a) = stkList stk ++ [a]
+
 infixr 8 <<+
 
+bwdStack :: Bwd x -> Some (Ny :* Stack Z x)
+bwdStack B0 = Some (Zy :* S0)
+bwdStack (zx :< x) = case bwdStack zx of
+  Some (ny :* stk) -> Some (Sy ny :* (stk :<< x))
+
+------------------------------------ Values ------------------------------------
 -- Environment of closed values of size `top`
 type Valz = Stack Z (Val Z)
+type Semz = Stack Z Sem
 
 data VVar :: N -> Type where
   VPar :: End -> VVar n  -- Has to be declared in the Store (for equality testing)
-  VLvl :: Int -> TypeKind -> VVar n  -- Cache the kind for equality testing
   VInx :: Inx n -> VVar n
 
 deriving instance Show (VVar n)
 
 instance Eq (VVar n) where
-  (VLvl i0 k0) == (VLvl i1 k1) = i0 == i1 && k0 == k1
   (VPar e0) == (VPar e1) = e0 == e1
   (VInx _) == (VInx _) = error "tried to compare VInxs"
   _ == _ = False
 
-data Scope :: (N -> Type) -> (N -> Type) where
-  (::-) :: Stack n (Val Z) m -- Inx-closed values from n to m (stashed env)
-        -> f (S m)           -- Plus an `f` with 1 extra lambda-bound variable
-        -> Scope f n
-
-infix 6 ::-
-
-deriving instance (forall n. Show (f n)) => Show (Scope f n)
-
+-- More syntactic, called "Term" elsewhere in literature (not in BRAT)
+-- Contains Inx's up to n-1, no Lvl's
 data Val :: N -> Type where
-  VNum :: NumVal n -> Val n
+  VNum :: NumVal (VVar n) -> Val n
   VCon :: UserName -> [Val n] -> Val n
-  VLam :: Scope Val n -> Val n
-  VFun :: Modey m -> CTy m n -> Val n
+  VLam :: Val (S n) -> Val n -- Just body (binds DeBruijn index n)
+  VFun :: MODEY m => Modey m -> CTy m n -> Val n
   VApp :: VVar n -> Bwd (Val n) -> Val n
-  -- Sum types
-  VSum :: Modey m -> [Some (Flip (Ro' m) n)] -> Val n
+  VSum :: MODEY m => Modey m -> [Some (Ro m n)] -> Val n -- (Hugr-like) Sum types
+
+data SVar = SPar End | SLvl Int
+ deriving (Show, Eq)
+
+-- Semantic value, used internally by normalization; contains Lvl's but no Inx's
+data Sem where
+  SNum :: NumVal SVar -> Sem
+  SCon :: UserName -> [Sem] -> Sem
+  -- Second is just body, we do NOT substitute under the binder,
+  -- instead we stash Sem's for each free DeBruijn index into the first member:
+  SLam :: Stack Z Sem n -> Val (S n) -> Sem
+  SFun :: MODEY m => Modey m -> Stack Z Sem n -> CTy m n -> Sem
+  SApp :: SVar -> Bwd Sem -> Sem
+  -- Sum types, stash like SLam (shared between all variants)
+  SSum :: MODEY m => Modey m -> Stack Z Sem n -> [Some (Ro m n)] -> Sem
+deriving instance Show Sem
 
 data CTy :: Mode -> N -> Type where
   (:->>) :: Ro m i j -> Ro m j k -> CTy m i
@@ -159,105 +182,155 @@ instance MODEY m => Show (CTy m n) where
       Braty -> "->"
       Kerny -> "-o"
 
--- The `Ro` that we should always use, because the number of free variables grows on the right
-type Ro m bot top = Ro' m top bot
-
--- Ro with top and bottom the wrong way round for partial application
-data Ro' :: Mode
+data Ro :: Mode
+        -> N -- The number of free variables (in scope) at the start (bottom)
         -> N -- The number of free variables at the end (top)
-        -> N -- The number of free variables at the start (bottom)
         -> Type where
   R0 :: Ro m bot bot
   -- Existential quantification
-  REx :: (PortName, TypeKind)
-      -> Scope (Ro' Brat top) bot -- This why top and bot have to be backwards
-      -> Ro Brat bot top
+  REx :: {---------} (PortName, TypeKind)
+      -> {------------------------------} Ro Brat (S bot) top
+      -> Ro Brat bot {----------------------------------} top
   -- Pairing
-  RPr :: (PortName, Val bot) -> Ro m bot top -> Ro m bot top
+  RPr :: {------} (PortName, Val bot)
+      -> {--------------------------} Ro m bot top
+      -> Ro m bot {--------------------------} top
 
-instance forall m top bot. MODEY m => Show (Ro' m top bot) where
+
+instance forall m top bot. MODEY m => Show (Ro m bot top) where
   show ro = intercalate ", " $ roToList ro
    where
-    roToList :: forall bot. Ro' m top bot -> [String]
+    roToList :: forall bot. Ro m bot top -> [String]
     roToList R0 = []
     roToList (RPr (p, ty) ro) = let tyStr = case modey :: Modey m of
                                       Braty -> show ty
                                       Kerny -> show ty
                                 in  ('(':p ++ " :: " ++ tyStr ++ ")"):roToList ro
-    roToList  (REx (p, k) (_ ::- ro)) = ('(':p ++ " :: " ++ show k ++ ")"):roToList ro
+    roToList  (REx (p, k) ro) = ('(':p ++ " :: " ++ show k ++ ")"):roToList ro
+
+instance Show (Val n) where
+  show v@(VCon _ _) | Just vs <- asList v = show vs
+   where
+    asList (VCon (PrefixName [] "nil") []) = Just []
+    asList (VCon (PrefixName [] "cons") [hd, tl]) = (hd:) <$> asList tl
+    asList _ = Nothing
+  show (VCon c []) = show c
+  show (VCon c vs) = show c ++ "(" ++ intercalate ", " (show <$> vs) ++ ")"
+  show (VNum v) = show v
+  show (VFun m cty) = "{ " ++ modily m (show cty) ++ " }"
+  show (VApp v ctx) = "VApp " ++ show v ++ " " ++ show ctx
+  show (VLam body) = "VLam " ++ show body
+  show (VSum my ros) = case my of
+    Braty -> "VSum (" ++ intercalate " + " (helper <$> ros) ++ ")"
+    Kerny -> "VSum (" ++ intercalate " + " (helper <$> ros) ++ ")"
+   where
+    helper :: MODEY m => Some (Ro m n) -> String
+    helper (Some ro) = show ro
+
+---------------------------------- Patterns -----------------------------------
+pattern TNat, TInt, TFloat, TBool, TText, TUnit, TNil :: Val n
+pattern TNat = VCon  (PrefixName [] "Nat") []
+pattern TInt = VCon  (PrefixName [] "Int") []
+pattern TFloat = VCon (PrefixName [] "Float") []
+pattern TBool = VCon  (PrefixName [] "Bool") []
+pattern TText = VCon (PrefixName [] "String") []
+pattern TUnit = VCon (PrefixName [] "nil") []
+pattern TNil = VCon (PrefixName [] "nil") []
+
+pattern TList, TOption :: Val n -> Val n
+pattern TList ty = VCon (PrefixName [] "List") [ty]
+pattern TOption ty = VCon (PrefixName [] "Option") [ty]
+
+pattern TVec, TCons :: Val n -> Val n -> Val n
+pattern TVec ty n = VCon (PrefixName [] "Vec") [ty, n]
+pattern TCons x ys = VCon (PrefixName [] "cons") [x, ys]
+
+pattern TQ, TMoney, TBit :: Val n
+pattern TQ = VCon (PrefixName [] "Qubit") []
+pattern TMoney = VCon (PrefixName [] "Money") []
+pattern TBit = VCon (PrefixName [] "Bit") []
+
+type family BinderType (m :: Mode) where
+  BinderType Brat = KindOr (Val Z)
+  BinderType Kernel = Val Z
+
+type family BinderVal (m :: Mode) where
+  BinderVal Brat = Val Z
+  BinderVal Kernel = KernelVal Z
 
 -------------------------------- Number Values ---------------------------------
-data NumVal n = NumValue
+-- x is the TYPE of variables, e.g. SVar or (VVar n)
+data NumVal x = NumValue
   { upshift :: Integer
-  , grower  :: Fun00 n
-  } deriving Eq
+  , grower  :: Fun00 x
+  } deriving (Eq, Foldable, Functor, Traversable)
 
-instance Show (NumVal n) where
+instance Show x => Show (NumVal x) where
   show (NumValue 0 g) = show g
   show (NumValue n Constant0) = show n
   show (NumValue n g) = show n ++ " + " ++ show g
 
 -- Functions which map 0 to 0
-data Fun00 n
+data Fun00 x
  = Constant0
- | StrictMonoFun (StrictMono n)
- deriving Eq
+ | StrictMonoFun (StrictMono x)
+ deriving (Eq, Foldable, Functor, Traversable)
 
-instance Show (Fun00 n) where
+instance Show x => Show (Fun00 x) where
   show Constant0 = "0"
   show (StrictMonoFun sm) = show sm
 
 -- Strictly increasing function
-data StrictMono n = StrictMono
+data StrictMono x = StrictMono
  { multBy2ToThe :: Integer
- , monotone :: Monotone n
- } deriving Eq
+ , monotone :: Monotone x
+ } deriving (Eq, Foldable, Functor, Traversable)
 
-instance Show (StrictMono n) where
+instance Show x => Show (StrictMono x) where
   show (StrictMono 0 m) = show m
   show (StrictMono n m) = let a = "2^" ++ show n
                               b = show (2 ^ n :: Int)
                           in (minimumBy (comparing length) [b,a]) ++ " * " ++ show m
 
-data Monotone n
- = Linear (VVar n)
- | Full (StrictMono n)
- deriving Eq
+data Monotone x
+ = Linear x
+ | Full (StrictMono x)
+ deriving (Eq, Foldable, Functor, Traversable)
 
-instance Show (Monotone n) where
+instance Show x => Show (Monotone x) where
   show (Linear v) = show v
   show (Full sm) = "(2^(" ++ show sm ++ ") - 1)"
 
 -- Reference semantics for NumValue types
-class NumFun (t :: N -> Type) where
-  numEval :: t n -> Integer -> Integer
-  numValue :: t n -> NumVal n
+class NumFun (t :: Type -> Type) where
+  calculate :: t Integer -> Integer -- Variables already replaced by Integer
+  numValue :: t x -> NumVal x
 
 instance NumFun NumVal where
-  numEval NumValue{..} = (upshift +) . numEval grower
+  calculate NumValue{..} = upshift + calculate grower
   numValue = id
 
 instance NumFun Fun00 where
-  numEval Constant0 = const 0
-  numEval (StrictMonoFun mono) = numEval mono
+  calculate Constant0 = 0
+  calculate (StrictMonoFun mono) = calculate mono
 
   numValue fun00 = NumValue 0 fun00
 
 instance NumFun StrictMono where
-  numEval StrictMono{..} = ((2 ^ multBy2ToThe) *) . numEval monotone
+  calculate StrictMono{..} = (2 ^ multBy2ToThe) * calculate monotone
 
   numValue = numValue . StrictMonoFun
 
 instance NumFun Monotone where
-  numEval (Linear _) = id
-  numEval (Full sm) = full . numEval sm
+  calculate (Linear n) = n
+  calculate (Full sm) = full (calculate sm)
    where
     full n = 2 ^ n - 1
 
   numValue = numValue . StrictMono 0
 
 -- Actual semantics for NumValue types
-nVar :: VVar n -> NumVal n
+nVar :: x -> NumVal x
 nVar v = NumValue
   { upshift = 0
   , grower = StrictMonoFun
@@ -295,60 +368,11 @@ nFull NumValue{..} = case upshift of
   -- 2^(n + x) - 1  =  1 + 2 * (2^(n + x - 1) - 1)
   n -> nPlus 1 (n2PowTimes 1 (nFull (NumValue (n - 1) grower)))
 
-pattern TNat, TInt, TFloat, TBool, TText, TUnit, TNil :: Val n
-pattern TNat = VCon  (PrefixName [] "Nat") []
-pattern TInt = VCon  (PrefixName [] "Int") []
-pattern TFloat = VCon (PrefixName [] "Float") []
-pattern TBool = VCon  (PrefixName [] "Bool") []
-pattern TText = VCon (PrefixName [] "String") []
-pattern TUnit = VCon (PrefixName [] "nil") []
-pattern TNil = VCon (PrefixName [] "nil") []
-
-pattern TList, TOption :: Val n -> Val n
-pattern TList ty = VCon (PrefixName [] "List") [ty]
-pattern TOption ty = VCon (PrefixName [] "Option") [ty]
-
-pattern TVec, TCons :: Val n -> Val n -> Val n
-pattern TVec ty n = VCon (PrefixName [] "Vec") [ty, n]
-pattern TCons x ys = VCon (PrefixName [] "cons") [x, ys]
-
-pattern TQ, TMoney, TBit :: Val n
-pattern TQ = VCon (PrefixName [] "Qubit") []
-pattern TMoney = VCon (PrefixName [] "Money") []
-pattern TBit = VCon (PrefixName [] "Bit") []
-
-instance Show (Val n) where
-  show v@(VCon _ _) | Just vs <- asList v = show vs
-   where
-    asList (VCon (PrefixName [] "nil") []) = Just []
-    asList (VCon (PrefixName [] "cons") [hd, tl]) = (hd:) <$> asList tl
-    asList _ = Nothing
-  show (VCon c []) = show c
-  show (VCon c vs) = show c ++ "(" ++ intercalate ", " (show <$> vs) ++ ")"
-  show (VNum v) = show v
-  show (VFun m cty) = "{ " ++ modily m (show cty) ++ " }"
-  show (VApp v ctx) = "VApp " ++ show v ++ " " ++ show ctx
-  show (VLam (ga ::- x)) = "VLam " ++ show ga ++ " " ++ show x
-  show (VSum my ros) = case my of
-    Braty -> "VSum (" ++ intercalate " + " (helper <$> ros) ++ ")"
-    Kerny -> "VSum (" ++ intercalate " + " (helper <$> ros) ++ ")"
-   where
-    helper :: MODEY m => Some (Flip (Ro' m) n) -> String
-    helper (Some (Flip ro)) = show ro
-
-type family BinderType (m :: Mode) where
-  BinderType Brat = KindOr (Val Z)
-  BinderType Kernel = Val Z
-
-type family BinderVal (m :: Mode) where
-  BinderVal Brat = Val Z
-  BinderVal Kernel = KernelVal Z
-
 -- EvenOrOdd attempts to do DivMod to a numval.
 -- It shouldn't change the number of free variables
-class EvenOrOdd (t :: N -> Type) where
+class EvenOrOdd (t :: Type -> Type) where
   -- When half t is (n, b), then t = 2*n+b. I.e. True means odd
-  half :: t n -> Maybe (NumVal n, Bool)
+  half :: t x -> Maybe (NumVal x, Bool)
 
 instance EvenOrOdd NumVal where
   half (NumValue upshift grower) = case (upshift `divMod` 2, half grower) of
@@ -384,13 +408,8 @@ data NumPat
  | NPVar
  deriving Show
 
-bwdStack :: Bwd x -> Some (Ny :* Stack Z x)
-bwdStack B0 = Some (Zy :* S0)
-bwdStack (zx :< x) = case bwdStack zx of
-  Some (ny :* stk) -> Some (Sy ny :* (stk :<< x))
-
 numMatch :: Bwd (Val Z) -- Stuff we've already matched
-         -> NumVal Z -- Type argument
+         -> NumVal (VVar Z) -- Type argument
          -> NumPat -- Pattern to match against arg
          -> Either ErrorMsg (Bwd (Val Z))
 numMatch zv arg NPVar = pure (zv :< VNum arg)
@@ -431,7 +450,7 @@ valMatches' zv (v:vs) (p:ps) = do
   valMatches' zv vs ps
 valMatches' _ _ _ = Left $ InternalError "ragged lists in valMatches"
 
-
+---------------------- Variable Renumbering (VarChanger) ----------------------
 -- A `Thinning i j` embeds i things among j things.
 data Thinning :: N -> N -> Type where
   ThNull :: Thinning Z Z
@@ -471,17 +490,12 @@ data VarChanger :: N -> N -> Type where
   ParToInx :: AddR out inn tot
            -> Stack Z End out    -- Ends for each outer variable we want to abstract (by matching on the End)
            -> VarChanger inn tot -- Expand scope by abstract outer Par variables
-  InxToLvl :: AddR out inn tot
-           -> Stack Z (Int, TypeKind) out -- de Bruijn level for every outer variable
-           -> VarChanger tot inn
   Thinning :: Thinning src tgt
            -> VarChanger src tgt
-
 
 weakenVC :: VarChanger src tgt -> VarChanger (S src) (S tgt)
 weakenVC (InxToPar a stk) = InxToPar (AddS a) stk
 weakenVC (ParToInx a stk) = ParToInx (AddS a) stk
-weakenVC (InxToLvl a stk) = InxToLvl (AddS a) stk
 weakenVC (Thinning th) = Thinning (ThKeep th)
 
 
@@ -493,82 +507,44 @@ instance DeBruijn VVar where
     | Just out <- findInx endz e = VInx (injOut a out)
   -- Need to update the scope of inner variables, since we're adding more outers
   changeVar (ParToInx a _) (VInx v) = VInx (injInn a v)
-  changeVar (InxToLvl a lvlz) (VInx v) = case outOrInn a v of
-    Left out -> uncurry VLvl (proj lvlz out)
-    Right inn -> VInx inn
   changeVar (Thinning th) (VInx v) = VInx (inxThin v th)
   changeVar _ (VPar e) = VPar e
-  changeVar _ (VLvl l k) = VLvl l k
 
--- Invariant: tgt - src = tgt' - src' (varchanger makes the same change to the scope)
--- Hence:     tgt' - tgt = src' - src (the stack has the same length)
-varChangerThroughStack :: VarChanger src tgt
-                       -> Stack src x src'
-                       -> Some (VarChanger src' -- VarChanger src' tgt' (weakened by the length of the stack)
-                                :*
-                                Stack tgt x -- Stack tgt x tgt' (shifted by the scope difference of the VarChanger)
-                               )
-varChangerThroughStack (vc {- src -> tgt -}) (S0 {- src = src' -}) = Some {- tgt' = tgt -} (vc {- src' -> tgt' -} :* S0)
-varChangerThroughStack (vc {- src -> tgt -}) (xz :<< x {- src -> S src' -}) = case varChangerThroughStack vc xz of
-  Some {- tgt' -} (vc {- src' -> tgt' -} :* xz {- tgt -> tgt' -}) -> Some {- S tgt' -} ((weakenVC vc {- S src' -> S tgt' -}) :* ((xz :<< x) {- tgt -> S tgt' -}))
-
-instance DeBruijn t => DeBruijn (Scope t) where
-  changeVar vc (vz ::- t) = case varChangerThroughStack vc vz of
-    Some (vc :* vz) -> vz ::- changeVar (weakenVC vc) t
 
 instance DeBruijn Val where
-  changeVar vc (VNum n) = VNum (changeVar vc n)
+  changeVar vc (VNum n) = VNum (fmap (changeVar vc) n)
   changeVar vc (VCon c vs) = VCon c ((changeVar vc) <$> vs)
   changeVar vc (VApp v ss)
     = VApp (changeVar vc v) (changeVar vc <$> ss)
-  changeVar vc (VLam sc)
-    = VLam (changeVar vc sc)
+  changeVar vc (VLam sc) = VLam (changeVar (weakenVC vc) sc)
   changeVar vc (VFun Braty cty)
     = VFun Braty $ changeVar vc cty
   changeVar vc (VFun Kerny cty)
     = VFun Kerny $ changeVar vc cty
   changeVar vc (VSum my ros)
     = VSum my (f <$> ros)
-    where f (Some (Flip ro)) = case varChangerThroughRo vc ro of Some (_ :* Flip ro) -> Some (Flip ro)
+    where f (Some ro) = case varChangerThroughRo vc ro of Some (_ :* ro) -> Some ro
 
 varChangerThroughRo :: VarChanger src tgt
                     -> Ro m src src'
                     -> Some (VarChanger src' -- VarChanger src' tgt'
                              :*
-                             Flip (Ro' m) tgt -- Ro m tgt tgt'
+                             Ro m tgt -- Ro m tgt tgt'
                             )
 -- Lift the scope of Ro from src -> src' to tgt -> tgt'
 -- R0 enforces src = src', so we choose tgt' = tgt in our existential type
-varChangerThroughRo vc R0 = Some (vc :* Flip R0)
+varChangerThroughRo vc R0 = Some (vc :* R0)
 varChangerThroughRo vc (RPr (p,ty) ro {- src -> src' -}) = case changeVar vc {- src -> tgt -} ty of
   ty -> case varChangerThroughRo vc ro of
-          Some (vc {- src' -> tgt' -} :* Flip ro {- tgt -> tgt' -}) -> Some (vc :* Flip (RPr (p,ty) ro))
-varChangerThroughRo vc {- src -> tgt -} (REx pk (vz {- src -> src' -} ::- ro {- S src' -> src'' -}))
-  -- First, go through the let-bound stack
-  = case varChangerThroughStack vc vz of
-      -- Second, go through the lambda for the existential. Third, go through the rest of the row
-      Some (vc {- src' -> tgt' -} :* vz {- tgt -> tgt' -}) -> case varChangerThroughRo (weakenVC vc) ro of
-        Some (vc {- src'' -> tgt'' -} :* Flip ro {- S tgt' -> tgt'' -}) -> Some (vc :* Flip (REx pk (vz ::- ro)))
+          Some (vc {- src' -> tgt' -} :* ro {- tgt -> tgt' -}) -> Some (vc :* RPr (p,ty) ro)
+varChangerThroughRo vc {- src -> tgt -} (REx pk ro {- S src' -> src'' -})
+  = case varChangerThroughRo (weakenVC vc) ro of
+        Some (vc {- src'' -> tgt'' -} :* ro {- S tgt' -> tgt'' -}) -> Some (vc :* REx pk ro)
 
 instance DeBruijn (CTy m) where
   changeVar (vc {- srcIn -> tgtIn -}) (ri {- srcIn -> srcMid -} :->> ro {- srcMid -> srcOut -}) = case varChangerThroughRo vc ri of
-    Some {- tgtMid -} (vc {- srcMid -> tgtMid -} :* Flip ri {- tgtIn -> tgtMid -}) -> case varChangerThroughRo vc ro of
-      Some {- tgtOut -} (_vc {- srcOut -> tgtOut -} :* Flip ro {- tgtMid -> tgtOut -}) -> ri :->> ro
-
-instance DeBruijn NumVal where
-  changeVar vc (NumValue u g) = NumValue u (changeVar vc g)
-
-instance DeBruijn Fun00 where
-  changeVar _ Constant0 = Constant0
-  changeVar vc (StrictMonoFun sm) = StrictMonoFun (changeVar vc sm)
-
-instance DeBruijn StrictMono where
-  changeVar vc (StrictMono pow mono) = StrictMono pow (changeVar vc mono)
-
-instance DeBruijn Monotone where
-  changeVar vc (Linear v) = Linear (changeVar vc v)
-  changeVar vc (Full sm) = Full (changeVar vc sm)
-
+    Some {- tgtMid -} (vc {- srcMid -> tgtMid -} :* ri {- tgtIn -> tgtMid -}) -> case varChangerThroughRo vc ro of
+      Some {- tgtOut -} (_vc {- srcOut -> tgtOut -} :* ro {- tgtMid -> tgtOut -}) -> ri :->> ro
 
 kernelNoBind :: Ro Kernel bot top -> bot :~: top
 kernelNoBind R0 = Refl
@@ -605,19 +581,7 @@ roTopM Kerny = \ny ro -> case kernelNoBind ro of
 roTop :: Ny bot -> Ro Brat bot top -> Ny top
 roTop ny R0 = ny
 roTop ny (RPr _ ro) = roTop ny ro
-roTop ny (REx _ (stk ::- ro)) = roTop (Sy (stkTop ny stk)) ro
- where
-  stkTop :: Ny bot -> Stack bot ty top -> Ny top
-  stkTop ny S0 = ny
-  stkTop ny (stk :<< _) = Sy (stkTop ny stk)
-
-stkLen :: Stack Z t tot -> Ny tot
-stkLen S0 = Zy
-stkLen (zx :<< _) = Sy (stkLen zx)
-
-stkList :: Stack i a j -> [a]
-stkList S0 = []
-stkList (stk :<< a) = stkList stk ++ [a]
+roTop ny (REx _ ro) = roTop (Sy ny) ro
 
 copyable :: Val Z -> Maybe Bool
 copyable TQ = Just False

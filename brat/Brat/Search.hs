@@ -108,7 +108,7 @@ tokenValues _ _ = []
 
 rowLen :: Ro m bot top -> Int
 rowLen R0 = 0
-rowLen (REx _ (_ ::- rest)) = 1 + rowLen rest
+rowLen (REx _ rest) = 1 + rowLen rest
 rowLen (RPr _ rest) = 1 + rowLen rest
 
 vsearch :: FC -> Val Z -> [Term Chk Noun]
