@@ -20,6 +20,7 @@ import Brat.FC hiding (end)
 import Brat.Naming
 import Brat.Syntax.Common
 import Brat.Syntax.Core
+import Brat.Syntax.FuncDecl (FunBody(..), FuncDecl(..))
 import Brat.Syntax.Simple
 import Brat.UserName
 import Util (names, (**^))
@@ -41,8 +42,8 @@ type TypeAlias = TypeAliasF (Term Chk Noun)
 
 type TypeAliasTable = M.Map UserName TypeAlias
 
-type RawDecl = Decl' [RawIO] (FunBody Raw Noun)
-type RawEnv = ([RawDecl], [RawAlias], TypeAliasTable)
+type RawEnv = ([RawFuncDecl], [RawAlias], TypeAliasTable)
+type RawFuncDecl = FuncDecl [RawIO] (FunBody Raw Noun)
 
 addNames :: TypeRow ty -> [(PortName, ty)]
 addNames tms = aux (fromList names) tms
@@ -307,9 +308,9 @@ desugarVBody (Clauses cs) = Clauses <$> mapM branch cs
 desugarVBody (NoLhs rhs) = NoLhs <$> desugar rhs
 desugarVBody Undefined = pure Undefined
 
-instance Desugarable RawDecl where
-  type Desugared RawDecl = Decl
-  desugar' d@Decl{..} = do
+instance Desugarable RawFuncDecl where
+  type Desugared RawFuncDecl = CoreFuncDecl
+  desugar' d@FuncDecl{..} = do
     tys  <- addNames <$> desugar' fnSig
     noun <- desugarNBody fnBody
     pure $ d { fnBody = noun
@@ -329,9 +330,8 @@ desugarAliases (a@(TypeAlias fc name _ _):as) = do
   local (\((decls, aliases, aliasTbl), uz) -> ((decls, aliases, M.insert name a aliasTbl), uz)) $
     (a :) <$> desugarAliases as
 
-desugarEnv :: RawEnv -> Either Error ([Decl], [TypeAlias])
+desugarEnv :: RawEnv -> Either Error ([CoreFuncDecl], [TypeAlias])
 desugarEnv env@(decls, aliases, aliasTbl)
--- desugarEnv env@(decls, aliases)
   = fmap fst
     . runExcept
     . flip runReaderT (env, B0)

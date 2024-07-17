@@ -4,6 +4,7 @@ import Data.List.NonEmpty
 
 import Brat.FC
 import Brat.Syntax.Common
+import Brat.Syntax.FuncDecl (FuncDecl(..))
 import Brat.Syntax.Raw
 import Brat.Syntax.Simple
 import Brat.UserName
@@ -14,7 +15,7 @@ data FBody
   | FUndefined
  deriving Show
 
-type FDecl = Decl' [RawIO] FBody
+type FDecl = FuncDecl [RawIO] FBody
 deriving instance Show FDecl
 type FEnv = ([FDecl], [RawAlias])
 

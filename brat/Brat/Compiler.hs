@@ -12,9 +12,9 @@ import Brat.Error
 import Brat.Load
 import Brat.Naming (root, split)
 
-import qualified Data.ByteString.Lazy as BS
 import Control.Monad (when)
 import Control.Monad.Except
+import qualified Data.ByteString.Lazy as BS
 import System.Exit (die)
 
 printDeclsHoles :: [FilePath] -> String -> IO ()

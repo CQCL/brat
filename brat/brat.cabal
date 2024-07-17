@@ -79,6 +79,7 @@ library
                        Brat.Elaborator,
                        Brat.Syntax.Abstractor,
                        Brat.Syntax.Concrete,
+                       Brat.Syntax.FuncDecl,
                        Brat.Syntax.Port,
                        Brat.Syntax.Simple,
                        Brat.UserName,

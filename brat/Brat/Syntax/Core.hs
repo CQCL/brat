@@ -3,7 +3,7 @@ module Brat.Syntax.Core (Term(..)
                         ,Output
                         ,InOut
                         ,CType
-                        ,Decl
+                        ,CoreFuncDecl
                         ,Precedence(..)
                         ,precedence
                         ) where
@@ -16,6 +16,7 @@ import Brat.Constructors.Patterns (pattern CCons,
 import Brat.FC
 import Brat.Naming
 import Brat.Syntax.Common
+import Brat.Syntax.FuncDecl
 import Brat.Syntax.Simple
 import Brat.UserName
 
@@ -28,7 +29,7 @@ type InOut = (PortName, KindOr (Term Chk Noun))
 
 type CType = CType' InOut
 
-type Decl = Decl' [InOut] (FunBody Term Noun)
+type CoreFuncDecl = FuncDecl [InOut] (FunBody Term Noun)
 
 data Term :: Dir -> Kind -> Type where
   Simple   :: SimpleTerm -> Term Chk Noun

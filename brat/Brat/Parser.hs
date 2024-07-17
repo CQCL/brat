@@ -9,6 +9,7 @@ import qualified Brat.Lexer.Token as Lexer
 import Brat.Syntax.Abstractor
 import Brat.Syntax.Common hiding (end)
 import qualified Brat.Syntax.Common as Syntax
+import Brat.Syntax.FuncDecl (FuncDecl(..), Locality(..))
 import Brat.Syntax.Concrete
 import Brat.Syntax.Raw
 import Brat.Syntax.Simple
@@ -515,8 +516,7 @@ cnoun pe = do
 
 decl :: Parser FDecl
 decl = do
-      (WC fc (nm, ty, body, rt)) <- withFC (do
-        rt <- pure RtLocal -- runtime
+      (WC fc (nm, ty, body)) <- withFC (do
         nm <- simpleName
         ty <- try (functionType <&> \ty -> [Named "thunk" (Right ty)])
               <|> (match TypeColon >> outputs)
@@ -526,14 +526,14 @@ decl = do
                                  _ -> False
         body <- if allow_clauses then (FClauses <$> clauses nm) <|> (FNoLhs <$> nbody nm)
                 else FNoLhs <$> nbody nm
-        pure (nm, ty, body, rt))
-      pure $ Decl { fnName = nm
-                  , fnLoc  = fc
-                  , fnSig  = ty
-                  , fnBody = body
-                  , fnRT   = rt
-                  , fnLocality = Local
-                  }
+        pure (nm, ty, body))
+      pure $ FuncDecl
+        { fnName = nm
+        , fnLoc  = fc
+        , fnSig  = ty
+        , fnBody = body
+        , fnLocality = Local
+        }
     where
       is_fun_ty :: RawVType -> Bool
       is_fun_ty (RFn _) = True
@@ -665,13 +665,13 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
                                  Just (ext, op) -> pure (intercalate "." ext, op)
                                  Nothing -> fail $ "Malformed op name: " ++ symbol
                   pure (fnName, ty, (ext, op))
-               pure Decl { fnName = fnName
-                         , fnSig = ty
-                         , fnBody = FUndefined
-                         , fnLoc = fc
-                         , fnRT = RtLocal
-                         , fnLocality = Extern symbol
-                         }
+               pure FuncDecl
+                 { fnName = fnName
+                 , fnSig = ty
+                 , fnBody = FUndefined
+                 , fnLoc = fc
+                 , fnLocality = Extern symbol
+                 }
    where
     nDecl = match TypeColon >> outputs
     vDecl = (:[]) . Named "thunk" . Right <$> functionType

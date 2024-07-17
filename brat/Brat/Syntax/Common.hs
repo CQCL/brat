@@ -1,19 +1,13 @@
-{-# LANGUAGE AllowAmbiguousTypes, QuantifiedConstraints, UndecidableInstances #-}
-
 module Brat.Syntax.Common (PortName,
                            Dir(..),
                            Kind(..),
                            Diry(..),
                            Kindy(..),
                            CType'(..),
-                           pattern Extern, pattern Local, -- No reason not to export Locality if required
-                           Decl'(..),
                            Import(..),
                            ImportSelection(..),
-                           Runtime(RtLocal), -- No reason not to export others if required
                            Pattern(..),
                            Abstractor(..), occursInAbstractor,
-                           FunBody(..),
                            TypeKind(..), KindOr,
                            showSig,
                            showRow,
@@ -52,7 +46,6 @@ import Brat.UserName
 
 import Data.Bifunctor (first)
 import Data.List (intercalate)
-import Data.List.NonEmpty (NonEmpty(..))
 import Data.Kind (Type)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 
@@ -161,17 +154,6 @@ deriving instance Eq io => Eq (CType' io)
 instance Semigroup (CType' (PortName, ty)) where
   (ss :-> ts) <> (us :-> vs) = (ss <> us) :-> (ts <> vs)
 
-data Locality = Extern (String, String) | Local deriving (Eq, Show)
-
-data Decl' (io :: Type) (body :: Type)
-  = Decl { fnName :: String
-         , fnSig  :: io
-         , fnBody :: body
-         , fnLoc  :: FC
-         , fnRT   :: Runtime
-         , fnLocality :: Locality
-         }
-
 data Import
   = Import { importName :: WC UserName
            , importQualified :: Bool
@@ -186,13 +168,6 @@ data ImportSelection
   | ImportHiding [WC String]
   deriving (Eq, Ord)
 
-deriving instance
-  forall tm io.
-  (forall d k. Eq (tm d k), Eq io
-  ,Eq (FunBody tm Noun)
-  ,Eq (FunBody tm UVerb)
-  ) => Eq (Decl' io (FunBody tm Noun))
-
 instance Show Import where
   show Import{..} =
     let prefix = if importQualified then [] else ["open"]
@@ -202,26 +177,6 @@ instance Show Import where
     showSelection ImportAll = []
     showSelection (ImportPartial fns) = "(":(unWC <$> fns) ++ [")"]
     showSelection (ImportHiding fns) = "hiding (":(unWC <$> fns) ++ [")"]
-
-
-instance (Show io, Show (FunBody tm Noun))
- => Show (Decl' io (FunBody tm Noun)) where
-  show Decl{..} = unlines [fnName ++ " :: " ++ show fnSig
-                          ,fnName ++ " = " ++ show fnBody]
-
--- TODO: allow combinations thereof
--- default to local
-data Runtime = RtTierkreis | RtLocal | RtKernel deriving (Eq, Show)
-
-data FunBody (tm :: Dir -> Kind -> Type) (k :: Kind) where
-  -- lhs and rhs
-  ThunkOf   :: WC (FunBody tm UVerb) -> FunBody tm Noun
-  Clauses   :: NonEmpty (WC Abstractor, WC (tm Chk Noun)) -> FunBody tm UVerb
-  NoLhs     :: (WC (tm Chk k)) -> FunBody tm k
-  Undefined :: FunBody tm k
-
-deriving instance (forall d k. Show (tm d k)) => Show (FunBody tm k)
-deriving instance (forall d k. Eq (tm d k)) => Eq (FunBody tm k)
 
 showSig :: Show ty => [(String, ty)] -> String
 showSig [] = "()"

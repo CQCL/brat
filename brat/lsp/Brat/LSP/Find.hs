@@ -10,6 +10,7 @@ import Brat.LSP.State
 import Brat.Syntax.Common
 import Brat.Syntax.Concrete (Flat(..))
 import Brat.Syntax.Core
+import Brat.Syntax.FuncDecl (FunBody(..), FuncDecl(..))
 import Brat.Syntax.Value (VDecl(..))
 import Brat.Unelaborator (unelab)
 
@@ -18,7 +19,6 @@ data Context
             , root :: Flat
             -- May be nothing if not hovering over a term
             , thing :: Flat
-            , runtime :: Runtime
             } deriving Show
 
 getInfo :: ProgramState -> Pos -> Maybe Context
@@ -28,16 +28,15 @@ getInfo ps pos
       (x:_) -> buildContext pos x
  where
   pred :: VDecl -> Bool
-  pred (VDecl (Decl{..})) = pos `inside` fnLoc
+  pred (VDecl (FuncDecl{..})) = pos `inside` fnLoc
 
   buildContext :: Pos -> VDecl -> Maybe Context
-  buildContext pos (VDecl Decl{..}) = do
+  buildContext pos (VDecl FuncDecl{..}) = do
     body <- findInBody pos fnBody
     subject <- getThing pos body
     pure $ Context { declName = fnName
                    , root = unWC body
                    , thing = subject
-                   , runtime = fnRT
                    }
 
   findInBody :: KINDY k => Pos -> FunBody Term k -> Maybe (WC Flat)

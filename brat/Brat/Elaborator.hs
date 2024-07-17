@@ -7,8 +7,9 @@ import Data.Map (empty)
 
 import Brat.FC
 import Brat.Syntax.Common
-import Brat.Syntax.Raw
 import Brat.Syntax.Concrete
+import Brat.Syntax.FuncDecl (FunBody(..), FuncDecl(..))
+import Brat.Syntax.Raw
 import Brat.Error
 
 assertSyn :: Dirable d => WC (Raw d k) -> Either Error (WC (Raw Syn k))
@@ -202,16 +203,17 @@ elabBody (FNoLhs e) _ = do
       _ -> (assertUVerb e) >>= \e -> pure $ ThunkOf (WC (fcOf e) (NoLhs e))
 elabBody FUndefined _ = pure Undefined
 
-elabDecl :: FDecl -> Either Error RawDecl
-elabDecl d = do
+elabFunDecl :: FDecl -> Either Error RawFuncDecl
+elabFunDecl d = do
   rc <- elabBody (fnBody d) (fnLoc d)
-  pure $ Decl { fnName = fnName d
-              , fnLoc = fnLoc d
-              , fnSig = fnSig d
-              , fnBody = rc
-              , fnRT = fnRT d
-              , fnLocality = fnLocality d
-              }
+  pure $ FuncDecl
+    { fnName = fnName d
+    , fnLoc = fnLoc d
+    , fnSig = fnSig d
+    , fnBody = rc
+    , fnLocality = fnLocality d
+    }
+
 
 elabEnv :: FEnv -> Either Error RawEnv
-elabEnv (ds, x) = (,x,empty) <$> forM ds elabDecl
+elabEnv (ds, x) = (,x,empty) <$> forM ds elabFunDecl

@@ -20,6 +20,7 @@ import Brat.Naming
 import Brat.Syntax.Abstractor
 import Brat.Syntax.Common
 import Brat.Syntax.Core
+import Brat.Syntax.FuncDecl (FunBody(..))
 import Brat.Syntax.Simple
 import Brat.Syntax.Value
 import Brat.UserName

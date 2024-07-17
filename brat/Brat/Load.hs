@@ -18,6 +18,7 @@ import Brat.Parser
 import Brat.Syntax.Common
 import Brat.Syntax.Concrete (FEnv)
 import Brat.Syntax.Core
+import Brat.Syntax.FuncDecl (FunBody(..), FuncDecl(..), Locality(..))
 import Brat.Syntax.Raw
 import Brat.Syntax.Value
 import Brat.UserName
@@ -60,7 +61,7 @@ emptyMod = (M.empty, [], [], initStore, (M.empty, []))
 -- the box that is created for it. For simple `NoLhs` definitions, we return
 -- Nothing.
 checkDecl :: Prefix -> VDecl -> [(Tgt, BinderType Brat)] -> Checking ()
-checkDecl pre (VDecl Decl{..}) to_define = localFC fnLoc $ do
+checkDecl pre (VDecl FuncDecl{..}) to_define = localFC fnLoc $ do
   trackM "\nCheckDecl:"
   unless (fnLocality == Local) $ err $ InternalError "checkDecl called on ext function"
   getFunTy fnSig >>= \case

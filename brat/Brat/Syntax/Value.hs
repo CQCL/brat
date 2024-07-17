@@ -25,6 +25,7 @@ module Brat.Syntax.Value {-(VDecl
 import Brat.Error
 import Brat.Syntax.Common
 import Brat.Syntax.Core (Term (..))
+import Brat.Syntax.FuncDecl (FunBody, FuncDecl(..))
 import Brat.UserName
 import Bwd
 import Hasochism
@@ -34,14 +35,14 @@ import Data.Ord (comparing)
 import Data.Kind (Type)
 import Data.Type.Equality ((:~:)(..))
 
-newtype VDecl = VDecl (Decl' (Some (Ro Brat Z)) (FunBody Term Noun))
+newtype VDecl = VDecl (FuncDecl (Some (Ro Brat Z)) (FunBody Term Noun))
 
 instance MODEY Brat => Show VDecl where
   show (VDecl decl) = show $ aux decl
    where
-    aux :: Decl' (Some (Ro Brat Z)) body -> Decl' String body
-    aux (Decl { .. }) = case fnSig of
-      Some sig -> Decl { fnName = fnName, fnSig = (show sig), fnBody = fnBody, fnLoc = fnLoc, fnRT = fnRT, fnLocality = fnLocality }
+    aux :: FuncDecl (Some (Ro Brat Z)) body -> FuncDecl String body
+    aux (FuncDecl { .. }) = case fnSig of
+      Some sig -> FuncDecl { fnName = fnName, fnSig = (show sig), fnBody = fnBody, fnLoc = fnLoc, fnLocality = fnLocality }
 
 ------------------------------------ Variable Indices ------------------------------------
 -- Well scoped de Bruijn indices
