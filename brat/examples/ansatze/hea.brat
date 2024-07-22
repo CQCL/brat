@@ -1,0 +1,31 @@
+type Real = Nat # Temporary hack
+
+type Operator = Pair (Pair Nat Nat) Real
+
+type Pauli = Vec Nat 0
+
+edges :: Vec Operator 1
+edges = ?e
+
+numNodes :: Nat
+numNodes = ?nn
+
+numEdges :: Nat
+numEdges = ?ne
+
+apply-operators :: { Vec Money numNodes
+                   , Vec Operator numEdges
+                   -o Vec Qubit numNodes
+                   }
+apply-operators = ?help
+
+# map :: (f :: {A -> B}), (xs :: Vec A n) -> (ys :: Vec B n)
+# map = f, xs -> ?ys
+
+ext measure :: Qubit -> Bool, Money
+
+hea :: (rotations :: Vec Operator numEdges),
+       (meas :: Vec Pauli numNodes),
+       (cash :: Vec Money numNodes)
+    -> (cash :: Vec Money numNodes), (result :: Vec Bool numNodes)
+hea = rots, meas -> ?j # apply-operators; meas(cash); xs -> map((measure,xs)); transpose

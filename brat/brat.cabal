@@ -1,0 +1,132 @@
+cabal-version:       2.2
+
+name:                brat
+version:             0.1.0.0
+maintainer:          craig.roy@cambridgequantum.com
+build-type:          Custom
+extra-source-files:  emacs/brat-mode.el, emacs/lsp-brat.el, proto/*.proto
+
+
+custom-setup
+  setup-depends:
+    base < 5,
+    Cabal,
+    directory,
+    proto-lens-setup
+
+common haskell
+  default-extensions:  DataKinds,
+                       FlexibleInstances,
+                       GADTs,
+                       GeneralizedNewtypeDeriving,
+                       LambdaCase,
+                       KindSignatures,
+                       RecordWildCards,
+                       StandaloneDeriving,
+                       TupleSections,
+                       TypeFamilies,
+                       TypeSynonymInstances 
+
+common warning-flags
+  ghc-options:
+    -Wall
+    -Wincomplete-uni-patterns
+    -Wincomplete-record-updates
+    -Wcompat
+    -Widentities
+    -Wredundant-constraints
+    -Wmissing-export-lists
+    -Wpartial-fields
+    -Wincomplete-patterns
+    -Wmonomorphism-restriction
+    -Wmissing-fields
+
+    -Wno-name-shadowing
+    -Wno-unticked-promoted-constructors
+    -Wno-unused-do-bind
+    -Wno-missing-signatures
+
+library
+  import:              haskell, warning-flags
+  default-language:    Haskell2010
+  other-modules:       Brat.Compile.Scheme,
+                       Brat.Dot,
+                       Brat.Eval,
+                       Brat.Graph,
+                       Brat.Lexer,
+                       Brat.Parser,
+                       Brat.Search,
+                       Brat.Thin,
+                       Control.Monad.Freer,
+                       Proto.Graph, Proto.Graph_Fields,
+                       Proto.Signature, Proto.Signature_Fields,
+                       Util
+
+  exposed-modules:     Brat.Checker,
+                       Brat.Error,
+                       Brat.FC,
+                       Brat.Load,
+                       Brat.Naming,
+                       Brat.Syntax.Common,
+                       Brat.Syntax.Core,
+                       Brat.Syntax.Raw,
+                       Brat.Syntax.Skel
+
+  autogen-modules:     Proto.Graph, Proto.Graph_Fields,
+                       Proto.Signature, Proto.Signature_Fields
+
+  build-depends:       base < 5,
+                       megaparsec >= 9.0.0,
+                       mtl,
+                       HUnit,
+                       containers >= 0.6.5.1,
+                       proto-lens-runtime,
+                       proto-lens,
+                       microlens,
+                       vector,
+                       text,
+                       deepseq
+
+executable brat
+  import:              haskell, warning-flags
+  default-language:    Haskell2010
+  main-is:             Main.hs
+  build-depends:       base < 5,
+                       brat,
+                       megaparsec >= 9.0.0,
+                       filepath,
+                       mtl,
+                       containers,
+                       proto-lens-runtime
+
+  other-modules:       Brat.Checker,
+                       Brat.Compile.Scheme,
+                       Brat.Dot,
+                       Brat.Error,
+                       Brat.Eval,
+                       Brat.FC,
+                       Brat.Graph,
+                       Brat.Lexer,
+                       Brat.Load,
+                       Brat.Naming,
+                       Brat.Parser,
+                       Brat.Search,
+                       Brat.Syntax.Common,
+                       Brat.Syntax.Core,
+                       Brat.Syntax.Raw,
+                       Brat.Syntax.Skel
+                       Brat.Thin,
+                       Control.Monad.Freer,
+                       Proto.Graph, Proto.Graph_Fields,
+                       Proto.Signature, Proto.Signature_Fields,
+                       Util
+
+
+executable lsp-brat
+  import:              warning-flags
+  default-language:    Haskell2010
+  main-is:             Driver.hs
+  other-modules:       Brat.LSP.Find, Brat.LSP.Holes, Brat.LSP.State
+  hs-source-dirs:      lsp
+  build-depends:       base <5, brat, lsp, lsp-types, text, lens, hslogger, rope-utf16-splay
+  default-extensions:  RecordWildCards

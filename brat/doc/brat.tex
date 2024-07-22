@@ -1,0 +1,202 @@
+\documentclass{article}
+
+\usepackage{pig}
+\usepackage{xspace}
+\usepackage{amssymb}
+
+\ColourEpigram
+
+\newcommand{\lollipop}{\multimap}
+
+\newcommand{\D}[1]{\blue{\textbf{#1}}}
+\newcommand{\C}[1]{\red{\textbf{#1}}}
+
+\newcommand{\Tm}[2]{\D{Term} \; #1 \; #2 \xspace}
+\newcommand{\Syn}{\C{Syn}}
+\newcommand{\Chk}{\C{Chk}}
+\newcommand{\Nn}{\C{Noun}}
+\newcommand{\Vb}{\C{Verb}}
+\newcommand{\Comma}{\mbox{,}}
+\newcommand{\Semicolon}{\mbox{;}}
+\newcommand{\App}[2]{#1 (#2)}
+\newcommand{\Abst}{\D{Abst}}
+\newcommand{\Lam}[2]{#1 \rightarrow #2}
+\newcommand{\Thunk}[1]{\{ #1 \}}
+\newcommand{\Pair}[2]{[ #1 , #2 ]}
+\newcommand{\Force}[1]{#1 ()}
+\newcommand{\Ports}{\D{Ports}}
+\newcommand{\Pull}[2]{pull \; #1 \; #2}
+\newcommand{\Var}[1]{var \; #1}
+\newcommand{\Fun}[1]{\mathit{fun} \; #1}
+\newcommand{\Emb}[1]{#1}
+\newcommand{\Outputs}{\D{Outputs}}
+\newcommand{\Ann}[2]{#1 \; :: \; #2}
+\newcommand{\VHole}{vhole}
+\newcommand{\NHole}{nhole}
+\newcommand{\List}[1]{\D{List} \; #1}
+\newcommand{\Vec}[1]{\mathit{vec} #1}
+\newcommand{\Slice}[2]{\mathit{slice} \; #1 \; #2}
+\newcommand{\SliceH}[1]{\D{Slice} #1}
+\newcommand{\Select}[2]{\mathit{select} \; #1 \; #2}
+
+\newcommand{\Sc}[1]{\mathit{#1}}
+
+\newcommand{\group}[1]{\langle #1 \rangle}
+
+\newcommand{\binding}{\Sc{binding}}
+\newcommand{\synVerb}{\Sc{syn\!Verb}}
+\newcommand{\chkVerb}{\Sc{chkVerb}}
+\newcommand{\synNoun}{\Sc{synNoun}}
+\newcommand{\chkNoun}{\Sc{chkNoun}}
+\newcommand{\port}{\Sc{port}}
+\newcommand{\outputs}{\Sc{outputs}}
+\newcommand{\vtype}{\Sc{vtype}}
+\newcommand{\ctype}{\Sc{ctype}}
+\newcommand{\stype}{\Sc{stype}}
+
+\newcommand{\SD}[1]{\green{\textbf{#1}}}
+
+\newcommand{\Qubit}{\SD{Qubit}}
+\newcommand{\Bit}{\SD{Bit}}
+\newcommand{\Vector}[2]{#2 \; \SD{of} \; #1}
+\newcommand{\Money}{\SD{Money}}
+\newcommand{\Nat}{\Sc{nat}}
+\newcommand{\RowLabel}{\Sc{label}}
+\newcommand{\Row}[1]{\green{[} #1 \green{]}}
+
+\newcommand{\Bool}{\textbf{Bool}}
+\newcommand{\copyable}{\textit{copyable}}
+\newcommand{\True}{\textbf{True}}
+\newcommand{\False}{\textbf{False}}
+
+\title{brat}
+\begin{document}
+\maketitle
+
+\section*{Syntax V1}
+\[
+\Rule{a \in \Tm d k \hg b \in \Tm d k }{a \Comma b \in \Tm d k}
+\]
+\[
+\Rule{a \in \Tm \Syn k \hg b \in \Tm d \Vb }{a \Semicolon b \in \Tm d k}
+\]
+\[
+\Rule{f \in \Tm \Syn \Nn \hg a \in \Tm \Chk \Nn }{\App f a \in \Tm \Syn \Nn}
+\]
+\[
+\Rule{a \in \Abst \hg body \in \Tm d \Nn }{\Lam a body \in \Tm d \Vb}
+\]
+\[
+\Rule{f \in \Tm \Chk \Vb}{\Thunk f \in \Tm \Chk \Nn}
+\]
+\[
+\Rule{a \in \Tm \Chk \Nn \hg b \in \Tm \Chk \Nn}{\Pair a b \in \Tm \Chk \Nn}
+\]
+\[
+\Rule{f \in \Tm \Syn \Nn}{\Force f \in \Tm \Syn \Vb}
+\]
+\[
+\Rule{p \in \Ports \hg t \in \Tm \Chk k}{\Pull{p}{t} \in \Tm \Chk k}
+\]
+\[
+\Rule{}{\Var x \in \Tm \Syn \Nn}
+\]
+\[
+\Rule{}{\Fun x \in \Tm \Syn \Nn}
+\]
+\[
+\Rule{t \in \Tm \Syn k}{\Emb t \in \Tm \Chk k}
+\]
+\[
+\Rule{t \in \Tm \Chk k \hg ty \in \Outputs}{\Ann{t}{ty} \in \Tm \Syn k}
+\]
+\[
+\Axiom{\VHole \in \Tm \Chk \Vb}
+\]
+\[
+\Axiom{\NHole \in \Tm \Chk \Nn}
+\]
+\[
+\Rule{t \in \List{(\Tm \Chk \Nn)}}{\Vec t \in \Tm \Chk \Nn}
+\]
+\[
+\Rule{t \in \Tm \Chk \Nn \hg s \in \SliceH{(\Tm \Chk \Nn)}}{\Slice t s \in \Tm \Chk \Nn}
+\]
+\[
+\Rule{t \in \Tm \Syn \Nn \hg s \in (\Tm \Chk \Nn)}{\Select t s \in \Tm \Chk \Nn}
+\]
+
+
+\subsection*{Grammar}
+
+\[
+\begin{array}{rrl}
+\port & := & p \\
+\\
+\binding & := & x \\
+& | & \binding, \binding \\
+& | & \port\!:\binding\\
+\\
+\synVerb & := & \synVerb , \synVerb \\
+& | & \binding \rightarrow \synNoun \\
+& | & \synNoun() \\
+& | & \synVerb ; \synVerb \\
+\\
+\chkVerb & := & \chkVerb , \chkVerb \\
+& | & \synVerb ; \chkVerb \\
+& | & \binding \rightarrow \chkNoun \\
+\\
+\synNoun & := & x \\
+&  | & \synNoun , \synNoun \\
+&  | & \synVerb(\chkNoun^{,\ast}) \\
+&  | & \synNoun ; \synVerb \\
+& | & \chkNoun :: (\port :: \vtype)^{,\ast} \\
+\\
+\chkNoun & := & \chkNoun , \chkNoun \\
+& | & \synNoun ; \chkVerb \\
+& | & \{ \chkVerb \} \\
+& | & [\chkNoun, \chkNoun] \\
+& | & \group{\port\!:}^{,\ast} \; \chkNoun \\
+& | & \synNoun \\
+\\
+\vtype & := & Ty \\
+& | & \{ \ctype \} \\
+& | & Pair \; \vtype \; \vtype \\
+\\
+\ctype & := & \group{\port :: \vtype}^{,\ast} \rightarrow \group{\port :: \vtype}^{,\ast} \\
+
+\end{array}
+\]
+
+\subsection*{Typechecking}
+
+\section*{Core language}
+\[
+\begin{array}{rrl}
+\ctype & := & \group{\port :: \vtype}^{,\ast} \rightarrow \group{\port :: \vtype}^{,\ast} \\
+& | & \group{\port :: \stype}^{,\ast} \lollipop \group{\port :: \stype}^{,\ast} \\
+\\
+\stype & := & \Qubit \\
+& | & \Bit \\
+& | & \Vector \stype \Nat \\
+& | & \Money \\
+& | & \Row{\group{\RowLabel : \stype}^{,\ast}} \\
+\end{array}
+\]
+\[
+\begin{array}{l@{\;}lll}
+  \copyable & :: stype & \rightarrow & \Bool \\
+  \copyable & \Qubit & = & \False \\
+  \copyable & \Bit & = & \True \\
+  \copyable & (\Vector s n) & = & \copyable \; s \\
+  \copyable & \Money & = & \False \\
+  \copyable & \Row{\, \vec p : \vec s \,} & = & \bigwedge_i \copyable \; s_i \\
+\end{array}
+\]
+
+% Towards type checking kernels
+% - Universal quantification over nats
+% - Pattern matching (0, 1+, 2x) on nats in types
+% - Size-change termination (See Andreas Abel)
+
+\end{document}

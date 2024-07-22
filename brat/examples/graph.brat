@@ -1,0 +1,29 @@
+type Square n = Vec (Vec Bool n) n
+
+# getNodes :: Square n -> Vec Nat n
+# getNodes = adj -> <1,2,3>
+
+# 0 -> 1
+# 0 -> 2
+# 1 -> 3
+# 2 -> 3
+# 2 -> 0
+# can't do this
+#mat :: AdjMat 4
+#mat = <<1, 2>
+#      ,<3>
+#      ,<3, 0>
+#      ,<>>
+
+mat :: Vec (Vec Nat 4) 4
+mat = [[0,1,1,0]
+      ,[0,0,0,1]
+      ,[1,0,0,1]
+      ,[0,0,0,0]
+      ]
+
+add1 :: Vec Nat n -> Vec Nat n
+add1 = xs -> ?inc
+
+explore :: Vec (Vec Nat 4) 4 -> Vec Nat n
+explore = ?map

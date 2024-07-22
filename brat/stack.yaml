@@ -1,0 +1,12 @@
+resolver:
+  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/18/13.yaml
+
+packages:
+- .
+
+extra-deps:
+- proto-lens-0.7.1.0@sha256:b151890929e71db5b8c2ad86cd758bcdf1dfcf25f34eb6c9ce19e3d7cd4eae39,2959
+- proto-lens-protoc-0.7.1.0@sha256:b0b92498af74fc4bb770d51f84405d591e73c085a0c1d9952dd3e14ce07b538f,2220
+- proto-lens-runtime-0.7.0.1@sha256:703f327422b2e204f8ea13c5e178edd8ab42ccd01c7a5a89fcb1b37ab474c68a,3038
+- proto-lens-setup-0.4.0.5@sha256:ae4514963a6c20ad059bba427cd14b94c6007f614d797ebecae3c37f8bf0fa96,3108
+

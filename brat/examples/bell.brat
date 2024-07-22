@@ -1,0 +1,64 @@
+ext cnot :: { ctrl :: Qubit, tgt :: Qubit -o ctrl :: Bool, tgt :: Bool }
+
+ext H :: { x :: Qubit -o x :: Qubit }
+
+ext measure :: { q :: Qubit -o b :: Bit }
+
+ext Rz :: (th :: Float) -> (k :: { q :: Qubit -o q :: Qubit })
+
+type A = Bool
+type B = Nat
+type C = Bool
+
+id :: A -> A
+id = a -> a
+
+id2 :: A, B -> A, B
+id2 = a, b -> a, b
+
+thId :: (fn :: {A -> A})
+thId = { x -> id(x) }
+
+f' :: A -> B
+f' = ?f'
+
+g' :: B -> C
+g' = ?g'
+
+fg :: A -> C
+fg = ?fg
+
+
+id' :: (f :: {A -> A}), A -> A
+id' = {f}, a -> f(a)
+
+id'' :: A -> A
+id'' x = id((id)(x))
+
+copyNat :: Nat -> Nat, Nat
+copyNat x = x, x
+
+add :: Nat, Nat -> Nat
+add 0, y = y
+add (1+ x), y = add(1, add(x, y))
+
+double :: Nat -> Nat
+double x = add(copyNat(x))
+
+# test :: {A -> A}
+# test = id;?help
+
+compTest :: { A -> B }, { B -> C} -> { A -> C }
+compTest {f}, {g} = { x -> g(f(x)) }
+
+# phasedBell :: (th :: Double), (c :: Qubit), (d :: Qubit) -> (c :: Bit), (d :: Bit)
+# phasedBell = th -> (H ; id , id) ; (measure, measure)
+
+justMeasure :: { c :: Qubit, d :: Qubit -o c :: Bit, d :: Bit }
+justMeasure = { c, d -> (measure,measure)(c, d) }
+
+idq :: { Qubit -o Qubit }
+idq = { q -> q }
+
+phasedBell :: Float -> { c :: Qubit, d :: Qubit -o c :: Bit, d :: Bit }
+phasedBell th = { c, d -> (measure,measure)((Rz(th),idq)((H,idq)(c,d))) }
