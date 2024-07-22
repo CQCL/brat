@@ -13,7 +13,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: src/
+        working-directory: brat/
 
     steps:
     - uses: actions/checkout@v4
@@ -34,7 +34,7 @@ jobs:
           hugr_validator/target/deps
           hugr_validator/target/build
         # best effort for cache: tie it to Stack resolver and package config
-        key: ${{ runner.os }}-stack-${{ hashFiles('src/stack.yaml', 'hugr_validator/Cargo.toml') }}
+        key: ${{ runner.os }}-stack-${{ hashFiles('brat/stack.yaml', 'hugr_validator/Cargo.toml') }}
         restore-keys: |
           ${{ runner.os }}-stack
         save-always: true
