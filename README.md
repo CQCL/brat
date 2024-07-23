@@ -6,7 +6,7 @@ To build BRAT from source, you will need:
 - GHC 9.6.4 (can be installed with the `ghcup` tool)
 - The `stack` build tool for Haskell
 
-Then, navigate to the `src` directory and run `stack install`.
+Then, navigate to the `brat` directory and run `stack install`.
 
 This will add the `brat` and `brat-lsp` binaries  to `~/.local/bin`, and copy configuration for the emacs editor mode to `~/.local/share/brat/`.
 
@@ -30,18 +30,18 @@ brat --compile my-program.brat | hugr_validator
 ```
 
 # Reference
-The [`src/examples`](src/examples) directory contains some examples of BRAT programs.
+The [`brat/examples`](brat/examples) directory contains some examples of BRAT programs.
 For example:
-- Quantum teleportation: [teleportation.brat](src/examples/teleportation.brat)
-- Quantum Fourier transform: [teleportation.brat](src/examples/teleportation.brat)
-- Simple Repeat-Until-Success: [rus.brat](src/examples/rus.brat)
-- Ising Hamiltonian: [ising.brat](src/examples/ising.brat)
+- Quantum teleportation: [teleportation.brat](brat/examples/teleportation.brat)
+- Quantum Fourier transform: [teleportation.brat](brat/examples/teleportation.brat)
+- Simple Repeat-Until-Success: [rus.brat](brat/examples/rus.brat)
+- Ising Hamiltonian: [ising.brat](brat/examples/ising.brat)
 
 This directory also contains tests of syntax features which, while terse, may serve as a reference in the short term.
 For example:
-- [unified.brat](src/examples/unified.brat) contains some functional programs
-- [dollar_kind.brat](src/examples/dollar_kind.brat) tests polymorphism over kernel types
-- [tups.brat](src/examples/tups.brat) tests heterogenous lists
-- [compjuxt.brat](src/examples/compjuxt.brat), `src/examples/composition.brat` contain tests for diagrammatic syntax
-- [pass.brat](src/examples/pass.brat) tests the 'passthrough' (`..`) operator
-- [portpulling.brat](src/examples/portpulling.brat) demonstrates port pulling
+- [unified.brat](brat/examples/unified.brat) contains some functional programs
+- [dollar_kind.brat](brat/examples/dollar_kind.brat) tests polymorphism over kernel types
+- [tups.brat](brat/examples/tups.brat) tests heterogenous lists
+- [compjuxt.brat](brat/examples/compjuxt.brat), `brat/examples/composition.brat` contain tests for diagrammatic syntax
+- [pass.brat](brat/examples/pass.brat) tests the 'passthrough' (`..`) operator
+- [portpulling.brat](brat/examples/portpulling.brat) demonstrates port pulling
