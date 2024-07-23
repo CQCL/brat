@@ -1,0 +1,2 @@
+main :: { a :: Qubit, b :: Qubit -o b :: Qubit, a :: Qubit}
+main = { q0, q1 => q1, q0 }

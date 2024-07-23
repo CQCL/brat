@@ -1,0 +1,2 @@
+xs :: [Int,Bool]
+xs = [1,true]

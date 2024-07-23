@@ -1,0 +1,7 @@
+ext "add" add(a :: Int, b :: Int) -> (c :: Int)
+
+one :: (n :: Int)
+one = 1
+
+two :: Int
+two = add(1, one)

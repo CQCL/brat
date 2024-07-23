@@ -1,0 +1,10 @@
+ext "Rx" Rx(th :: Float) -> { rxa :: Qubit -o rxb :: Qubit }
+
+nums :: (x :: Int), (y :: Int), (z :: Int)
+nums = 1, 2 ,3
+
+xish :: { rxa :: Qubit -o rxb :: Qubit }
+xish = Rx(30.0)
+
+main :: { a :: Qubit -o b :: Qubit }
+main = { q => xish(q) }

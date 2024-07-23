@@ -1,0 +1,5 @@
+two :: Vec(Int, 2)
+two = [1,2]
+
+three :: Vec(Int, 3)
+three = cons(0,two)

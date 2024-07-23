@@ -3,9 +3,8 @@ import Test.Tasty.Silver.Interactive (defaultMain)
 
 import Test.Abstractor
 import Test.Checking
-import Test.Circuit.Graph
+import Test.Graph
 import Test.Compile.Hugr
-import Test.Constructors
 import Test.Elaboration
 import Test.Failure
 import Test.Libs
@@ -21,6 +20,7 @@ main = do
   checkingTests <- getCheckingTests
   parsingTests <- getParsingTests
   compilationTests <- setupCompilationTests
+  graphTests <- getGraphTests
   defaultMain $ testGroup "All" [graphTests
                                 ,failureTests
                                 ,checkingTests
@@ -29,7 +29,6 @@ main = do
                                 ,nameTests
                                 ,parsingTests
                                 ,searchTests
-                                ,constructorTests
                                 ,elaborationTests
                                 ,substitutionTests
                                 ,abstractorTests

@@ -1,0 +1,5 @@
+ext "N" N :: (value :: Int)
+ext "add" add :: {a :: Int, b :: Int -> c :: Int}
+
+addN(inp :: Int) -> (out :: Int)
+addN(n) = add(n, N)

@@ -1,0 +1,5 @@
+n :: Nat
+n = succ(2)
+
+m :: Int
+m = doub(-3)
