@@ -29,6 +29,5 @@ cabal.project.local~
 *.log
 *.blg
 *.bbl
-*.pdf
 target
 Cargo.lock

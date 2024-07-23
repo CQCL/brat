@@ -1,5 +1,5 @@
 # About
-BRAT is a functional programming language designed for writing quantum experiments. For an introduction to BRAT, see the [extended abstract](papers/planqc-2024/brat-planqc.pdf) submitted to PLanQC 2024.
+BRAT is a functional programming language designed for writing quantum experiments. For an introduction to BRAT, see the [extended abstract](papers/brat-planqc-2024.pdf) submitted to PLanQC 2024.
 
 # Installation
 To build BRAT from source, you will need:
