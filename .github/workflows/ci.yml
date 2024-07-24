@@ -30,11 +30,10 @@ jobs:
           ~/.stack
           .stack-work
           ~/.cargo
-          # Rust dependencies
-          hugr_validator/target/deps
-          hugr_validator/target/build
         # best effort for cache: tie it to Stack resolver and package config
-        key: ${{ runner.os }}-stack-${{ hashFiles('brat/stack.yaml', 'hugr_validator/Cargo.toml') }}
+        key: ${{ runner.os }}-stack-${{ hashFiles('brat/stack.yaml',
+                                                  'hugr_validator/Cargo.toml',
+                                                  'hugr_extension/Cargo.toml') }}
         restore-keys: |
           ${{ runner.os }}-stack
         save-always: true
@@ -49,11 +48,21 @@ jobs:
       run: stack test --ta --hide-successes
 
     # Validate the hugr outputs
+    - name: Check for hugr_validator
+      id: cached_validator
+      run: |
+        if [ -f ~/.cargo/bin/hugr_validator ]; then
+            echo "out=true" >> $GITHUB_OUTPUT
+        else
+            echo "We need to build hugr_validator"
+            echo "out=false" >> $GITHUB_OUTPUT
+        fi
+
     - name: Install rust
+      if: ${{ steps.cached_validator.outputs.out != 'true' }}
       uses: dtolnay/rust-toolchain@stable
-      with:
-        profile: minimal
     - name: Install hugr_validator
+      if: ${{ steps.cached_validator.outputs.out != 'true' }}
       run: cargo install --path ../hugr_validator
     - name: Validate compilation output
       run: tools/validate.sh
