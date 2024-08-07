@@ -510,9 +510,7 @@ checkClause my fnName cty clause = modily my $ do
   let clauseName = fnName ++ "." ++ show (index clause)
 
   -- First, we check the patterns on the LHS. This requires some overs,
-  -- so we make a box, however this box will never be turned into Hugr.
-  -- Since this box and its corresponding Source/Target aren't needed for
-  -- compilation, we can skip adding them to the graph
+  -- so we make a box, however this box will be skipped during compilation.
   (vars, match, rhsCty) <- suppressHoles . fmap snd $
                      let ?my = my in makeBox (clauseName ++ "_setup") cty $
                      \(overs, unders) -> do
