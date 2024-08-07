@@ -63,10 +63,10 @@ library
                        Brat.Dot,
                        Brat.Eval,
                        Brat.Lexer
-                       Brat.Checker.Clauses,
                        Brat.Checker.Helpers,
                        Brat.Checker.Helpers.Nodes,
                        Brat.Checker.Monad,
+                       Brat.Checker.SolvePatterns,
                        Brat.Checker.Types,
                        Brat.Compile.Hugr,
                        Brat.Constructors,

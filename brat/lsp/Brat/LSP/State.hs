@@ -1,6 +1,6 @@
 module Brat.LSP.State (ProgramState(..), emptyPS, updateState) where
 
-import Brat.Checker (TypedHole)
+import Brat.Checker.Types (TypedHole)
 import Brat.Syntax.Raw
 import Brat.Syntax.Value (VDecl)
 

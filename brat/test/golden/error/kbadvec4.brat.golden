@@ -1,6 +1,6 @@
-Error in test/golden/error/kbadvec4.brat@FC {start = Pos {line = 2, col = 5}, end = Pos {line = 2, col = 22}}:
+Error in test/golden/error/kbadvec4.brat@FC {start = Pos {line = 2, col = 7}, end = Pos {line = 2, col = 12}}:
 f = { [1,2] => true }
-    ^^^^^^^^^^^^^^^^^
+      ^^^^^
 
   Type error: Expected something of type `Bool` but got `1`
 

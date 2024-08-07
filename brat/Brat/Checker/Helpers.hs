@@ -123,7 +123,7 @@ pullPorts toPort showFn (p:ports) types = do
   pull1Port :: PortName
             -> [(a, ty)]
             -> Checking ((a, ty), [(a, ty)])
-  pull1Port p [] = fail $ "Port not found: " ++ p
+  pull1Port p [] = fail $ "Port not found: " ++ p ++ " in " ++ showFn types
   pull1Port p (x@(a,_):xs)
    | p == toPort a
    = if (p `elem` (toPort . fst <$> xs))

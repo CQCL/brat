@@ -32,6 +32,7 @@ module Brat.Syntax.Common (PortName,
                            toTypeRow,
                            MODEY(..),
                            KINDY(..),
+                           DIRY(..),
                            modily,
                            ArithOp(..),
                            pattern Dollar,
@@ -131,6 +132,14 @@ data Diry :: Dir -> Type where
   Chky :: Diry Chk
 deriving instance Show (Diry d)
 
+class DIRY (d :: Dir) where
+  diry :: Diry d
+
+instance DIRY Chk where
+  diry = Chky
+
+instance DIRY Syn where
+  diry = Syny
 
 -- How to typecheck the *inputs* of a term
 data Kind = Noun -- there are no inputs

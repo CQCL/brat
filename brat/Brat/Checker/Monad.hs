@@ -1,6 +1,6 @@
 module Brat.Checker.Monad where
 
-import Brat.Checker.Quantity (Quantity(..), qpred)
+import Brat.Checker.Quantity (Quantity(..))
 import Brat.Checker.Types hiding (HoleData(..))
 import Brat.Constructors (ConstructorMap, CtorArgs)
 import Brat.Error (Error(..), ErrorMsg(..), dumbErr)
@@ -118,7 +118,7 @@ localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
                                    localVEnv ext (k (env { locals = M.union ext (locals env) }))
 localVEnv ext (Req (InLvl str c) k) = Req (InLvl str (localVEnv ext c)) (localVEnv ext . k)
 localVEnv ext (Req r k) = Req r (localVEnv ext . k)
-   
+
 -- runs a computation, but intercepts uses of outer *locals* variables and redirects
 -- them to use new outports of the specified node (expected to be a Source).
 -- Returns a list of captured variables and their generated (Source-node) outports
@@ -184,9 +184,9 @@ lookupAndUse :: UserName -> KEnv
              -> Either Error (Maybe ((Src, BinderType Kernel), KEnv))
 lookupAndUse x kenv = case M.lookup x kenv of
    Nothing -> Right Nothing
-   Just (q, rest) -> case qpred q of
-                      Nothing -> Left $ dumbErr $ TypeErr $ (show x) ++ " has already been used"
-                      Just q -> Right $ Just (rest, M.insert x (q, rest) kenv)
+   Just (None, _) -> Left $ dumbErr $ TypeErr $ (show x) ++ " has already been used"
+   Just (One, rest)  -> Right $ Just (rest, M.insert x (None, rest) kenv)
+   Just (Tons, rest) -> Right $ Just (rest, M.insert x (Tons, rest) kenv)
 
 localKVar :: KEnv -> Checking v -> Checking v
 localKVar _   (Ret v) = Ret v
@@ -305,3 +305,16 @@ instance FreshMonad Checking where
 -- This way we get file contexts when pattern matching fails
 instance MonadFail Checking where
   fail = typeErr
+
+-- Run a computation without logging any holes
+suppressHoles :: Checking a -> Checking a
+suppressHoles (Ret x) = Ret x
+suppressHoles (Req (LogHole _) k) = suppressHoles (k ())
+suppressHoles (Req c k) = Req c (suppressHoles . k)
+
+-- Run a computation without doing any graph generation
+suppressGraph :: Checking a -> Checking a
+suppressGraph (Ret x) = Ret x
+suppressGraph (Req (AddNode _ _) k) = suppressGraph (k ())
+suppressGraph (Req (Wire _) k) = suppressGraph (k ())
+suppressGraph (Req c k) = Req c (suppressGraph . k)

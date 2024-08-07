@@ -1,6 +1,6 @@
-Error in test/golden/error/pass.brat@FC {start = Pos {line = 5, col = 11}, end = Pos {line = 5, col = 19}}:
+Error in test/golden/error/pass.brat@FC {start = Pos {line = 5, col = 12}, end = Pos {line = 5, col = 13}}:
 f = { .., (x => x) }
-          ^^^^^^^^
+           ^
 
   Nothing to bind to: x
 

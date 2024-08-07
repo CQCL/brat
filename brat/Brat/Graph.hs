@@ -42,13 +42,14 @@ data NodeType :: Mode -> Type where
   Source :: NodeType a  -- For building..
   Target :: NodeType a  -- ..boxes
   Id     :: NodeType a  -- Identity node for convenient wiring
-  FunClauses :: (NonEmpty
-                 ( TestMatchData a  -- pattern match LHS as conjunctive sequence
-                 , Name  -- The node for the RHS box
-                )) -> NodeType a
+  PatternMatch :: NonEmpty
+                  ( TestMatchData a  -- pattern match LHS as conjunctive sequence
+                  , Name  -- The node for the RHS box
+                  )
+               -> NodeType a
   Hypo :: NodeType a  -- Hypothesis for type checking
   Constructor :: UserName -> NodeType a
-  Selector :: UserName -> NodeType a -- TODO: Get rid of this in favour of FunClauses based matching
+  Selector :: UserName -> NodeType a -- TODO: Get rid of this in favour of pattern matching
   ArithNode :: ArithOp -> NodeType Brat
 
 deriving instance Show (NodeType a)

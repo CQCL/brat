@@ -4,15 +4,14 @@ module Brat.Load (loadFilename
                  ,desugarEnv
                  ) where
 
-import Brat.Checker.Clauses (checkBody)
-import Brat.Checker.Helpers (ensureEmpty, showMode, wire)
-import Brat.Checker.Monad
-import Brat.Checker.Types (Store, initStore)
 import Brat.Checker
+import Brat.Checker.Helpers (ensureEmpty, next, showMode, wire)
+import Brat.Checker.Monad
+import Brat.Checker.Types (Store, TypedHole, VEnv, initStore)
 import Brat.Elaborator (elabEnv)
 import Brat.Error
 import Brat.FC hiding (end)
-import Brat.Graph (NodeType(..))
+import Brat.Graph (Graph, NodeType(..))
 import Brat.Naming
 import Brat.Parser
 import Brat.Syntax.Common
@@ -61,7 +60,7 @@ emptyMod = (M.empty, [], [], initStore, (M.empty, []))
 -- the box that is created for it. For simple `NoLhs` definitions, we return
 -- Nothing.
 checkDecl :: Prefix -> VDecl -> [(Tgt, BinderType Brat)] -> Checking ()
-checkDecl pre (VDecl FuncDecl{..}) to_define = localFC fnLoc $ do
+checkDecl pre (VDecl FuncDecl{..}) to_define = (fnName -!) $ localFC fnLoc $ do
   trackM "\nCheckDecl:"
   unless (fnLocality == Local) $ err $ InternalError "checkDecl called on ext function"
   getFunTy fnSig >>= \case
@@ -76,7 +75,7 @@ checkDecl pre (VDecl FuncDecl{..}) to_define = localFC fnLoc $ do
     Just (Some (my :* Flip cty)) -> getClauses fnBody (my, cty) >>= \case
       Right stuff -> do
         box_out :: Src <- case stuff of
-          -- checkBody makes an outer box and wires up FunClauses within.
+          -- checkBody makes an outer box and wires up PatternMatch within.
           -- We'll wire the output of that box into the Id node representing
           -- this function (to_define)
           (Some (Braty :* Flip cty), body) -> let ?my = Braty in checkBody fnName body cty
@@ -168,9 +167,7 @@ loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addS
       -- If Nothing: We deleted this from the map, so must have checked it already
       (Nothing, remaining) -> pure remaining
       -- Decl defines are the inputs to the Id node which represents a definition
-      (Just decl_defines, remaining) -> do
-        show name -! checkDecl pre decl decl_defines
-        pure remaining
+      (Just decl_defines, remaining) -> remaining <$ checkDecl pre decl decl_defines
 
 loadFilename :: Namespace -> [FilePath] -> String -> ExceptT SrcErr IO VMod
 loadFilename ns libDirs file = do
