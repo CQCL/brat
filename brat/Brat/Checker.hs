@@ -280,10 +280,9 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
 
   mkWire (src, ty) (tgt, _) = wire (src, binderToValue ?my ty, tgt)
 
-  mkClause (i, (abs, tm)) = Clause i (normaliseAbstractor <$> abs) tm
-
   checkClauses cty@(ins :->> outs) overs = do
-    let clauses = mkClause <$> (NE.zip (NE.fromList [0..]) ((second to_chk c) :| cs))
+    let clauses = (NE.zip (NE.fromList [0..]) ((second to_chk c) :| cs)) <&>
+            \(i, (abs, tm)) -> Clause i (normaliseAbstractor <$> abs) tm
     clauses <- traverse (checkClause ?my "lambda" cty) clauses
     (_, patMatchUnders, patMatchOvers, _) <- anext "lambda" (PatternMatch clauses) (S0, Some (Zy :* S0))
                                              ins
