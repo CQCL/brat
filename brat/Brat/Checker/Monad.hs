@@ -105,7 +105,7 @@ localFC f (Req (Throw (e@Err{fc=Nothing})) k) = localFC f (Req (Throw (e{fc=Just
 localFC f (Req (InLvl str c) k) = Req (InLvl str (localFC f c)) (localFC f . k)
 localFC f (Req r k) = Req r (localFC f . k)
 
-localEnv :: (?my :: Modey m) => Env (EnvData m) -> (Checking v -> Checking v)
+localEnv :: (?my :: Modey m) => Env (EnvData m) -> Checking v -> Checking v
 localEnv = case ?my of
   Braty -> localVEnv
   Kerny -> \env m -> localKVar env (m <* req KDone)
