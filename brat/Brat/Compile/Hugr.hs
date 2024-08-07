@@ -449,7 +449,6 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
       case outs of
         [(_, VCon tycon _)] -> do
           outs <- compilePorts outs
-          -- addNode name (constructorOp parent tycon c (FunctionType ins outs))
           compileConstructor parent tycon c (FunctionType ins outs)
     PatternMatch cs -> default_edges <$> do
       ins <- compilePorts ins
