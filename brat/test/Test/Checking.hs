@@ -2,7 +2,7 @@ module Test.Checking (getCheckingTests, expectedCheckingFails) where
 
 import Brat.Checker (run)
 import Brat.Checker.Monad (Checking)
-import Brat.Checker.Types (emptyEnv, TypedHole)
+import Brat.Checker.Types (TypedHole)
 import Brat.Error (Error)
 import Brat.Graph (Graph)
 import Brat.Naming (root)

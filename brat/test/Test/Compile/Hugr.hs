@@ -2,7 +2,7 @@ module Test.Compile.Hugr where
 
 import Brat.Checker (run)
 import Brat.Checker.Monad (Checking)
-import Brat.Checker.Types (TypedHole, emptyEnv)
+import Brat.Checker.Types (TypedHole)
 import Brat.Compiler (compileFile)
 import Brat.Error (Error)
 import Brat.Graph (Graph)
