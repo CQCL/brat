@@ -215,9 +215,9 @@ check' Pass (overs, ()) = pure (((), overs), ([], ()))
 check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
   -- Used overs have their port pulling taken care of
   (problem, rightOverSrcs) <- localFC abstFC $ argProblemsWithLeftovers (fst <$> overs) (normaliseAbstractor abst) []
-  -- argProblems processes the whole abstractor, so all of the overs in the
+  -- That processes the whole abstractor, so all of the overs in the
   -- `Problem` it creates are used
-  let usedOvers = [ (src, fromJust (lookup src overs)) | (src, _) <- problem ] -- [ (NamedPort (end src) (show pat), fromJust (lookup src overs)) | (src, pat) <- problem ]
+  let usedOvers = [ (src, fromJust (lookup src overs)) | (src, _) <- problem ]
   let rightOvers = [ over | over@(src,_) <- overs, src `elem` rightOverSrcs ]
   case diry @d of
     Chky -> do
@@ -227,9 +227,9 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
       (ins :->> outs) <- mkSig usedOvers unders
       (allFakeUnders, rightFakeUnders, tgtMap) <- suppressHoles $ suppressGraph $ do
         (_, [], fakeOvers, fakeAcc) <- anext "lambda_fake_source" Hypo (S0, Some (Zy :* S0)) R0 ins
-        -- Hypo `check` calls need an environment, even just to compute leftovers
-        -- We want to keep the `problem` that we worked out, but with fake overs
-        Just srcMap <- pure $ zip_same_length (fst <$> usedOvers) (fst <$> fakeOvers)
+        -- Hypo `check` calls need an environment, even just to compute leftovers;
+        -- we get that env by solving `problem` reformulated in terms of the `fakeOvers`
+        let srcMap = fromJust $ zip_same_length (fst <$> usedOvers) (fst <$> fakeOvers)
         let fakeProblem = [ (fromJust (lookup src srcMap), pat) | (src, pat) <- problem ]
         fakeEnv <- localFC abstFC $ solve ?my fakeProblem >>= (solToEnv . snd)
         localEnv fakeEnv $ do
