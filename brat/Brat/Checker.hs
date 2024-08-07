@@ -261,12 +261,9 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
   -- Invariant: When solToEnv is called, port pulling has already been resolved,
   -- because that's one of the functions of `argProblems`.
   --
-  -- Probably controversial: Here we update the port names to be the user
-  -- variable names for nicer error messages. This mirrors previous behaviour
-  -- using `abstract`, but is a bit of a hack.
-  --
-  -- In the future, we should instead make a datastructure that knows both the
-  -- port name and the user variable name when applicable!
+  -- N.B.: Here we update the port names to be the user variable names for nicer
+  -- error messages. This mirrors previous behaviour using `abstract`, but is a
+  --  bit of a hack. See issue #23.
   solToEnv :: [(String, (Src, BinderType m))] -> Checking (M.Map UserName (EnvData m))
   solToEnv xs = traverse (uncurry singletonEnv) (portNamesToBoundNames xs) >>= mergeEnvs
 
