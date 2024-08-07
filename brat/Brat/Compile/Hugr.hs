@@ -810,30 +810,27 @@ compileModule venv = do
   analyseDecl idNode = do
     (ns, es) <- gets bratGraph
     let srcPortTys = [(srcPort, ty) | (srcPort, ty, In tgt _) <- es, tgt == idNode ]
-    maybeDirect <- case srcPortTys of
-      [(Ex input 0, _)] | Just srcNode <- M.lookup input ns -> canCompileDirect input srcNode
-      _ -> pure Nothing
-    case maybeDirect of
-       Just func -> pure func
-       Nothing -> do -- a computation, or several values
+    case srcPortTys of
+      -- All top-level functions are compiled into Box-es, which should look like this:
+      [(Ex input 0, _)] | Just (BratNode (Box _ src tgt) _ outs) <- M.lookup input ns ->
+        case outs of
+          [(_, VFun Braty cty)] -> do
+            sig <- compileSig Braty cty
+            pure $ (sig, False, compileBox (src, tgt))
+          [(_, VFun Kerny cty)] -> do
+            -- We're compiling, e.g.
+            --   f :: { Qubit -o Qubit }
+            --   f = { h; circ(pi) }
+            -- Although this looks like a constant kernel, we'll have to compile the
+            -- computation that produces this constant. We do so by making a FuncDefn
+            -- that takes no arguments and produces the constant kernel graph value.
+            thunkTy <- HTFunc <$> compileSig Kerny cty
+            pure $ (funcReturning [thunkTy], True, \parent ->
+              withIO parent thunkTy $ compileKernBox parent input (compileBox (src, tgt)) cty)
+          _ -> error "Box should have exactly one output of Thunk type"
+      _ -> do -- a computation, or several values
         outs <- compilePorts srcPortTys -- note compiling already-erased types, is this right?
         pure (funcReturning outs, True, compileNoun outs (map fst srcPortTys))
-
-  canCompileDirect :: Name -> Node -> Compile (Maybe (PolyFuncType, Bool, (NodeId -> Compile ())))
-  canCompileDirect _ (BratNode (Box _ src tgt) _ [(_, VFun Braty cty)]) = do
-    sig <- compileSig Braty cty
-    pure $ Just (sig, False, compileBox (src, tgt))
-  canCompileDirect input (BratNode (Box _ src tgt) [] [(_, VFun Kerny cty)]) = do
-        -- We're compiling, e.g.
-        --   f :: { Qubit -o Qubit }
-        --   f = { h; circ(pi) }
-        -- Although this looks like a constant kernel, we'll have to compile the
-        -- computation that produces this constant. We do so by making a FuncDefn
-        -- that takes no arguments and produces the constant kernel graph value.
-        thunkTy <- HTFunc <$> compileSig Kerny cty
-        pure $ Just (funcReturning [thunkTy], True, \parent ->
-          withIO parent thunkTy $ compileKernBox parent input (compileBox (src, tgt)) cty)
-  canCompileDirect _ _ = pure Nothing
 
   withIO :: NodeId -> HugrType -> Compile TypedPort -> Compile ()
   withIO parent output c = do
