@@ -225,14 +225,6 @@ compileArithNode parent op TFloat  = addNode (show op ++ "_Float") $ OpCustom $ 
   Pow -> error "TODO: Pow"  -- Not defined in extension
 compileArithNode _ _ ty = error $ "compileArithNode: Unexpected type " ++ show ty
 
--- Parent had better be a FuncDef
-compileFunClauses :: [HugrType] -> NonEmpty (TestMatchData m, Name) -> NodeId -> Compile ()
-compileFunClauses ins cs parent = do
-  inputNode <- addNode ("FunClauses.Input") (OpIn (InputNode parent ins))
-  ccOuts <- compileClauses parent (zip (Port inputNode <$> [0..]) ins) cs
-  addNodeWithInputs "FunClauses.Output" (OpOut (OutputNode parent (snd <$> ccOuts))) ccOuts []
-  pure ()
-
 renameAndSortHugr :: M.Map NodeId (HugrOp NodeId) -> [(PortId NodeId, PortId NodeId)] -> Hugr Int
 renameAndSortHugr nodes edges = fmap update (Hugr (fst <$> sorted_nodes) (edges ++ orderEdges)) where
   sorted_nodes = let ([root], rest) = partition (\(n, nid) -> nid == getParent n) (swap <$> M.assocs nodes) in
@@ -337,7 +329,7 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
     -- We need to return value of each type (perhaps to be indirectCalled by successor).
     -- Note this is where we must compile something different *for each caller* by clearing out the `compiled` map for each function
     let hTys = map (compileType . snd . fst) $ sortBy (comparing snd) in_edges
-    
+
     decls <- gets decls
     let (funcDef, extra_call) = decls M.! name
     nod <- case extra_call of
@@ -453,19 +445,41 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
       addNode "Id" (OpNoop (NoopOp parent (compileType ty)))
 
     Constructor c -> default_edges <$> do
-      let b = case c of
-            CFalse -> False
-            CTrue -> True
-            _ -> error $ "Don't know how to compile " ++ show c
+      ins <- compilePorts ins
+      case outs of
+        [(_, VCon tycon _)] -> do
+          outs <- compilePorts outs
+          -- addNode name (constructorOp parent tycon c (FunctionType ins outs))
+          compileConstructor parent tycon c (FunctionType ins outs)
+    PatternMatch cs -> default_edges <$> do
+      ins <- compilePorts ins
+      outs <- compilePorts outs
+      dfgId <- addNode "DidMatch_DFG" (OpDFG (DFG parent (FunctionType ins outs)))
+      inputNode <- addNode ("PatternMatch.Input") (OpIn (InputNode dfgId ins))
+      ccOuts <- compileClauses dfgId (zip (Port inputNode <$> [0..]) ins) cs
+      addNodeWithInputs "PatternMatch.Output" (OpOut (OutputNode dfgId (snd <$> ccOuts))) ccOuts []
+      pure dfgId
+    ArithNode op -> default_edges <$> compileArithNode parent op (snd $ head ins)
+    Selector _c -> error "Todo: selector"
+    x -> error $ show x ++ " should have been compiled outside of compileNode"
+
+compileConstructor :: NodeId -> UserName -> UserName -> FunctionType -> Compile NodeId
+compileConstructor parent tycon con sig
+  | Just b <- isBool con = do
       -- A boolean value is a tuple and a tag
       -- This is the same thing that happens in Brat.Checker.Clauses (makeDiscriminator)
       makeTuple <- addNode "bool.MakeTuple" (OpMakeTuple (MakeTupleOp parent []))
       tag <- addNode "bool.tag" (OpTag (TagOp parent (if b then 1 else 0) [HTTuple [], HTTuple []]))
       addEdge (Port makeTuple 0, Port tag 0)
       pure tag
-    ArithNode op -> default_edges <$> compileArithNode parent op (snd $ head ins)
-    Selector _c -> error "Todo: selector"
-    x -> error $ show x ++ " should have been compiled outside of compileNode"
+  | otherwise = let name = "Constructor " ++ show tycon ++ "::" ++ show con in
+                  addNode name (constructorOp parent tycon con sig)
+ where
+  isBool :: UserName -> Maybe Bool
+  isBool CFalse = Just False
+  isBool CTrue = Just True
+  isBool _ = Nothing
+
 
 getOutPort :: NodeId -> OutPort -> Compile (Maybe (PortId NodeId))
 getOutPort parent p@(Ex srcNode srcPort) = do
@@ -746,6 +760,9 @@ compilePrimTest parent port@(_, ty) (PrimLitTest tm) = do
            [port, loadPort]
            [sumOut]
 
+constructorOp :: NodeId -> UserName -> UserName -> FunctionType -> HugrOp NodeId
+constructorOp parent tycon c sig = OpCustom (CustomOp parent "BRAT" ("Ctor::" ++ show tycon ++ "::" ++ show c) sig [])
+
 undoPrimTest :: NodeId
              -> [TypedPort] -- The inputs we have to put back together
              -> HugrType -- The type of the thing we're making
@@ -755,7 +772,7 @@ undoPrimTest parent inPorts outTy (PrimCtorTest c tycon _ _) = do
   let sig = FunctionType (snd <$> inPorts) [outTy]
   head <$> addNodeWithInputs
            ("UndoCtorTest " ++ show c)
-           (OpCustom (CustomOp parent "BRAT" ("Ctor::" ++ show tycon ++ "::" ++ show c) sig []))
+           (constructorOp parent tycon c sig)
            inPorts
            [outTy]
 undoPrimTest parent inPorts outTy (PrimLitTest tm) = do
@@ -807,18 +824,20 @@ compileModule venv = do
   canCompileDirect _ (BratNode (Box _ src tgt) _ [(_, VFun Braty cty)]) = do
     sig <- compileSig Braty cty
     pure $ Just (sig, False, compileBox (src, tgt))
-  canCompileDirect _ (BratNode (FunClauses cs) _ [(_, VFun my cty)]) = do
-    sig <- compileSig my cty
+{- ALAN do we need to keep anything from here
+--canCompileDirect _ (BratNode (PatternMatch cs) _ [(_, VFun my cty)]) = do
+    sig <- compileSig cty
     let (FunctionType ins _) = body sig
-    pure $ Just (sig, False, compileFunClauses ins cs)
+    pure $ Just (sig, False, compilePatternMatch ins venv cs)
   -- Really these two are not compiled direct, and should be dealt with via compileNoun,
   -- but until compileNode correctly handles each of these, we have to do so here:
-  canCompileDirect input (KernelNode (FunClauses cs) _ [(_, VFun Kerny cty)]) = do
+--canCompileDirect input (KernelNode (PatternMatch cs) _ [(_, VFun Kerny cty)]) = do
     kernTy <- compileSig Kerny cty
     let (FunctionType kIns _) = body kernTy
     let thunkTy = HTFunc kernTy
     pure $ Just (funcReturning [thunkTy], True, \parent ->
-          withIO parent thunkTy $ compileKernBox parent input (compileFunClauses kIns cs) cty)
+          withIO parent thunkTy $ compileKernBox parent input (compilePatternMatch kIns venv cs) cty)
+-}
   canCompileDirect input (BratNode (Box _ src tgt) [] [(_, VFun Kerny cty)]) = do
         -- We're compiling, e.g.
         --   f :: { Qubit -o Qubit }

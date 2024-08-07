@@ -1,0 +1,9 @@
+f :: { Nat -> Bool }
+f = { 0 => true
+    | succ(n) => false
+    }
+
+pure(X :: *, x :: X, n :: #) -> Vec(X, n)
+pure = { _, _, zero => []
+       | X, x, succ(n) => cons(x, pure(X, x, n))
+       }

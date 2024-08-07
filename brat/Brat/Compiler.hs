@@ -61,14 +61,16 @@ writeDot libDirs file out = do
   isMain _ = False
 -}
 
-compileFile :: [FilePath] -> String -> IO BS.ByteString
+compileFile :: [FilePath] -> String -> IO (Either String BS.ByteString)
 compileFile libDirs file = do
   let (checkRoot, newRoot) = split "checking" root
   env <- runExceptT $ loadFilename checkRoot libDirs file
   (venv, _, holes, defs, outerGraph) <- eitherIO env
-  case holes of
-    [] -> pure $ compile defs newRoot outerGraph venv
-    xs -> die (show (CompilingHoles (show <$> xs)))
+  pure $ case holes of
+    [] -> Right $ compile defs newRoot outerGraph venv
+    xs -> Left (show (CompilingHoles (show <$> xs)))
 
 compileAndPrintFile :: [FilePath] -> String -> IO ()
-compileAndPrintFile libDirs file = BS.putStr =<< compileFile libDirs file
+compileAndPrintFile libDirs file = compileFile libDirs file >>= \case
+  Right bs -> BS.putStr bs
+  Left err -> die err

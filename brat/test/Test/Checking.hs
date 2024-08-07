@@ -1,6 +1,8 @@
 module Test.Checking (getCheckingTests, expectedCheckingFails) where
 
-import Brat.Checker (run, emptyEnv, Checking, TypedHole)
+import Brat.Checker (run)
+import Brat.Checker.Monad (Checking)
+import Brat.Checker.Types (emptyEnv, TypedHole)
 import Brat.Error (Error)
 import Brat.Graph (Graph)
 import Brat.Naming (root)
@@ -16,7 +18,6 @@ import Test.Tasty.ExpectedFailure
 expectedCheckingFails = map ("examples" </>) ["nested-abstractors.brat"
                                              ,"karlheinz_alias.brat"
                                              ,"hea.brat"
-                                             ,"multilambda.brat"
                                              ]
 
 parseAndCheckXF :: FilePath -> TestTree

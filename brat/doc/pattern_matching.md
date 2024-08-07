@@ -147,18 +147,18 @@ TestMatchSequence {
 }
 ```
 
-Finally, once we have checked all clauses, we collect them in a `FunClauses` node that holds references to the LHS `TestMatchData` and RHS `Box` nodes for each clause.
+Finally, once we have checked all clauses, we collect them in a `PatternMatch` node that holds references to the LHS `TestMatchData` and RHS `Box` nodes for each clause.
 
 
 ## Compiling to Hugr
 
-We use the `FunClauses` nodes from the Brat graph to construct a nested chain of Hugr `Conditional` nodes that implement the matching logic.
+We use the `PatternMatch` nodes from the Brat graph to construct a nested chain of Hugr `Conditional` nodes that implement the matching logic.
 Below we describe the compilation process for a function from the top down.
 
-### Compiling `FunClauses`
+### Compiling `PatternMatch`
 
-The `FunClauses` Brat node is the main entry point when compiling a function.
-For each clause, it holds the LHS (in form of `TestMatchData`) and the RHS (in form of a `Box` node). For each clause in the `FunClauses` node, we have `TestMatchData` which determines whether the corresponding branch is valid for the inputs dynamically given to the function. If no branches match, we create a `Panic` node, which should raise an error in hugr.
+The `PatternMatch` Brat node is the main entry point when compiling a function.
+For each clause, it holds the LHS (in form of `TestMatchData`) and the RHS (in form of a `Box` node). For each clause in the `PatternMatch` node, we have `TestMatchData` which determines whether the corresponding branch is valid for the inputs dynamically given to the function. If no branches match, we create a `Panic` node, which should raise an error in hugr.
 
 We assume that we can compile each LHS `TestMatchData` into a Hugr node that takes the function arguments as input and returns a single sum as output.
 The sum has two options:
@@ -170,7 +170,7 @@ Using this building block, we can construct a Hugr that tests the clauses one by
 
 ```mermaid
 flowchart
-    subgraph FunDef[FunClauses: deal]
+    subgraph FunDef[PatternMatch: deal]
         direction TB
         Input -->|$X| TestMatch1
         Input -->|$n| TestMatch1

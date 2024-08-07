@@ -1,37 +1,29 @@
-module Brat.Checker (check
+module Brat.Checker (checkBody
+                    ,check
                     ,run
-                    ,VEnv
-                    ,Checking
-                    ,Graph
-                    ,Modey(..)
-                    ,Node
-                    ,CheckingSig(..)
-                    ,TypedHole(..)
-                    ,wrapError
-                    ,next, knext
-                    ,localFC
-                    ,emptyEnv
-                    ,checkInputs, checkOutputs, checkThunk
-                    ,CheckConstraints
-                    ,TensorOutputs(..)
-                    ,kindCheck, kindCheckRow, kindCheckAnnotation
-                    ,mkArgRo
-                    ,weaken
+                    ,kindCheck
+                    ,kindCheckAnnotation
+                    ,kindCheckRow
+                    ,tensor
                     ) where
 
 import Control.Arrow (first)
-import Control.Monad (foldM)
+import Control.Monad (foldM, zipWithM)
 import Control.Monad.Freer
 import Data.Bifunctor (second)
 import Data.Functor (($>), (<&>))
--- import Data.List (filter, intercalate, transpose)
+import Data.List ((\\))
+import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
+import Data.Maybe (fromJust)
 import Data.Type.Equality ((:~:)(..))
 import Prelude hiding (filter)
 
 import Brat.Checker.Helpers
 import Brat.Checker.Monad
 import Brat.Checker.Quantity
+import Brat.Checker.SolvePatterns (argProblems, argProblemsWithLeftovers, solve)
 import Brat.Checker.Types
 import Brat.Constructors
 import Brat.Error
@@ -41,14 +33,17 @@ import qualified Brat.FC as FC
 import Brat.Graph
 import Brat.Naming
 -- import Brat.Search
+import Brat.Syntax.Abstractor (NormalisedAbstractor(..), normaliseAbstractor)
 import Brat.Syntax.Common
 import Brat.Syntax.Core
-import Brat.Syntax.Port (toEnd)
+import Brat.Syntax.FuncDecl (FunBody(..))
+import Brat.Syntax.Port (ToEnd, toEnd)
 import Brat.Syntax.Simple
 import Brat.Syntax.Value
 import Brat.UserName
 import Bwd
 import Hasochism
+import Util (zip_same_length)
 
 -- Put things into a standard form in a kind-directed manner, such that it is
 -- meaningful to do case analysis on them
@@ -59,9 +54,6 @@ standardise k val = eval S0 val <&> (k,) >>= \case
 
 mergeEnvs :: [Env a] -> Checking (Env a)
 mergeEnvs = foldM combineDisjointEnvs M.empty
-
-emptyEnv :: Env a
-emptyEnv = M.empty
 
 singletonEnv :: (?my :: Modey m) => String -> (Src, BinderType m) -> Checking (Env (EnvData m))
 singletonEnv x input@(p, ty) = case ?my of
@@ -187,7 +179,8 @@ checkThunk m name cty tm = do
 check :: (CheckConstraints m k
          ,EvMode m
          ,TensorOutputs (Outputs m d)
-         ,?my :: Modey m)
+         ,?my :: Modey m
+         , DIRY d)
       => WC (Term d k)
       -> ChkConnectors m d k
       -> Checking (SynConnectors m d k
@@ -198,7 +191,8 @@ check' :: forall m d k
         . (CheckConstraints m k
           ,EvMode m
           ,TensorOutputs (Outputs m d)
-          ,?my :: Modey m)
+          ,?my :: Modey m
+          , DIRY d)
        => Term d k
        -> ChkConnectors m d k
        -> Checking (SynConnectors m d k
@@ -218,11 +212,89 @@ check' (s :-: t) (overs, unders) = do
   pure ((ins, outs), (rightovers, rightunders))
 check' Pass ([], ()) = typeErr "pass is being given an empty row"
 check' Pass (overs, ()) = pure (((), overs), ([], ()))
-check' (Lambda (binder,  body) []) (overs, unders) = do
-  (ext, overs) <- abstract overs (unWC binder)
-  (sycs, ((), unders)) <- localEnv ext $ check body ((), unders)
-  pure (sycs, (overs, unders))
-check' (Lambda (_binder,  _body) _clauses) (_overs, _unders) = error "Multi clause lambda doesn't check yet"
+check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
+  -- Used overs have their port pulling taken care of
+  (problem, rightOverSrcs) <- localFC abstFC $ argProblemsWithLeftovers (fst <$> overs) (normaliseAbstractor abst) []
+  -- argProblems processes the whole abstractor, so all of the overs in the
+  -- `Problem` it creates are used
+  let usedOvers = [ (src, fromJust (lookup src overs)) | (src, _) <- problem ] -- [ (NamedPort (end src) (show pat), fromJust (lookup src overs)) | (src, pat) <- problem ]
+  let rightOvers = [ over | over@(src,_) <- overs, src `elem` rightOverSrcs ]
+  case diry @d of
+    Chky -> do
+      -- We'll check the first variant against a Hypo node (omitted from compilation)
+      -- to work out how many overs/unders it needs, and then check it again (in Chk)
+      -- with the other clauses, as part of the body.
+      (ins :->> outs) <- mkSig usedOvers unders
+      (allFakeUnders, rightFakeUnders, tgtMap) <- suppressHoles $ suppressGraph $ do
+        (_, [], fakeOvers, fakeAcc) <- anext "lambda_fake_source" Hypo (S0, Some (Zy :* S0)) R0 ins
+        -- Hypo `check` calls need an environment, even just to compute leftovers
+        -- We want to keep the `problem` that we worked out, but with fake overs
+        Just srcMap <- pure $ zip_same_length (fst <$> usedOvers) (fst <$> fakeOvers)
+        let fakeProblem = [ (fromJust (lookup src srcMap), pat) | (src, pat) <- problem ]
+        fakeEnv <- localFC abstFC $ solve ?my fakeProblem >>= (solToEnv . snd)
+        localEnv fakeEnv $ do
+          (_, fakeUnders, [], _) <- anext "lambda_fake_target" Hypo fakeAcc outs R0
+          Just tgtMap <- pure $ zip_same_length (fst <$> fakeUnders) unders
+          (((), ()), ((), rightFakeUnders)) <- check body ((), fakeUnders)
+          pure (fakeUnders, rightFakeUnders, tgtMap)
+
+      let usedFakeUnders = (fst <$> allFakeUnders) \\ (fst <$> rightFakeUnders)
+      let usedUnders = [ fromJust (lookup tgt tgtMap) | tgt <- usedFakeUnders ]
+      let rightUnders = [ fromJust (lookup tgt tgtMap) | (tgt, _) <- rightFakeUnders ]
+      sig <- mkSig usedOvers usedUnders
+      patOuts <- checkClauses sig usedOvers
+      zipWithM mkWire patOuts usedUnders
+      pure (((), ()), (rightOvers, rightUnders))
+    Syny -> do
+      env <- localFC abstFC $
+        argProblems (fst <$> usedOvers) (normaliseAbstractor abst) [] >>=
+        solve ?my >>=
+        (solToEnv . snd)
+      (((), synthOuts), ((), ())) <- localEnv env $ check body ((), ())
+
+      sig <- mkSig usedOvers synthOuts
+      patOuts <- checkClauses sig usedOvers
+      pure (((), patOuts), (rightOvers, ()))
+ where
+  -- Invariant: When solToEnv is called, port pulling has already been resolved,
+  -- because that's one of the functions of `argProblems`.
+  --
+  -- Probably controversial: Here we update the port names to be the user
+  -- variable names for nicer error messages. This mirrors previous behaviour
+  -- using `abstract`, but is a bit of a hack.
+  --
+  -- In the future, we should instead make a datastructure that knows both the
+  -- port name and the user variable name when applicable!
+  solToEnv :: [(String, (Src, BinderType m))] -> Checking (M.Map UserName (EnvData m))
+  solToEnv xs = traverse (uncurry singletonEnv) (portNamesToBoundNames xs) >>= mergeEnvs
+
+  portNamesToBoundNames :: [(String, (Src, BinderType m))] -> [(String, (Src, BinderType m))]
+  portNamesToBoundNames = fmap (\(n, (src, ty)) -> (n, (NamedPort (end src) n, ty)))
+
+  mkSig :: ToEnd t => [(Src, BinderType m)] -> [(NamedPort t, BinderType m)] -> Checking (CTy m Z)
+  mkSig overs unders = rowToRo ?my (retuple <$> overs) S0 >>=
+    \(Some (inRo :* endz)) -> rowToRo ?my (retuple <$> unders) endz >>=
+      \(Some (outRo :* _)) -> pure (inRo :->> outRo)
+
+  retuple (NamedPort e p, ty) = (p, e, ty)
+
+  mkWire (src, ty) (tgt, _) = wire (src, binderToValue ?my ty, tgt)
+
+  mkClause (i, (abs, tm)) = Clause i (normaliseAbstractor <$> abs) tm
+
+  checkClauses cty@(ins :->> outs) overs = do
+    let clauses = mkClause <$> (NE.zip (NE.fromList [0..]) ((second to_chk c) :| cs))
+    clauses <- traverse (checkClause ?my "lambda" cty) clauses
+    (_, patMatchUnders, patMatchOvers, _) <- anext "lambda" (PatternMatch clauses) (S0, Some (Zy :* S0))
+                                             ins
+                                             outs
+    zipWithM mkWire overs patMatchUnders
+    pure patMatchOvers
+
+  to_chk :: WC (Term d Noun) -> WC (Term Chk Noun)
+  to_chk t = case (diry @d, t) of
+    (Chky, t) -> t
+    (Syny, t) -> WC (fcOf t) (Emb t)
 check' (Pull ports t) (overs, unders) = do
   unders <- pullPortsRow ports unders
   check t (overs, unders)
@@ -418,6 +490,75 @@ check' (Simple tm) ((), ((hungry, ty):unders)) = do
       wire (dangling, vty, hungry)
       pure (((), ()), ((), unders))
 check' tm _ = error $ "check' " ++ show tm
+
+
+-- Clauses from either function definitions or case statements (TODO), as we get
+-- from the elaborator
+data Clause = Clause
+  { index :: Int  -- Which clause is this (in the order they're defined in source)
+  , lhs :: WC NormalisedAbstractor
+  , rhs :: WC (Term Chk Noun)
+  }
+ deriving Show
+
+-- Return the tests that need to succeed for this clause to fire
+-- (Tests are always defined on the overs of the outer box, rather than on
+-- refined overs)
+checkClause :: forall m. (CheckConstraints m UVerb, EvMode m) => Modey m
+            -> String
+            -> CTy m Z
+            -> Clause
+            -> Checking
+               ( TestMatchData m -- TestMatch data (LHS)
+               , Name   -- Function node (RHS)
+               )
+checkClause my fnName cty clause = modily my $ do
+  let clauseName = fnName ++ "." ++ show (index clause)
+
+  -- First, we check the patterns on the LHS. This requires some overs,
+  -- so we make a box, however this box will never be turned into Hugr.
+  -- Since this box and its corresponding Source/Target aren't needed for
+  -- compilation, we can skip adding them to the graph
+  (vars, match, rhsCty) <- suppressHoles . fmap snd $
+                     let ?my = my in makeBox (clauseName ++ "_setup") cty $
+                     \(overs, unders) -> do
+    -- Make a problem to solve based on the lhs and the overs
+    problem <- argProblems (fst <$> overs) (unWC $ lhs clause) []
+    (tests, sol) <- localFC (fcOf (lhs clause)) $ solve my problem
+    -- The solution gives us the variables bound by the patterns.
+    -- We turn them into a row
+    Some (patEz :* patRo) <- mkArgRo my S0 ((\(n, (src, ty)) -> (NamedPort (toEnd src) n, ty)) <$> sol)
+    -- Also make a row for the refined outputs (shifted by the pattern environment)
+    Some (_ :* outRo) <- mkArgRo my patEz (first (fmap toEnd) <$> unders)
+    let match = TestMatchData my $ MatchSequence overs tests (snd <$> sol)
+    let vars = fst <$> sol
+    pure (vars, match, patRo :->> outRo)
+
+  -- Now actually make a box for the RHS and check it
+  ((boxPort, _ty), _) <- let ?my = my in makeBox (clauseName ++ "_rhs") rhsCty $ \(rhsOvers, rhsUnders) -> do
+    let abstractor = foldr ((:||:) . APat . Bind) AEmpty vars
+    let ?my = my in do
+      env <- abstractAll rhsOvers abstractor
+      localEnv env $ check @m (rhs clause) ((), rhsUnders)
+  let NamedPort {end=Ex rhsNode _} = boxPort
+  pure (match, rhsNode)
+
+-- Top level function for type checking function definitions
+-- Will make a top-level box for the function, then type check the definition
+checkBody :: (CheckConstraints m UVerb, EvMode m, ?my :: Modey m)
+          => String -- The function name
+          -> FunBody Term UVerb
+          -> CTy m Z -- Function type
+          -> Checking Src
+checkBody fnName body cty = case body of
+  NoLhs tm -> do
+    ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \(overs, unders) -> check tm (overs, unders)
+    pure src
+  Clauses (c :| cs) -> do
+    fc <- req AskFC
+    ((box, _), _) <- makeBox (fnName ++ ".box") cty (check (WC fc (Lambda c cs)))
+    pure box
+  Undefined -> err (InternalError "Checking undefined clause")
 
 -- Constructs row from a list of ends and types. Uses standardize to ensure that dependency is
 -- detected. Fills in the first bot ends from a stack. The stack grows every time we go under

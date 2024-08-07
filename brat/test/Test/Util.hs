@@ -2,7 +2,7 @@ module Test.Util where
 
 import Brat.Checker
 import Brat.Checker.Monad
-import Brat.Checker.Types (initStore)
+import Brat.Checker.Types (initStore, emptyEnv)
 import Brat.Error
 import Brat.FC
 import Brat.Load

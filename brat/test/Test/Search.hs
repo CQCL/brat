@@ -2,7 +2,8 @@
 
 module Test.Search {- (searchTests) -} where
 
-import Brat.Checker (check, Modey(..))
+import Brat.Checker (check)
+import Brat.Checker.Types (Modey(..))
 import Brat.FC
 import Brat.Naming
 import Brat.Search (vsearch)

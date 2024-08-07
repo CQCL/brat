@@ -1,26 +1,15 @@
-{-# LANGUAGE
-AllowAmbiguousTypes,
-UndecidableInstances
-#-}
+module Brat.Checker.SolvePatterns (argProblems, argProblemsWithLeftovers, solve) where
 
-module Brat.Checker.Clauses (checkBody) where
-
-import Brat.Checker
-import Brat.Checker.Helpers
 import Brat.Checker.Monad
-import Brat.Checker.Types hiding (Store)
+import Brat.Checker.Helpers
+import Brat.Checker.Types (EndType(..))
 import Brat.Constructors
 import Brat.Constructors.Patterns
 import Brat.Error
 import Brat.Eval
-import Brat.FC hiding (end)
-import qualified Brat.FC as FC
-import Brat.Graph (NodeType(..), MatchSequence(..), PrimTest(..), TestMatchData(..))
-import Brat.Naming
+import Brat.Graph (NodeType(..), PrimTest(..))
 import Brat.Syntax.Abstractor
 import Brat.Syntax.Common
-import Brat.Syntax.Core
-import Brat.Syntax.FuncDecl (FunBody(..))
 import Brat.Syntax.Simple
 import Brat.Syntax.Value
 import Brat.UserName
@@ -29,95 +18,12 @@ import Control.Monad.Freer
 import Hasochism
 
 import Control.Monad (unless)
-import Data.Bifunctor
+import Data.Bifunctor (first)
 import Data.Foldable (traverse_)
-import Data.List.NonEmpty (NonEmpty(..))
-import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import Data.Type.Equality ((:~:)(..), testEquality)
 import Brat.Syntax.Port (toEnd)
-
--- Top level function for type checking function definitions
--- Will make a top-level box for the function, then type check the definition
-checkBody :: (CheckConstraints m UVerb, EvMode m, ?my :: Modey m)
-          => String -- The function name
-          -> FunBody Term UVerb
-          -> CTy m Z -- Function type
-          -> Checking Src
-checkBody fnName body cty = case body of
-  NoLhs tm -> do
-    ((src, _), _) <- makeBox fnName cty $ \(overs, unders) -> check tm (overs, unders)
-    pure src
-  Clauses cs -> checkClauses ?my fnName (mkClause <$> (NE.zip (NE.fromList [0..]) cs)) cty
-  Undefined -> err (InternalError "Checking undefined clause")
- where
-  mkClause (i, (abs, tm)) = Clause i (normaliseAbstractor <$> abs) tm
-
--- Clauses from either function definitions or case statements (TODO), as we get
--- from the elaborator
-data Clause = Clause
-  { index :: Int  -- Which clause is this (in the order they're defined in source)
-  , lhs :: WC NormalisedAbstractor
-  , rhs :: WC (Term Chk Noun)
-  }
- deriving Show
-
--- Return the tests that need to succeed for this clause to fire
--- (Tests are always defined on the overs of the outer box, rather than on
--- refined overs)
-checkClause :: forall m. (CheckConstraints m UVerb, EvMode m) => Modey m
-            -> String
-            -> CTy m Z
-            -> Clause
-            -> Checking
-               ( TestMatchData m -- TestMatch data (LHS)
-               , Name   -- Function node (RHS)
-               )
-checkClause my fnName cty clause = modily my $ do
-  trackM $ "-------------\n\nCheckClause " ++ show clause
-  let clauseName = fnName ++ "." ++ show (index clause)
-  -- First, we check the patterns on the LHS. This requires some overs,
-  -- so we make a box, however this box will never be turned into Hugr.
-  (_, names) <- let ?my = my in makeBox (clauseName ++ "_setup") cty $ \(overs, unders) -> do
-    -- Make a problem to solve based on the lhs and the overs
-    problem <- argProblems (fst <$> overs) (unWC $ lhs clause) []
-    (tests, sol) <- localFC (fcOf (lhs clause)) $ solve my problem
-    -- The solution gives us the variables bound by the patterns.
-    -- We turn them into a row
-    Some (patEz :* patRo) <- mkArgRo my S0 ((\(n, (src, ty)) -> (NamedPort (toEnd src) n, ty)) <$> sol)
-    -- Also make a row for the refined outputs (shifted by the pattern environment)
-    Some (_ :* outRo) <- mkArgRo my patEz (first (fmap toEnd) <$> unders)
-
-
-    let match = TestMatchData my $ MatchSequence overs tests (snd <$> sol)
-
-    -- Now actually make a box for the RHS and check it
-    let rhsCty = patRo :->> outRo
-    ((boxPort, _ty), _) <- makeBox (clauseName ++ "_rhs") rhsCty $ \(rhsOvers, rhsUnders) -> do
-      let abstractor = WC (fcOf (lhs clause)) $ foldr ((:||:) . APat . Bind . fst) AEmpty sol
-      trackM (show abstractor)
-      let fc = FC (start (fcOf (lhs clause))) (FC.end (fcOf (rhs clause)))
-      let ?my = my in
-        check @m (WC fc (Lambda (abstractor, rhs clause) [])) (rhsOvers, rhsUnders)
-    let NamedPort {end=Ex rhsNode _} = boxPort
-    pure (match, rhsNode)
-  pure names
-
--- The ctype given should have the pattern variables from refining the lhs of the clause as its LHS
-checkClauses :: forall m
-              . (CheckConstraints m UVerb, EvMode m)
-             => Modey m
-             -> String
-             -> NonEmpty Clause
-             -> CTy m Z
-             -> Checking Src
-checkClauses my fnName clauses cty@(ins :->> outs) = do
-  namess <- traverse (checkClause my fnName cty) clauses
-  (_, _, [(over, _)], _) <- let ?my = my in anext fnName (FunClauses namess) (S0, Some (Zy :* S0))
-                                            (R0 :: Ro m Z Z)
-                                            ((RPr ("value", VFun modey (ins :->> outs)) R0) :: Ro m Z Z)
-  pure over
 
 -- Refine clauses from function definitions (and potentially future case statements)
 -- by processing each one in sequence. This will involve repeating tests for various
@@ -453,10 +359,16 @@ numPatVal (NP2Times np) es = case numPatVal np es of (nv, es) -> (n2PowTimes 1 n
 numPatVal _ [] = error "Constructor table has an error (numPat)"
 
 argProblems :: [Src] -> NormalisedAbstractor -> Problem -> Checking Problem
-argProblems srcs (NA (APull ps abs)) p = pullPorts portName show ps (map (, ()) srcs) >>= \srcs -> argProblems (fst <$> srcs) (NA abs) p
-argProblems (src:srcs) na p | Just (pat, na) <- unconsNA na = ((src, pat):) <$> argProblems srcs na p
-argProblems [] (NA AEmpty) p = pure p
-argProblems _ _ _ = err $ UnificationError "Pattern doesn't match expected length for constructor args"
+argProblems srcs na p = argProblemsWithLeftovers srcs na p >>= \case
+  (p, []) -> pure p
+  -- This isn't a problem in general, but I think it is when we call argProblems?
+  _ -> err $ UnificationError "Pattern doesn't match expected length for constructor args"
+
+argProblemsWithLeftovers :: [Src] -> NormalisedAbstractor -> Problem -> Checking (Problem, [Src])
+argProblemsWithLeftovers srcs (NA (APull ps abs)) p = pullPorts portName show ps (map (, ()) srcs) >>= \srcs -> argProblemsWithLeftovers (fst <$> srcs) (NA abs) p
+argProblemsWithLeftovers (src:srcs) na p | Just (pat, na) <- unconsNA na = first ((src, pat):) <$> argProblemsWithLeftovers srcs na p
+argProblemsWithLeftovers srcs (NA AEmpty) p = pure (p, srcs)
+argProblemsWithLeftovers [] abst _ = err $ NothingToBind (show abst)
 
 lookupConstructor :: Modey m
                   -> UserName -- A value constructor

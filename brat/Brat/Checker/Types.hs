@@ -6,6 +6,7 @@ module Brat.Checker.Types (Overs, Unders
                           ,Mode(..), Modey(..)
                           ,Env, VEnv, KEnv, EnvData
                           ,Store(..), EndType(..)
+                          ,emptyEnv
                           ,TypedHole(..), HoleTag(..), HoleData(..)
                           ,initStore
                           ) where
@@ -55,6 +56,9 @@ type family EnvData (m :: Mode) where
 type Env e = M.Map UserName e
 type VEnv = Env (EnvData Brat)
 type KEnv = Env (EnvData Kernel)
+
+emptyEnv :: Env a
+emptyEnv = M.empty
 
 data HoleTag :: Mode -> Kind -> Type where
   NBHole :: HoleTag Brat Noun

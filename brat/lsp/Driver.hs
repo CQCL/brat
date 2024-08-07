@@ -17,7 +17,7 @@ import Language.LSP.VFS
 import System.FilePath (dropFileName)
 import System.Log.Logger
 
-import Brat.Checker (TypedHole)
+import Brat.Checker.Types (TypedHole)
 import Brat.Error
 import Brat.FC as FC
 import Brat.Load
