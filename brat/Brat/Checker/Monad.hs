@@ -312,7 +312,7 @@ suppressHoles (Ret x) = Ret x
 suppressHoles (Req (LogHole _) k) = suppressHoles (k ())
 suppressHoles (Req c k) = Req c (suppressHoles . k)
 
--- Run a computation without donig any graph generation
+-- Run a computation without doing any graph generation
 suppressGraph :: Checking a -> Checking a
 suppressGraph (Ret x) = Ret x
 suppressGraph (Req (AddNode _ _) k) = suppressGraph (k ())
