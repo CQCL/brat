@@ -246,11 +246,13 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
       zipWithM mkWire patOuts usedUnders
       pure (((), ()), (rightOvers, rightUnders))
     Syny -> do
-      env <- localFC abstFC $
-        argProblems (fst <$> usedOvers) (normaliseAbstractor abst) [] >>=
-        solve ?my >>=
-        (solToEnv . snd)
-      (((), synthOuts), ((), ())) <- localEnv env $ check body ((), ())
+      synthOuts <- suppressHoles $ suppressGraph $ do
+        env <- localFC abstFC $
+          argProblems (fst <$> usedOvers) (normaliseAbstractor abst) [] >>=
+          solve ?my >>=
+          (solToEnv . snd)
+        (((), synthOuts), ((), ())) <- localEnv env $ check body ((), ())
+	pure synthOuts
 
       sig <- mkSig usedOvers synthOuts
       patOuts <- checkClauses sig usedOvers
