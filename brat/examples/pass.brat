@@ -1,11 +1,9 @@
-open import lib.kernel (qid)
-
 -- All of the lines of this function are the identity
 three_qubit(Qubit, Qubit, Qubit) -o Qubit, Qubit, Qubit
 three_qubit = {
   ..; -- Consumes all output
-  qid, ..; -- Consumes the remainder of the input
-  qid, qid, ..
+  |, ..; -- Consumes the remainder of the input
+  |, |, ..
 }
 
 apply_gate_twice({ Qubit, Qubit -o Qubit, Qubit }) -> { Qubit, Qubit -o Qubit, Qubit }
