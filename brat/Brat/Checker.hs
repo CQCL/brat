@@ -488,8 +488,8 @@ check' (Simple tm) ((), ((hungry, ty):unders)) = do
 check' tm _ = error $ "check' " ++ show tm
 
 
--- Clauses from either function definitions or case statements (TODO), as we get
--- from the elaborator
+-- Clauses from either function definitions or case statements, as we get
+-- them from the elaborator
 data Clause = Clause
   { index :: Int  -- Which clause is this (in the order they're defined in source)
   , lhs :: WC NormalisedAbstractor
