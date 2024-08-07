@@ -824,20 +824,6 @@ compileModule venv = do
   canCompileDirect _ (BratNode (Box _ src tgt) _ [(_, VFun Braty cty)]) = do
     sig <- compileSig Braty cty
     pure $ Just (sig, False, compileBox (src, tgt))
-{- ALAN do we need to keep anything from here
---canCompileDirect _ (BratNode (PatternMatch cs) _ [(_, VFun my cty)]) = do
-    sig <- compileSig cty
-    let (FunctionType ins _) = body sig
-    pure $ Just (sig, False, compilePatternMatch ins venv cs)
-  -- Really these two are not compiled direct, and should be dealt with via compileNoun,
-  -- but until compileNode correctly handles each of these, we have to do so here:
---canCompileDirect input (KernelNode (PatternMatch cs) _ [(_, VFun Kerny cty)]) = do
-    kernTy <- compileSig Kerny cty
-    let (FunctionType kIns _) = body kernTy
-    let thunkTy = HTFunc kernTy
-    pure $ Just (funcReturning [thunkTy], True, \parent ->
-          withIO parent thunkTy $ compileKernBox parent input (compilePatternMatch kIns venv cs) cty)
--}
   canCompileDirect input (BratNode (Box _ src tgt) [] [(_, VFun Kerny cty)]) = do
         -- We're compiling, e.g.
         --   f :: { Qubit -o Qubit }
