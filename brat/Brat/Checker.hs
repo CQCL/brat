@@ -242,7 +242,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
       let usedUnders = [ fromJust (lookup tgt tgtMap) | tgt <- usedFakeUnders ]
       let rightUnders = [ fromJust (lookup tgt tgtMap) | (tgt, _) <- rightFakeUnders ]
       sig <- mkSig usedOvers usedUnders
-      patOuts <- checkClauses sig usedOvers
+      patOuts <- checkClauses sig usedOvers (c :| cs)
       zipWithM mkWire patOuts usedUnders
       pure (((), ()), (rightOvers, rightUnders))
     Syny -> do
@@ -255,7 +255,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
 	pure synthOuts
 
       sig <- mkSig usedOvers synthOuts
-      patOuts <- checkClauses sig usedOvers
+      patOuts <- checkClauses sig usedOvers ((fst c, WC (fcOf body) (Emb body)) :| cs)
       pure (((), patOuts), (rightOvers, ()))
  where
   -- Invariant: When solToEnv is called, port pulling has already been resolved,
@@ -282,8 +282,8 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
 
   mkWire (src, ty) (tgt, _) = wire (src, binderToValue ?my ty, tgt)
 
-  checkClauses cty@(ins :->> outs) overs = do
-    let clauses = (NE.zip (NE.fromList [0..]) ((second to_chk c) :| cs)) <&>
+  checkClauses cty@(ins :->> outs) overs all_cs = do
+    let clauses = NE.zip (NE.fromList [0..]) all_cs <&>
             \(i, (abs, tm)) -> Clause i (normaliseAbstractor <$> abs) tm
     clauses <- traverse (checkClause ?my "lambda" cty) clauses
     (_, patMatchUnders, patMatchOvers, _) <- anext "lambda" (PatternMatch clauses) (S0, Some (Zy :* S0))
@@ -292,10 +292,6 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
     zipWithM mkWire overs patMatchUnders
     pure patMatchOvers
 
-  to_chk :: WC (Term d Noun) -> WC (Term Chk Noun)
-  to_chk t = case (diry @d, t) of
-    (Chky, t) -> t
-    (Syny, t) -> WC (fcOf t) (Emb t)
 check' (Pull ports t) (overs, unders) = do
   unders <- pullPortsRow ports unders
   check t (overs, unders)
