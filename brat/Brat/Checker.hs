@@ -8,7 +8,7 @@ module Brat.Checker (checkBody
                     ) where
 
 import Control.Arrow (first)
-import Control.Monad (foldM, zipWithM)
+import Control.Monad (foldM)
 import Control.Monad.Freer
 import Data.Bifunctor (second)
 import Data.Functor (($>), (<&>))
@@ -243,7 +243,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
       let rightUnders = [ fromJust (lookup tgt tgtMap) | (tgt, _) <- rightFakeUnders ]
       sig <- mkSig usedOvers usedUnders
       patOuts <- checkClauses sig usedOvers (c :| cs)
-      zipWithM mkWire patOuts usedUnders
+      mkWires patOuts usedUnders
       pure (((), ()), (rightOvers, rightUnders))
     Syny -> do
       synthOuts <- suppressHoles $ suppressGraph $ do
@@ -277,7 +277,9 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
 
   retuple (NamedPort e p, ty) = (p, e, ty)
 
-  mkWire (src, ty) (tgt, _) = wire (src, binderToValue ?my ty, tgt)
+  mkWires overs unders = case zip_same_length overs unders of
+    Nothing -> err $ InternalError "Trying to wire up different sized lists of wires"
+    Just conns -> traverse (\((src, ty), (tgt, _)) -> wire (src, binderToValue ?my ty, tgt)) conns
 
   checkClauses cty@(ins :->> outs) overs all_cs = do
     let clauses = NE.zip (NE.fromList [0..]) all_cs <&>
@@ -286,7 +288,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
     (_, patMatchUnders, patMatchOvers, _) <- anext "lambda" (PatternMatch clauses) (S0, Some (Zy :* S0))
                                              ins
                                              outs
-    zipWithM mkWire overs patMatchUnders
+    mkWires overs patMatchUnders
     pure patMatchOvers
 
 check' (Pull ports t) (overs, unders) = do
