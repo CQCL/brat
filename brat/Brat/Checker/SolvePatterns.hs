@@ -191,7 +191,7 @@ unify l k r = do
 instantiateMeta :: End -> Val Z -> Checking ()
 instantiateMeta e val = do
   throwLeft (doesntOccur e val)
-  req (Define e val)
+  Define e val (const (Ret ()))
 
 
 -- Be conservative, fail if in doubt. Not dangerous like being wrong while succeeding
@@ -318,7 +318,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
                                              (RPr ("out", TNat) R0)
     wire (NamedPort out "numerator", TNat, lhs)
     wire (const2, TNat, rhs)
-    req $ Define (toEnd out) (VNum (n2PowTimes 1 (nVar (VPar (toEnd half)))))
+    defineSrc (NamedPort out "") (VNum (n2PowTimes 1 (nVar (VPar (toEnd half)))))
     pure half
 
 
@@ -335,7 +335,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
                                              (RPr ("out", TNat) R0)
     wire (NamedPort out "", TNat, lhs)
     wire (const1, TNat, rhs)
-    req $ Define (ExEnd out) (VNum (nPlus 1 (nVar (VPar (toEnd pred)))))
+    defineSrc (NamedPort out "") (VNum (nPlus 1 (nVar (VPar (toEnd pred)))))
     pure (nVar (VPar (toEnd pred)))
 
 patVal :: ValPat -> [End] -> (Val Z, [End])

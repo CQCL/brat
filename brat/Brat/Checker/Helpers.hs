@@ -37,7 +37,7 @@ import Bwd
 import Hasochism
 import Util (log2)
 
-import Control.Monad.Freer (req, Free(Ret))
+import Control.Monad.Freer
 import Control.Arrow ((***))
 import Data.List (intercalate)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
@@ -293,10 +293,10 @@ valueToBinder Braty = Right
 valueToBinder Kerny = id
 
 defineSrc :: Src -> Val Z -> Checking ()
-defineSrc src v = req (Define (ExEnd (end src)) v)
+defineSrc src v = Define (ExEnd (end src)) v (const (Ret ()))
 
 defineTgt :: Tgt -> Val Z -> Checking ()
-defineTgt tgt v = req (Define (InEnd (end tgt)) v)
+defineTgt tgt v = Define (InEnd (end tgt)) v (const (Ret ()))
 
 declareSrc :: Src -> Modey m -> BinderType m -> Checking ()
 declareSrc src my ty = req (Declare (ExEnd (end src)) my ty)

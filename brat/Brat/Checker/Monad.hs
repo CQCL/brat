@@ -18,6 +18,7 @@ import Control.Monad.Freer
 import Control.Monad.Fail ()
 import Data.List (intercalate)
 import qualified Data.Map as M
+import qualified Data.Set as S
 
 -- import Debug.Trace
 
@@ -58,6 +59,7 @@ data Context = Ctx { globalVEnv :: VEnv
                    , aliasTable :: M.Map UserName Alias
                    }
 
+-- Commands for synchronous operations
 data CheckingSig ty where
   Fresh   :: String -> CheckingSig Name
   -- Run a sub-process on a new namespace-level
@@ -89,7 +91,6 @@ data CheckingSig ty where
   KDone   :: CheckingSig ()
   AskVEnv :: CheckingSig CtxEnv
   Declare :: End -> Modey m -> BinderType m -> CheckingSig ()
-  Define  :: End -> Val Z -> CheckingSig ()
 
 localAlias :: (UserName, Alias) -> Checking v -> Checking v
 localAlias _ (Ret v) = Ret v
@@ -251,17 +252,6 @@ handler (Req s k) ctx g ns
                        (ctx { store =
                               st { typeMap = M.insert end (EndType my bty) m }
                             }) g ns
-      Define end v ->
-        let st@Store{typeMap=tm, valueMap=vm} = store ctx
-        in case track ("Define " ++ show end ++ " = " ++ show v) $ M.lookup end vm of
-          Just _ -> Left $ dumbErr (InternalError $ "Redefining " ++ show end)
-          Nothing -> case M.lookup end tm of
-            Nothing -> Left $ dumbErr (InternalError $ "Defining un-Declared " ++ show end ++ " in \n" ++ show tm)
-            Just _ -> -- TODO can we check the value is of the kind declared?
-              handler (k ())
-                (ctx { store =
-                    st { valueMap = M.insert end v vm }
-                }) g ns
       -- TODO: Use the kind argument for partially applied constructors
       TLup key -> do
         let args = M.lookup key (typeConstructors ctx)
@@ -280,6 +270,38 @@ handler (Req s k) ctx g ns
         args <- maybeToRight (Err (Just fc) $ TyConNotFound (show tycon) (show vcon)) $
                 M.lookup tycon tbl
         handler (k args) ctx g ns
+handler (Define end v k) ctx g ns = let st@Store{typeMap=tm, valueMap=vm} = store ctx in
+  case track ("Define " ++ show end ++ " = " ++ show v) $ M.lookup end vm of
+      Just _ -> Left $ dumbErr (InternalError $ "Redefining " ++ show end)
+      Nothing -> case M.lookup end tm of
+        Nothing -> Left $ dumbErr (InternalError $ "Defining un-Declared " ++ show end ++ " in \n" ++ show tm)
+        -- TODO can we check the value is of the kind declared?
+        Just _ -> let news = News (M.singleton end (howStuck v)) in
+          handler (k news)
+            (ctx { store =
+                st { valueMap = M.insert end v vm }
+            }) g ns
+
+howStuck :: Val n -> Stuck
+howStuck (VApp (VHop e) _) = AwaitingAny (S.singleton e)
+howStuck (VLam bod) = howStuck bod
+howStuck (VCon _ _) = Unstuck
+howStuck (VFun _ _) = Unstuck
+howStuck (VSum _ _) = Unstuck
+-- Numbers are likely to cause problems.
+-- Whether they are stuck or not depends on the question we're asking!
+howStuck (VNum (NumValue 0 gro)) = howStuckGro gro
+ where
+  howStuckGro Constant0 = Unstuck
+  howStuckGro (StrictMonoFun f) = howStuckSM f
+
+  howStuckSM (StrictMono 0 mono) = howStuckMono mono
+  howStuckSM _ = AwaitingAny mempty
+
+  howStuckMono (Full sm) = howStuckSM sm
+  howStuckMono (Linear (VHop e)) = AwaitingAny (S.singleton e)
+  howStuckMono (Linear _) = AwaitingAny mempty
+howStuck _ = AwaitingAny mempty
 
 type Checking = Free CheckingSig
 
