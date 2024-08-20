@@ -1,3 +1,5 @@
+{-# LANGUAGE ApplicativeDo #-}
+
 module Brat.Checker (checkBody
                     ,check
                     ,run
@@ -252,7 +254,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
           solve ?my >>=
           (solToEnv . snd)
         (((), synthOuts), ((), ())) <- localEnv env $ check body ((), ())
-	pure synthOuts
+        pure synthOuts
 
       sig <- mkSig usedOvers synthOuts
       patOuts <- checkClauses sig usedOvers ((fst c, WC (fcOf body) (Emb body)) :| cs)
@@ -521,12 +523,13 @@ checkClause my fnName cty clause = modily my $ do
     (tests, sol) <- localFC (fcOf (lhs clause)) $ solve my problem
     -- The solution gives us the variables bound by the patterns.
     -- We turn them into a row
-    Some (patEz :* patRo) <- mkArgRo my S0 ((\(n, (src, ty)) -> (NamedPort (toEnd src) n, ty)) <$> sol)
-    -- Also make a row for the refined outputs (shifted by the pattern environment)
-    Some (_ :* outRo) <- mkArgRo my patEz (first (fmap toEnd) <$> unders)
-    let match = TestMatchData my $ MatchSequence overs tests (snd <$> sol)
-    let vars = fst <$> sol
-    pure (vars, match, patRo :->> outRo)
+    mkArgRo my S0 ((\(n, (src, ty)) -> (NamedPort (toEnd src) n, ty)) <$> sol) >>= \case
+      -- Also make a row for the refined outputs (shifted by the pattern environment)
+      Some (patEz :* patRo) -> mkArgRo my patEz (first (fmap toEnd) <$> unders) >>= \case
+        Some (_ :* outRo) -> do
+          let match = TestMatchData my $ MatchSequence overs tests (snd <$> sol)
+          let vars = fst <$> sol
+          pure (vars, match, patRo :->> outRo)
 
   -- Now actually make a box for the RHS and check it
   ((boxPort, _ty), _) <- let ?my = my in makeBox (clauseName ++ "_rhs") rhsCty $ \(rhsOvers, rhsUnders) -> do
