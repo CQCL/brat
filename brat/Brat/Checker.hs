@@ -487,6 +487,15 @@ check' (Simple tm) ((), ((hungry, ty):unders)) = do
                                      R0 (RPr ("value", vty) R0)
       wire (dangling, vty, hungry)
       pure (((), ()), ((), unders))
+check' Hope ((), ((tgt, ty):_unders)) = case (?my, ty) of
+  (Braty, Left k) -> do
+    (_, [], [(src,_)], _) <- anext "hope" Hypo (S0, Some (Zy :* S0)) R0 (REx ("hope", k) R0)
+    wire (src, kindType k, tgt)
+    -- TODO: write the end down somewhere
+    defineTgt tgt (VApp (VHop (end src)) B0)
+    pure (((), ()), ((), unders))
+  (Braty, Right _ty) -> typeErr "Can only infer kinded things with !"
+  (Kerny, _) -> typeErr "Won't infer kernel typed !"
 check' tm _ = error $ "check' " ++ show tm
 
 
