@@ -98,6 +98,8 @@ localAlias con@(name, alias) (Req (ALup u) k)
   | u == name = localAlias con $ k (Just alias)
 localAlias con (Req (InLvl str c) k) = Req (InLvl str (localAlias con c)) (localAlias con . k)
 localAlias con (Req r k) = Req r (localAlias con . k)
+localAlias con (Define v e k) = Define v e (localAlias con . k)
+localAlias con (Yield st k) = Yield st (localAlias con . k)
 
 localFC :: FC -> Checking v -> Checking v
 localFC _ (Ret v) = Ret v
@@ -105,6 +107,9 @@ localFC f (Req AskFC k) = localFC f (k f)
 localFC f (Req (Throw (e@Err{fc=Nothing})) k) = localFC f (Req (Throw (e{fc=Just f})) k)
 localFC f (Req (InLvl str c) k) = Req (InLvl str (localFC f c)) (localFC f . k)
 localFC f (Req r k) = Req r (localFC f . k)
+localFC f (Define v e k) = Define v e (localFC f . k)
+localFC f (Yield st k) = Yield st (localFC f . k)
+
 
 localEnv :: (?my :: Modey m) => Env (EnvData m) -> Checking v -> Checking v
 localEnv = case ?my of
@@ -119,6 +124,8 @@ localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
                                    localVEnv ext (k (env { locals = M.union ext (locals env) }))
 localVEnv ext (Req (InLvl str c) k) = Req (InLvl str (localVEnv ext c)) (localVEnv ext . k)
 localVEnv ext (Req r k) = Req r (localVEnv ext . k)
+localVEnv ext (Define v e k) = Define v e (localVEnv ext . k)
+localVEnv ext (Yield st k) = Yield st (localVEnv ext . k)
 
 -- runs a computation, but intercepts uses of outer *locals* variables and redirects
 -- them to use new outports of the specified node (expected to be a Source).
@@ -137,12 +144,16 @@ captureOuterLocals c = do
   helper (avail, captured) (Req (VLup x) k) | j@(Just new) <- M.lookup x avail =
     helper (avail, M.insert x new captured) (k j)
   helper state (Req r k) = Req r (helper state . k)
+  helper state (Define e v k) = Define e v (helper state . k)
+  helper state (Yield st k) = Yield st (helper state . k)
 
 wrapError :: (Error -> Error) -> Checking v -> Checking v
 wrapError _ (Ret v) = Ret v
 wrapError f (Req (Throw e) k) = Req (Throw (f e)) k
 wrapError f (Req (InLvl str c) k) = Req (InLvl str (wrapError f c)) (wrapError f . k)
 wrapError f (Req r k) = Req r (wrapError f . k)
+wrapError f (Define v e k) = Define v e (wrapError f . k)
+wrapError f (Yield st k) = Yield st (wrapError f . k)
 
 throwLeft :: Either ErrorMsg a -> Checking a
 throwLeft (Right x) = pure x
@@ -204,11 +215,15 @@ localKVar env (Req KDone k) = case [ x | (x,(One,_)) <- M.assocs env ] of
                                               ,"haven't been used"
                                               ]
 localKVar env (Req r k) = Req r (localKVar env . k)
+localKVar env (Define e v k) = Define e v (localKVar env . k)
+localKVar env (Yield st k) = Yield st (localKVar env . k)
 
 catchErr :: Free CheckingSig a -> Free CheckingSig (Either Error a)
 catchErr (Ret t) = Ret (Right t)
 catchErr (Req (Throw e) _) = pure $ Left e
 catchErr (Req r k) = Req r (catchErr . k)
+catchErr (Define e v k) = Define e v (catchErr . k)
+catchErr (Yield st k) = Yield st (catchErr . k)
 
 handler :: Free CheckingSig v
         -> Context
@@ -284,6 +299,7 @@ handler (Define end v k) ctx g ns = let st@Store{typeMap=tm, valueMap=vm} = stor
 
 howStuck :: Val n -> Stuck
 howStuck (VApp (VHop e) _) = AwaitingAny (S.singleton e)
+howStuck (VApp (VPar e) _) = AwaitingAny (S.singleton e)
 howStuck (VLam bod) = howStuck bod
 howStuck (VCon _ _) = Unstuck
 howStuck (VFun _ _) = Unstuck
@@ -333,6 +349,8 @@ suppressHoles :: Checking a -> Checking a
 suppressHoles (Ret x) = Ret x
 suppressHoles (Req (LogHole _) k) = suppressHoles (k ())
 suppressHoles (Req c k) = Req c (suppressHoles . k)
+suppressHoles (Define v e k) = Define v e (suppressHoles . k)
+suppressHoles (Yield st k) = Yield st (suppressHoles . k)
 
 -- Run a computation without doing any graph generation
 suppressGraph :: Checking a -> Checking a
@@ -340,3 +358,5 @@ suppressGraph (Ret x) = Ret x
 suppressGraph (Req (AddNode _ _) k) = suppressGraph (k ())
 suppressGraph (Req (Wire _) k) = suppressGraph (k ())
 suppressGraph (Req c k) = Req c (suppressGraph . k)
+suppressGraph (Define v e k) = Define v e (suppressGraph . k)
+suppressGraph (Yield st k) = Yield st (suppressGraph . k)
