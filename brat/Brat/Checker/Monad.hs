@@ -296,6 +296,8 @@ handler (Define end v k) ctx g ns = let st@Store{typeMap=tm, valueMap=vm} = stor
             (ctx { store =
                 st { valueMap = M.insert end v vm }
             }) g ns
+handler (Yield Unstuck k) ctx g ns = handler (k mempty) ctx g ns
+handler (Yield (AwaitingAny ends) _k) _ _ _ = Left $ dumbErr $ TypeErr $ unlines $ ("Typechecking blocked on:":(show <$> S.toList ends)) ++ ["", "Try writing more types! :-)"]
 
 howStuck :: Val n -> Stuck
 howStuck (VApp (VHop e) _) = AwaitingAny (S.singleton e)
