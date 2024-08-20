@@ -130,9 +130,11 @@ checkInputs :: (CheckConstraints m KVerb, ?my :: Modey m)
             -> [(Tgt, BinderType m)] -- Actual
             -> Checking [(Src, BinderType m)]
 checkInputs _ overs [] = pure overs
-checkInputs tm@(WC fc _) (o:overs) (u:unders) = localFC fc $ do
-  wrapError (addRowContext ?my (o:overs) (u:unders)) $ checkWire ?my tm False o u
+checkInputs tm@(WC fc _) (o:overs) (u:unders) = localFC fc $ (
+  (wrapError (addRowContext ?my (o:overs) (u:unders)) $ checkWire ?my tm False o u)
+  *>
   checkInputs tm overs unders
+ )
  where
   addRowContext :: Show (BinderType m)
               => Modey m
@@ -150,9 +152,11 @@ checkOutputs :: (CheckConstraints m k, ?my :: Modey m)
              -> [(Src, BinderType m)] -- Actual
              -> Checking [(Tgt, BinderType m)]
 checkOutputs _ unders [] = pure unders
-checkOutputs tm@(WC fc _) (u:unders) (o:overs) = localFC fc $ do
-  wrapError (addRowContext ?my (u:unders) (o:overs)) $ checkWire ?my tm True o u
+checkOutputs tm@(WC fc _) (u:unders) (o:overs) = localFC fc $ (
+  (wrapError (addRowContext ?my (u:unders) (o:overs)) $ checkWire ?my tm True o u)
+  *>
   checkOutputs tm unders overs
+ )
  where
   addRowContext :: Show (BinderType m)
               => Modey m
