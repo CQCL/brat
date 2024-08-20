@@ -138,19 +138,12 @@ type Semz = Stack Z Sem
 
 data VVar :: N -> Type where
   VPar :: End -> VVar n  -- Has to be declared in the Store (for equality testing)
-  VHop :: End -> VVar n  -- A meta we "Hope" we can solve to make things go
   VInx :: Inx n -> VVar n
 
 deriving instance Show (VVar n)
 
-isGlobal :: VVar n -> Maybe End
-isGlobal (VPar e) = Just e
-isGlobal (VHop e) = Just e
-isGlobal _ = Nothing
-
 instance Eq (VVar n) where
   (VPar e0) == (VPar e1) = e0 == e1
-  (VHop e0) == (VHop e1) = e0 == e1
   (VInx _) == (VInx _) = error "tried to compare VInxs"
   _ == _ = False
 
@@ -164,7 +157,7 @@ data Val :: N -> Type where
   VApp :: VVar n -> Bwd (Val n) -> Val n
   VSum :: MODEY m => Modey m -> [Some (Ro m n)] -> Val n -- (Hugr-like) Sum types
 
-data SVar = SPar End | SHop End | SLvl Int
+data SVar = SPar End | SLvl Int
  deriving (Show, Eq)
 
 -- Semantic value, used internally by normalization; contains Lvl's but no Inx's
@@ -517,7 +510,6 @@ instance DeBruijn VVar where
   changeVar (ParToInx a _) (VInx v) = VInx (injInn a v)
   changeVar (Thinning th) (VInx v) = VInx (inxThin v th)
   changeVar _ (VPar e) = VPar e
-  changeVar _ (VHop e) = VHop e
 
 
 instance DeBruijn Val where

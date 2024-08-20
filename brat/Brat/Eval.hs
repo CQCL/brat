@@ -91,10 +91,6 @@ semVar _ (VPar end) = req (ELup end) >>= \case
     -- (Ok to) keep going (because we don't put recursive definitions in the store).
     Just v -> sem S0 v
     Nothing -> pure $ SApp (SPar end) B0
--- Same logic as VPar
-semVar _ (VHop end) = req (ELup end) >>= \case
-    Just v -> sem S0 v
-    Nothing -> pure $ SApp (SHop end) B0
 
 apply :: Val Z -> [Val Z] -> Checking (Val Z)
 apply f args = do
@@ -135,7 +131,6 @@ quoteCTy lvy my ga (ins :->> outs) = quoteRo my ga ins lvy >>= \case
 -- first number is next Lvl to use in Value
 --         require every Lvl in Sem is < n (converted by n - 1 - lvl), else must fail at runtime
 quoteVar :: Ny n -> SVar -> VVar n
-quoteVar _ (SHop end) = VHop end
 quoteVar _ (SPar end) = VPar end -- no need to chase, done in semVar
 quoteVar ny (SLvl lvl) = VInx $ helper ny $ (ny2int ny) - 1 - lvl
  where
@@ -189,7 +184,7 @@ kindEq (TypeFor m xs) (TypeFor m' ys) | m == m' = kindListEq xs ys
 kindEq k k' = Left . TypeErr $ "Unequal kinds " ++ show k ++ " and " ++ show k'
 
 kindOf :: VVar Z -> Checking TypeKind
-kindOf v | Just e <- isGlobal v = req (TypeOf e) >>= \case
+kindOf (VPar e) = req (TypeOf e) >>= \case
   EndType Braty (Left k) -> pure k
   EndType my ty -> typeErr $ "End " ++ show e ++ " isn't a kind, it's type is " ++ case my of
     Braty -> show ty
@@ -245,7 +240,6 @@ eqWorker tm (lvy :* kz) (TypeFor m []) (SApp f args) (SApp f' args') | f == f' =
     _ -> err $ InternalError "quote gave a surprising result"
  where
   svKind (VPar e) = kindOf (VPar e)
-  svKind (VHop e) = kindOf (VHop e)
   svKind (VInx n) = pure $ proj kz n
 eqWorker tm lvkz (TypeFor m []) (SCon c args) (SCon c' args') | c == c' =
   req (TLup (m, c)) >>= \case
