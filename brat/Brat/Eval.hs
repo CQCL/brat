@@ -219,64 +219,50 @@ dropRight = second (\_ -> ())
 
 eqWorker :: String              -- for error message
          -> (Ny :* Stack Z TypeKind) lv -- next Level & kinds for existing Levels
-         -> S.Set End           -- The hope set
          -> TypeKind            -- kind of both Sem's
          -> Sem                 -- expected
          -> Sem                 -- actual
          -> Checking (Either ErrorMsg ())
-eqWorker tm (lvy :* kz) hopeSet (TypeFor m ((_, k):ks)) exp act = do
+eqWorker tm (lvy :* kz) (TypeFor m ((_, k):ks)) exp act = do
   -- Higher kind
   let xz = B0 :< semLvl lvy
   exp <- applySem exp xz
   act <- applySem act xz
-  eqWorker tm (Sy lvy :* (kz :<< k)) hopeSet (TypeFor m ks) exp act
+  eqWorker tm (Sy lvy :* (kz :<< k)) (TypeFor m ks) exp act
 -- Nothing else is higher kinded
--- Hack: We should be able to cope when the stack of levels isn't empty
-eqWorker tm (Zy :* S0) hopeSet (SApp (SPar e) B0) act | S.member e hopeSet = do
-  v <- quote Zy act
-  case doesntOccur e v of
-    Left msg -> case v of
-      VApp (VPar e') B0 | e == e' -> pure (Right ())
-      -- TODO: Not all occurrences are toxic. The end could be in an argument
-      -- to a hoping variable which isn't used.
-      -- E.g. h1 = h2 h1 - this is valid if h2 is the identity, or ignores h1.
-      _ -> pure $ Left msg
-    Right () -> defineEnd e v $> Right ()
-  
-eqWorker tm _ hopeSet Nat exp act = pure $
+eqWorker tm _ Nat exp act = pure $
   if getNum exp == getNum act then Right () else Left $
     TypeMismatch tm (show exp) (show act)
-eqWorker tm (lvy :* kz) hopeSet (TypeFor m []) (SApp f args) (SApp f' args') | f == f' =
+eqWorker tm (lvy :* kz) (TypeFor m []) (SApp f args) (SApp f' args') | f == f' =
   svKind (quoteVar lvy f) >>= \case
-    TypeFor m' ks | m == m' -> eqTests tm (lvy :* kz) hopeSet (snd <$> ks) (args <>> []) (args' <>> [])
+    TypeFor m' ks | m == m' -> eqTests tm (lvy :* kz) (snd <$> ks) (args <>> []) (args' <>> [])
       -- pattern should always match
     _ -> err $ InternalError "quote gave a surprising result"
  where
   svKind (VPar e) = kindOf (VPar e)
   svKind (VInx n) = pure $ proj kz n
-eqWorker tm lvkz hopeSet (TypeFor m []) (SCon c args) (SCon c' args') | c == c' =
+eqWorker tm lvkz (TypeFor m []) (SCon c args) (SCon c' args') | c == c' =
   req (TLup (m, c)) >>= \case
-        Just ks -> eqTests tm lvkz hopeSet (snd <$> ks) args args'
+        Just ks -> eqTests tm lvkz (snd <$> ks) args args'
         Nothing -> pure . Left . TypeErr $ "Type constructor " ++ show c
                         ++ " undefined " ++ " at kind " ++ show (TypeFor m [])
-eqWorker tm lvkz hopeSet (Star []) (SFun m0 stk0 (ins0 :->> outs0)) (SFun m1 stk1 (ins1 :->> outs1)) | Just Refl <- testEquality m0 m1 =
-  eqRowTest m0 tm lvkz hopeSet (stk0,ins0) (stk1,ins1) >>= \case
+eqWorker tm lvkz (Star []) (SFun m0 stk0 (ins0 :->> outs0)) (SFun m1 stk1 (ins1 :->> outs1)) | Just Refl <- testEquality m0 m1 =
+  eqRowTest m0 tm lvkz (stk0,ins0) (stk1,ins1) >>= \case
     Left msg -> pure (Left msg)
     Right (Some lvkz, stk0, stk1) -> eqRowTest m0 tm lvkz (stk0, outs0) (stk1, outs1) <&> dropRight
-eqWorker tm lvkz hopeSet (TypeFor _ []) (SSum m0 stk0 rs0) (SSum m1 stk1 rs1)
+eqWorker tm lvkz (TypeFor _ []) (SSum m0 stk0 rs0) (SSum m1 stk1 rs1)
   | Just Refl <- testEquality m0 m1 = case zip_same_length rs0 rs1 of
       Nothing -> pure (Left (TypeErr "Mismatched sum lengths"))
       Just rs -> traverse eqVariant rs <&> sequence_
  where
   eqVariant (Some r0, Some r1) = eqRowTest m0 tm lvkz (stk0,r0) (stk1,r1) <&> dropRight
-eqWorker tm _ _ _ v0 v1 = pure . Left $ TypeMismatch tm (show v0) (show v1)
+eqWorker tm _ _ v0 v1 = pure . Left $ TypeMismatch tm (show v0) (show v1)
 
 -- Type rows have bot0,bot1 dangling de Bruijn indices, which we instantiate with
 -- de Bruijn levels. As we go under binders in these rows, we add to the scope's
 -- environments, which we return at the end for eqCType.
 eqRowTest :: Modey m
           -> String -- The term we complain about in errors
-          -> S.Set End      -- the hope set
           -> (Ny :* Stack Z TypeKind) lv -- Next available level, the kinds of existing levels
           -> (Stack Z Sem bot0, Ro m bot0 top0)
           -> (Stack Z Sem bot1, Ro m bot1 top1)
@@ -284,32 +270,31 @@ eqRowTest :: Modey m
                                        ,Stack Z Sem top0
                                        ,Stack Z Sem top1
                                        ))
-eqRowTest _ _ _ lvkz (stk0, R0) (stk1, R0) = pure $ Right (Some lvkz, stk0, stk1)
-eqRowTest m tm hopeSet lvkz (stk0, RPr (_, ty0) r0) (stk1, RPr (_, ty1) r1) = do
+eqRowTest _ _ lvkz (stk0, R0) (stk1, R0) = pure $ Right (Some lvkz, stk0, stk1)
+eqRowTest m tm lvkz (stk0, RPr (_, ty0) r0) (stk1, RPr (_, ty1) r1) = do
   let k = case m of
         Braty -> Star []
         Kerny -> Dollar []
-  let headTest = do
-        (ty0,ty1) <- (,) <$> sem stk0 ty0 <*> sem stk1 ty1
-        eqWorker tm hopeSet lvkz k ty0 ty1
-  (first,rest) <- (,) <$> headTest <*> eqRowTest m tm hopeSet lvkz (stk0, r0) (stk1, r1)
-  throwLeft first
-  pure rest
-eqRowTest m tm hopeSet (lvy :* kz) (stk0, REx (_, k0) r0) (stk1, REx (_, k1) r1) =
+  ty0 <- sem stk0 ty0
+  ty1 <- sem stk1 ty1
+  eqWorker tm lvkz k ty0 ty1 >>= \case
+    Left msg -> pure $ Left msg
+    Right () -> eqRowTest m tm lvkz (stk0, r0) (stk1, r1)
+eqRowTest m tm (lvy :* kz) (stk0, REx (_, k0) r0) (stk1, REx (_, k1) r1) =
   case kindEq k0 k1 of
       Left msg -> pure $ Left msg
       Right () -> do
         let l = semLvl lvy
-        eqRowTest m tm hopeSet (Sy lvy :* (kz :<< k0)) (stk0 :<< l, r0) (stk1 :<< l, r1)
-eqRowTest m tm _ _ exp act = modily m $ pure . Left $ TypeMismatch tm (show exp) (show act)
+        eqRowTest m tm (Sy lvy :* (kz :<< k0)) (stk0 :<< l, r0) (stk1 :<< l, r1)
+eqRowTest m tm _ exp act = modily m $ pure . Left $ TypeMismatch tm (show exp) (show act)
 
-eqTests :: String -> (Ny :* Stack Z TypeKind) n -> S.Set End -> [TypeKind] -> [Sem] -> [Sem] -> Checking (Either ErrorMsg ())
+eqTests :: String -> (Ny :* Stack Z TypeKind) n -> [TypeKind] -> [Sem] -> [Sem] -> Checking (Either ErrorMsg ())
   -- note alternative - traverse zip3/zip_same_len*2 + currying
   -- to get [Either ErrorMsg ()], then sequenceA -> Either ErrorMsg [()]
-eqTests tm lvkz hopeSet = go
+eqTests tm lvkz = go
  where
   go [] [] [] = pure (Right ())
-  go (k:ks) (u:us) (v:vs) = eqWorker tm lvkz hopeSet k u v >>= \case
+  go (k:ks) (u:us) (v:vs) = eqWorker tm lvkz k u v >>= \case
     Right () -> go ks us vs
     Left e -> pure $ Left e
   go _ us vs = pure . Left . TypeErr $ "Arity mismatch in type constructor arguments:\n  "
