@@ -299,3 +299,38 @@ eqTests tm lvkz = go
     Left e -> pure $ Left e
   go _ us vs = pure . Left . TypeErr $ "Arity mismatch in type constructor arguments:\n  "
                    ++ show us ++ "\n  " ++ show vs
+
+-- Be conservative, fail if in doubt. Not dangerous like being wrong while succeeding
+-- We can have bogus failures here because we're not normalising under lambdas
+-- N.B. the value argument is normalised.
+doesntOccur :: End -> Val n -> Either ErrorMsg ()
+doesntOccur e (VNum nv) = case getNumVar nv of
+  Just e' -> collision e e'
+  _ -> pure ()
+ where
+  getNumVar :: NumVal (VVar n) -> Maybe End
+  getNumVar (NumValue _ (StrictMonoFun (StrictMono _ mono))) = case mono of
+    Linear v -> case v of
+      VPar e -> Just e
+      _ -> Nothing
+    Full sm -> getNumVar (numValue sm)
+  getNumVar _ = Nothing
+doesntOccur e (VApp var args) = case var of
+  VPar e' -> collision e e' *> traverse_ (doesntOccur e) args
+  _ -> pure ()
+doesntOccur e (VCon _ args) = traverse_ (doesntOccur e) args
+doesntOccur e (VLam body) = doesntOccur e body
+doesntOccur e (VFun my (ins :->> outs)) = case my of
+  Braty -> doesntOccurRo my e ins *> doesntOccurRo my e outs
+  Kerny -> doesntOccurRo my e ins *> doesntOccurRo my e outs
+doesntOccur e (VSum my rows) = traverse_ (\(Some ro) -> doesntOccurRo my e ro) rows
+
+collision :: End -> End -> Either ErrorMsg ()
+collision e v | e == v = Left . UnificationError $
+                         show e ++ " is cyclic"
+              | otherwise = pure ()
+
+doesntOccurRo :: Modey m -> End -> Ro m i j -> Either ErrorMsg ()
+doesntOccurRo _ _ R0 = pure ()
+doesntOccurRo my e (RPr (_, ty) ro) = doesntOccur e ty *> doesntOccurRo my e ro
+doesntOccurRo Braty e (REx _ ro) = doesntOccurRo Braty e ro
