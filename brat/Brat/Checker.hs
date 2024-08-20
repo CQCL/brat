@@ -7,6 +7,7 @@ module Brat.Checker (checkBody
                     ,kindCheckAnnotation
                     ,kindCheckRow
                     ,tensor
+                    ,CheckConstraints
                     ) where
 
 import Control.Arrow (first)
@@ -116,13 +117,13 @@ checkWire Braty (WC fc tm) outputs (dangling, o) (hungry, u) = localFC fc $ do
   let ot = binderToValue Braty o
   let ut = binderToValue Braty u
   if outputs
-    then typeEq (show tm) (Star []) ot ut
-    else typeEq (show tm) (Star []) ut ot
+    then typeEq (show tm) (Zy :* S0 :* S0) (Star []) ot ut
+    else typeEq (show tm) (Zy :* S0 :* S0) (Star []) ut ot
   wire (dangling, ot, hungry)
 checkWire Kerny (WC fc tm) outputs (dangling, ot) (hungry, ut) = localFC fc $ do
   if outputs
-    then typeEq (show tm) (Dollar []) ot ut
-    else typeEq (show tm) (Dollar []) ut ot
+    then typeEq (show tm) (Zy :* S0 :* S0) (Dollar []) ot ut
+    else typeEq (show tm) (Zy :* S0 :* S0) (Dollar []) ut ot
   wire (dangling, ot, hungry)
 
 checkInputs :: (CheckConstraints m KVerb, ?my :: Modey m)

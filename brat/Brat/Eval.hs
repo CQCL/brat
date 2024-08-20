@@ -6,6 +6,7 @@ module Brat.Eval (EvMode(..)
                  ,apply
                  ,eval
                  ,sem
+                 ,doesntOccur
                  ,evalCTy
                  ,eqTest
                  ,kindEq
@@ -20,7 +21,7 @@ import Brat.Error (ErrorMsg(..))
 import Brat.Syntax.Value
 import Brat.Syntax.Common
 import Brat.UserName (plain)
-import Control.Monad.Freer (req)
+import Control.Monad.Freer
 import Bwd
 import Hasochism
 import Util (zip_same_length)
@@ -28,7 +29,9 @@ import Util (zip_same_length)
 import Data.Bifunctor (second)
 import Data.Functor
 import Data.Kind (Type)
+import qualified Data.Set as S
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
+import Data.Foldable (traverse_)
 
 kindType :: TypeKind -> Val Z
 kindType Nat = TNat
@@ -191,14 +194,127 @@ kindOf (VPar e) = req (TypeOf e) >>= \case
     Kerny -> show ty
 kindOf (VInx n) = case n of {}
 
--- We should have made sure that the two values share the given kind
+-- Demand that two things are equal, we're allowed to solve variables in the
+-- hope set to make this true.
+-- Raises a user error if the vals cannot be made equal.
 typeEq :: String -- String representation of the term for error reporting
-   -> TypeKind -- The kind we're comparing at
-   -> Val Z -- Expected
-   -> Val Z -- Actual
-   -> Checking ()
-typeEq str k exp act = eqTest str k exp act >>= throwLeft
+       -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n
+       -> TypeKind -- The kind we're comparing at
+       -> Val n -- Expected
+       -> Val n -- Actual
+       -> Checking ()
+typeEq str stuff@(_ny :* _ks :* sems) k exp act = do
+  hopes <- req HopeSet
+  exp <- sem sems exp
+  act <- sem sems act
+  typeEqEta str stuff hopes k exp act
 
+-- Presumes that the hope set and the two `Sem`s are up to date.
+typeEqEta :: String -- String representation of the term for error reporting
+          -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n
+          -> S.Set End -- The hope set
+          -> TypeKind -- The kind we're comparing at
+          -> Sem -- Expected
+          -> Sem -- Actual
+          -> Checking ()
+typeEqEta tm (lvy :* kz :* sems) hopeSet (TypeFor m ((_, k):ks)) exp act = do
+  -- Higher kinded things
+  let nextSem = semLvl lvy
+  let xz = B0 :< nextSem
+  exp <- applySem exp xz
+  act <- applySem act xz
+  typeEqEta tm (Sy lvy :* (kz :<< k) :* (sems :<< nextSem)) hopeSet (TypeFor m ks) exp act
+-- Not higher kinded - check for flex terms
+-- (We don't solve under binders for now, so we only consider Zy here)
+-- "easy" flex cases
+typeEqEta _tm (Zy :* _ks :* _sems) hopeSet _ (SApp (SPar e) B0) act
+  | S.member e hopeSet = solveHope e act
+typeEqEta _tm (Zy :* _ks :* _sems) hopeSet _ exp (SApp (SPar e) B0)
+  | S.member e hopeSet = solveHope e exp
+typeEqEta tm stuff@(ny :* _ks :* _sems) hopeSet k exp act = do
+  exp <- quote ny exp
+  act <- quote ny act
+  case [e | (VApp (VPar e) _) <- [exp,act], S.member e hopeSet] of
+    [] -> typeEqRigid tm stuff k exp act
+    es -> do
+      Yield (AwaitingAny $ S.fromList es) (\_ -> typeEq tm stuff k exp act)
+
+-- This will update the hopeSet, potentially invalidating things that have been eval'd
+-- The Sem is closed, for now.
+solveHope :: End -> Sem -> Checking ()
+solveHope e v = quote Zy v >>= \v -> case doesntOccur e v of
+  Right () -> Define e v (const (pure ()))
+  Left msg -> case v of
+    VApp (VPar e') B0 | e == e' -> pure ()
+    -- TODO: Not all occurrences are toxic. The end could be in an argument
+    -- to a hoping variable which isn't used.
+    -- E.g. h1 = h2 h1 - this is valid if h2 is the identity, or ignores h1.
+    _ -> err msg
+
+typeEqs :: String -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n -> [TypeKind] -> [Val n] -> [Val n] -> Checking ()
+typeEqs _ _ [] [] [] = pure ()
+typeEqs tm stuff (k:ks) (exp:exps) (act:acts) = typeEqs tm stuff ks exps acts <* typeEq tm stuff k exp act
+typeEqs _ _ _ _ _ = typeErr "arity mismatch"
+
+kindForMode :: Modey m -> TypeKind
+kindForMode Braty = Star []
+kindForMode Kerny = Dollar []
+
+typeEqRow :: forall m lv top0 top1. Modey m
+          -> String -- The term we complain about in errors
+          -> (Ny :* Stack Z TypeKind :* Stack Z Sem) lv -- Next available level, the kinds of existing levels
+          -> Ro m lv top0
+          -> Ro m lv top1
+          -> Checking (Some ((Ny :* Stack Z TypeKind :* Stack Z Sem) -- The new stack of kinds and fresh level
+                            :* 
+                            (((:~:) top0) :* ((:~:) top1))) -- Proofs both input rows have same length (quantified over by Some)
+                      )
+typeEqRow _ _ stuff R0 R0 = pure (Some (stuff :* (Refl :* Refl)))
+typeEqRow m tm stuff (RPr (_,ty1) ro1) (RPr (_,ty2) ro2) = typeEq tm stuff (kindForMode m) ty1 ty2 *> typeEqRow m tm stuff ro1 ro2
+typeEqRow m tm (ny :* kz :* semz) (REx (_,k1) ro1) (REx (_,k2) ro2) | k1 == k2 = typeEqRow m tm (Sy ny :* (kz :<< k1) :* (semz :<< semLvl ny)) ro1 ro2
+typeEqRow _ _ _ _ _ = typeErr "Mismatched rows"
+
+-- Calls to typeEqRigid *must* start with rigid types to ensure termination
+typeEqRigid :: String -- String representation of the term for error reporting
+            -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n
+            -> TypeKind -- The kind we're comparing at
+            -> Val n -- Expected
+            -> Val n -- Actual
+            -> Checking ()
+typeEqRigid tm (_ :* _ :* semz) Nat exp act = do
+  -- TODO: What if there's hope in the numbers?
+  exp <- sem semz exp
+  act <- sem semz act
+  if getNum exp == getNum act
+  then pure ()
+  else err $ TypeMismatch tm (show exp) (show act)
+typeEqRigid tm stuff@(_ :* kz :* _) (TypeFor m []) (VApp f args) (VApp f' args') | f == f' =
+  svKind f >>= \case
+    TypeFor m' ks | m == m' -> typeEqs tm stuff (snd <$> ks) (args <>> []) (args' <>> [])
+      -- pattern should always match
+    _ -> err $ InternalError "quote gave a surprising result"
+ where
+  svKind (VPar e) = kindOf (VPar e)
+  svKind (VInx n) = pure $ proj kz n
+typeEqRigid tm lvkz (TypeFor m []) (VCon c args) (VCon c' args') | c == c' =
+  req (TLup (m, c)) >>= \case
+        Just ks -> typeEqs tm lvkz (snd <$> ks) args args'
+        Nothing -> err $ TypeErr $ "Type constructor " ++ show c
+                        ++ " undefined " ++ " at kind " ++ show (TypeFor m [])
+typeEqRigid tm lvkz (Star []) (VFun m0 (ins0 :->> outs0)) (VFun m1 (ins1 :->> outs1)) | Just Refl <- testEquality m0 m1 =
+  typeEqRow m0 tm lvkz ins0 ins1 >>= \case
+    Some (lvkz :* (Refl :* Refl)) -> () <$ typeEqRow m0 tm lvkz outs0 outs1
+typeEqRigid tm lvkz (TypeFor _ []) (VSum m0 rs0) (VSum m1 rs1)
+  | Just Refl <- testEquality m0 m1 = case zip_same_length rs0 rs1 of
+      Nothing -> typeErr "Mismatched sum lengths"
+      Just rs -> () <$ traverse eqVariant rs
+ where
+  eqVariant (Some r0, Some r1) = () <$ typeEqRow m0 tm lvkz r0 r1
+typeEqRigid tm _ _ v0 v1 = err $ TypeMismatch tm (show v0) (show v1)
+
+
+-------- for SolvePatterns usage: not allowed to solve hopes,
+-- and if pattern insoluble, it's not a type error (it's a "pattern match case unreachable")
 eqTest :: String -- String representation of the term for error reporting
        -> TypeKind -- The kind we're comparing at
        -> Val Z -- Expected
@@ -272,9 +388,7 @@ eqRowTest :: Modey m
                                        ))
 eqRowTest _ _ lvkz (stk0, R0) (stk1, R0) = pure $ Right (Some lvkz, stk0, stk1)
 eqRowTest m tm lvkz (stk0, RPr (_, ty0) r0) (stk1, RPr (_, ty1) r1) = do
-  let k = case m of
-        Braty -> Star []
-        Kerny -> Dollar []
+  let k = kindForMode m
   ty0 <- sem stk0 ty0
   ty1 <- sem stk1 ty1
   eqWorker tm lvkz k ty0 ty1 >>= \case

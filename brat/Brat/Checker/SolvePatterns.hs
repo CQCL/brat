@@ -19,7 +19,6 @@ import Hasochism
 
 import Control.Monad (unless)
 import Data.Bifunctor (first)
-import Data.Foldable (traverse_)
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import Data.Type.Equality ((:~:)(..), testEquality)

@@ -368,3 +368,6 @@ suppressGraph (Req (Wire _) k) = suppressGraph (k ())
 suppressGraph (Req c k) = Req c (suppressGraph . k)
 suppressGraph (Define v e k) = Define v e (suppressGraph . k)
 suppressGraph (Yield st k) = Yield st (suppressGraph . k)
+
+defineEnd :: End -> Val Z -> Checking ()
+defineEnd e v = Define e v (const (Ret ()))

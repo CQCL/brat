@@ -20,7 +20,7 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
                             ,evalSrcRow, evalTgtRow
                             )-} where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows)
+import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (eval, EvMode(..), kindType)
@@ -291,9 +291,6 @@ binderToValue Kerny v = v
 valueToBinder :: Modey m -> Val Z -> BinderType m
 valueToBinder Braty = Right
 valueToBinder Kerny = id
-
-defineEnd :: End -> Val Z -> Checking ()
-defineEnd e v = Define e v (const (Ret ()))
 
 defineSrc :: Src -> Val Z -> Checking ()
 defineSrc src v = defineEnd (ExEnd (end src)) v
