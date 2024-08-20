@@ -307,7 +307,6 @@ handler (Yield Unstuck k) ctx g ns = handler (k mempty) ctx g ns
 handler (Yield (AwaitingAny ends) _k) _ _ _ = Left $ dumbErr $ TypeErr $ unlines $ ("Typechecking blocked on:":(show <$> S.toList ends)) ++ ["", "Try writing more types! :-)"]
 
 howStuck :: Val n -> Stuck
-howStuck (VApp (VHop e) _) = AwaitingAny (S.singleton e)
 howStuck (VApp (VPar e) _) = AwaitingAny (S.singleton e)
 howStuck (VLam bod) = howStuck bod
 howStuck (VCon _ _) = Unstuck
@@ -324,7 +323,7 @@ howStuck (VNum (NumValue 0 gro)) = howStuckGro gro
   howStuckSM _ = AwaitingAny mempty
 
   howStuckMono (Full sm) = howStuckSM sm
-  howStuckMono (Linear (VHop e)) = AwaitingAny (S.singleton e)
+  howStuckMono (Linear (VPar e)) = AwaitingAny (S.singleton e) -- ALAN was VHop
   howStuckMono (Linear _) = AwaitingAny mempty
 howStuck _ = AwaitingAny mempty
 

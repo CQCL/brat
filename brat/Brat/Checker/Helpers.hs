@@ -292,11 +292,14 @@ valueToBinder :: Modey m -> Val Z -> BinderType m
 valueToBinder Braty = Right
 valueToBinder Kerny = id
 
+defineEnd :: End -> Val Z -> Checking ()
+defineEnd e v = Define e v (const (Ret ()))
+
 defineSrc :: Src -> Val Z -> Checking ()
-defineSrc src v = Define (ExEnd (end src)) v (const (Ret ()))
+defineSrc src v = defineEnd (ExEnd (end src)) v
 
 defineTgt :: Tgt -> Val Z -> Checking ()
-defineTgt tgt v = Define (InEnd (end tgt)) v (const (Ret ()))
+defineTgt tgt v = defineEnd (InEnd (end tgt)) v
 
 declareSrc :: Src -> Modey m -> BinderType m -> Checking ()
 declareSrc src my ty = req (Declare (ExEnd (end src)) my ty)
