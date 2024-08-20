@@ -19,6 +19,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
+import qualified Data.Set as S
 import Data.Type.Equality ((:~:)(..))
 import Prelude hiding (filter)
 
@@ -491,12 +492,9 @@ check' (Simple tm) ((), ((hungry, ty):unders)) = do
                                      R0 (RPr ("value", vty) R0)
       wire (dangling, vty, hungry)
       pure (((), ()), ((), unders))
-check' Hope ((), ((tgt, ty):_unders)) = case (?my, ty) of
-  (Braty, Left k) -> do
-    (_, [], [(src,_)], _) <- anext "hope" Hypo (S0, Some (Zy :* S0)) R0 (REx ("hope", k) R0)
-    wire (src, kindType k, tgt)
-    -- TODO: write the end down somewhere
-    defineTgt tgt (VApp (VHop (end src)) B0)
+check' Hope ((), ((tgt, ty):unders)) = case (?my, ty) of
+  (Braty, Left _k) -> do
+    req (ANewHope (toEnd tgt))
     pure (((), ()), ((), unders))
   (Braty, Right _ty) -> typeErr "Can only infer kinded things with !"
   (Kerny, _) -> typeErr "Won't infer kernel typed !"
@@ -965,5 +963,6 @@ run ve initStore ns m =
                 , kconstructors = kernelConstructors
                 , typeConstructors = defaultTypeConstructors
                 , aliasTable = M.empty
+                , hopeSet = S.empty
                 } in
     (\(a,ctx,(holes, graph),ns) -> (a, (holes, store ctx, graph, ns))) <$> handler m ctx mempty ns

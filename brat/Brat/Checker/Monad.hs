@@ -57,6 +57,7 @@ data Context = Ctx { globalVEnv :: VEnv
                    , kconstructors :: ConstructorMap Kernel
                    , typeConstructors :: M.Map (Mode, UserName) [(PortName, TypeKind)]
                    , aliasTable :: M.Map UserName Alias
+                   , hopeSet :: S.Set End
                    }
 
 -- Commands for synchronous operations
@@ -91,6 +92,8 @@ data CheckingSig ty where
   KDone   :: CheckingSig ()
   AskVEnv :: CheckingSig CtxEnv
   Declare :: End -> Modey m -> BinderType m -> CheckingSig ()
+  ANewHope :: End -> CheckingSig ()
+  HopeSet :: CheckingSig (S.Set End)
 
 localAlias :: (UserName, Alias) -> Checking v -> Checking v
 localAlias _ (Ret v) = Ret v
@@ -285,6 +288,10 @@ handler (Req s k) ctx g ns
         args <- maybeToRight (Err (Just fc) $ TyConNotFound (show tycon) (show vcon)) $
                 M.lookup tycon tbl
         handler (k args) ctx g ns
+
+      ANewHope e -> handler (k ()) (ctx { hopeSet = S.insert e (hopeSet ctx) }) g ns
+
+      HopeSet -> handler (k (hopeSet ctx)) ctx g ns
 handler (Define end v k) ctx g ns = let st@Store{typeMap=tm, valueMap=vm} = store ctx in
   case track ("Define " ++ show end ++ " = " ++ show v) $ M.lookup end vm of
       Just _ -> Left $ dumbErr (InternalError $ "Redefining " ++ show end)
@@ -293,8 +300,8 @@ handler (Define end v k) ctx g ns = let st@Store{typeMap=tm, valueMap=vm} = stor
         -- TODO can we check the value is of the kind declared?
         Just _ -> let news = News (M.singleton end (howStuck v)) in
           handler (k news)
-            (ctx { store =
-                st { valueMap = M.insert end v vm }
+            (ctx { store = st { valueMap = M.insert end v vm },
+                hopeSet = S.delete end (hopeSet ctx)
             }) g ns
 handler (Yield Unstuck k) ctx g ns = handler (k mempty) ctx g ns
 handler (Yield (AwaitingAny ends) _k) _ _ _ = Left $ dumbErr $ TypeErr $ unlines $ ("Typechecking blocked on:":(show <$> S.toList ends)) ++ ["", "Try writing more types! :-)"]
