@@ -86,6 +86,7 @@ tok = (   try (char '(' $> LParen)
       <|> try (string "-" $> Minus)
       <|> try (string "$" $> Dollar)
       <|> try (string "|" $> Pipe)
+      <|> try (string "!" $> Bang)
       <|> try (K <$> try keyword)
       <|> try qualified
       <|> Ident <$> ident
