@@ -123,11 +123,12 @@ typeEqRigid tm (_ :* _ :* semz) Nat exp act = do
   if getNum exp == getNum act
   then pure ()
   else err $ TypeMismatch tm (show exp) (show act)
-typeEqRigid tm stuff@(_ :* kz :* _) (TypeFor m []) (VApp f args) (VApp f' args') | f == f' =
-  svKind f >>= \case
-    TypeFor m' ks | m == m' -> typeEqs tm stuff (snd <$> ks) (args <>> []) (args' <>> [])
-      -- pattern should always match
-    _ -> err $ InternalError "quote gave a surprising result"
+typeEqRigid tm stuff@(_ :* kz :* _) (TypeFor m []) (VApp f args) (VApp f' args')
+  -- instance Eq for VVar errors if we compare VInx's but "show" here identifies matching DeBruijn indices:
+  | show f == show f' = svKind f >>= \case
+      TypeFor m' ks | m == m' -> typeEqs tm stuff (snd <$> ks) (args <>> []) (args' <>> [])
+        -- pattern should always match
+      _ -> err $ InternalError "quote gave a surprising result"
  where
   svKind (VPar e) = kindOf (VPar e)
   svKind (VInx n) = pure $ proj kz n
