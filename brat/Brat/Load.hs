@@ -40,6 +40,8 @@ import System.FilePath
 import Prelude hiding (last)
 import Data.Functor (($>))
 
+import Debug.Trace
+
 -- A Module is a node in the dependency graph
 type FlatMod = ((FEnv, String) -- data at the node: declarations, and file contents
                ,Import -- name of this node
@@ -67,7 +69,8 @@ checkDecl pre (VDecl FuncDecl{..}) to_define = (fnName -!) $ localFC fnLoc $ do
     -- We must have a row of nouns as the definition
     Nothing -> case fnBody of
       NoLhs body -> do
-        (((), ()), ((), []), p) <- let ?my = Braty in check body ((), to_define)
+        (((), ()), ((), []), (d,p)) <- let ?my = Braty in check body ((), to_define)
+        traceM $ "checkDecl executing " ++ show d
         p
       Undefined -> error "No body in `checkDecl`"
       ThunkOf _ -> case fnSig of
