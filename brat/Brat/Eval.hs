@@ -311,11 +311,11 @@ typeEqRigid tm lvkz (TypeFor m []) (VCon c args) (VCon c' args') | c == c' =
 typeEqRigid tm lvkz (Star []) (VFun m0 (ins0 :->> outs0)) (VFun m1 (ins1 :->> outs1)) | Just Refl <- testEquality m0 m1 = do
   probs :: [Checking ()] <- throwLeft $ typeEqRow m0 tm lvkz ins0 ins1 >>= \case -- this is in Either ErrorMsg
         (Some (lvkz :* (Refl :* Refl)), ps1) -> typeEqRow m0 tm lvkz outs0 outs1 <&> (ps1++) . snd
-  sequence_ probs
+  traverse_ id probs -- uses Applicative (unlike sequence_ which uses Monad), hence parallelized
 typeEqRigid tm lvkz (TypeFor _ []) (VSum m0 rs0) (VSum m1 rs1)
   | Just Refl <- testEquality m0 m1 = case zip_same_length rs0 rs1 of
       Nothing -> typeErr "Mismatched sum lengths"
-      Just rs -> traverse eqVariant rs >>= (sequence_ . concat)
+      Just rs -> traverse eqVariant rs >>= (traverse_ id . concat)
  where
   eqVariant (Some r0, Some r1) = throwLeft $ (snd <$> typeEqRow m0 tm lvkz r0 r1)
 typeEqRigid tm _ _ v0 v1 = err $ TypeMismatch tm (show v0) (show v1)
