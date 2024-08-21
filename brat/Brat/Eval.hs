@@ -267,19 +267,19 @@ kindForMode :: Modey m -> TypeKind
 kindForMode Braty = Star []
 kindForMode Kerny = Dollar []
 
-typeEqRow :: forall m lv top0 top1. Modey m
+typeEqRow :: Modey m
           -> String -- The term we complain about in errors
           -> (Ny :* Stack Z TypeKind :* Stack Z Sem) lv -- Next available level, the kinds of existing levels
           -> Ro m lv top0
           -> Ro m lv top1
-          -> Checking (Some ((Ny :* Stack Z TypeKind :* Stack Z Sem) -- The new stack of kinds and fresh level
-                            :*
-                            (((:~:) top0) :* ((:~:) top1))) -- Proofs both input rows have same length (quantified over by Some)
-                      )
-typeEqRow _ _ stuff R0 R0 = pure (Some (stuff :* (Refl :* Refl)))
-typeEqRow m tm stuff (RPr (_,ty1) ro1) (RPr (_,ty2) ro2) = typeEq tm stuff (kindForMode m) ty1 ty2 *> typeEqRow m tm stuff ro1 ro2
+          -> Either ErrorMsg (Some ((Ny :* Stack Z TypeKind :* Stack Z Sem) -- The new stack of kinds and fresh level
+                                   :* (((:~:) top0) :* ((:~:) top1))) -- Proofs both input rows have same length (quantified over by Some)
+                             ,[Checking ()] -- subproblems to run in parallel
+                             )
+typeEqRow _ _ stuff R0 R0 = pure (Some (stuff :* (Refl :* Refl)), [])
+typeEqRow m tm stuff (RPr (_,ty1) ro1) (RPr (_,ty2) ro2) = typeEqRow m tm stuff ro1 ro2 <&> \(res, probs) -> (res, (typeEq tm stuff (kindForMode m) ty1 ty2):probs)
 typeEqRow m tm (ny :* kz :* semz) (REx (_,k1) ro1) (REx (_,k2) ro2) | k1 == k2 = typeEqRow m tm (Sy ny :* (kz :<< k1) :* (semz :<< semLvl ny)) ro1 ro2
-typeEqRow _ _ _ _ _ = typeErr "Mismatched rows"
+typeEqRow _ _ _ _ _ = Left $ TypeErr "Mismatched rows"
 
 -- Calls to typeEqRigid *must* start with rigid types to ensure termination
 typeEqRigid :: String -- String representation of the term for error reporting
@@ -308,15 +308,16 @@ typeEqRigid tm lvkz (TypeFor m []) (VCon c args) (VCon c' args') | c == c' =
         Just ks -> typeEqs tm lvkz (snd <$> ks) args args'
         Nothing -> err $ TypeErr $ "Type constructor " ++ show c
                         ++ " undefined " ++ " at kind " ++ show (TypeFor m [])
-typeEqRigid tm lvkz (Star []) (VFun m0 (ins0 :->> outs0)) (VFun m1 (ins1 :->> outs1)) | Just Refl <- testEquality m0 m1 =
-  typeEqRow m0 tm lvkz ins0 ins1 >>= \case
-    Some (lvkz :* (Refl :* Refl)) -> () <$ typeEqRow m0 tm lvkz outs0 outs1
+typeEqRigid tm lvkz (Star []) (VFun m0 (ins0 :->> outs0)) (VFun m1 (ins1 :->> outs1)) | Just Refl <- testEquality m0 m1 = do
+  probs :: [Checking ()] <- throwLeft $ typeEqRow m0 tm lvkz ins0 ins1 >>= \case -- this is in Either ErrorMsg
+        (Some (lvkz :* (Refl :* Refl)), ps1) -> typeEqRow m0 tm lvkz outs0 outs1 <&> (ps1++) . snd
+  sequence_ probs
 typeEqRigid tm lvkz (TypeFor _ []) (VSum m0 rs0) (VSum m1 rs1)
   | Just Refl <- testEquality m0 m1 = case zip_same_length rs0 rs1 of
       Nothing -> typeErr "Mismatched sum lengths"
-      Just rs -> () <$ traverse eqVariant rs
+      Just rs -> traverse eqVariant rs >>= (sequence_ . concat)
  where
-  eqVariant (Some r0, Some r1) = () <$ typeEqRow m0 tm lvkz r0 r1
+  eqVariant (Some r0, Some r1) = throwLeft $ (snd <$> typeEqRow m0 tm lvkz r0 r1)
 typeEqRigid tm _ _ v0 v1 = err $ TypeMismatch tm (show v0) (show v1)
 
 
