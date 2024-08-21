@@ -187,21 +187,6 @@ check :: (CheckConstraints m k
                   ,Checking ())
 check (WC fc tm) conn = trace ("Beginning check of " ++ show tm) $ localFC fc (check' tm conn)
 
-{-checkNow :: (CheckConstraints m k
-         ,EvMode m
-         ,TensorOutputs (Outputs m d)
-         ,?my :: Modey m
-         , DIRY d)
-      => WC (Term d k)
-      -> ChkConnectors m d k
-      -> Checking (SynConnectors m d k
-                  ,ChkConnectors m d k
-                  )
-checkNow tm conn = do
-  (syncs, chkcs, subps) <- check tm conn
-  traverse_ id subps
-  pure (syncs, chkcs)-}
-
 check' :: forall m d k
         . (CheckConstraints m k
           ,EvMode m
