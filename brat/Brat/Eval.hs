@@ -209,6 +209,10 @@ typeEq str stuff@(_ny :* _ks :* sems) k exp act = do
   act <- sem sems act
   typeEqEta str stuff hopes k exp act
 
+isNumVar :: Sem -> Maybe SVar
+isNumVar (SNum (NumValue 0 (StrictMonoFun (StrictMono 0 (Linear v))))) = Just v
+isNumVar _ = Nothing
+
 -- Presumes that the hope set and the two `Sem`s are up to date.
 typeEqEta :: String -- String representation of the term for error reporting
           -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n
@@ -227,10 +231,13 @@ typeEqEta tm (lvy :* kz :* sems) hopeSet (TypeFor m ((_, k):ks)) exp act = do
 -- Not higher kinded - check for flex terms
 -- (We don't solve under binders for now, so we only consider Zy here)
 -- "easy" flex cases
-typeEqEta _tm (Zy :* _ks :* _sems) hopeSet _ (SApp (SPar e) B0) act
-  | S.member e hopeSet = solveHope e act
-typeEqEta _tm (Zy :* _ks :* _sems) hopeSet _ exp (SApp (SPar e) B0)
-  | S.member e hopeSet = solveHope e exp
+typeEqEta _tm (Zy :* _ks :* _sems) hopeSet k (SApp (SPar e) B0) act
+  | S.member e hopeSet = solveHope k e act
+typeEqEta _tm (Zy :* _ks :* _sems) hopeSet k exp (SApp (SPar e) B0)
+  | S.member e hopeSet = solveHope k e exp
+typeEqEta _ (Zy :* _ :* _) hopeSet Nat exp act
+  | Just (SPar e) <- isNumVar exp, S.member e hopeSet = solveHope Nat e act
+  | Just (SPar e) <- isNumVar act, S.member e hopeSet = solveHope Nat e exp
 typeEqEta tm stuff@(ny :* _ks :* _sems) hopeSet k exp act = do
   exp <- quote ny exp
   act <- quote ny act
@@ -241,8 +248,8 @@ typeEqEta tm stuff@(ny :* _ks :* _sems) hopeSet k exp act = do
 
 -- This will update the hopeSet, potentially invalidating things that have been eval'd
 -- The Sem is closed, for now.
-solveHope :: End -> Sem -> Checking ()
-solveHope e v = quote Zy v >>= \v -> case doesntOccur e v of
+solveHope :: TypeKind -> End -> Sem -> Checking ()
+solveHope _k e v = quote Zy v >>= \v -> case doesntOccur e v of
   Right () -> Define e v (const (pure ()))
   Left msg -> case v of
     VApp (VPar e') B0 | e == e' -> pure ()
@@ -266,7 +273,7 @@ typeEqRow :: forall m lv top0 top1. Modey m
           -> Ro m lv top0
           -> Ro m lv top1
           -> Checking (Some ((Ny :* Stack Z TypeKind :* Stack Z Sem) -- The new stack of kinds and fresh level
-                            :* 
+                            :*
                             (((:~:) top0) :* ((:~:) top1))) -- Proofs both input rows have same length (quantified over by Some)
                       )
 typeEqRow _ _ stuff R0 R0 = pure (Some (stuff :* (Refl :* Refl)))
