@@ -18,8 +18,6 @@ import Data.Functor
 import qualified Data.Set as S
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 
-import Brat.Naming
-
 -- Demand that two things are equal, we're allowed to solve variables in the
 -- hope set to make this true.
 -- Raises a user error if the vals cannot be made equal.
@@ -151,7 +149,7 @@ typeEqRigid tm lvkz (TypeFor _ []) (VSum m0 rs0) (VSum m1 rs1)
 typeEqRigid tm _ _ v0 v1 = err $ TypeMismatch tm (show v0) (show v1)
 
 buildNatVal :: NumVal (VVar Z) -> Checking Src
-buildNatVal _nv@(NumValue n gro) = case n of
+buildNatVal nv@(NumValue n gro) = case n of
   0 -> buildGro gro
   n -> do
     nDangling <- buildNum n
@@ -201,4 +199,4 @@ buildNatVal _nv@(NumValue n gro) = case n of
     wire (outPlus1, TNat, lhs)
     wire (one, TNat, rhs)
     pure out
-  buildMono _ = pure (NamedPort (Ex (MkName [("",-1)]) 0) "")--err . InternalError $ "Trying to build a non-closed nat value: " ++ show nv
+  buildMono _ = err . InternalError $ "Trying to build a non-closed nat value: " ++ show nv
