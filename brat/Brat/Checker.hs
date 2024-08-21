@@ -48,6 +48,7 @@ import Brat.UserName
 import Bwd
 import Hasochism
 import Util (zip_same_length)
+import Debug.Trace
 
 -- Put things into a standard form in a kind-directed manner, such that it is
 -- meaningful to do case analysis on them
@@ -183,7 +184,7 @@ check :: (CheckConstraints m k
       -> Checking (SynConnectors m d k
                   ,ChkConnectors m d k
                   ,Checking ())
-check (WC fc tm) conn = localFC fc (check' tm conn)
+check (WC fc tm) conn = trace ("Beginning check of " ++ show tm) $ localFC fc (check' tm conn)
 
 check' :: forall m d k
         . (CheckConstraints m k
@@ -461,7 +462,8 @@ check' (VHole (mnemonic, name)) connectors = do
 -- TODO: Better error message
 check' tm@(Con _ _) ((), []) = typeErr $ "No type to check " ++ show tm ++ " against"
 check' tm@(Con vcon vargs) ((), ((hungry, ty):unders)) =
-  pure (((), ()), ((), unders), subp)
+  trace ("check' Con vcon=" ++ show vcon ++ "  vargs=" ++ show vargs) $
+    pure (((), ()), ((), unders), subp)
  where
   subp = case (?my, ty) of
     (Braty, Left k) -> do
