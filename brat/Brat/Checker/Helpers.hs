@@ -410,3 +410,13 @@ runArith (NumValue upl grol) Pow (NumValue upr gror)
  -- 2^(2^k * upr) + 2^(2^k * upr) * (full(2^(k + k') * mono))
  = pure $ NumValue (upl ^ upr) (StrictMonoFun (StrictMono (l * upr) (Full (StrictMono (k + k') mono))))
 runArith _ _ _ = Nothing
+
+buildArithOp :: ArithOp -> Checking ((Tgt, Tgt), Src)
+buildArithOp op = do
+  (_, [(lhs,_), (rhs,_)], [(out,_)], _) <- next "" (ArithNode op) (S0, Some (Zy :* S0)) (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0)) (RPr ("value", TNat) R0)
+  pure ((lhs, rhs), out)
+
+buildConst :: SimpleTerm -> Val Z -> Checking Src
+buildConst tm ty = do
+  (_, _, [(out,_)], _) <- next "" (Const tm) (S0, Some (Zy :* S0)) R0 (RPr ("value", ty) R0)
+  pure out

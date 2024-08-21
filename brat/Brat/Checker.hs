@@ -27,6 +27,7 @@ import Prelude hiding (filter)
 import Brat.Checker.Helpers
 import Brat.Checker.Monad
 import Brat.Checker.Quantity
+import Brat.Checker.SolveHoles (typeEq)
 import Brat.Checker.SolvePatterns (argProblems, argProblemsWithLeftovers, solve)
 import Brat.Checker.Types
 import Brat.Constructors

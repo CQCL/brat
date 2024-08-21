@@ -57,6 +57,7 @@ data Context = Ctx { globalVEnv :: VEnv
                    , kconstructors :: ConstructorMap Kernel
                    , typeConstructors :: M.Map (Mode, UserName) [(PortName, TypeKind)]
                    , aliasTable :: M.Map UserName Alias
+                   -- All the ends here should be targets
                    , hopeSet :: S.Set End
                    }
 
