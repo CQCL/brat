@@ -479,15 +479,15 @@ check' (VHole (mnemonic, name)) connectors = do
 check' tm@(Con _ _) ((), []) = typeErr $ "No type to check " ++ show tm ++ " against"
 check' tm@(Con vcon vargs) ((), ((hungry, ty):unders)) =
   trace ("check' Con vcon=" ++ show vcon ++ "  vargs=" ++ show vargs) $
-    pure (((), ()), ((), unders), subp)
+    (((), ()), ((), unders), ) <$> subp
  where
   subp = case (?my, ty) of
-    (Braty, Left k) -> do
+    (Braty, Left k) -> pure $ do
       (_, leftOvers) <- kindCheck [(hungry, k)] (Con vcon vargs)
       ensureEmpty "kindCheck leftovers" leftOvers
     (Braty, Right ty) -> aux Braty clup ty
     (Kerny, _) -> aux Kerny kclup ty
-  aux :: Modey m -> (UserName -> UserName -> Checking (CtorArgs m)) -> Val Z -> Checking ()
+  aux :: Modey m -> (UserName -> UserName -> Checking (CtorArgs m)) -> Val Z -> Checking (Checking ())
   aux my lup ty = do
     VCon tycon tyargs <- eval S0 ty
     (CArgs pats nFree _ argTypeRo) <- lup vcon tycon
@@ -506,8 +506,8 @@ check' tm@(Con vcon vargs) ((), ((hungry, ty):unders)) =
                                           argTypeRo (RPr ("value", ty') R0)
     (((), ()), ((), leftUnders), p) <- wrapError wrap $ check vargs ((), argUnders)
     ensureEmpty "con unders" leftUnders
-    p
     wire (dangling, ty, hungry)
+    pure p
 
 check' (C cty) ((), ((hungry, ty):unders)) = case (?my, ty) of
   (Braty, Left k) -> pure (((), ()), ((), unders),
