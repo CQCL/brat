@@ -125,11 +125,6 @@ ensureEmpty :: Show ty => String -> [(NamedPort e, ty)] -> Checking ()
 ensureEmpty _ [] = pure ()
 ensureEmpty str xs = err $ InternalError $ "Expected empty " ++ str ++ ", got:\n  " ++ showSig (rowToSig xs)
 
-noUnders m = do
-  ((outs, ()), (overs, unders)) <- m
-  ensureEmpty "unders" unders
-  pure (outs, overs)
-
 rowToSig :: Traversable t => t (NamedPort e, ty) -> t (PortName, ty)
 rowToSig = fmap $ \(p,ty) -> (portName p, ty)
 
@@ -175,13 +170,13 @@ anext str th vals0 ins outs = do
 
   () <- req (AddNode node (mkNode (modey @m) th inputs outputs))
   pure (node, unders, overs, vals2)
- where
-  mkNode :: forall m. Modey m -> NodeType m
-         -> [(PortName, Val Z)]
-         -> [(PortName, Val Z)]
-         -> Node
-  mkNode Braty = BratNode
-  mkNode Kerny = KernelNode
+
+mkNode :: forall m. Modey m -> NodeType m
+        -> [(PortName, Val Z)]
+        -> [(PortName, Val Z)]
+        -> Node
+mkNode Braty = BratNode
+mkNode Kerny = KernelNode
 
 type Endz = Ny :* Stack Z End
 
