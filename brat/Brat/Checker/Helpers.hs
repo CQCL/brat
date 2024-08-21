@@ -265,7 +265,11 @@ getThunks Braty row@((src, Right ty):rest) = eval S0 ty >>= \case
     (nodes, unders', overs') <- getThunks Braty rest
     pure (node:nodes, unders <> unders', overs <> overs')
   (VFun _ _) -> err $ ExpectedThunk (showMode Braty) (showRow row)
-  v -> typeErr $ "Force called on non-thunk: " ++ show v
+  v -> do
+    h <- req AskHopeSet
+    case v of
+      VApp (VPar e) _ | M.member e h -> Yield (AwaitingAny $ S.singleton e) (\_ -> getThunks Braty row)
+      _ -> typeErr $ "Force called on non-thunk: " ++ show v
 getThunks Kerny row@((src, Right ty):rest) = eval S0 ty >>= \case
   (VFun Kerny (ss :->> ts)) -> do
     (node, unders, overs, _) <- let ?my = Kerny in anext "" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
