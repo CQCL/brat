@@ -103,6 +103,7 @@ solve my ((src, PCon c abs):p) = do
         (tests, sol) <- solve my p
         pure ((src, PrimLitTest (Num 0)):tests, sol)
       _ -> case M.lookup c natConstructors of
+        -- This `relationToInner` is very sus - it doesn't do any wiring!
         Just (Just _, relationToInner) -> do
           (node, [], kids@[(dangling, _)], _) <- next "unpacked_nat" Hypo (S0, Some (Zy :* S0))
             R0 -- we don't need to wire the src in; we just need the inner stuff
@@ -140,13 +141,17 @@ solveConstructor :: EvMode m
                              )
 solveConstructor my src (c, abs) ty p = do
   (CArgs pats _ patRo argRo, (tycon, tyargs)) <- lookupConstructor my c ty
-  (_, _, _, stuff) <- next "type_args" Hypo (S0, Some (Zy :* S0)) patRo R0
+  -- Create a row of hypothetical kinds which contextualise the arguments to the
+  -- constructor.
+  (_, _, _, stuff) <- next "type_args" Hypo (S0, Some (Zy :* S0)) R0 patRo
   (node, _, patArgWires, _) <- let ?my = my in anext "val_args" Hypo stuff R0 argRo
   trackM ("Constructor " ++ show c ++ "; type " ++ show ty)
   case (snd stuff) of
     Some (_ :* patEnds) -> do
       trackM (show pats)
       trackM (show patEnds)
+      -- Match the patterns for `c` against the ends of the Hypo node, to
+      -- produce the terms that we're interested in
       let (lhss, leftovers) = patVals pats (stkList patEnds)
       unless (null leftovers) $ error "There's a bug in the constructor table"
       tyArgKinds <- tlup (Brat, tycon)
@@ -193,6 +198,7 @@ instantiateMeta e val = do
   Define e val (const (Ret ()))
 
 
+-- Need to keep track of which way we're solving - which side is known/unknown
 unifyNum :: NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
 unifyNum (NumValue lup lgro) (NumValue rup rgro)
   | lup <= rup = lhsFun00 lgro (NumValue (rup - lup) rgro)
