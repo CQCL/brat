@@ -1,0 +1,5 @@
+Error in test/golden/error/remaining-nat-hopes.brat:
+  Expected to work out values for these holes:
+    In checking_check_defs_1_bad_2__2 0
+
+

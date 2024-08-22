@@ -80,6 +80,7 @@ data ErrorMsg
  | WrongModeForType String
  -- TODO: Add file context here
  | CompilingHoles [String]
+ | RemainingNatHopes [String]
 
 instance Show ErrorMsg where
   show (TypeErr x) = "Type error: " ++ x
@@ -161,9 +162,10 @@ instance Show ErrorMsg where
   -- TODO: Make all of these use existing errors
   show (UnificationError str) = "Unification error: " ++ str
   show UnreachableBranch = "Branch cannot be reached"
-  show (CompilingHoles hs) = unlines ("Can't compile file with remaining holes": indent hs)
-   where
-    indent = fmap ("  " ++)
+  show (CompilingHoles hs) = unlines ("Can't compile file with remaining holes":indent hs)
+  show (RemainingNatHopes hs) = unlines ("Expected to work out values for these holes:":indent (indent hs))
+
+indent = fmap ("  " ++)
 
 data Error = Err { fc  :: Maybe FC
                  , msg :: ErrorMsg
