@@ -1,10 +1,11 @@
-module Brat.Checker.SolveHoles (typeEq) where
+module Brat.Checker.SolveHoles (typeEq, buildNatVal, buildNum, invertNatVal) where
 
 import Brat.Checker.Monad
 import Brat.Checker.Types (kindForMode)
-import Brat.Checker.Helpers (buildArithOp, buildConst)
+import Brat.Checker.Helpers (buildArithOp, buildConst, next)
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval
+import Brat.Graph (NodeType(..))
 import Brat.Syntax.Common
 import Brat.Syntax.Simple (SimpleTerm(..))
 import Brat.Syntax.Value
@@ -149,6 +150,13 @@ typeEqRigid tm lvkz (TypeFor _ []) (VSum m0 rs0) (VSum m1 rs1)
   eqVariant (Some r0, Some r1) = throwLeft $ (snd <$> typeEqRow m0 tm lvkz r0 r1)
 typeEqRigid tm _ _ v0 v1 = err $ TypeMismatch tm (show v0) (show v1)
 
+wire :: (Src, Val Z, Tgt) -> Checking ()
+wire (src, ty, tgt) = req $ Wire (end src, ty, end tgt)
+
+buildNum :: Integer -> Checking Src
+buildNum n = buildConst (Num (fromIntegral n)) TNat
+
+
 buildNatVal :: NumVal (VVar Z) -> Checking Src
 buildNatVal nv@(NumValue n gro) = case n of
   0 -> buildGro gro
@@ -160,12 +168,6 @@ buildNatVal nv@(NumValue n gro) = case n of
     wire (src, TNat, rhs)
     pure out
  where
-  wire :: (Src, Val Z, Tgt) -> Checking ()
-  wire (src, ty, tgt) = req $ Wire (end src, ty, end tgt)
-
-  buildNum :: Integer -> Checking Src
-  buildNum n = buildConst (Num (fromIntegral n)) TNat
-
   buildGro :: Fun00 (VVar Z) -> Checking Src
   buildGro Constant0 = buildNum 0
   buildGro (StrictMonoFun sm) = buildSM sm
@@ -201,3 +203,31 @@ buildNatVal nv@(NumValue n gro) = case n of
     wire (one, TNat, rhs)
     pure out
   buildMono _ = err . InternalError $ "Trying to build a non-closed nat value: " ++ show nv
+
+invertNatVal :: Src -> NumVal a -> Checking Src
+invertNatVal src (NumValue up gro) = case up of
+  0 -> invertGro src gro
+  _ -> do
+    ((lhs,rhs),out) <- buildArithOp Sub
+    upSrc <- buildNum up
+    wire (src, TNat, lhs)
+    wire (upSrc, TNat, rhs)
+    invertGro out gro
+ where
+  invertGro _ Constant0 = error "Invariant violated: the numval arg to invertNatVal should contain a variable"
+  invertGro src (StrictMonoFun sm) = invertSM src sm
+
+  invertSM src (StrictMono k mono) = case k of
+    0 -> invertMono src mono
+    _ -> do
+      divisor <- buildNum (2 ^ k)
+      ((lhs,rhs),out) <- buildArithOp Div
+      wire (src, TNat, lhs)
+      wire (divisor, TNat, rhs)
+      invertMono out mono
+
+  invertMono src (Linear _) = pure src
+  invertMono src (Full sm) = do
+    (_, [(llufTgt,_)], [(llufSrc,_)], _) <- next "luff" (Prim ("BRAT","lluf")) (S0, Some (Zy :* S0)) (REx ("n", Nat) R0) (REx ("n", Nat) R0)
+    wire (src, TNat, llufTgt)
+    invertSM llufSrc sm
