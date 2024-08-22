@@ -20,7 +20,6 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
-import qualified Data.Set as S
 import Data.Type.Equality ((:~:)(..))
 import Prelude hiding (filter)
 
@@ -496,7 +495,8 @@ check' (Simple tm) ((), ((hungry, ty):unders)) = do
       pure (((), ()), ((), unders))
 check' Hope ((), ((tgt, ty):unders)) = case (?my, ty) of
   (Braty, Left _k) -> do
-    req (ANewHope (toEnd tgt))
+    fc <- req AskFC
+    req (ANewHope (toEnd tgt, fc))
     pure (((), ()), ((), unders))
   (Braty, Right _ty) -> typeErr "Can only infer kinded things with !"
   (Kerny, _) -> typeErr "Won't infer kernel typed !"
@@ -965,16 +965,18 @@ run ve initStore ns m = do
                 , kconstructors = kernelConstructors
                 , typeConstructors = defaultTypeConstructors
                 , aliasTable = M.empty
-                , hopeSet = S.empty
+                , hopeSet = M.empty
                 }
   (a,ctx,(holes, graph),ns) <- handler m ctx mempty ns
   let tyMap = typeMap $ store ctx
   -- If the hopeSet has any remaining holes with kind Nat, we need to abort.
   -- Even though we didn't need them for typechecking problems, our runtime
   -- behaviour depends on the values of the holes, which we can't account for.
-  case S.toList $ S.filter (isNatKinded tyMap) (hopeSet ctx) of
+  case M.toList $ M.filterWithKey (\e _ -> isNatKinded tyMap e) (hopeSet ctx) of
     [] -> pure (a, (holes, store ctx, graph, ns))
-    hs -> Left $ Err Nothing (RemainingNatHopes (show <$> hs))
+    -- Just use the FC of the first hole while we don't have the capacity to
+    -- show multiple error locations
+    hs@((_,fc):_) -> Left $ Err (Just fc) (RemainingNatHopes (show . fst <$> hs))
  where
   isNatKinded tyMap e = case tyMap M.! e of
     EndType Braty (Left Nat) -> True

@@ -51,6 +51,8 @@ data CtxEnv = CtxEnv
   , locals :: VEnv
   }
 
+type HopeSet = M.Map End FC
+
 data Context = Ctx { globalVEnv :: VEnv
                    , store :: Store
                    , constructors :: ConstructorMap Brat
@@ -58,7 +60,7 @@ data Context = Ctx { globalVEnv :: VEnv
                    , typeConstructors :: M.Map (Mode, UserName) [(PortName, TypeKind)]
                    , aliasTable :: M.Map UserName Alias
                    -- All the ends here should be targets
-                   , hopeSet :: S.Set End
+                   , hopeSet :: HopeSet
                    }
 
 -- Commands for synchronous operations
@@ -93,8 +95,8 @@ data CheckingSig ty where
   KDone   :: CheckingSig ()
   AskVEnv :: CheckingSig CtxEnv
   Declare :: End -> Modey m -> BinderType m -> CheckingSig ()
-  ANewHope :: End -> CheckingSig ()
-  HopeSet :: CheckingSig (S.Set End)
+  ANewHope :: (End, FC) -> CheckingSig ()
+  AskHopeSet :: CheckingSig HopeSet
 
 localAlias :: (UserName, Alias) -> Checking v -> Checking v
 localAlias _ (Ret v) = Ret v
@@ -290,9 +292,9 @@ handler (Req s k) ctx g ns
                 M.lookup tycon tbl
         handler (k args) ctx g ns
 
-      ANewHope e -> handler (k ()) (ctx { hopeSet = S.insert e (hopeSet ctx) }) g ns
+      ANewHope (e, fc) -> handler (k ()) (ctx { hopeSet = M.insert e fc (hopeSet ctx) }) g ns
 
-      HopeSet -> handler (k (hopeSet ctx)) ctx g ns
+      AskHopeSet -> handler (k (hopeSet ctx)) ctx g ns
 handler (Define end v k) ctx g ns = let st@Store{typeMap=tm, valueMap=vm} = store ctx in
   case track ("Define " ++ show end ++ " = " ++ show v) $ M.lookup end vm of
       Just _ -> Left $ dumbErr (InternalError $ "Redefining " ++ show end)
@@ -302,7 +304,7 @@ handler (Define end v k) ctx g ns = let st@Store{typeMap=tm, valueMap=vm} = stor
         Just _ -> let news = News (M.singleton end (howStuck v)) in
           handler (k news)
             (ctx { store = st { valueMap = M.insert end v vm },
-                hopeSet = S.delete end (hopeSet ctx)
+                hopeSet = M.delete end (hopeSet ctx)
             }) g ns
 handler (Yield Unstuck k) ctx g ns = handler (k mempty) ctx g ns
 handler (Yield (AwaitingAny ends) _k) _ _ _ = Left $ dumbErr $ TypeErr $ unlines $ ("Typechecking blocked on:":(show <$> S.toList ends)) ++ ["", "Try writing more types! :-)"]

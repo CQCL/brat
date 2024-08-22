@@ -15,6 +15,7 @@ import Util (zip_same_length)
 
 import Data.Foldable (traverse_)
 import Data.Functor
+import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 
@@ -28,7 +29,7 @@ typeEq :: String -- String representation of the term for error reporting
        -> Val n -- Actual
        -> Checking ()
 typeEq str stuff@(_ny :* _ks :* sems) k exp act = do
-  hopes <- req HopeSet
+  hopes <- req AskHopeSet
   exp <- sem sems exp
   act <- sem sems act
   typeEqEta str stuff hopes k exp act
@@ -40,7 +41,7 @@ isNumVar _ = Nothing
 -- Presumes that the hope set and the two `Sem`s are up to date.
 typeEqEta :: String -- String representation of the term for error reporting
           -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n
-          -> S.Set End -- The hope set
+          -> HopeSet -- The hope set
           -> TypeKind -- The kind we're comparing at
           -> Sem -- Expected
           -> Sem -- Actual
@@ -56,16 +57,16 @@ typeEqEta tm (lvy :* kz :* sems) hopeSet (TypeFor m ((_, k):ks)) exp act = do
 -- (We don't solve under binders for now, so we only consider Zy here)
 -- "easy" flex cases
 typeEqEta _tm (Zy :* _ks :* _sems) hopeSet k (SApp (SPar e) B0) act
-  | S.member e hopeSet = solveHope k e act
+  | M.member e hopeSet = solveHope k e act
 typeEqEta _tm (Zy :* _ks :* _sems) hopeSet k exp (SApp (SPar e) B0)
-  | S.member e hopeSet = solveHope k e exp
+  | M.member e hopeSet = solveHope k e exp
 typeEqEta _ (Zy :* _ :* _) hopeSet Nat exp act
-  | Just (SPar e) <- isNumVar exp, S.member e hopeSet = solveHope Nat e act
-  | Just (SPar e) <- isNumVar act, S.member e hopeSet = solveHope Nat e exp
+  | Just (SPar e) <- isNumVar exp, M.member e hopeSet = solveHope Nat e act
+  | Just (SPar e) <- isNumVar act, M.member e hopeSet = solveHope Nat e exp
 typeEqEta tm stuff@(ny :* _ks :* _sems) hopeSet k exp act = do
   exp <- quote ny exp
   act <- quote ny act
-  case [e | (VApp (VPar e) _) <- [exp,act], S.member e hopeSet] of
+  case [e | (VApp (VPar e) _) <- [exp,act], M.member e hopeSet] of
     [] -> typeEqRigid tm stuff k exp act
     es -> do
       Yield (AwaitingAny $ S.fromList es) (\_ -> typeEq tm stuff k exp act)
