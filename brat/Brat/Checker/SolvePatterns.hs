@@ -326,14 +326,16 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
         instantiateMeta (ExEnd out) (VNum (nPlus 1 (n2PowTimes 1 (nVar (VPar (toEnd halfSrc))))))
         pure (nVar (VPar (toEnd halfSrc)))
       Linear (VPar (InEnd tgt)) -> do
-        oneSrc <- buildNum 1
-        ((flooredHalfTgt, oneTgt), addOut) <- buildArithOp Add
-        wire (oneSrc, TNat, oneTgt)
         twoSrc <- buildNum 2
-        ((lhsTgt, twoTgt), out) <- buildArithOp Mul
-        wire (addOut, TNat, lhsTgt)
+        ((flooredHalfTgt, twoTgt), doubleSrc) <- buildArithOp Mul
         wire (twoSrc, TNat, twoTgt)
-        wire (out, TNat, NamedPort tgt "")
+
+        oneSrc <- buildNum 1
+        ((doubleTgt, oneTgt), addOut) <- buildArithOp Add
+        wire (oneSrc, TNat, oneTgt)
+        wire (doubleSrc, TNat, doubleTgt)
+        wire (addOut, TNat, NamedPort tgt "")
+
         instantiateMeta (InEnd tgt) (VNum (nPlus 1 (n2PowTimes 1 (nVar (VPar (toEnd flooredHalfTgt))))))
         pure (nVar (VPar (toEnd flooredHalfTgt)))
 
