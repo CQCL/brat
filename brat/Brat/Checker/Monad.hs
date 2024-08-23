@@ -141,26 +141,21 @@ localVEnv ext (Req r k) = Req r (localVEnv ext . k)
 localVEnv ext (Define v e k) = Define v e (localVEnv ext . k)
 localVEnv ext (Yield st k) = Yield st (localVEnv ext . k)
 
--- runs a computation, but intercepts uses of outer *locals* variables and redirects
--- them to use new outports of the specified node (expected to be a Source).
--- Returns a list of captured variables and their generated (Source-node) outports
-captureOuterLocals :: Checking v -> Checking (v, VEnv)
-captureOuterLocals c = do
+-- runs a computation, but logs (via AddCapture, under the specified Name) uses of outer
+-- *local* variables
+captureOuterLocals :: Name -> Checking v -> Checking v
+captureOuterLocals n c = do
   outerLocals <- locals <$> req AskVEnv
-  helper (outerLocals, M.empty) c
+  helper outerLocals c
  where
-  helper :: (VEnv, VEnv) -> Checking v
-         -> Checking (v, M.Map UserName [(Src, BinderType Brat)])
-  helper (_, captured) (Ret v) = Ret (v, captured)
-  helper state@(avail,_) (Req (InLvl str c) k) = do
-    (v, captured) <- req (InLvl str (helper state c))
-    helper (avail, captured) (k v)
-  helper (avail, captured) (Req (VLup x) k) | j@(Just new) <- M.lookup x avail =
-    helper (avail, M.insert x new captured) (k j)
-  helper _state (Req (Fork _c) _k) = error "it happens!" -- ALAN
-  helper state (Req r k) = Req r (helper state . k)
-  helper state (Define e v k) = Define e v (helper state . k)
-  helper state (Yield st k) = Yield st (helper state . k)
+  helper :: VEnv -> Checking v -> Checking v
+  helper _ (Ret v) = Ret v
+  helper avail (Req (VLup x) k) | j@(Just new) <- M.lookup x avail =
+    (req $ AddCapture n (x,new)) >> helper avail (k j)
+  helper avail (Req (Fork c) k) = Req (Fork $ helper avail c) (helper avail . k)
+  helper avail (Req r k) = Req r (helper avail . k)
+  helper avail (Define e v k) = Define e v (helper avail . k)
+  helper avail (Yield st k) = Yield st (helper avail . k)
 
 wrapError :: (Error -> Error) -> Checking v -> Checking v
 wrapError _ (Ret v) = Ret v

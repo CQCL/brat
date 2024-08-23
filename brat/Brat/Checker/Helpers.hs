@@ -305,9 +305,9 @@ makeBox name cty@(ss :->> ts) body = do
       bres <- name -! body (overs, unders)
       pure (thunk, bres)
     (Braty, body) -> do
-      (bres, captures) <- name -! (captureOuterLocals $ body (overs, unders))
-      (_, [], [thunk], _) <- next (name ++ "_thunk") (Box captures src tgt) (S0, Some (Zy :* S0))
+      (node, [], [thunk], _) <- next (name ++ "_thunk") (Box M.empty src tgt) (S0, Some (Zy :* S0))
                                      R0 (RPr ("thunk", VFun ?my cty) R0)
+      bres <- name -! (captureOuterLocals node $ body (overs, unders))
       pure (thunk, bres)
 
 -- Evaluate either mode's BinderType

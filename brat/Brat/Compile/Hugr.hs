@@ -427,10 +427,10 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
             Nothing -> error "Callee has been erased"
 
     -- We need to figure out if this thunk contains a brat- or a kernel-computation
-    (Box venv src tgt) -> case outs of
+    (Box venv src tgt) -> assert (M.null venv) $ case outs of
       [(_, VFun Kerny cty)] -> default_edges . nodeId . fst <$>
-           compileKernBox parent name (assert (M.null venv) $ compileBox (src, tgt)) cty
-      [(_, VFun Braty cty)] -> compileBratBox parent name (venv, src, tgt) cty <&>
+           compileKernBox parent name (compileBox (src, tgt)) cty
+      [(_, VFun Braty cty)] -> gets capSets >>= \cs -> compileBratBox parent name (cs M.! name, src, tgt) cty <&>
           (\(partialNode, captures) -> Just (partialNode, 1, captures)) -- 1 is arbitrary, Box has no real inputs
       outs -> error $ "Unexpected outs of box: " ++ show outs
 
