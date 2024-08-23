@@ -15,6 +15,7 @@ import Bwd
 import Control.Monad.Except
 import Test.Tasty
 import Test.Tasty.HUnit
+import Data.List (isInfixOf)
 
 runEmpty m = run emptyEnv initStore root m
 
@@ -22,6 +23,12 @@ assertChecking :: Checking a -> Assertion
 assertChecking m = case runEmpty $ localFC (FC (Pos 0 0) (Pos 0 0)) m of
   Right _ -> pure ()
   Left err -> assertFailure (showError err)
+
+assertCheckingFail :: Show a => String -> Checking a -> Assertion
+assertCheckingFail needle m = case runEmpty $ localFC (FC (Pos 0 0) (Pos 0 0)) m of
+  Right res -> assertFailure ("Computation produced result " ++ show res ++ " when should have Thrown")
+  Left err -> let shown = showError err in
+    if isInfixOf needle shown then pure () else assertFailure ("Unexpected error " ++ shown)
 
 parseAndCheck :: [FilePath] -> FilePath -> TestTree
 parseAndCheck libDirs file = testCase (show file) $ do

@@ -15,12 +15,57 @@ import Test.Substitution
 import Test.Syntax.Let
 import Test.TypeArith
 
+import Brat.Checker.Monad
+import Brat.Syntax.Common
+import Brat.Syntax.Port
+import Brat.Syntax.Value
+import Brat.UserName
+import Brat.Error
+import Control.Monad.Freer
+import qualified Data.Set as S
+import Debug.Trace
+import Test.Util
+import Test.Tasty.HUnit (testCase)
+
+coroT1 :: Checking ()
+coroT1 = do
+  name <- req (Fresh "anything")
+  let e = InEnd $ In name 0
+  req $ Declare e Braty (Left $ Star [])
+  req . Fork $ do
+    req (ELup e) >>= \case
+      Just _ -> err $ InternalError "already defined"
+      Nothing -> Define e (VCon (PrefixName [] "nil") []) (\_ -> pure ())
+  Yield (AwaitingAny $ S.singleton e) $ \_ -> do
+    traceM "Yield continued"
+    v <- req $ ELup e
+    case v of
+      Just _ -> pure ()
+      Nothing -> err $ InternalError "not defined"
+
+coroT2 :: Checking ()
+coroT2 = do
+  name <- req (Fresh "anything")
+  let e = InEnd $ In name 0
+  req $ Declare e Braty (Left $ Star [])
+  v <- Yield (AwaitingAny $ S.singleton e) $ \_ -> req $ ELup e
+  -- No way to execute this without a 'v'
+  req . Fork $ Define e (VCon (PrefixName [] "nil") []) (\_ -> pure ())
+  err $ InternalError $ case v of
+    Nothing -> "ELup performed without waiting for Yield" -- true in next case too
+    Just _ -> "ELup returned value before being Defined"
+
+
 main = do
   failureTests  <- getFailureTests
   checkingTests <- getCheckingTests
   parsingTests <- getParsingTests
   compilationTests <- setupCompilationTests
   graphTests <- getGraphTests
+  let coroTests = testGroup "coroutine"
+       [testCase "coroT1" $ assertChecking coroT1
+       ,testCase "coroT2" $ assertCheckingFail "Typechecking blocked on" coroT2
+       ]
   defaultMain $ testGroup "All" [graphTests
                                 ,failureTests
                                 ,checkingTests
@@ -34,4 +79,5 @@ main = do
                                 ,abstractorTests
                                 ,compilationTests
                                 ,typeArithTests
+                                ,coroTests
                                 ]
