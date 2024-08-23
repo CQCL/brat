@@ -461,8 +461,9 @@ check' (VHole (mnemonic, name)) connectors = do
 check' tm@(Con _ _) ((), []) = typeErr $ "No type to check " ++ show tm ++ " against"
 check' tm@(Con vcon vargs) ((), ((hungry, ty):unders)) = do
   traceM ("check' Con vcon=" ++ show vcon ++ "  vargs=" ++ show vargs)
-  req . Fork $ case (?my, ty) of
+  req . Fork $ trace "In forked computation for check' Con" $ case (?my, ty) of
       (Braty, Left k) -> do
+        traceM "Braty Left"
         (_, leftOvers) <- kindCheck [(hungry, k)] (Con vcon vargs)
         ensureEmpty "kindCheck leftovers" leftOvers
       (Braty, Right ty) -> aux Braty clup ty
@@ -471,6 +472,7 @@ check' tm@(Con vcon vargs) ((), ((hungry, ty):unders)) = do
  where
   aux :: Modey m -> (UserName -> UserName -> Checking (CtorArgs m)) -> Val Z -> Checking ()
   aux my lup ty = do
+    traceM $ "In forked aux for check' Con"
     VCon tycon tyargs <- eval S0 ty
     (CArgs pats nFree _ argTypeRo) <- lup vcon tycon
     -- Look for vectors to produce better error messages for mismatched lengths
