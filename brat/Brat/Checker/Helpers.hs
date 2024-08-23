@@ -300,12 +300,12 @@ makeBox name cty@(ss :->> ts) body = do
   (tgt, unders, _, _) <- anext (name ++ "/out") Target ctx ts R0
   case (?my, body) of
     (Kerny, _) -> do
-      (_,_,[thunk],_) <- next (name ++ "_thunk") (Box M.empty src tgt) (S0, Some (Zy :* S0))
+      (_,_,[thunk],_) <- next (name ++ "_thunk") (Box src tgt) (S0, Some (Zy :* S0))
                                 R0 (RPr ("thunk", VFun Kerny cty) R0)
       bres <- name -! body (overs, unders)
       pure (thunk, bres)
     (Braty, body) -> do
-      (node, [], [thunk], _) <- next (name ++ "_thunk") (Box M.empty src tgt) (S0, Some (Zy :* S0))
+      (node, [], [thunk], _) <- next (name ++ "_thunk") (Box src tgt) (S0, Some (Zy :* S0))
                                      R0 (RPr ("thunk", VFun ?my cty) R0)
       bres <- name -! (captureOuterLocals node $ body (overs, unders))
       pure (thunk, bres)

@@ -299,7 +299,7 @@ compileClauses parent ins ((matchData, rhs) :| clauses) = do
 
   didMatch :: [HugrType] -> NodeId -> [TypedPort] -> Compile [TypedPort]
   didMatch outTys parent ins = gets bratGraph >>= \(ns,_) -> case ns M.! rhs of
-    BratNode (Box _venv src tgt) _ _ -> do
+    BratNode (Box src tgt) _ _ -> do
       dfgId <- addNode "DidMatch_DFG" (OpDFG (DFG parent (FunctionType (snd <$> ins) outTys)))
       compileBox (src, tgt) dfgId
       for (zip (fst <$> ins) (Port dfgId <$> [0..])) addEdge
@@ -427,7 +427,7 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
             Nothing -> error "Callee has been erased"
 
     -- We need to figure out if this thunk contains a brat- or a kernel-computation
-    (Box venv src tgt) -> assert (M.null venv) $ case outs of
+    (Box src tgt) -> case outs of
       [(_, VFun Kerny cty)] -> default_edges . nodeId . fst <$>
            compileKernBox parent name (compileBox (src, tgt)) cty
       [(_, VFun Braty cty)] -> gets capSets >>= \cs -> compileBratBox parent name (cs M.! name, src, tgt) cty <&>
@@ -815,7 +815,7 @@ compileModule venv = do
     let srcPortTys = [(srcPort, ty) | (srcPort, ty, In tgt _) <- es, tgt == idNode ]
     case srcPortTys of
       -- All top-level functions are compiled into Box-es, which should look like this:
-      [(Ex input 0, _)] | Just (BratNode (Box _ src tgt) _ outs) <- M.lookup input ns ->
+      [(Ex input 0, _)] | Just (BratNode (Box src tgt) _ outs) <- M.lookup input ns ->
         case outs of
           [(_, VFun Braty cty)] -> do
             sig <- compileSig Braty cty
