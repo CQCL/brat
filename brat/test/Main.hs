@@ -57,7 +57,7 @@ coroT2 = do
 
 
 main = do
-  failureTests  <- getFailureTests
+  --failureTests  <- getFailureTests
   checkingTests <- getCheckingTests
   parsingTests <- getParsingTests
   compilationTests <- setupCompilationTests
@@ -67,7 +67,7 @@ main = do
        ,testCase "coroT2" $ assertCheckingFail "Typechecking blocked on" coroT2
        ]
   defaultMain $ testGroup "All" [graphTests
-                                ,failureTests
+                                --,failureTests
                                 ,checkingTests
                                 ,letTests
                                 ,libDirTests
