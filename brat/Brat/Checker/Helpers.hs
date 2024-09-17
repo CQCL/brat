@@ -180,7 +180,8 @@ anext str th vals0 ins outs = do
   (overs, vals2)  <- endPorts node ExEnd Ex 0 vals1 outs
   () <- sequence_ $
         [ declareTgt tgt (modey @m) ty | (tgt, ty) <- unders ] ++
-        [ declareSrc src (modey @m) ty | (src, ty) <- overs ]
+        [ req (Declare (ExEnd (end src)) (modey @m) ty) | (src, ty) <- overs ]
+
   let inputs  = [ (portName p, biType @m ty) | (p, ty) <- unders ]
   let outputs = [ (portName p, biType @m ty) | (p, ty) <- overs  ]
 
@@ -294,9 +295,6 @@ defineSrc src v = defineEnd (ExEnd (end src)) v
 
 defineTgt :: Tgt -> Val Z -> Checking ()
 defineTgt tgt v = defineEnd (InEnd (end tgt)) v
-
-declareSrc :: Src -> Modey m -> BinderType m -> Checking ()
-declareSrc src my ty = req (Declare (ExEnd (end src)) my ty)
 
 declareTgt :: Tgt -> Modey m -> BinderType m -> Checking ()
 declareTgt tgt my ty = req (Declare (InEnd (end tgt)) my ty)
