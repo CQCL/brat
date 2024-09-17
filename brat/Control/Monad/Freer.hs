@@ -93,6 +93,8 @@ instance Monad (Free sig) where
   Req r j >>= k = Req r (j >=> k)
   Define e v k1 >>= k2 = Define e v (k1 >=> k2)
   Yield st k1 >>= k2 = Yield st (k1 >=> k2)
+  --- equivalent to
+  -- Yield st k1 >>= k2 = Yield st (\n -> (k1 n) >>= k2)
 
 req :: sig t -> Free sig t
 req s = Req s Ret
