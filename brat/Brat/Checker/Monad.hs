@@ -97,7 +97,7 @@ data CheckingSig ty where
   ELup    :: End -> CheckingSig (Maybe (Val Z))
   -- Lookup an alias in the table
   ALup    :: UserName -> CheckingSig (Maybe Alias)
-  TypeOf  :: End -> CheckingSig EndType
+  TypeOf  :: End -> CheckingSig (EndType, Bool)
   AddNode :: Name -> Node -> CheckingSig ()
   Wire    :: Wire -> CheckingSig ()
   KDone   :: CheckingSig ()
@@ -290,7 +290,7 @@ handler (Req s k) ctx g ns
                        track ("Declared " ++ show end ++ " :: " ++ bty_str) $
                        handler (k ())
                        (ctx { store =
-                              st { typeMap = M.insert end (EndType my bty) m }
+                              st { typeMap = M.insert end (EndType my bty, False) m }
                             }) g ns
       -- TODO: Use the kind argument for partially applied constructors
       TLup key -> do
@@ -321,6 +321,7 @@ handler (Define end v k) ctx g ns = let st@Store{typeMap=tm, valueMap=vm} = stor
       Just _ -> Left $ dumbErr (InternalError $ "Redefining " ++ show end)
       Nothing -> case M.lookup end tm of
         Nothing -> Left $ dumbErr (InternalError $ "Defining un-Declared " ++ show end ++ " in \n" ++ show tm)
+        -- Allow even Skolems to be defined (e.g. clauses with unique soln)
         -- TODO can we check the value is of the kind declared?
         Just _ -> let news = News (M.singleton end (howStuck v)) in
           handler (k news)

@@ -95,7 +95,7 @@ instance Show EndType where
   show (EndType Braty (Right ty)) = show ty
 
 data Store = Store
-  { typeMap  :: M.Map End EndType
+  { typeMap  :: M.Map End (EndType, Bool) -- True = is skolem const, will never be defined
   , valueMap :: M.Map End (Val Z)
   }
 

@@ -20,6 +20,7 @@ import Hasochism
 
 import Control.Monad (unless)
 import Data.Bifunctor (first)
+import Data.Functor ((<&>))
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import Data.Type.Equality ((:~:)(..), testEquality)
@@ -121,7 +122,7 @@ solve my ((src, PCon c abs):p) = do
 
 
 typeOfEnd :: Modey m -> End -> Checking (BinderType m)
-typeOfEnd my e = req (TypeOf e) >>= \case
+typeOfEnd my e = (req (TypeOf e) <&> fst) >>= \case
   EndType my' ty
     | Just Refl <- testEquality my my' -> case my' of
         Braty -> case ty of

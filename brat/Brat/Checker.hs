@@ -989,5 +989,5 @@ run ve initStore ns m = do
     hs@((_,fc):_) -> Left $ Err (Just fc) (RemainingNatHopes (show . fst <$> hs))
  where
   isNatKinded tyMap e = case tyMap M.! e of
-    EndType Braty (Left Nat) -> True
+    (EndType Braty (Left Nat), _) -> True
     _ -> False
