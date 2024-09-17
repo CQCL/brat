@@ -217,7 +217,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
       -- with the other clauses, as part of the body.
       (ins :->> outs) <- mkSig usedOvers unders
       (allFakeUnders, rightFakeUnders, tgtMap) <- suppressHoles $ suppressGraph $ do
-        (_, [], fakeOvers, fakeAcc) <- anext "lambda_fake_source" Hypo (S0, Some (Zy :* S0)) R0 ins
+        (_, [], fakeOvers, fakeAcc) <- anext' "lambda_fake_source" Hypo (S0, Some (Zy :* S0)) R0 ins True
         -- Hypo `check` calls need an environment, even just to compute leftovers;
         -- we get that env by solving `problem` reformulated in terms of the `fakeOvers`
         let srcMap = fromJust $ zip_same_length (fst <$> usedOvers) (fst <$> fakeOvers)

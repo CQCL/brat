@@ -173,14 +173,27 @@ anext :: forall m i j k
       -> Ro m i j -- Inputs and Outputs use de Bruijn indices
       -> Ro m j k
       -> Checking (Name, Unders m Chk, Overs m UVerb, (Semz k, Some Endz))
-anext str th vals0 ins outs = do
+anext str th vals0 ins outs = anext' str th vals0 ins outs $ case th of
+  Source -> True
+  _ -> False
+
+anext' :: forall m i j k
+       . EvMode m
+      => String
+      -> NodeType m
+      -> (Semz i, Some Endz)
+      -> Ro m i j -- Inputs and Outputs use de Bruijn indices
+      -> Ro m j k
+      -> Bool -- whether outports are skolem consts (will never be defined), inports never are
+      -> Checking (Name, Unders m Chk, Overs m UVerb, (Semz k, Some Endz))
+anext' str th vals0 ins outs skol = do
   node <- req (Fresh str) -- Pick a name for the thunk
   -- Use the new name to generate Ends with which to instantiate types
   (unders, vals1) <- endPorts node InEnd In 0 vals0 ins
   (overs, vals2)  <- endPorts node ExEnd Ex 0 vals1 outs
   () <- sequence_ $
         [ declareTgt tgt (modey @m) ty | (tgt, ty) <- unders ] ++
-        [ req (Declare (ExEnd (end src)) (modey @m) ty False) | (src, ty) <- overs ]
+        [ req (Declare (ExEnd (end src)) (modey @m) ty skol) | (src, ty) <- overs ]
 
   let inputs  = [ (portName p, biType @m ty) | (p, ty) <- unders ]
   let outputs = [ (portName p, biType @m ty) | (p, ty) <- overs  ]
