@@ -131,15 +131,12 @@ checkInputs :: (CheckConstraints m KVerb, ?my :: Modey m)
             => WC (Term d KVerb)
             -> [(Src, BinderType m)] -- Expected
             -> [(Tgt, BinderType m)] -- Actual
-            -> Either ErrorMsg ([(Src, BinderType m)], Checking ())
-checkInputs _ overs [] = pure (overs, pure ())
-checkInputs tm@(WC fc _) (o:overs) (u:unders) = do
-  (overs', p) <- checkInputs tm overs unders
-  pure (overs', thisWire *> p)
+            -> Checking [(Src, BinderType m)]
+checkInputs _ overs [] = pure overs
+checkInputs tm@(WC fc _) (o:overs) (u:unders) = localFC fc $ do
+  req . Fork $ wrapError (addRowContext ?my (o:overs) (u:unders)) $ checkWire ?my tm False o u
+  checkInputs tm overs unders
  where
-  thisWire = localFC fc $
-    wrapError (addRowContext ?my (o:overs) (u:unders)) $
-      checkWire ?my tm False o u
   addRowContext :: Show (BinderType m)
               => Modey m
               -> [(Src, BinderType m)] -- Expected
@@ -148,22 +145,18 @@ checkInputs tm@(WC fc _) (o:overs) (u:unders) = do
   addRowContext _ as bs (Err fc (TypeMismatch tm _ _))
    = Err fc $ TypeMismatch tm (showRow as) (showRow bs)
   addRowContext _ _ _ e = e
-checkInputs tm [] unders = Left $ TypeErr $ "No overs but unders: " ++ show unders ++ " for " ++ show tm
+checkInputs tm [] unders = typeErr $ "No overs but unders: " ++ show unders ++ " for " ++ show tm
 
--- TODO refactor more? combine checkInputs; find prefix first and then `zip`
 checkOutputs :: (CheckConstraints m k, ?my :: Modey m)
              => WC (Term Syn k)
              -> [(Tgt, BinderType m)] -- Expected
              -> [(Src, BinderType m)] -- Actual
-             -> Either ErrorMsg ([(Tgt, BinderType m)], Checking ())
-checkOutputs _ unders [] = pure (unders, pure ())
-checkOutputs tm@(WC fc _) (u:unders) (o:overs) = do
-  (unders', p) <- checkOutputs tm unders overs
-  pure (unders', thisWire *> p)
+             -> Checking [(Tgt, BinderType m)]
+checkOutputs _ unders [] = pure unders
+checkOutputs tm@(WC fc _) (u:unders) (o:overs) = localFC fc $ do
+  req . Fork $ wrapError (addRowContext ?my (u:unders) (o:overs)) $ checkWire ?my tm True o u
+  checkOutputs tm unders overs
  where
-  thisWire = localFC fc $
-              wrapError (addRowContext ?my (u:unders) (o:overs)) $
-              checkWire ?my tm True o u
   addRowContext :: Show (BinderType m)
               => Modey m
               -> [(Tgt, BinderType m)] -- Expected
@@ -172,7 +165,7 @@ checkOutputs tm@(WC fc _) (u:unders) (o:overs) = do
   addRowContext _ as bs (Err fc (TypeMismatch tm _ _))
    = Err fc $ TypeMismatch tm (showRow as) (showRow bs)
   addRowContext _ _ _ e = e
-checkOutputs tm [] overs = Left $ TypeErr $ "No unders but overs: " ++ show overs ++ " for " ++ show tm
+checkOutputs tm [] overs = typeErr $ "No unders but overs: " ++ show overs ++ " for " ++ show tm
 
 check :: (CheckConstraints m k
          ,EvMode m
@@ -182,8 +175,7 @@ check :: (CheckConstraints m k
       => WC (Term d k)
       -> ChkConnectors m d k
       -> Checking (SynConnectors m d k
-                  ,ChkConnectors m d k
-                  )
+                  ,ChkConnectors m d k)
 check (WC fc tm) conn = trace ("Beginning check of " ++ show tm) $ localFC fc (check' tm conn)
 
 check' :: forall m d k
@@ -195,8 +187,7 @@ check' :: forall m d k
        => Term d k
        -> ChkConnectors m d k
        -> Checking (SynConnectors m d k
-                   ,ChkConnectors m d k -- rightovers
-                   )
+                   ,ChkConnectors m d k) -- rightovers
 check' Empty tys = pure (((), ()), tys)
 check' (s :|: t) tys = do
   -- in Checking mode, each LHS/RHS removes its wires+types from the ChkConnectors remaining
@@ -243,9 +234,9 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
       let rightUnders = [ fromJust (lookup tgt tgtMap) | (tgt, _) <- rightFakeUnders ]
       req . Fork $ do
             sig <- mkSig usedOvers usedUnders
-            (patOuts, rest) <- checkClauses sig usedOvers (c :| cs)
+            patOuts <- checkClauses sig usedOvers (c :| cs)
             mkWires patOuts usedUnders
-            rest
+            pure ()
       pure (((), ()), (rightOvers, rightUnders))
     Syny -> do
       synthOuts <- suppressHoles $ suppressGraph $ do
@@ -256,9 +247,8 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
         (((), synthOuts), ((), ())) <- localEnv env $ check body ((), ())
         pure synthOuts
       sig <- mkSig usedOvers synthOuts
-      (patOuts, clauseProbs) <- checkClauses sig usedOvers
+      patOuts <- checkClauses sig usedOvers
           ((fst c, WC (fcOf body) (Emb body)) :| cs)
-      req $ Fork clauseProbs -- TODO don't return clauseProbs from checkClauses
       pure (((), patOuts), (rightOvers, ()))
  where
   -- Invariant: When solToEnv is called, port pulling has already been resolved,
@@ -284,20 +274,20 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
     Nothing -> err $ InternalError "Trying to wire up different sized lists of wires"
     Just conns -> traverse (\((src, ty), (tgt, _)) -> wire (src, binderToValue ?my ty, tgt)) conns
 
-  checkClauses :: CTy m Z -> [(Src, BinderType m)] -> NonEmpty (WC Abstractor, WC (Term Chk Noun)) -> Checking ([(Src, BinderType m)], Checking ())
+  checkClauses :: CTy m Z -> [(Src, BinderType m)] -> NonEmpty (WC Abstractor, WC (Term Chk Noun)) -> Checking [(Src, BinderType m)]
   checkClauses cty@(ins :->> outs) overs all_cs = do
     (node, patMatchUnders, patMatchOvers, _) <- suppressGraph $
         anext "lambda" Hypo (S0, Some (Zy :* S0)) ins outs
-    let clauses = NE.zip (NE.fromList [0..]) all_cs <&>
+    req . Fork $ do
+      let clauses = NE.zip (NE.fromList [0..]) all_cs <&>
                   \(i, (abs, tm)) -> Clause i (normaliseAbstractor <$> abs) tm
-    let clauseProblems = do
-          clauses <- traverse (checkClause ?my "lambda" cty) clauses
-          let inputs  = [ (portName p, biType @m ty) | (p, ty) <- patMatchUnders ]
-          let outputs = [ (portName p, biType @m ty) | (p, ty) <- patMatchOvers  ]
-          req $ AddNode node (mkNode ?my (PatternMatch clauses) inputs outputs) -- not added by anext because suppressGraph
-          mkWires overs patMatchUnders -- might canonicalize type better now
-          pure ()
-    pure (patMatchOvers, clauseProblems)
+      clauses <- traverse (checkClause ?my "lambda" cty) clauses
+      let inputs  = [ (portName p, biType @m ty) | (p, ty) <- patMatchUnders ]
+      let outputs = [ (portName p, biType @m ty) | (p, ty) <- patMatchOvers  ]
+      req $ AddNode node (mkNode ?my (PatternMatch clauses) inputs outputs) -- not added by anext because suppressGraph
+      mkWires overs patMatchUnders -- might canonicalize type better now
+      pure ()
+    pure patMatchOvers
 
 check' (Pull ports t) (overs, unders) = do
   unders <- pullPortsRow ports unders
@@ -310,8 +300,7 @@ check' (t ::: outs) (overs, ()) | Braty <- ?my = do
   pure (((), danglies), (leftOvers, ()))
 check' (Emb t) (overs, unders) = do
   ((ins, outs), (overs, ())) <- check t (overs, ())
-  (unders, p') <- throwLeft $ checkOutputs t unders outs
-  req $ Fork p'
+  unders <- checkOutputs t unders outs
   pure ((ins, ()), (overs, unders))
 check' (Th tm) ((), u@(hungry, ty):unders) = case (?my, ty) of
   (Braty, ty) -> do
@@ -357,20 +346,15 @@ check' (TypedTh t) ((), ()) = case ?my of
   createThunk :: (CheckConstraints m2 Noun, ?my :: Modey m2, EvMode m2)
               => SynConnectors m2 Syn KVerb
               -> Checking (SynConnectors Brat Syn Noun
-                          ,ChkConnectors Brat Syn Noun
-                          )
+                          ,ChkConnectors Brat Syn Noun)
   createThunk (ins, outs) = do
     Some (ez :* inR) <- mkArgRo ?my S0 (first (fmap toEnd) <$> ins)
     Some (_ :* outR) <- mkArgRo ?my ez (first (fmap toEnd) <$> outs)
-    (thunkOut, p) <- makeBox "thunk" (inR :->> outR) $
+    (thunkOut, ()) <- makeBox "thunk" (inR :->> outR) $
         \(thOvers, thUnders) -> do
           -- if these ensureEmpty's fail then its a bug!
-          (rightUnders, ip) <- throwLeft $ checkInputs t thOvers ins
-          ensureEmpty "TypedTh inputs" rightUnders
-          (leftOvers, op) <- throwLeft $ checkOutputs t thUnders outs
-          ensureEmpty "TypedTh outputs" leftOvers
-          pure (ip *> op)
-    req $ Fork p
+          checkInputs t thOvers ins >>= ensureEmpty "TypedTh inputs"
+          checkOutputs t thUnders outs >>= ensureEmpty "TypedTh outputs"
     pure (((), [thunkOut]), ((), ()))
 check' (Force th) ((), ()) = do
   (((), outs), ((), ())) <- let ?my = Braty in check th ((), ())
@@ -379,8 +363,7 @@ check' (Force th) ((), ()) = do
   pure ((thInputs, thOutputs), ((), ()))
 check' (Forget kv) (overs, unders) = do
   ((ins, outs), ((), rightUnders)) <- check kv ((), unders)
-  (leftOvers, p) <- throwLeft $ checkInputs kv overs ins
-  req $ Fork p
+  leftOvers <- checkInputs kv overs ins
   pure (((), outs), (leftOvers, rightUnders))
 check' (Var x) ((), ()) = (, ((), ())) . ((),) <$> case ?my of
   Braty -> vlup x
@@ -493,38 +476,40 @@ check' tm@(Con vcon vargs) ((), ((hungry, ty):unders)) = do
     wire (dangling, ty, hungry)
 
 check' (C cty) ((), ((hungry, ty):unders)) = case (?my, ty) of
-  (Braty, Left k) ->  do
-      req $ Fork (kindCheck [(hungry, k)] (C cty) >>= (ensureEmpty "kindCheck leftovers") . snd)
-      pure (((), ()), ((), unders))
+  (Braty, Left k) -> do
+    (_, leftOvers) <- kindCheck [(hungry, k)] (C cty)
+    ensureEmpty "kindCheck leftovers" leftOvers
+    pure (((), ()), ((), unders))
   _ -> typeErr $ "Ill-kinded function type: " ++ show cty
 check' (Simple tm) ((), ((hungry, ty):unders)) = do
-  req . Fork $ do
-    ty <- evalBinder ?my ty
-    case (?my, ty, tm) of
-      -- The only SimpleType that checks against a kind is a Nat
-      (Braty, Left Nat, Num n) -> do
-        (_, _, [(dangling, _)], _) <- next "" (Const (Num n)) (S0,Some (Zy :* S0))
-                                      R0 (REx ("value", Nat) R0)
-        let val = VNum (nConstant (fromIntegral n))
-        defineSrc dangling val
-        defineTgt hungry val
-        wire (dangling, kindType Nat, hungry)
-      -- No defining needed, so everything else can be unified
-      _ -> do
-        let vty = biType @m ty
-        throwLeft $ simpleCheck ?my vty tm
-        (_, _, [(dangling, _)], _) <- anext @m "" (Const tm) (S0,Some (Zy :* S0))
-                                      R0 (RPr ("value", vty) R0)
-        wire (dangling, vty, hungry)
-  pure (((), ()), ((), unders))
+  ty <- evalBinder ?my ty
+  case (?my, ty, tm) of
+    -- The only SimpleType that checks against a kind is a Nat
+    (Braty, Left Nat, Num n) -> do
+      (_, _, [(dangling, _)], _) <- next "" (Const (Num n)) (S0,Some (Zy :* S0))
+                                    R0 (REx ("value", Nat) R0)
+      let val = VNum (nConstant (fromIntegral n))
+      defineSrc dangling val
+      defineTgt hungry val
+      wire (dangling, kindType Nat, hungry)
+      pure (((), ()), ((), unders))
+    -- No defining needed, so everything else can be unified
+    _ -> do
+      let vty = biType @m ty
+      throwLeft $ simpleCheck ?my vty tm
+      (_, _, [(dangling, _)], _) <- anext @m "" (Const tm) (S0,Some (Zy :* S0))
+                                     R0 (RPr ("value", vty) R0)
+      wire (dangling, vty, hungry)
+      pure (((), ()), ((), unders))
 check' Hope ((), ((tgt, ty):unders)) = case (?my, ty) of
   (Braty, Left _k) -> do
     fc <- req AskFC
-    req (ANewHope (toEnd tgt, fc)) -- could probably delay via *>
+    req (ANewHope (toEnd tgt, fc))
     pure (((), ()), ((), unders))
   (Braty, Right _ty) -> typeErr "Can only infer kinded things with !"
   (Kerny, _) -> typeErr "Won't infer kernel typed !"
 check' tm _ = error $ "check' " ++ show tm
+
 
 -- Clauses from either function definitions or case statements, as we get
 -- them from the elaborator
