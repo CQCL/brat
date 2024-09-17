@@ -67,8 +67,8 @@ checkDecl pre (VDecl FuncDecl{..}) to_define = (fnName -!) $ localFC fnLoc $ do
     -- We must have a row of nouns as the definition
     Nothing -> case fnBody of
       NoLhs body -> do
-        (((), ()), ((), []), p) <- let ?my = Braty in check body ((), to_define)
-        p
+        (((), ()), ((), [])) <- let ?my = Braty in check body ((), to_define)
+        pure ()
       Undefined -> error "No body in `checkDecl`"
       ThunkOf _ -> case fnSig of
         Some ro -> err $ ExpectedThunk (showMode Braty) (show ro)

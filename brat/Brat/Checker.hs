@@ -183,7 +183,7 @@ check :: (CheckConstraints m k
       -> ChkConnectors m d k
       -> Checking (SynConnectors m d k
                   ,ChkConnectors m d k
-                  ,Checking ())
+                  )
 check (WC fc tm) conn = trace ("Beginning check of " ++ show tm) $ localFC fc (check' tm conn)
 
 check' :: forall m d k
@@ -196,23 +196,22 @@ check' :: forall m d k
        -> ChkConnectors m d k
        -> Checking (SynConnectors m d k
                    ,ChkConnectors m d k -- rightovers
-                   ,Checking () -- subproblem(s) still needing solving
                    )
-check' Empty tys = pure (((), ()), tys, pure ())
+check' Empty tys = pure (((), ()), tys)
 check' (s :|: t) tys = do
   -- in Checking mode, each LHS/RHS removes its wires+types from the ChkConnectors remaining
-  ((ins, outs), tys, ps)  <- check s tys
-  ((ins', outs'), tys, pt) <- check t tys
+  ((ins, outs), tys)  <- check s tys
+  ((ins', outs'), tys) <- check t tys
   -- in Synthesizing mode, instead here we join together the outputs, and the inputs
-  pure ((combine ins ins', tensor outs outs'), tys, ps <* pt)
+  pure ((combine ins ins', tensor outs outs'), tys)
 check' (s :-: t) (overs, unders) = do
   -- s is Syn, t is a UVerb
-  ((ins, overs), (rightovers, ()), ps) <- check s (overs, ())
-  (((), outs), (emptyOvers, rightunders), pt) <- check t (overs, unders)
+  ((ins, overs), (rightovers, ())) <- check s (overs, ())
+  (((), outs), (emptyOvers, rightunders)) <- check t (overs, unders)
   ensureEmpty "composition overs" emptyOvers
-  pure ((ins, outs), (rightovers, rightunders), ps <* pt)
+  pure ((ins, outs), (rightovers, rightunders))
 check' Pass ([], ()) = typeErr "pass is being given an empty row"
-check' Pass (overs, ()) = pure (((), overs), ([], ()), pure ())
+check' Pass (overs, ()) = pure (((), overs), ([], ()))
 check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
   -- Used overs have their port pulling taken care of
   (problem, rightOverSrcs) <- localFC abstFC $ argProblemsWithLeftovers (fst <$> overs) (normaliseAbstractor abst) []
@@ -236,31 +235,30 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
         localEnv fakeEnv $ do
           (_, fakeUnders, [], _) <- anext "lambda_fake_target" Hypo fakeAcc outs R0
           Just tgtMap <- pure $ zip_same_length (fst <$> fakeUnders) unders
-          -- no need to finish checking the body subproblem, we'll check it again in a moment
-          (((), ()), ((), rightFakeUnders), _) <- check body ((), fakeUnders)
+          (((), ()), ((), rightFakeUnders)) <- check body ((), fakeUnders)
           pure (fakeUnders, rightFakeUnders, tgtMap)
 
       let usedFakeUnders = (fst <$> allFakeUnders) \\ (fst <$> rightFakeUnders)
       let usedUnders = [ fromJust (lookup tgt tgtMap) | tgt <- usedFakeUnders ]
       let rightUnders = [ fromJust (lookup tgt tgtMap) | (tgt, _) <- rightFakeUnders ]
-      let clauseProblems = do
+      let clauseProblems :: Checking () = do
             sig <- mkSig usedOvers usedUnders
             (patOuts, rest) <- checkClauses sig usedOvers (c :| cs)
             mkWires patOuts usedUnders
             rest
-      pure (((), ()), (rightOvers, rightUnders), clauseProblems)
+      clauseProblems *> pure (((), ()), (rightOvers, rightUnders))
     Syny -> do
-      (synthOuts, p) <- suppressHoles $ suppressGraph $ do
+      synthOuts <- suppressHoles $ suppressGraph $ do
         env <- localFC abstFC $
           argProblems (fst <$> usedOvers) (normaliseAbstractor abst) [] >>=
           solve ?my >>=
           (solToEnv . snd)
-        (((), synthOuts), ((), ()), p) <- localEnv env $ check body ((), ())
-        pure (synthOuts, suppressHoles $ suppressGraph $ localEnv env p)
+        (((), synthOuts), ((), ())) <- localEnv env $ check body ((), ())
+        pure synthOuts
       sig <- mkSig usedOvers synthOuts
       (patOuts, clauseProbs) <- checkClauses sig usedOvers
           ((fst c, WC (fcOf body) (Emb body)) :| cs)
-      pure (((), patOuts), (rightOvers, ()), p *> clauseProbs)
+      clauseProbs *> pure (((), patOuts), (rightOvers, ()))
  where
   -- Invariant: When solToEnv is called, port pulling has already been resolved,
   -- because that's one of the functions of `argProblems`.
@@ -306,13 +304,13 @@ check' (Pull ports t) (overs, unders) = do
 check' (t ::: outs) (overs, ()) | Braty <- ?my = do
   (ins :->> outs) :: CTy Brat Z <- kindCheckAnnotation Braty ":::" outs
   (_, hungries, danglies, _) <- next "id" Id (S0,Some (Zy :* S0)) ins outs
-  (((), ()), (leftOvers, unders), p) <- check t (overs, hungries)
+  (((), ()), (leftOvers, unders)) <- check t (overs, hungries)
   ensureEmpty "unders" unders
-  pure (((), danglies), (leftOvers, ()), p)
+  pure (((), danglies), (leftOvers, ()))
 check' (Emb t) (overs, unders) = do
-  ((ins, outs), (overs, ()), p) <- check t (overs, ())
+  ((ins, outs), (overs, ())) <- check t (overs, ())
   (unders, p') <- throwLeft $ checkOutputs t unders outs
-  pure ((ins, ()), (overs, unders), p *> p')
+  p' *> pure ((ins, ()), (overs, unders))
 check' (Th tm) ((), u@(hungry, ty):unders) = case (?my, ty) of
   (Braty, ty) ->
     let subp = evalBinder Braty ty >>= \case
@@ -321,7 +319,7 @@ check' (Th tm) ((), u@(hungry, ty):unders) = case (?my, ty) of
           Right ty@(VFun Kerny cty) -> checkThunk Kerny "thunk" cty tm >>= wire . (,ty, hungry)
           Left (Star args) -> kindCheck [(hungry, Star args)] (Th tm) $> ()
           _ -> err . ExpectedThunk "" $ showRow (u:unders)
-    in pure (((), ()), ((), unders), subp)
+    in subp *> pure (((), ()), ((), unders))
   (Kerny, _) -> err . ThunkInKernel $ show (Th tm)
  where
   checkThunk :: (CheckConstraints m1 UVerb, EvMode m1)
@@ -333,10 +331,9 @@ check' (Th tm) ((), u@(hungry, ty):unders) = case (?my, ty) of
   checkThunk m name cty tm = do
     ((dangling, _), ()) <- let ?my = m in makeBox name cty $
       \(thOvers, thUnders) -> do
-        (((), ()), (emptyOvers, emptyUnders), p) <- check tm (thOvers, thUnders)
+        (((), ()), (emptyOvers, emptyUnders)) <- check tm (thOvers, thUnders)
         ensureEmpty "thunk leftovers" emptyOvers
         ensureEmpty "thunk leftunders" emptyUnders
-        p
     pure dangling
 
 check' (TypedTh t) ((), ()) = case ?my of
@@ -352,16 +349,15 @@ check' (TypedTh t) ((), ()) = case ?my of
       -- both a classical type and a kernel type, but just in case:
       -- (pushing down Emb(TypedTh(v)) to Thunk(Emb+Forget(v)) would help in Checkable cases)
       (Right _, Right _) -> typeErr "TypedTh could be either Brat or Kernel"
-      (Left _, Right (conns, ((), ()), kp)) -> let ?my = Kerny in createThunk conns kp
-      (Right (conns, ((), ()), bp), Left _) -> createThunk conns bp
+      (Left _, Right (conns, ((), ()))) -> let ?my = Kerny in createThunk conns
+      (Right (conns, ((), ())), Left _) -> createThunk conns
  where
   createThunk :: (CheckConstraints m2 Noun, ?my :: Modey m2, EvMode m2)
               => SynConnectors m2 Syn KVerb
-              -> Checking ()
               -> Checking (SynConnectors Brat Syn Noun
                           ,ChkConnectors Brat Syn Noun
-                          ,Checking ())
-  createThunk (ins, outs) p = do
+                          )
+  createThunk (ins, outs) = do
     Some (ez :* inR) <- mkArgRo ?my S0 (first (fmap toEnd) <$> ins)
     Some (_ :* outR) <- mkArgRo ?my ez (first (fmap toEnd) <$> outs)
     (thunkOut, p) <- makeBox "thunk" (inR :->> outR) $
@@ -371,19 +367,18 @@ check' (TypedTh t) ((), ()) = case ?my of
           ensureEmpty "TypedTh inputs" rightUnders
           (leftOvers, op) <- throwLeft $ checkOutputs t thUnders outs
           ensureEmpty "TypedTh outputs" leftOvers
-          pure (p *> ip *> op)
-    pure (((), [thunkOut]), ((), ()), p)
+          pure (ip *> op)
+    p *> pure (((), [thunkOut]), ((), ()))
 check' (Force th) ((), ()) = do
-  (((), outs), ((), ()), p) <- let ?my = Braty in check th ((), ())
+  (((), outs), ((), ())) <- let ?my = Braty in check th ((), ())
   -- pull a bunch of thunks (only!) out of here
-  p *> do -- allow p to run concurrently with getThunks and rest of check' Force
-    (_, thInputs, thOutputs) <- getThunks ?my outs
-    pure ((thInputs, thOutputs), ((), ()), pure ())
+  (_, thInputs, thOutputs) <- getThunks ?my outs
+  pure ((thInputs, thOutputs), ((), ()))
 check' (Forget kv) (overs, unders) = do
-  ((ins, outs), ((), rightUnders), p) <- check kv ((), unders)
-  (leftOvers, p') <- throwLeft $ checkInputs kv overs ins
-  pure (((), outs), (leftOvers, rightUnders), p *> p')
-check' (Var x) ((), ()) = (, ((), ()), pure ()) . ((),) <$> case ?my of
+  ((ins, outs), ((), rightUnders)) <- check kv ((), unders)
+  (leftOvers, p) <- throwLeft $ checkInputs kv overs ins
+  p *> pure (((), outs), (leftOvers, rightUnders))
+check' (Var x) ((), ()) = (, ((), ())) . ((),) <$> case ?my of
   Braty -> vlup x
   Kerny -> req (KLup x) >>= \case
     Just (p, ty) -> pure [(p, ty)]
@@ -402,29 +397,28 @@ check' (Arith op l r) ((), u@(hungry, ty):unders) = case (?my, ty) of
     let inRo = RPr ("left", ty) $ RPr ("right", ty) R0
     let outRo = RPr ("out", ty) R0
     (_, [lunders, runders], [(dangling, _)], _) <- next (show op) (ArithNode op) (S0, Some $ Zy :* S0) inRo outRo
-    (((), ()), ((), leftUnders), pl) <- check l ((), [lunders])
+    (((), ()), ((), leftUnders)) <- check l ((), [lunders])
     ensureEmpty "arith unders" leftUnders
-    (((), ()), ((), leftUnders), pr) <- check r ((), [runders])
+    (((), ()), ((), leftUnders)) <- check r ((), [runders])
     ensureEmpty "arith unders" leftUnders
     wire (dangling, ty, hungry)
-    pure (((), ()), ((), unders), pl *> pr)
+    pure (((), ()), ((), unders))
 check' (fun :$: arg) (overs, unders) = do
-  ((ins, outputs), ((), leftUnders), pf) <- check fun ((), unders)
-  ((argIns, ()), (leftOvers, argUnders), pa) <- check arg (overs, ins)
+  ((ins, outputs), ((), leftUnders)) <- check fun ((), unders)
+  ((argIns, ()), (leftOvers, argUnders)) <- check arg (overs, ins)
   ensureEmpty "leftover function args" argUnders
-  pure ((argIns, outputs), (leftOvers, leftUnders), pf *> pa)
+  pure ((argIns, outputs), (leftOvers, leftUnders))
 check' (Let abs x y) conn = do
-  (((), dangling), ((), ()), px) <- check x ((), ())
+  (((), dangling), ((), ())) <- check x ((), ())
   env <- abstractAll dangling (unWC abs)
-  (sycs, chcs, py) <- localEnv env $ check y conn
-  pure (sycs, chcs, px *> py)
+  localEnv env $ check y conn
 check' (NHole (mnemonic, name)) connectors = do
   fc <- req AskFC
   let suggestions = Nothing
   () <- case ?my of
     Kerny -> req $ LogHole $ TypedHole NKHole (HoleData { .. })
     Braty -> req $ LogHole $ TypedHole NBHole (HoleData { .. })
-  pure (((), ()), ((), []), pure ())
+  pure (((), ()), ((), []))
 -- TODO: Fix this
 {-
   where
@@ -458,14 +452,14 @@ check' (VHole (mnemonic, name)) connectors = do
   req $ LogHole $ case ?my of
     Braty -> TypedHole VBHole (HoleData { .. })
     Kerny -> TypedHole VKHole (HoleData { .. })
-  pure (((), ()), ([], []), pure ())
+  pure (((), ()), ([], []))
 -- TODO: Better error message
 check' tm@(Con _ _) ((), []) = typeErr $ "No type to check " ++ show tm ++ " against"
 check' tm@(Con vcon vargs) ((), ((hungry, ty):unders)) =
   trace ("check' Con vcon=" ++ show vcon ++ "  vargs=" ++ show vargs) $
-    pure (((), ()), ((), unders), subp)
+    subp *> pure (((), ()), ((), unders))
  where
-  subp = case (?my, ty) of
+  subp :: Checking () = case (?my, ty) of
     (Braty, Left k) -> do
       (_, leftOvers) <- kindCheck [(hungry, k)] (Con vcon vargs)
       ensureEmpty "kindCheck leftovers" leftOvers
@@ -488,16 +482,16 @@ check' tm@(Con vcon vargs) ((), ((hungry, ty):unders)) =
     (_, argUnders, [(dangling, _)], _) <- anext (show vcon) (Constructor vcon)
                                           (env, Some (Zy :* S0))
                                           argTypeRo (RPr ("value", ty') R0)
-    (((), ()), ((), leftUnders), p) <- wrapError wrap $ check vargs ((), argUnders)
+    (((), ()), ((), leftUnders)) <- wrapError wrap $ check vargs ((), argUnders)
     ensureEmpty "con unders" leftUnders
-    p
     wire (dangling, ty, hungry)
 
 check' (C cty) ((), ((hungry, ty):unders)) = case (?my, ty) of
-  (Braty, Left k) -> pure (((), ()), ((), unders),
-      kindCheck [(hungry, k)] (C cty) >>= (ensureEmpty "kindCheck leftovers") . snd)
+  (Braty, Left k) -> 
+      (kindCheck [(hungry, k)] (C cty) >>= (ensureEmpty "kindCheck leftovers") . snd)
+      *> pure (((), ()), ((), unders))
   _ -> typeErr $ "Ill-kinded function type: " ++ show cty
-check' (Simple tm) ((), ((hungry, ty):unders)) = pure (((), ()), ((), unders), subp)
+check' (Simple tm) ((), ((hungry, ty):unders)) = subp *> pure (((), ()), ((), unders))
  where
   subp = do
     ty <- evalBinder ?my ty
@@ -520,8 +514,8 @@ check' (Simple tm) ((), ((hungry, ty):unders)) = pure (((), ()), ((), unders), s
 check' Hope ((), ((tgt, ty):unders)) = case (?my, ty) of
   (Braty, Left _k) -> do
     fc <- req AskFC
-    req (ANewHope (toEnd tgt, fc))
-    pure (((), ()), ((), unders), pure ()) -- could probably delay ANewHope too
+    req (ANewHope (toEnd tgt, fc)) -- could probably delay via *>
+    pure (((), ()), ((), unders))
   (Braty, Right _ty) -> typeErr "Can only infer kinded things with !"
   (Kerny, _) -> typeErr "Won't infer kernel typed !"
 check' tm _ = error $ "check' " ++ show tm
@@ -591,10 +585,9 @@ checkBody fnName body cty = do
       pure (WC fc (Lambda c cs))
     Undefined -> err (InternalError "Checking undefined clause")
   ((src, _), ()) <- makeBox (fnName ++ ".box") cty $ \(overs, unders) -> do
-    (((),()), (rightOvers, rightUnders), p) <- check tm (overs, unders)
+    (((),()), (rightOvers, rightUnders)) <- check tm (overs, unders)
     ensureEmpty ("unconsumed inputs to " ++ fnName) rightOvers
     ensureEmpty ("unproduced outputs from " ++ fnName) rightUnders
-    p
   pure src
 
 -- Constructs row from a list of ends and types. Uses standardize to ensure that dependency is
