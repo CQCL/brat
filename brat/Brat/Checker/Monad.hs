@@ -53,6 +53,8 @@ data CtxEnv = CtxEnv
 
 type HopeSet = M.Map End FC
 
+type CaptureSets = M.Map Name VEnv
+
 data Context = Ctx { globalVEnv :: VEnv
                    , store :: Store
                    , constructors :: ConstructorMap Brat
@@ -61,7 +63,7 @@ data Context = Ctx { globalVEnv :: VEnv
                    , aliasTable :: M.Map UserName Alias
                    -- All the ends here should be targets
                    , hopeSet :: HopeSet
-                   , captureSets :: M.Map Name VEnv
+                   , captureSets :: CaptureSets
                    }
 
 -- Commands for synchronous operations

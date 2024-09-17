@@ -10,7 +10,7 @@
 module Brat.Compile.Hugr (compile) where
 
 import Brat.Constructors.Patterns (pattern CFalse, pattern CTrue)
-import Brat.Checker.Monad (track, trackM, CheckingSig(..))
+import Brat.Checker.Monad (track, trackM, CheckingSig(..), CaptureSets)
 import Brat.Checker.Helpers (binderToValue)
 import Brat.Checker.Types (Store(..), VEnv)
 import Brat.Eval (eval, evalCTy, kindType)
@@ -55,6 +55,7 @@ type TypedPort = (PortId NodeId, HugrType)
 
 data CompilationState = CompilationState
  { bratGraph :: Graph -- the input BRAT Graph; should not be written
+ , capSets :: CaptureSets -- environments captured by Box nodes in previous
  , nameSupply :: Namespace
  , nodes :: M.Map NodeId (HugrOp NodeId) -- this node's id => HugrOp containing parent id
  , edges :: [(PortId NodeId, PortId NodeId)]
@@ -73,8 +74,9 @@ data CompilationState = CompilationState
  , decls :: M.Map Name (NodeId, Bool)
  }
 
-emptyCS g ns store = CompilationState
+emptyCS g cs ns store = CompilationState
   { bratGraph = g
+  , capSets = cs
   , nameSupply = ns
   , nodes = M.empty
   , edges = []
@@ -497,10 +499,11 @@ compileConstDfg :: NodeId -> String -> FunctionType -> (NodeId -> Compile a) -> 
 compileConstDfg parent desc box_sig contents = do
   st <- gets store
   g <- gets bratGraph
+  cs <- gets capSets
   -- First, we fork off a new namespace
   (res, cs) <- desc -! do
     ns <- gets nameSupply
-    pure $ flip runState (emptyCS g ns st) $ do
+    pure $ flip runState (emptyCS g cs ns st) $ do
       -- make a DFG node at the root. We can't use `addNode` since the
       -- DFG needs itself as parent
       dfg_id <- freshNode ("Box_" ++ show desc)
@@ -870,13 +873,14 @@ compileNoun outs srcPorts parent = do
 compile :: Store
         -> Namespace
         -> Graph
+        -> CaptureSets
         -> VEnv
         -> BS.ByteString
-compile store ns g venv
+compile store ns g capSets venv
   = evalState
     (trackM "compileFunctions" *>
      compileModule venv *>
      trackM "dumpJSON" *>
      dumpJSON
     )
-    (emptyCS g ns store)
+    (emptyCS g capSets ns store)

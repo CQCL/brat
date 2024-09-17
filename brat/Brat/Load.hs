@@ -50,10 +50,12 @@ type VMod = (VEnv
             ,[(UserName, VDecl)] -- all symbols from all modules
             ,[TypedHole]          -- for just the last module
             ,Store  -- Ends declared & defined in the module
-            ,Graph) -- per function, first elem is name
+            ,Graph  -- all functions in this module, nodes identified from first VEnv
+            ,CaptureSets -- for nodes in this module's Graph only
+            )
 
 emptyMod :: VMod
-emptyMod = (M.empty, [], [], initStore, (M.empty, []))
+emptyMod = (M.empty, [], [], initStore, (M.empty, []), M.empty)
 
 -- N.B. This should only be passed local functions
 -- If the decl is a function with pattern matching clauses, return the Name of
@@ -131,7 +133,7 @@ loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addS
   -- Generate some stuff for each entry:
     --  * A map from names to VDecls (aka an Env)
     --  * Some overs and outs??
-  (entries, (_holes, kcStore, kcGraph, ns)) <- run venv initStore ns $
+  (entries, (holes, kcStore, kcGraph, capSets, ns)) <- run venv initStore ns $
     withAliases aliases $ ("globals" -!) $ forM decls $ \d -> localFC (fnLoc d) $ do
       let name = PrefixName pre (fnName d)
       (thing, ins :->> outs, sig, prefix) <- case (fnLocality d) of
@@ -147,16 +149,18 @@ loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addS
       (_, unders, overs, _) <- prefix -! next (show name) thing (S0, Some (Zy :* S0)) ins outs
       pure ((name, VDecl d{fnSig=sig}), (unders, overs))
   trackM "finished kind checking"
+  unless (length holes == 0) $ error "Should be no holes from kind-checking"
+  unless (M.null capSets) $ error "Should be no captures from kind-checking"
   -- We used to check there were no holes from that, but for now we do not bother
   -- A list of local functions (read: with bodies) to define with checkDecl
   let to_define = M.fromList [ (name, unders) | ((name, VDecl decl), (unders, _)) <- entries, fnLocality decl == Local ]
   let vdecls = map fst entries
   -- Now generate environment mapping usernames to nodes in the graph
   venv <- pure $ venv <> M.fromList [(name, overs) | ((name, _), (_, overs)) <- entries]
-  ((), (holes, newEndData, graph, _)) <- run venv kcStore ns $ withAliases aliases $ do
+  ((), (holes, newEndData, graph, capSets, _)) <- run venv kcStore ns $ withAliases aliases $ do
     remaining <- "check_defs" -! foldM checkDecl' to_define vdecls
     pure $ assert (M.null remaining) () -- all to_defines were defined
-  pure (venv, oldDecls <> vdecls, holes, oldEndData <> newEndData, kcGraph <> graph)
+  pure (venv, oldDecls <> vdecls, holes, oldEndData <> newEndData, kcGraph <> graph, capSets)
  where
   checkDecl' :: M.Map UserName [(Tgt, BinderType Brat)]
              -> (UserName, VDecl)
@@ -202,11 +206,10 @@ loadFiles ns (cwd :| extraDirs) fname contents = do
       let main = (cwd </> fname ++ ".brat", [], mainStmts, mainCts)
       pure (deps ++ [main])
     Nothing -> throwError (SrcErr "" $ dumbErr (InternalError "Empty dependency graph"))
-  -- keep (as we fold) and then return only the graphs from the last file in the list
+  -- keep VEnv as we fold but discard holes, graph and captures except from the last file in the list
   liftEither $ foldM
-    (\(venv, decls, _, defs, _) -> loadStmtsWithEnv ns (venv, decls, defs))
+    (\(venv, decls, _, defs, _, _) -> loadStmtsWithEnv ns (venv, decls, defs))
     emptyMod
---     (fname, [], M.empty, contents)
     allStmts'
   where
     -- builds a map from Import to (index in which discovered, module)
