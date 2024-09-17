@@ -215,7 +215,6 @@ computeMeta e nv = case (e, vars nv) of
    defineSrc idSrc (VNum (nVar (VPar (toEnd idTgt))))
    defineTgt (NamedPort tgt2 "") (VNum (nVar (VPar (toEnd idSrc))))
    wire (idSrc, TNat, NamedPort tgt2 "")
-   let nv' = fmap (const (VPar (toEnd idSrc))) nv
    src1 <- buildNatVal nv
    wire (src1, TNat, NamedPort tgt1 "")
 
@@ -277,7 +276,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     instantiateMeta (ExEnd x) (VNum (nPlus 1 y))
     pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k y
 
-  demandSucc sm@(StrictMono k (Linear (VPar (InEnd x)))) = do
+  demandSucc (StrictMono k (Linear (VPar (InEnd x)))) = do
     one <- buildNum 1
     ((lhs,rhs),out) <- buildArithOp Add
     wire (one, TNat, rhs)
@@ -313,7 +312,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
         wire (twoSrc, TNat, twoTgt)
         wire (outSrc, TNat, NamedPort tgt "")
         let half = nVar (VPar (toEnd halfTgt))
-        instantiateMeta (InEnd tgt) (VNum (n2PowTimes 1 (nVar (VPar (toEnd halfTgt)))))
+        instantiateMeta (InEnd tgt) (VNum (n2PowTimes 1 half))
         pure (StrictMonoFun (StrictMono 0 (Linear (VPar (toEnd halfTgt)))))
       Full sm -> StrictMonoFun sm <$ demand0 (NumValue 0 (StrictMonoFun sm))
     evenGro (StrictMonoFun (StrictMono n mono)) = pure (StrictMonoFun (StrictMono (n - 1) mono))
