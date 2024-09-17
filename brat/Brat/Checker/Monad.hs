@@ -61,6 +61,7 @@ data Context = Ctx { globalVEnv :: VEnv
                    , aliasTable :: M.Map UserName Alias
                    -- All the ends here should be targets
                    , hopeSet :: HopeSet
+                   , captureSets :: M.Map Name VEnv
                    }
 
 -- Commands for synchronous operations
@@ -98,6 +99,7 @@ data CheckingSig ty where
   ANewHope :: (End, FC) -> CheckingSig ()
   AskHopeSet :: CheckingSig HopeSet
   Fork :: Checking () -> CheckingSig ()
+  AddCapture :: Name -> (UserName, [(Src, BinderType Brat)]) -> CheckingSig ()
 
 localAlias :: (UserName, Alias) -> Checking v -> Checking v
 localAlias _ (Ret v) = Ret v
@@ -302,6 +304,8 @@ handler (Req s k) ctx g ns
       ANewHope (e, fc) -> handler (k ()) (ctx { hopeSet = M.insert e fc (hopeSet ctx) }) g ns
       AskHopeSet -> handler (k (hopeSet ctx)) ctx g ns
       Fork c -> handler (k () <* c) ctx g ns
+      AddCapture n (var, ends) ->
+        handler (k ()) ctx {captureSets=M.insertWith M.union n (M.singleton var ends) (captureSets ctx)} g ns
 
 handler (Define end v k) ctx g ns = let st@Store{typeMap=tm, valueMap=vm} = store ctx in
   case track ("Define " ++ show end ++ " = " ++ show v) $ M.lookup end vm of
