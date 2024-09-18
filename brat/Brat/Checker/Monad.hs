@@ -16,6 +16,7 @@ import Util
 import Control.Monad.Freer
 
 import Control.Monad.Fail ()
+import Data.Functor ((<&>))
 import Data.List (intercalate)
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -239,8 +240,7 @@ localKVar env (Fork desc par c) =
 -- Skolem constants are e.g. function parameters that are *not* going to be defined if we wait.
 -- (exception: clause inputs can sometimes be defined if there is exactly one possible value).
 isSkolem :: End -> Checking Bool
-isSkolem (InEnd _) = pure False
-isSkolem (ExEnd _) = pure True -- TODO: should only be True for function parameters i.e. Source nodes
+isSkolem e = req (TypeOf e) <&> snd
 
 catchErr :: Free CheckingSig a -> Free CheckingSig (Either Error a)
 catchErr (Ret t) = Ret (Right t)
