@@ -430,8 +430,10 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
     (Box src tgt) -> case outs of
       [(_, VFun Kerny cty)] -> default_edges . nodeId . fst <$>
            compileKernBox parent name (compileBox (src, tgt)) cty
-      [(_, VFun Braty cty)] -> gets capSets >>= \cs -> compileBratBox parent name (cs M.! name, src, tgt) cty <&>
-          (\(partialNode, captures) -> Just (partialNode, 1, captures)) -- 1 is arbitrary, Box has no real inputs
+      [(_, VFun Braty cty)] -> do
+        cs <- gets (M.findWithDefault M.empty name . capSets)
+        (partialNode, captures) <- compileBratBox parent name (cs, src, tgt) cty
+        pure $ Just (partialNode, 1, captures) -- 1 is arbitrary, Box has no real inputs
       outs -> error $ "Unexpected outs of box: " ++ show outs
 
     Source -> default_edges <$> do
