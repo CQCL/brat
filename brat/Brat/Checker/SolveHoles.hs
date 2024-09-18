@@ -14,6 +14,8 @@ import Bwd
 import Hasochism
 import Util (zip_same_length)
 
+import Control.Exception (assert)
+import Control.Monad (filterM)
 import Data.Foldable (traverse_)
 import Data.Functor
 import qualified Data.Map as M
@@ -64,13 +66,18 @@ typeEqEta _tm (Zy :* _ks :* _sems) hopeSet k exp (SApp (SPar e) B0)
 typeEqEta _ (Zy :* _ :* _) hopeSet Nat exp act
   | Just (SPar e) <- isNumVar exp, M.member e hopeSet = solveHope Nat e act
   | Just (SPar e) <- isNumVar act, M.member e hopeSet = solveHope Nat e exp
+-- harder cases, neither is in the hopeSet, so we can't define it ourselves
 typeEqEta tm stuff@(ny :* _ks :* _sems) hopeSet k exp act = do
   exp <- quote ny exp
   act <- quote ny act
-  case [e | (VApp (VPar e) _) <- [exp,act], M.member e hopeSet] of
-    [] -> typeEqRigid tm stuff k exp act
-    es -> do
+  let ends = [e | (VApp (VPar e) _) <- [exp,act], assert (not $ M.member e hopeSet) True]
+  filterM shouldWait ends >>= \case
+    [] -> typeEqRigid tm stuff k exp act -- easyish, both rigid i.e. already defined
+    es -> do -- tricky: must wait for one or other to become more defined
       Yield (AwaitingAny $ S.fromList es) (\_ -> typeEq tm stuff k exp act)
+ where
+  shouldWait :: End -> Checking Bool
+  shouldWait e = isSkolem e <&> not
 
 -- This will update the hopeSet, potentially invalidating things that have been eval'd
 -- The Sem is closed, for now.

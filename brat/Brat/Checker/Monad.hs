@@ -236,6 +236,12 @@ localKVar env (Fork desc par c) =
   -- can't send end both ways, so until we can join (TODO), restrict Forks to local scope
   thTrace ("Spawning(LKV) " ++ desc) $ localKVar env $ par *> c
 
+-- Skolem constants are e.g. function parameters that are *not* going to be defined if we wait.
+-- (exception: clause inputs can sometimes be defined if there is exactly one possible value).
+isSkolem :: End -> Checking Bool
+isSkolem (InEnd _) = pure False
+isSkolem (ExEnd _) = pure True -- TODO: should only be True for function parameters i.e. Source nodes
+
 catchErr :: Free CheckingSig a -> Free CheckingSig (Either Error a)
 catchErr (Ret t) = Ret (Right t)
 catchErr (Req (Throw e) _) = pure $ Left e
