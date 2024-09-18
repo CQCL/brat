@@ -2,7 +2,7 @@
 
 module Brat.Checker.Helpers where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd)
+import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd, throwLeft, isSkolem)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (eval, EvMode(..), kindType)
@@ -21,18 +21,34 @@ import Util (log2)
 
 import Control.Monad.Freer
 import Control.Arrow ((***))
+import Data.Functor ((<&>))
 import Data.List (intercalate)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Prelude hiding (last)
 
-simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Either ErrorMsg ()
-simpleCheck Braty TNat (Num n) | n >= 0 = pure ()
-simpleCheck Braty TInt (Num _) = pure ()
-simpleCheck Braty TFloat (Float _) = pure ()
-simpleCheck Braty TText (Text _) = pure ()
-simpleCheck _ ty tm = Left $ TypeErr $ unwords
+simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Checking ()
+simpleCheck my ty tm = case (my, ty) of
+  (Braty, VApp (VPar e) _) -> do
+    isHope <- req AskHopeSet <&> M.member e
+    if isHope then
+      case tm of
+        Float _ -> defineEnd e TFloat
+        Text _ -> defineEnd e TText
+        Num n | n < 0 -> defineEnd e TInt
+        Num _ -> typeErr $ "Can't determine whether Int or Nat: " ++ show tm
+    else isSkolem e >>= \case
+      True -> throwLeft $ helper Braty ty tm
+      False -> Yield (AwaitingAny $ S.singleton e) (\_ -> simpleCheck Braty ty tm)
+  _ -> throwLeft $ helper my ty tm
+ where
+  helper :: Modey m -> Val Z -> SimpleTerm -> Either ErrorMsg ()
+  helper Braty TNat (Num n) | n >= 0 = pure ()
+  helper Braty TInt (Num _) = pure ()
+  helper Braty TFloat (Float _) = pure ()
+  helper Braty TText (Text _) = pure ()
+  helper _ ty tm = Left $ TypeErr $ unwords
                       ["Expected something of type"
                       ,"`" ++ show ty ++ "`"
                       ,"but got"

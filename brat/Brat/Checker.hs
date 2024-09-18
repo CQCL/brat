@@ -494,7 +494,7 @@ check' (Simple tm) ((), ((hungry, ty):unders)) = do
     -- No defining needed, so everything else can be unified
     _ -> do
       let vty = biType @m ty
-      throwLeft $ simpleCheck ?my vty tm
+      simpleCheck ?my vty tm
       (_, _, [(dangling, _)], _) <- anext @m "" (Const tm) (S0,Some (Zy :* S0))
                                      R0 (RPr ("value", vty) R0)
       wire (dangling, vty, hungry)
@@ -889,9 +889,9 @@ abstractPattern :: forall m
                 -> Pattern
                 -> Checking (Env (EnvData m)) -- Local env for checking body of lambda
 abstractPattern m (src, ty) (Bind x) = let ?my = m in singletonEnv x (src, ty)
-abstractPattern Braty (_, Left Nat) (Lit tm) = throwLeft (simpleCheck Braty TNat tm) $> emptyEnv
-abstractPattern Braty (_, Right ty) (Lit tm) = throwLeft (simpleCheck Braty ty tm) $> emptyEnv
-abstractPattern Kerny (_, ty) (Lit tm) = throwLeft (simpleCheck Kerny ty tm) $> emptyEnv
+abstractPattern Braty (_, Left Nat) (Lit tm) = simpleCheck Braty TNat tm $> emptyEnv
+abstractPattern Braty (_, Right ty) (Lit tm) = simpleCheck Braty ty tm $> emptyEnv
+abstractPattern Kerny (_, ty) (Lit tm) = simpleCheck Kerny ty tm $> emptyEnv
 abstractPattern Braty (dangling, Left k) pat = abstractKind k pat
  where
   abstractKind :: TypeKind -> Pattern -> Checking (Env (EnvData Brat))
