@@ -1,24 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
-module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
-                            ,simpleCheck
-                            ,combineDisjointEnvs
-                            ,ensureEmpty, noUnders
-                            ,rowToSig
-                            ,showMode, getVec
-                            ,mkThunkTy
-                            ,wire
-                            ,next, knext, anext
-                            ,kindType, getThunks
-                            ,binderToValue, valueToBinder
-                            ,kConFields
-                            ,defineSrc, defineTgt
-                            ,declareSrc, declareTgt
-                            ,makeBox
-                            ,uncons
-                            ,evalBinder
-                            ,evalSrcRow, evalTgtRow
-                            )-} where
+module Brat.Checker.Helpers where
 
 import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd)
 import Brat.Checker.Types
