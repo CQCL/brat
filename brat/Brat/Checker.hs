@@ -291,12 +291,14 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
     let clauses = NE.zip (NE.fromList [0..]) all_cs <&>
                   \(i, (abs, tm)) -> Clause i (normaliseAbstractor <$> abs) tm
     let clauseProblems = do
-          clauses <- traverse (checkClause ?my "lambda" cty) clauses
+          clauses_probs <- traverse (checkClause ?my "lambda" cty) clauses
+          let clauses = clauses_probs <&> (\(tm, n, _) -> (tm, n))
+          let probs = clauses_probs <&> (\(_, _, p) -> p)
           let inputs  = [ (portName p, biType @m ty) | (p, ty) <- patMatchUnders ]
           let outputs = [ (portName p, biType @m ty) | (p, ty) <- patMatchOvers  ]
           req $ AddNode node (mkNode ?my (PatternMatch clauses) inputs outputs) -- not added by anext because suppressGraph
           mkWires overs patMatchUnders -- might canonicalize type better now
-          pure ()
+          sequence_ probs
     pure (patMatchOvers, clauseProblems)
 
 check' (Pull ports t) (overs, unders) = do
@@ -543,6 +545,7 @@ checkClause :: forall m. (CheckConstraints m UVerb, EvMode m) => Modey m
             -> Checking
                ( TestMatchData m -- TestMatch data (LHS)
                , Name   -- Function node (RHS)
+               , Checking ()  -- subproblem for later
                )
 checkClause my fnName cty clause = modily my $ do
   let clauseName = fnName ++ "." ++ show (index clause)
@@ -566,13 +569,14 @@ checkClause my fnName cty clause = modily my $ do
           pure (vars, match, patRo :->> outRo)
 
   -- Now actually make a box for the RHS and check it
-  ((boxPort, _ty), _) <- let ?my = my in makeBox (clauseName ++ "_rhs") rhsCty $ \(rhsOvers, rhsUnders) -> do
+  ((boxPort, _ty), p) <- let ?my = my in makeBox (clauseName ++ "_rhs") rhsCty $ \(rhsOvers, rhsUnders) -> do
     let abstractor = foldr ((:||:) . APat . Bind) AEmpty vars
     let ?my = my in do
       env <- abstractAll rhsOvers abstractor
-      localEnv env $ check @m (rhs clause) ((), rhsUnders)
+      (((), ()), ((), []), p) <- localEnv env $ check @m (rhs clause) ((), rhsUnders)
+      pure p
   let NamedPort {end=Ex rhsNode _} = boxPort
-  pure (match, rhsNode)
+  pure (match, rhsNode, p)
 
 -- Top level function for type checking function definitions
 -- Will make a top-level box for the function, then type check the definition
