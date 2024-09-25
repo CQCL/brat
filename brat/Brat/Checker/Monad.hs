@@ -108,82 +108,72 @@ data CheckingSig ty where
   AskHopeSet :: CheckingSig HopeSet
   AddCapture :: Name -> (UserName, [(Src, BinderType Brat)]) -> CheckingSig ()
 
+wrapper :: (forall a. CheckingSig a -> Checking (Maybe a)) -> Checking v -> Checking v
+wrapper _ (Ret v) = Ret v
+wrapper f (Req (InLvl str c) k) = Req (InLvl str (wrapper f c)) (wrapper f . k)
+wrapper f (Req s k) = f s >>= \case
+  Just v -> wrapper f (k v)
+  Nothing -> Req s (wrapper f . k)
+wrapper f (Define v e k) = Define v e (wrapper f . k)
+wrapper f (Yield st k) = Yield st (wrapper f . k)
+wrapper f (Fork d par c) = Fork d (wrapper f par) (wrapper f c)
+
+wrapper2 :: (forall a. CheckingSig a -> Maybe a) -> Checking v -> Checking v
+wrapper2 f = wrapper (\s -> pure (f s))
+
 localAlias :: (UserName, Alias) -> Checking v -> Checking v
-localAlias _ (Ret v) = Ret v
-localAlias con@(name, alias) (Req (ALup u) k)
-  | u == name = localAlias con $ k (Just alias)
-localAlias con (Req (InLvl str c) k) = Req (InLvl str (localAlias con c)) (localAlias con . k)
-localAlias con (Req r k) = Req r (localAlias con . k)
-localAlias con (Define v e k) = Define v e (localAlias con . k)
-localAlias con (Yield st k) = Yield st (localAlias con . k)
-localAlias con (Fork d par c) = Fork d (localAlias con par) (localAlias con c)
+localAlias (name, alias) = wrapper2 (\case
+    ALup u | u == name -> Just (Just alias)
+    _ -> Nothing)
 
 localFC :: FC -> Checking v -> Checking v
-localFC _ (Ret v) = Ret v
-localFC f (Req AskFC k) = localFC f (k f)
-localFC f (Req (Throw (e@Err{fc=Nothing})) k) = localFC f (Req (Throw (e{fc=Just f})) k)
-localFC f (Req (InLvl str c) k) = Req (InLvl str (localFC f c)) (localFC f . k)
-localFC f (Req r k) = Req r (localFC f . k)
-localFC f (Define v e k) = Define v e (localFC f . k)
-localFC f (Yield st k) = Yield st (localFC f . k)
-localFC f (Fork d par c) = Fork d (localFC f par) (localFC f c)
-
+localFC f = wrapper (\case
+  AskFC -> pure $ Just f
+  (Throw (e@Err{fc=Nothing})) -> req (Throw (e{fc=Just f})) >> error "Throw returned"
+  _ -> pure $ Nothing)
 
 localEnv :: (?my :: Modey m) => Env (EnvData m) -> Checking v -> Checking v
 localEnv = case ?my of
   Braty -> localVEnv
   Kerny -> \env m -> localKVar env (m <* req KDone)
 
-localVEnv :: VEnv -> Checking v -> Checking v
-localVEnv _   (Ret v) = Ret v
-localVEnv ext (Req (VLup x) k) | Just x <- M.lookup x ext = localVEnv ext (k (Just x))
-localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
-                                   -- ext shadows local vars
-                                   localVEnv ext (k (env { locals = M.union ext (locals env) }))
-localVEnv ext (Req (InLvl str c) k) = Req (InLvl str (localVEnv ext c)) (localVEnv ext . k)
-localVEnv ext (Req r k) = Req r (localVEnv ext . k)
-localVEnv ext (Define v e k) = Define v e (localVEnv ext . k)
-localVEnv ext (Yield st k) = Yield st (localVEnv ext . k)
-localVEnv ext (Fork d par c) = Fork d (localVEnv ext par) (localVEnv ext c)
+localVEnv :: M.Map UserName [(Src, BinderType Brat)] -> Checking v -> Checking v
+localVEnv ext = wrapper (\case
+  (VLup x) | j@(Just _) <- M.lookup x ext -> pure $ Just j -- invoke continuation with j
+  AskVEnv -> do
+    outerEnv <- req AskVEnv
+    pure $ Just -- value to return to original continuation
+      (outerEnv { locals = M.union ext (locals outerEnv) })  -- ext shadows local vars                          
+  _ -> pure Nothing)
 
 -- runs a computation, but logs (via AddCapture, under the specified Name) uses of outer
 -- *local* variables
 captureOuterLocals :: Name -> Checking v -> Checking v
 captureOuterLocals n c = do
   outerLocals <- locals <$> req AskVEnv
-  helper outerLocals c
+  wrapper (helper outerLocals) c
  where
-  helper :: VEnv -> Checking v -> Checking v
-  helper _ (Ret v) = Ret v
-  helper avail (Req (VLup x) k) | j@(Just new) <- M.lookup x avail =
-    (req $ AddCapture n (x,new)) >> helper avail (k j)
-  helper avail (Req r k) = Req r (helper avail . k)
-  helper avail (Define e v k) = Define e v (helper avail . k)
-  helper avail (Yield st k) = Yield st (helper avail . k)
-  helper avail (Fork d par c) = Fork d (helper avail par) (helper avail c)
+  helper :: VEnv -> forall a. CheckingSig a -> Checking (Maybe a)
+  helper avail (VLup x) | j@(Just new) <- M.lookup x avail =
+    (req $ AddCapture n (x,new)) >> (pure $ Just j)
+  helper _ _ = pure Nothing
 
 wrapError :: (Error -> Error) -> Checking v -> Checking v
-wrapError _ (Ret v) = Ret v
-wrapError f (Req (Throw e) k) = Req (Throw (f e)) k
-wrapError f (Req (InLvl str c) k) = Req (InLvl str (wrapError f c)) (wrapError f . k)
-wrapError f (Req r k) = Req r (wrapError f . k)
-wrapError f (Define v e k) = Define v e (wrapError f . k)
-wrapError f (Yield st k) = Yield st (wrapError f . k)
-wrapError f (Fork d par c) = Fork d (wrapError f par) (wrapError f c)
+wrapError f = wrapper (\case
+  (Throw e) -> req (Throw (f e)) -- do not return value from outer Throw!
+  _ -> pure Nothing)
 
 throwLeft :: Either ErrorMsg a -> Checking a
 throwLeft (Right x) = pure x
 throwLeft (Left msg) = err msg
 
 vlup :: UserName -> Checking [(Src, BinderType Brat)]
-vlup s = do
-  req (VLup s) >>= \case
+vlup s = req (VLup s) >>= \case
     Just vty -> pure vty
     Nothing -> err $ VarNotFound (show s)
 
 alup :: UserName -> Checking Alias
-alup s = do
-  req (ALup s) >>= \case
+alup s = req (ALup s) >>= \case
     Just vty -> pure vty
     Nothing -> err $ VarNotFound (show s)
 
@@ -217,6 +207,7 @@ lookupAndUse x kenv = case M.lookup x kenv of
    Just (Tons, rest) -> Right $ Just (rest, M.insert x (Tons, rest) kenv)
 
 localKVar :: KEnv -> Checking v -> Checking v
+-- Doesn't fit the wrapper pattern because the `env` mutates
 localKVar _   (Ret v) = Ret v
 localKVar env (Req (KLup x) k) = case lookupAndUse x env of
                                    Left err@(Err (Just _) _) -> req $ Throw err
@@ -380,22 +371,16 @@ instance MonadFail Checking where
 
 -- Run a computation without logging any holes
 suppressHoles :: Checking a -> Checking a
-suppressHoles (Ret x) = Ret x
-suppressHoles (Req (LogHole _) k) = suppressHoles (k ())
-suppressHoles (Req c k) = Req c (suppressHoles . k)
-suppressHoles (Define v e k) = Define v e (suppressHoles . k)
-suppressHoles (Yield st k) = Yield st (suppressHoles . k)
-suppressHoles (Fork d par c) = Fork d (suppressHoles par) (suppressHoles c)
+suppressHoles = wrapper2 (\case
+  (LogHole _) -> Just ()
+  _ -> Nothing)
 
 -- Run a computation without doing any graph generation
 suppressGraph :: Checking a -> Checking a
-suppressGraph (Ret x) = Ret x
-suppressGraph (Req (AddNode _ _) k) = suppressGraph (k ())
-suppressGraph (Req (Wire _) k) = suppressGraph (k ())
-suppressGraph (Req c k) = Req c (suppressGraph . k)
-suppressGraph (Define v e k) = Define v e (suppressGraph . k)
-suppressGraph (Yield st k) = Yield st (suppressGraph . k)
-suppressGraph (Fork d par c) = Fork d (suppressGraph par) (suppressGraph c)
+suppressGraph = wrapper2 (\case
+  (AddNode _ _) -> Just ()
+  (Wire _) -> Just ()
+  _ -> Nothing)
 
 defineEnd :: End -> Val Z -> Checking ()
 defineEnd e v = Define e v (const (Ret ()))
