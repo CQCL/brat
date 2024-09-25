@@ -201,7 +201,7 @@ instantiateMeta e val = do
   throwLeft (doesntOccur e val)
   Define e val (const (Ret ()))
 
--- solve a Nat kinded metavariable. Unline `instantiateMeta`, this function also
+-- Solve a Nat kinded metavariable. Unlike `instantiateMeta`, this function also
 -- makes the dynamic wiring for a metavariable. This only needs to happen for
 -- numbers because they have nontrivial runtime behaviour.
 --
@@ -211,14 +211,15 @@ solveNumMeta e nv = case (e, vars nv) of
  -- Compute the thing that the rhs should be based on the src, and instantiate src to that
  (ExEnd src,  [VPar (InEnd tgt)]) -> do
    -- Compute the value of the `tgt` variable from the known `src` value by invering nv
-   tgtSrc <- invertNatVal (NamedPort src "") nv
+   tgtSrc <- invertNatVal nv
    -- If `nv` is *just* a variable, invertNatVal will return `src`. We need to
    -- catch this because defining x := x will cause eval to loop.
-   unless (ExEnd src == toEnd tgtSrc) (defineSrc src (VNum (const (VPar (ExEnd tgtSrc)) <$> nv)))
-   defineTgt (InEnd tgt) (VNum (nVar tgtSrc))
+   unless (ExEnd src == toEnd tgtSrc) $
+     (defineSrc (NamedPort src "") (VNum (const (VPar (ExEnd tgtSrc)) <$> nv)))
+   defineTgt (NamedPort tgt "") (VNum (nVar tgtSrc))
    wire (tgtSrc, TNat, NamedPort tgt "")
 
- (ExEnd src, _) -> defineSrc src nv
+ (ExEnd src, _) -> defineSrc (NamedPort src "") nv
 
  -- Both targets, we need to create the thing that they both derive from
  (InEnd tgt1, [VPar (InEnd tgt2)]) -> do
@@ -229,13 +230,13 @@ solveNumMeta e nv = case (e, vars nv) of
    wire (idSrc, TNat, NamedPort tgt2 "")
    let nv' = fmap (const (VPar (toEnd idSrc))) nv
    src1 <- buildNatVal nv'
-   defineTgt tgt1 (VNum nv')
+   defineTgt (NamedPort tgt1 "") (VNum nv')
    wire (src1, TNat, NamedPort tgt1 "")
 
  -- RHS is constant or Src, wire it into tgt
  (InEnd tgt,  _) -> do
    src <- buildNatVal nv
-   defineTgt tgt nv
+   defineTgt (NamedPort tgt "") nv
    wire (src, TNat, NamedPort tgt "")
 
  where
@@ -290,11 +291,8 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k y
 
   demandSucc sm@(StrictMono k (Linear (VPar (InEnd x)))) = do
-    one <- buildNum 1
-    ((lhs,rhs),out) <- buildArithOp Add
-    wire (one, TNat, rhs)
-    wire (out, TNat, NamedPort x "")
-    let y = nVar (VPar (toEnd lhs))
+    yTgt <- invertNatVal (NamedPort x "") (NumValue 1 (StrictMonoFun sm))
+    let y = nVar (VPar (toEnd yTgt))
     solveNumMeta (InEnd x) (nPlus 1 y)
     pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k y
 
@@ -320,12 +318,9 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
         solveNumMeta (ExEnd out) (n2PowTimes 1 (nVar (VPar (toEnd half))))
         pure (StrictMonoFun (StrictMono 0 (Linear (VPar (toEnd half)))))
       Linear (VPar (InEnd tgt)) -> do
-        twoSrc <- buildNum 2
-        ((halfTgt,twoTgt),outSrc) <- buildArithOp Mul
-        wire (twoSrc, TNat, twoTgt)
-        wire (outSrc, TNat, NamedPort tgt "")
+        halfTgt <- buildNatVal (NumValue 0 (StrictMonoFun (StrictMono 1 (Linear tgt))))
         let half = nVar (VPar (toEnd halfTgt))
-        solveNumMeta (InEnd tgt) (n2PowTimes 1 (nVar (VPar (toEnd halfTgt))))
+        solveNumMeta (InEnd tgt) (n2PowTimes 1 half)
         pure (StrictMonoFun (StrictMono 0 (Linear (VPar (toEnd halfTgt)))))
       Full sm -> StrictMonoFun sm <$ demand0 (NumValue 0 (StrictMonoFun sm))
     evenGro (StrictMonoFun (StrictMono n mono)) = pure (StrictMonoFun (StrictMono (n - 1) mono))
@@ -339,18 +334,10 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
         solveNumMeta (ExEnd out) (nPlus 1 (n2PowTimes 1 (nVar (VPar (toEnd halfSrc)))))
         pure (nVar (VPar (toEnd halfSrc)))
       Linear (VPar (InEnd tgt)) -> do
-        twoSrc <- buildNum 2
-        ((flooredHalfTgt, twoTgt), doubleSrc) <- buildArithOp Mul
-        wire (twoSrc, TNat, twoTgt)
-
-        oneSrc <- buildNum 1
-        ((doubleTgt, oneTgt), addOut) <- buildArithOp Add
-        wire (oneSrc, TNat, oneTgt)
-        wire (doubleSrc, TNat, doubleTgt)
-        wire (addOut, TNat, NamedPort tgt "")
-
-        solveNumMeta (InEnd tgt) (nPlus 1 (n2PowTimes 1 (nVar (VPar (toEnd flooredHalfTgt)))))
-        pure (nVar (VPar (toEnd flooredHalfTgt)))
+        flooredHalfTgt <- buildNatVal (NumValue 1 (StrictMonoFun (StrictMono 1 (Linear (VPar (toEnd tgt))))))
+        let flooredHalf = nVar (VPar (toEnd flooredHalfTgt))
+        solveNumMeta (InEnd tgt) (nPlus 1 (n2PowTimes 1 flooredHalf))
+        pure flooredHalf
 
       -- full(n + 1) = 1 + 2 * full(n)
       -- hence, full(n) is the rounded down half
