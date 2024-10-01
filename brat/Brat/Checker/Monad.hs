@@ -72,6 +72,9 @@ data Context = Ctx { globalVEnv :: VEnv
 mkFork :: String -> Free sig () -> Free sig ()
 mkFork d par = thTrace ("Forking " ++ d) $ Fork d par $ pure ()
 
+mkYield :: String -> S.Set End -> Free sig ()
+mkYield desc es = thTrace ("Yielding in " ++ desc) $ Yield (AwaitingAny es) (\_ -> Ret ())
+
 -- Commands for synchronous operations
 data CheckingSig ty where
   Fresh   :: String -> CheckingSig Name

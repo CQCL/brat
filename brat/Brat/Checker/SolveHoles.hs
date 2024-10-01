@@ -73,8 +73,8 @@ typeEqEta tm stuff@(ny :* _ks :* _sems) hopeSet k exp act = do
   let ends = [e | (VApp (VPar e) _) <- [exp,act], assert (not $ M.member e hopeSet) True]
   filterM shouldWait ends >>= \case
     [] -> typeEqRigid tm stuff k exp act -- easyish, both rigid i.e. already defined
-    es -> do -- tricky: must wait for one or other to become more defined
-      Yield (AwaitingAny $ S.fromList es) (\_ -> typeEq tm stuff k exp act)
+    es -> -- tricky: must wait for one or other to become more defined
+      mkYield "typeEqEta" (S.fromList es) >> typeEq tm stuff k exp act
  where
   shouldWait :: End -> Checking Bool
   shouldWait e = isSkolem e <&> not

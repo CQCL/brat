@@ -36,7 +36,7 @@ coroT1 = do
           Just _ -> err $ InternalError "already defined"
           Nothing -> defineEnd e (VCon (PrefixName [] "nil") [])
       )
-  Yield (AwaitingAny $ S.singleton e) $ \_ -> pure ()
+  mkYield "coroT1" (S.singleton e) >> pure ()
   traceM "Yield continued"
   v <- req $ ELup e
   case v of
@@ -48,7 +48,9 @@ coroT2 = do
   name <- req (Fresh "anything")
   let e = InEnd $ In name 0
   req $ Declare e Braty (Left $ Star []) False
-  v <- Yield (AwaitingAny $ S.singleton e) $ \_ -> req $ ELup e
+  v <- do
+    mkYield "coroT2" (S.singleton e)
+    req $ ELup e
   -- No way to execute this without a 'v'
   mkFork "t2" $ defineEnd e (VCon (PrefixName [] "nil") [])
   err $ InternalError $ case v of

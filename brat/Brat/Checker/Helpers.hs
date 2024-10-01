@@ -2,7 +2,7 @@
 
 module Brat.Checker.Helpers where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd, throwLeft, isSkolem)
+import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd, throwLeft, isSkolem, mkYield)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (eval, EvMode(..), kindType)
@@ -40,7 +40,7 @@ simpleCheck my ty tm = case (my, ty) of
         Num _ -> typeErr $ "Can't determine whether Int or Nat: " ++ show tm
     else isSkolem e >>= \case
       True -> throwLeft $ helper Braty ty tm
-      False -> Yield (AwaitingAny $ S.singleton e) (\_ -> simpleCheck Braty ty tm)
+      False -> mkYield "simpleCheck" (S.singleton e) >> simpleCheck Braty ty tm
   _ -> throwLeft $ helper my ty tm
  where
   helper :: Modey m -> Val Z -> SimpleTerm -> Either ErrorMsg ()
@@ -275,7 +275,7 @@ getThunks Braty row@((src, Right ty):rest) = eval S0 ty >>= \case
   v -> do
     h <- req AskHopeSet
     case v of
-      VApp (VPar e) _ | M.member e h -> Yield (AwaitingAny $ S.singleton e) (\_ -> getThunks Braty row)
+      VApp (VPar e) _ | M.member e h -> mkYield "getThunks" (S.singleton e) >> getThunks Braty row
       _ -> typeErr $ "Force called on non-thunk: " ++ show v
 getThunks Kerny row@((src, Right ty):rest) = eval S0 ty >>= \case
   (VFun Kerny (ss :->> ts)) -> do
