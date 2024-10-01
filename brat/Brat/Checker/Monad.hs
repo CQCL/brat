@@ -316,8 +316,14 @@ handler (Define end v k) ctx g ns = let st@Store{typeMap=tm, valueMap=vm} = stor
       Nothing -> case M.lookup end tm of
         Nothing -> Left $ dumbErr (InternalError $ "Defining un-Declared " ++ show end ++ " in \n" ++ show tm)
         -- Allow even Skolems to be defined (e.g. clauses with unique soln)
-        -- TODO can we check the value is of the kind declared?
-        Just _ -> let news = News (M.singleton end (howStuck v)) in
+        -- TODO(1) can we check the value is of the kind declared?
+        -- TODO(2) it'd be better to figure out if the end is really Unstuck,
+        -- or just awaiting some other end, but that seems overly complex atm, as
+        -- (a) we must be "Unstuck" if the end is Defined to something Skolem *OR* in the HopeSet,
+        -- (b) Numbers are tricky, whether they are stuck or not depends upon the question
+        -- (c) since there are no infinite end-creating loops, it's correct (merely inefficient)
+        -- to just "have another go".
+        Just _ -> let news = News (M.singleton end Unstuck) in
           handler (k news)
             (ctx { store = st { valueMap = M.insert end v vm },
                 hopeSet = M.delete end (hopeSet ctx)
@@ -327,27 +333,6 @@ handler (Yield (AwaitingAny ends) _k) ctx _ _ = Left $ dumbErr $ TypeErr $ unlin
   ("Typechecking blocked on:":(show <$> S.toList ends))
   ++ "":"Hopeset is":(show <$> M.keys (hopeSet ctx)) ++ ["Try writing more types! :-)"]
 handler (Fork desc par c) ctx g ns = handler (thTrace ("Spawning " ++ desc) $ par *> c) ctx g ns
-
-howStuck :: Val n -> Stuck
-howStuck (VApp (VPar e) _) = AwaitingAny (S.singleton e)
-howStuck (VLam bod) = howStuck bod
-howStuck (VCon _ _) = Unstuck
-howStuck (VFun _ _) = Unstuck
-howStuck (VSum _ _) = Unstuck
--- Numbers are likely to cause problems.
--- Whether they are stuck or not depends on the question we're asking!
-howStuck (VNum (NumValue 0 gro)) = howStuckGro gro
- where
-  howStuckGro Constant0 = Unstuck
-  howStuckGro (StrictMonoFun f) = howStuckSM f
-
-  howStuckSM (StrictMono 0 mono) = howStuckMono mono
-  howStuckSM _ = AwaitingAny mempty
-
-  howStuckMono (Full sm) = howStuckSM sm
-  howStuckMono (Linear (VPar e)) = AwaitingAny (S.singleton e) -- ALAN was VHop
-  howStuckMono (Linear _) = AwaitingAny mempty
-howStuck _ = AwaitingAny mempty
 
 type Checking = Free CheckingSig
 
