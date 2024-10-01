@@ -320,7 +320,9 @@ handler (Define end v k) ctx g ns = let st@Store{typeMap=tm, valueMap=vm} = stor
                 hopeSet = M.delete end (hopeSet ctx)
             }) g ns
 handler (Yield Unstuck k) ctx g ns = handler (k mempty) ctx g ns
-handler (Yield (AwaitingAny ends) _k) _ _ _ = Left $ dumbErr $ TypeErr $ unlines $ ("Typechecking blocked on:":(show <$> S.toList ends)) ++ ["", "Try writing more types! :-)"]
+handler (Yield (AwaitingAny ends) _k) ctx _ _ = Left $ dumbErr $ TypeErr $ unlines $
+  ("Typechecking blocked on:":(show <$> S.toList ends))
+  ++ "":"Hopeset is":(show <$> M.keys (hopeSet ctx)) ++ ["Try writing more types! :-)"]
 handler (Fork desc par c) ctx g ns = handler (thTrace ("Spawning " ++ desc) $ par *> c) ctx g ns
 
 howStuck :: Val n -> Stuck
