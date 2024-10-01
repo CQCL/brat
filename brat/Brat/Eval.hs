@@ -17,6 +17,7 @@ module Brat.Eval (EvMode(..)
                  ,kindType
                  ,numVal
                  ,quote
+                 ,getNumVar
                  ) where
 
 import Brat.Checker.Monad
@@ -298,6 +299,14 @@ eqTests tm lvkz = go
   go _ us vs = pure . Left . TypeErr $ "Arity mismatch in type constructor arguments:\n  "
                    ++ show us ++ "\n  " ++ show vs
 
+getNumVar :: NumVal (VVar n) -> Maybe End
+getNumVar (NumValue _ (StrictMonoFun (StrictMono _ mono))) = case mono of
+  Linear v -> case v of
+    VPar e -> Just e
+    _ -> Nothing
+  Full sm -> getNumVar (numValue sm)
+getNumVar _ = Nothing
+
 -- Be conservative, fail if in doubt. Not dangerous like being wrong while succeeding
 -- We can have bogus failures here because we're not normalising under lambdas
 -- N.B. the value argument is normalised.
@@ -305,14 +314,6 @@ doesntOccur :: End -> Val n -> Either ErrorMsg ()
 doesntOccur e (VNum nv) = case getNumVar nv of
   Just e' -> collision e e'
   _ -> pure ()
- where
-  getNumVar :: NumVal (VVar n) -> Maybe End
-  getNumVar (NumValue _ (StrictMonoFun (StrictMono _ mono))) = case mono of
-    Linear v -> case v of
-      VPar e -> Just e
-      _ -> Nothing
-    Full sm -> getNumVar (numValue sm)
-  getNumVar _ = Nothing
 doesntOccur e (VApp var args) = case var of
   VPar e' -> collision e e' *> traverse_ (doesntOccur e) args
   _ -> pure ()
