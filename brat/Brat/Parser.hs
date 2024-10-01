@@ -29,7 +29,7 @@ import Data.List (intercalate, uncons)
 import Data.List.HT (chop, viewR)
 import Data.List.NonEmpty (toList, NonEmpty(..), nonEmpty)
 import qualified Data.List.NonEmpty as NE
-import Data.Maybe (fromJust, maybeToList, fromMaybe)
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Set (empty)
 import Prelude hiding (lex, round)
 import Text.Megaparsec hiding (Pos, Token, State, empty, match, ParseError, parse)
@@ -45,9 +45,6 @@ parse p s tks = evalState (runParserT p s tks) (Pos 0 0)
 
 instance ShowErrorComponent CustomError where
   showErrorComponent (Custom s) = s
-
-nextToken :: Parser BToken
-nextToken = lookAhead $ token Just empty
 
 matchTokFC :: (Tok -> Maybe a) -> Parser (WC a)
 matchTokFC f = token (matchTok f) empty
@@ -84,12 +81,6 @@ kmatch = match . K
 matchString :: String -> Parser (WC ())
 matchString s = label (show s) $ matchTokFC $ \case
   Ident ident | ident == s -> Just ()
-  _ -> Nothing
-
-
-ident :: (String -> Maybe a) -> Parser a
-ident f = label "identifier" $ token0 $ \case
-  Ident str -> f str
   _ -> Nothing
 
 hole :: Parser (WC String)
@@ -191,7 +182,7 @@ abstractor = do ps <- many (try portPull)
     joinBinders xs = let (abs, startFC, endFC) = joinBindersAux xs in WC (spanFC startFC endFC) abs
 
     joinBindersAux (WC fc x :| []) = (x, fc, fc)
-    joinBindersAux (WC fc x :| (y:ys)) = let (abs, startFC, endFC) = joinBindersAux (y :| ys) in
+    joinBindersAux (WC fc x :| (y:ys)) = let (abs, _, endFC) = joinBindersAux (y :| ys) in
                                            (x :||: abs, fc, endFC)
 
   binding :: Parser (WC Abstractor)
@@ -208,8 +199,6 @@ abstractor = do ps <- many (try portPull)
   list2Cons _ = customFailure (Custom "Internal error list2Cons")
 
   portPull = port <* match PortColon
-
-  binderComma = match Comma $> (:||:)
 
   -- For simplicity, we can say for now that all of our infix vector patterns have
   -- the same precedence and associate to the right
@@ -509,14 +498,15 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
     case rest of
       Just (c, args) -> do
         rhs <- vectorBuild
-        pure (WC (spanFCOf lhs rhs) (FCon c (mkJuxt (args ++ [rhs]))))
+        let juxtElems = case args of
+              [] -> rhs :| []
+              (a:as) -> a :| (as ++ [rhs])
+        pure (WC (spanFCOf lhs rhs) (FCon c (mkJuxt juxtElems)))
       Nothing -> pure lhs
-   where
-    matchConstructor lhs = matchFC Cons
 
-  mkJuxt :: [WC Flat] -> WC Flat
-  mkJuxt [x] = x
-  mkJuxt (x:xs) = let rest = mkJuxt xs in WC (FC (start (fcOf x)) (end (fcOf rest))) (FJuxt x rest)
+  mkJuxt :: NonEmpty (WC Flat) -> WC Flat
+  mkJuxt (x :| []) = x
+  mkJuxt (x :| (y:ys)) = let rest = mkJuxt (y:|ys) in WC (FC (start (fcOf x)) (end (fcOf rest))) (FJuxt x rest)
 
   application :: Parser (WC Flat)
   application = atomExpr >>= applied
@@ -562,6 +552,7 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
     otherClauses <- many (match Pipe >> lambdaClause)
     let endPos = case otherClauses of
           [] -> end (fcOf (snd firstClause))
+          _ -> end (fcOf (snd (last otherClauses)))
     let fc = FC (start (fcOf (fst firstClause))) endPos
     pure (WC fc (FLambda (firstClause :| otherClauses)))
 
