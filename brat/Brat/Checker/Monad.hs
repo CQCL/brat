@@ -213,20 +213,20 @@ handler :: Free CheckingSig v
         -> Context
         -> Graph
         -> Namespace
-        -> Either Error (v,Context,([TypedHole],Graph),Namespace)
-handler (Ret v) ctx g ns = return (v, ctx, ([], g), ns)
+        -> Either Error (v,Context,([TypedHole],Graph))
+handler (Ret v) ctx g _ = return (v, ctx, ([], g))
 handler (Req s k) ctx g ns
   = case s of
       Fresh str -> let (name, root) = fresh str ns in
                      handler (k name) ctx g root
       InLvl str c -> do  -- In Either Error monad
         let (freshNS, newRoot) = split str ns
-        (v, ctx, (holes1, g), _) <- handler c ctx g freshNS
-        (v, ctx, (holes2, g), ns) <- handler (k v) ctx g newRoot
-        pure (v, ctx, (holes1 ++ holes2, g), ns)
+        (v, ctx, (holes1, g)) <- handler c ctx g freshNS
+        (v, ctx, (holes2, g)) <- handler (k v) ctx g newRoot
+        pure (v, ctx, (holes1 ++ holes2, g))
       Throw err -> Left err
-      LogHole hole -> do (v,ctx,(holes,g),ns) <- handler (k ()) ctx g ns
-                         return (v,ctx,(hole:holes,g),ns)
+      LogHole hole -> do (v,ctx,(holes,g)) <- handler (k ()) ctx g ns
+                         return (v,ctx,(hole:holes,g))
       AskFC -> error "AskFC in handler - shouldn't happen, should always be in localFC"
       VLup s -> handler (k $ M.lookup s (globalVEnv ctx)) ctx g ns
       ALup s -> handler (k $ M.lookup s (aliasTable ctx)) ctx g ns
