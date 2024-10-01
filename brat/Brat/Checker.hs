@@ -791,7 +791,7 @@ kindCheckRow' :: forall m n
 kindCheckRow' _ ez env (_,i) [] = pure (i, env, Some (ez :* R0))
 kindCheckRow' Braty (ny :* s) env (name,i) ((p, Left k):rest) = do -- s is Stack Z n
   let dangling = Ex name (ny2int ny)
-  req (Declare (ExEnd dangling) Braty (Left k))
+  req (Declare (ExEnd dangling) Braty (Left k) False) -- assume none are Skolem consts??
   env <- pure $ M.insert (plain p) [(NamedPort dangling p, Left k)] env
   (i, env, ser) <- kindCheckRow' Braty (Sy ny :* (s :<< ExEnd dangling)) env (name, i) rest
   case ser of

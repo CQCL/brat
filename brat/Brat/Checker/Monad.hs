@@ -102,7 +102,7 @@ data CheckingSig ty where
   Wire    :: Wire -> CheckingSig ()
   KDone   :: CheckingSig ()
   AskVEnv :: CheckingSig CtxEnv
-  Declare :: End -> Modey m -> BinderType m -> CheckingSig ()
+  Declare :: End -> Modey m -> BinderType m -> Bool -> CheckingSig () -- Bool = is-skole
   ANewHope :: (End, FC) -> CheckingSig ()
   AskHopeSet :: CheckingSig HopeSet
   AddCapture :: Name -> (UserName, [(Src, BinderType Brat)]) -> CheckingSig ()
@@ -282,7 +282,7 @@ handler (Req s k) ctx g ns
       TypeOf end -> case M.lookup end . typeMap . store $ ctx of
         Just et -> handler (k et) ctx g ns
         Nothing -> Left (dumbErr . InternalError $ "End " ++ show end ++ " isn't Declared")
-      Declare end my bty ->
+      Declare end my bty skol ->
         let st@Store{typeMap=m} = store ctx
         in case M.lookup end m of
           Just _ -> Left $ dumbErr (InternalError $ "Redeclaring " ++ show end)
@@ -290,7 +290,7 @@ handler (Req s k) ctx g ns
                        track ("Declared " ++ show end ++ " :: " ++ bty_str) $
                        handler (k ())
                        (ctx { store =
-                              st { typeMap = M.insert end (EndType my bty, False) m }
+                              st { typeMap = M.insert end (EndType my bty, skol) m }
                             }) g ns
       -- TODO: Use the kind argument for partially applied constructors
       TLup key -> do

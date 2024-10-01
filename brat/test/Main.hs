@@ -31,7 +31,7 @@ coroT1 :: Checking ()
 coroT1 = do
   name <- req (Fresh "anything")
   let e = InEnd $ In name 0
-  req $ Declare e Braty (Left $ Star [])
+  req $ Declare e Braty (Left $ Star []) False
   mkFork "t1" (req (ELup e) >>= \case
           Just _ -> err $ InternalError "already defined"
           Nothing -> Define e (VCon (PrefixName [] "nil") []) (\_ -> pure ())
@@ -47,7 +47,7 @@ coroT2 :: Checking ()
 coroT2 = do
   name <- req (Fresh "anything")
   let e = InEnd $ In name 0
-  req $ Declare e Braty (Left $ Star [])
+  req $ Declare e Braty (Left $ Star []) False
   v <- Yield (AwaitingAny $ S.singleton e) $ \_ -> req $ ELup e
   -- No way to execute this without a 'v'
   mkFork "t2" $ Define e (VCon (PrefixName [] "nil") []) (\_ -> pure ())
