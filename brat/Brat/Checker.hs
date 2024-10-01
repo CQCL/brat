@@ -48,7 +48,7 @@ import Brat.UserName
 import Bwd
 import Hasochism
 import Util (zip_same_length)
-import Debug.Trace
+--import Debug.Trace
 
 -- Put things into a standard form in a kind-directed manner, such that it is
 -- meaningful to do case analysis on them
@@ -176,7 +176,7 @@ check :: (CheckConstraints m k
       -> ChkConnectors m d k
       -> Checking (SynConnectors m d k
                   ,ChkConnectors m d k)
-check (WC fc tm) conn = trace ("Beginning check of " ++ show tm) $ localFC fc (check' tm conn)
+check (WC fc tm) conn = track ("Beginning check of " ++ show tm) $ localFC fc (check' tm conn)
 
 check' :: forall m d k
         . (CheckConstraints m k
@@ -443,19 +443,19 @@ check' (VHole (mnemonic, name)) connectors = do
 -- TODO: Better error message
 check' tm@(Con _ _) ((), []) = typeErr $ "No type to check " ++ show tm ++ " against"
 check' tm@(Con vcon vargs) ((), ((hungry, ty):unders)) = do
-  traceM ("check' Con vcon=" ++ show vcon ++ "  vargs=" ++ show vargs)
+  trackM ("check' Con vcon=" ++ show vcon ++ "  vargs=" ++ show vargs)
   mkFork "check'Con" $ case (?my, ty) of
       (Braty, Left k) -> do
         (_, leftOvers) <- kindCheck [(hungry, k)] (Con vcon vargs)
         ensureEmpty "kindCheck leftovers" leftOvers
       (Braty, Right ty) -> aux Braty clup ty
-      (Kerny, _) -> trace "Kerny" $ aux Kerny kclup ty
+      (Kerny, _) -> track "Kerny" $ aux Kerny kclup ty
   pure (((), ()), ((), unders))
  where
   aux :: Modey m -> (UserName -> UserName -> Checking (CtorArgs m)) -> Val Z -> Checking ()
   aux my lup ty = do
-    VCon tycon tyargs <- trace "In forked aux for check' Con" $ eval S0 ty
-    (CArgs pats nFree _ argTypeRo) <- trace "forked aux doing lup" $ lup vcon tycon
+    VCon tycon tyargs <- track "In forked aux for check' Con" $ eval S0 ty
+    (CArgs pats nFree _ argTypeRo) <- track "forked aux doing lup" $ lup vcon tycon
     -- Look for vectors to produce better error messages for mismatched lengths
     wrap <- detectVecErrors vcon tycon tyargs pats ty (Left tm)
     Some (ny :* env) <- throwLeft $ valMatches tyargs pats
