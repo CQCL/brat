@@ -593,16 +593,26 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
       WC (spanFCOf a b) (f a b)
     _ -> Nothing
 
-  pullAndJuxt = pull <|> juxt
+  pullAndJuxt = do
+    ports <- many (try portPull)
+    let firstPortFC = fcOf . fst <$> uncons ports
+    case ports of
+      [] -> juxtRhsWithPull
+      _ -> (\juxt@(WC juxtFC _) -> WC (maybe juxtFC (\fc -> spanFC fc juxtFC) firstPortFC) (FPull (unWC <$> ports) juxt)) <$> juxtRhsWithPull
+   where
+    portPull :: Parser (WC String)
+    portPull = do
+      WC portFC portName <- port
+      WC colonFC _ <- matchFC PortColon
+      pure (WC (spanFC portFC colonFC) portName)
 
-  pull :: Parser (WC Flat)
-  pull = do
-    ports <- some (try (port <* match PortColon))
-    body <- subExpr PJuxtPull
-    pure $ WC (spanFCOf (head ports) body) (FPull (unWC <$> ports) body)
-
-  juxt :: Parser (WC Flat)
-  juxt = (try pull <|> subExpr PJuxtPull) `chainl1` try comma
+    -- Juxtaposition here includes port pulling, since they have the same precedence
+    juxtRhsWithPull = do
+      expr <- subExpr PJuxtPull
+      rest <- optional (match Comma *> pullAndJuxt)
+      pure $ case rest of
+        Nothing -> expr
+        Just rest@(WC restFC _) -> WC (spanFC (fcOf expr) restFC) (FJuxt expr rest)
 
 cnoun :: Parser (WC Flat) -> Parser (WC (Raw 'Chk 'Noun))
 cnoun pe = do
