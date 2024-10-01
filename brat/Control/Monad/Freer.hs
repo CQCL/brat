@@ -45,12 +45,14 @@ data Free (sig :: Type -> Type) (v :: Type) where
   Req ::  sig t -> (t -> Free sig v) -> Free sig v
   Define :: End -> Val Z -> (News -> Free sig v) -> Free sig v
   Yield :: Stuck -> (News -> Free sig v) -> Free sig v
+  Fork :: String -> Free sig () -> Free sig v -> Free sig v
 
 instance Functor (Free sig) where
   fmap f (Ret v) = Ret (f v)
   fmap f (Req sig k) = Req sig (fmap f . k)
   fmap f (Define e v k) = Define e v (fmap f . k)
   fmap f (Yield st k) = Yield st (fmap f . k)
+  fmap f (Fork d par c) = Fork d par (fmap f c)
 
 class NewsWatcher t where
   (///) :: t -> News -> t
@@ -67,6 +69,7 @@ instance NewsWatcher (Free sig v) where
   Req sig k /// n = Req sig $ \v -> k v /// n
   Define e v k /// n = Define e v (k /// n)
   Yield st k /// n = Yield (st /// n) (k /// n)
+  Fork d par c /// n = Fork d (par /// n) (c /// n)
 
 instance Applicative (Free sig) where
   pure = Ret
@@ -75,6 +78,10 @@ instance Applicative (Free sig) where
   -- First, get rid of Yield Unstuck
   Yield Unstuck k <*> a = k mempty <*> a
   f <*> Yield Unstuck k = f <*> k mempty
+
+  -- Aggressively forward Forks
+  Fork d par c <*> ma = Fork d par (c <*> ma)
+  ma <*> Fork d par c = Fork d par (ma <*> c)
 
   -- Make progress on the left
   Ret f <*> ma = fmap f ma
@@ -95,6 +102,7 @@ instance Monad (Free sig) where
   Yield st k1 >>= k2 = Yield st (k1 >=> k2)
   --- equivalent to
   -- Yield st k1 >>= k2 = Yield st (\n -> (k1 n) >>= k2)
+  Fork d par k1 >>= k2 = Fork d par (k1 >>= k2)
 
 req :: sig t -> Free sig t
 req s = Req s Ret
