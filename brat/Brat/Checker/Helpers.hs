@@ -8,7 +8,7 @@ import Brat.Error (ErrorMsg(..))
 import Brat.Eval (eval, EvMode(..), kindType)
 import Brat.FC (FC)
 import Brat.Graph (Node(..), NodeType(..))
-import Brat.Naming (Name, FreshMonad(..))
+import Brat.Naming (Name)
 import Brat.Syntax.Common
 import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Simple
@@ -329,12 +329,12 @@ makeBox name cty@(ss :->> ts) body = do
     (Kerny, _) -> do
       (_,_,[thunk],_) <- next (name ++ "_thunk") (Box src tgt) (S0, Some (Zy :* S0))
                                 R0 (RPr ("thunk", VFun Kerny cty) R0)
-      bres <- name -! body (overs, unders)
+      bres <- body (overs, unders)
       pure (thunk, bres)
     (Braty, body) -> do
       (node, [], [thunk], _) <- next (name ++ "_thunk") (Box src tgt) (S0, Some (Zy :* S0))
                                      R0 (RPr ("thunk", VFun ?my cty) R0)
-      bres <- name -! (captureOuterLocals node $ body (overs, unders))
+      bres <- (captureOuterLocals node $ body (overs, unders))
       pure (thunk, bres)
 
 -- Evaluate either mode's BinderType
