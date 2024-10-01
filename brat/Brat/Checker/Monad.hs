@@ -60,8 +60,8 @@ data Context = Ctx { globalVEnv :: VEnv
 
 data CheckingSig ty where
   Fresh   :: String -> CheckingSig Name
-  -- Run a sub-process on a new namespace-level
-  InLvl   :: String -> Checking a -> CheckingSig a
+  GetNS   :: CheckingSig Namespace
+  SetNS   :: Namespace -> CheckingSig ()
   Throw   :: Error  -> CheckingSig a
   LogHole :: TypedHole -> CheckingSig ()
   AskFC   :: CheckingSig FC
@@ -95,14 +95,12 @@ localAlias :: (UserName, Alias) -> Checking v -> Checking v
 localAlias _ (Ret v) = Ret v
 localAlias con@(name, alias) (Req (ALup u) k)
   | u == name = localAlias con $ k (Just alias)
-localAlias con (Req (InLvl str c) k) = Req (InLvl str (localAlias con c)) (localAlias con . k)
 localAlias con (Req r k) = Req r (localAlias con . k)
 
 localFC :: FC -> Checking v -> Checking v
 localFC _ (Ret v) = Ret v
 localFC f (Req AskFC k) = localFC f (k f)
 localFC f (Req (Throw (e@Err{fc=Nothing})) k) = localFC f (Req (Throw (e{fc=Just f})) k)
-localFC f (Req (InLvl str c) k) = Req (InLvl str (localFC f c)) (localFC f . k)
 localFC f (Req r k) = Req r (localFC f . k)
 
 localEnv :: (?my :: Modey m) => Env (EnvData m) -> Checking v -> Checking v
@@ -116,7 +114,6 @@ localVEnv ext (Req (VLup x) k) | Just x <- M.lookup x ext = localVEnv ext (k (Ju
 localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
                                    -- ext shadows local vars
                                    localVEnv ext (k (env { locals = M.union ext (locals env) }))
-localVEnv ext (Req (InLvl str c) k) = Req (InLvl str (localVEnv ext c)) (localVEnv ext . k)
 localVEnv ext (Req r k) = Req r (localVEnv ext . k)
 
 -- runs a computation, but intercepts uses of outer *locals* variables and redirects
@@ -130,9 +127,6 @@ captureOuterLocals c = do
   helper :: (VEnv, VEnv) -> Checking v
          -> Checking (v, M.Map UserName [(Src, BinderType Brat)])
   helper (_, captured) (Ret v) = Ret (v, captured)
-  helper state@(avail,_) (Req (InLvl str c) k) = do
-    (v, captured) <- req (InLvl str (helper state c))
-    helper (avail, captured) (k v)
   helper (avail, captured) (Req (VLup x) k) | j@(Just new) <- M.lookup x avail =
     helper (avail, M.insert x new captured) (k j)
   helper state (Req r k) = Req r (helper state . k)
@@ -140,7 +134,6 @@ captureOuterLocals c = do
 wrapError :: (Error -> Error) -> Checking v -> Checking v
 wrapError _ (Ret v) = Ret v
 wrapError f (Req (Throw e) k) = Req (Throw (f e)) k
-wrapError f (Req (InLvl str c) k) = Req (InLvl str (wrapError f c)) (wrapError f . k)
 wrapError f (Req r k) = Req r (wrapError f . k)
 
 throwLeft :: Either ErrorMsg a -> Checking a
@@ -219,11 +212,8 @@ handler (Req s k) ctx g ns
   = case s of
       Fresh str -> let (name, root) = fresh str ns in
                      handler (k name) ctx g root
-      InLvl str c -> do  -- In Either Error monad
-        let (freshNS, newRoot) = split str ns
-        (v, ctx, (holes1, g)) <- handler c ctx g freshNS
-        (v, ctx, (holes2, g)) <- handler (k v) ctx g newRoot
-        pure (v, ctx, (holes1 ++ holes2, g))
+      GetNS -> handler (k ns) ctx g ns
+      SetNS ns -> handler (k ()) ctx g ns
       Throw err -> Left err
       LogHole hole -> do (v,ctx,(holes,g)) <- handler (k ()) ctx g ns
                          return (v,ctx,(hole:holes,g))
@@ -300,7 +290,10 @@ typeErr = err . TypeErr
 
 instance FreshMonad Checking where
   freshName x = req $ Fresh x
-  str -! c = req $ InLvl str c
+  str -! c = do
+    (ns, a) <- inLvl str c
+    req (SetNS ns)
+    pure a
 
 -- This way we get file contexts when pattern matching fails
 instance MonadFail Checking where
@@ -318,3 +311,15 @@ suppressGraph (Ret x) = Ret x
 suppressGraph (Req (AddNode _ _) k) = suppressGraph (k ())
 suppressGraph (Req (Wire _) k) = suppressGraph (k ())
 suppressGraph (Req c k) = Req c (suppressGraph . k)
+
+inLvl :: String -> Checking a -> Checking (Namespace, a)
+inLvl prefix c = req GetNS >>= \oldNS -> let (prefixNamespace, newRoot) = split prefix oldNS in
+  (newRoot,) <$> localNS prefixNamespace c
+ where
+  localNS :: Namespace -> Checking a -> Checking a
+  localNS _ (Ret v) = Ret v
+  localNS ns (Req (Fresh str) k) = let (name, root) = fresh str ns in
+    localNS root (k name)
+  localNS ns (Req GetNS k) = localNS ns (k ns)
+  localNS _ (Req (SetNS newRoot) k) = localNS newRoot (k ())
+  localNS ns (Req c k) = Req c (localNS ns . k)
