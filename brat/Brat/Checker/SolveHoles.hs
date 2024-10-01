@@ -14,10 +14,10 @@ import Bwd
 import Hasochism
 import Util (zip_same_length)
 
-import Control.Exception (assert)
-import Control.Monad (filterM)
+import Control.Monad (filterM, unless)
 import Data.Foldable (traverse_)
 import Data.Functor
+import Data.Maybe (catMaybes)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
@@ -70,7 +70,8 @@ typeEqEta _ (Zy :* _ :* _) hopeSet Nat exp act
 typeEqEta tm stuff@(ny :* _ks :* _sems) hopeSet k exp act = do
   exp <- quote ny exp
   act <- quote ny act
-  let ends = [e | (VApp (VPar e) _) <- [exp,act], assert (not $ M.member e hopeSet) True]
+  let ends = [e | (VApp (VPar e) _) <- [exp,act]] ++ catMaybes [getNumVar n | VNum n <- [exp, act]]
+  unless (not $ any (flip M.member hopeSet) ends) $ typeErr "ends were in hopeset"
   filterM shouldWait ends >>= \case
     [] -> typeEqRigid tm stuff k exp act -- easyish, both rigid i.e. already defined
     es -> -- tricky: must wait for one or other to become more defined
