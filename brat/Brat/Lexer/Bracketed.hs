@@ -50,17 +50,16 @@ unexpectedCloseErr fc b = Err (Just fc) (BracketErr (UnexpectedClose b))
 
 within :: (FC, BracketType) -> Bwd BToken -> [Token] -> Either Error (FC, Bwd BToken, [Token])
 within (openFC, b) _ [] = Left $ eofErr openFC b
-within ctx@(openFC, b) acc (t:ts)
+within ctx@(_, b) acc (t:ts)
  | Just b' <- closer (_tok t) = if b' == b
                                 then pure (fc t, acc, ts)
                                 else Left $ openCloseMismatchErr ctx (fc t, b')
  | Just b' <- opener (_tok t) = do
-     (closeFC, xs, ts) <- within (fc t, b') B0 ts
-     let fc = bracketFC openFC closeFC
+     let innerOpenFC = fc t
+     (innerCloseFC, xs, ts) <- within (innerOpenFC, b') B0 ts
+     let fc = spanFC innerOpenFC innerCloseFC
      within ctx (acc :< Bracketed fc b' (xs <>> [])) ts
  | otherwise = within ctx (acc :< FlatTok t) ts
-
-bracketFC openFC closeFC = FC (start openFC) (end closeFC)
 
 brackets :: [Token] -> Either Error [BToken]
 brackets ts = bracketsWorker B0 ts >>= \case
@@ -72,7 +71,7 @@ brackets ts = bracketsWorker B0 ts >>= \case
   bracketsWorker acc (t:ts)
    | Just b <- opener (_tok t) = do
        (closeFC, xs, ts) <- within (fc t, b) B0 ts
-       let enclosingFC = bracketFC (fc t) closeFC
+       let enclosingFC = spanFC (fc t) closeFC
        bracketsWorker (acc :< Bracketed enclosingFC b (xs <>> [])) ts
    | Just b <- closer (_tok t) = Left $ unexpectedCloseErr (fc t) b
    | otherwise = bracketsWorker (acc :< FlatTok t) ts

@@ -25,9 +25,10 @@ import Data.Bifunctor
 import Data.Either.HT (maybeRight)
 import Data.Foldable (msum)
 import Data.Functor (($>), (<&>))
-import Data.List (intercalate)
+import Data.List (intercalate, uncons)
 import Data.List.HT (chop, viewR)
 import Data.List.NonEmpty (toList, NonEmpty(..), nonEmpty)
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromJust, maybeToList, fromMaybe)
 import Data.Set (empty)
 import Prelude hiding (lex, round)
@@ -44,19 +45,6 @@ parse p s tks = evalState (runParserT p s tks) (Pos 0 0)
 
 instance ShowErrorComponent CustomError where
   showErrorComponent (Custom s) = s
-
-{-
-withFC :: Parser a -> Parser (WC a)
-withFC p = do
-  fc <- nextToken <&> \case
-    Bracketed fc _ _ -> fc
-    FlatTok (Token fc _) -> fc
-  thing <- p
-  end <- get
-  pure (WC (FC (start fc) end) thing)
--}
-withFC :: Parser a -> Parser (WC a)
-withFC p = undefined
 
 nextToken :: Parser BToken
 nextToken = lookAhead $ token Just empty
@@ -192,7 +180,7 @@ chainl1 px pf = px >>= rest
 
 abstractor :: Parser (WC Abstractor)
 abstractor = do ps <- many (try portPull)
-                abs <- binders
+                abs <- try (inBrackets Paren binders) <|> binders
                 pure $ if null ps
                        then abs
                        else let fc = spanFCOf (head ps) abs in WC fc (APull (unWC <$> ps) (unWC abs))
@@ -372,7 +360,7 @@ functionType = try (fmap RFn <$> ctype) <|> (fmap RKernel <$> kernel)
 
 
 vec :: Parser (WC Flat)
-vec = (\(WC fc x) -> vec2Cons (end fc) x) <$> (inBracketsFC Bracket elems)
+vec = (\(WC fc x) -> vec2Cons fc x) <$> (inBracketsFC Bracket elems)
   where
     elems = (element `chainl1` (try vecComma)) <|> pure []
     vecComma = match Comma $> (++)
@@ -382,13 +370,18 @@ vec = (\(WC fc x) -> vec2Cons (end fc) x) <$> (inBracketsFC Bracket elems)
 
     mkNil fc = FCon (plain "nil") (WC fc FEmpty)
 
-    vec2Cons :: Pos -> [WC Flat] -> WC Flat
-    -- The nil element gets as FC the closing ']' of the [li,te,ral]
-    vec2Cons end [] = let fc = FC end{col=(col end)-1} end in WC fc (mkNil fc)
+    vec2Cons :: FC -> [WC Flat] -> WC Flat
+    -- The nil element gets the FC of the `[]` expression.
+    -- N.B. this is also true in non-nil lists: the `nil` terminator of the list
+    -- `[1,2,3]` gets the file context of `[1,2,3]`
+    vec2Cons outerFC [] = WC outerFC (mkNil outerFC)
+    vec2Cons outerFC [x] = WC (fcOf x) $ FCon (plain "cons") (WC (fcOf x) (FJuxt x (WC outerFC (mkNil outerFC))))
     -- We give each cell of the list an FC which starts with the FC
     -- of its head element and ends at the end of the list (the closing ']')
-    vec2Cons end (x:xs) = let fc = FC (start $ fcOf x) end in
-      WC fc $ FCon (plain "cons") (WC fc (FJuxt x (vec2Cons end xs)))
+    vec2Cons outerFC (x:xs) = let endFC = fcOf (last xs)
+                                  fc = spanFC (fcOf x) endFC
+                              in WC fc $
+                                 FCon (plain "cons") (WC fc (FJuxt x (vec2Cons outerFC xs)))
 
 
 cthunk :: Parser (WC Flat)
@@ -627,17 +620,17 @@ cnoun pe = do
 
 decl :: Parser FDecl
 decl = do
-      (WC fc (nm, ty, body)) <- withFC (do
-        WC _ nm <- simpleName
-        ty <- try (functionType <&> \(WC _ ty) -> [Named "thunk" (Right ty)])
-              <|> (match TypeColon >> rawIO)
+      (fc, nm, ty, body) <- do
+        WC startFC nm <- simpleName
+        WC _ ty <- declSignature
         let allow_clauses = case ty of
                                  [Named _ (Right t)] -> is_fun_ty t
                                  [Anon (Right t)] -> is_fun_ty t
                                  _ -> False
-        body <- if allow_clauses then (FClauses <$> clauses nm) <|> (FNoLhs <$> nbody nm)
-                else FNoLhs <$> nbody nm
-        pure (nm, ty, body))
+        WC endFC body <- if allow_clauses
+                         then declClauses nm <|> declNounBody nm
+                         else declNounBody nm
+        pure (spanFC startFC endFC, nm, ty, body)
       pure $ FuncDecl
         { fnName = nm
         , fnLoc  = fc
@@ -651,12 +644,20 @@ decl = do
       is_fun_ty (RKernel _) = True
       is_fun_ty _ = False
 
-      nbody :: String -> Parser (WC Flat)
-      nbody nm = do
+      declClauses :: String -> Parser (WC FBody)
+      declClauses nm = do
+        cs <- clauses nm
+        let startFC = fcOf . fst $ NE.head cs
+        let endFC = fcOf . snd $ NE.last cs
+        pure (WC (spanFC startFC endFC) (FClauses cs))
+
+      declNounBody :: String -> Parser (WC FBody)
+      declNounBody nm = do
         label (nm ++ "(...) = ...") $
           matchString nm
         match Equal
-        expr
+        body@(WC fc _) <- expr
+        pure (WC fc (FNoLhs body))
 
 class FCStream a where
   getFC :: Int -> PosState a -> FC
@@ -749,12 +750,12 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
         <|> ((decl <?> "declaration")            <&> \x -> ([x], []))
  where
   alias :: Parser RawAlias
-  alias = withFC aliasContents <&>
-          \(WC fc (name, args, ty)) -> (TypeAlias fc name args ty)
+  alias = aliasContents <&>
+          \(fc, name, args, ty) -> (TypeAlias fc name args ty)
 
-  aliasContents :: Parser (UserName, [(String, TypeKind)], RawVType)
+  aliasContents :: Parser (FC, UserName, [(String, TypeKind)], RawVType)
   aliasContents = do
-    match (K KType)
+    WC startFC () <- matchFC (K KType)
     WC _ alias <- userName
     args <- option [] $ inBrackets Paren $ ((unWC <$> simpleName) `sepBy` (match Comma))
 {- future stuff
@@ -770,14 +771,14 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
     -- users to specify the kinds of variables in type aliases, like:
     --   type X(a :: *, b :: #, c :: *(x :: *, y :: #)) = ...
     -- See KARL-325
-    pure (alias, (,Star []) <$> args, unWC ty)
+    pure (spanFC startFC (fcOf ty), alias, (,Star []) <$> args, unWC ty)
 
   extDecl :: Parser FDecl
   extDecl = do (fc, fnName, ty, symbol) <- do
                   WC startFC () <- matchFC (K KExt)
                   symbol <- unWC <$> string
                   fnName <- unWC <$> simpleName
-                  WC tyFC ty <- try nDecl <|> vDecl
+                  WC tyFC ty <- declSignature
                   -- When external ops are used, we expect it to be in the form:
                   -- extension.op for the hugr extension used and the op name
                   let bits = chop (=='.') symbol
@@ -792,9 +793,11 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
                  , fnLoc = fc
                  , fnLocality = Extern symbol
                  }
-   where
-    nDecl = match TypeColon >> rawIOWithSpanFC
-    vDecl = functionType <&> fmap (\ty -> [Named "thunk" (Right ty)])
+
+declSignature :: Parser (WC [RawIO])
+declSignature = try nDecl <|> vDecl where
+ nDecl = match TypeColon >> rawIOWithSpanFC
+ vDecl = functionType <&> fmap (\ty -> [Named "thunk" (Right ty)])
 
 pfile :: Parser ([Import], FEnv)
 pfile = do

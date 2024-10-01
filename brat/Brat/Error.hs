@@ -188,6 +188,8 @@ instance Show ErrorMsg where
   show (CompilingHoles hs) = unlines ("Can't compile file with remaining holes": indent hs)
    where
     indent = fmap ("  " ++)
+  show (BracketErr msg) = show msg
+
 
 data Error = Err { fc  :: Maybe FC
                  , msg :: ErrorMsg

@@ -1,6 +1,6 @@
-Error in test/golden/binding/cons.brat@FC {start = Pos {line = 7, col = 10}, end = Pos {line = 7, col = 23}}:
+Error in test/golden/binding/cons.brat@FC {start = Pos {line = 7, col = 11}, end = Pos {line = 7, col = 22}}:
 badUncons(cons(stuff)) = stuff
-         ^^^^^^^^^^^^^
+          ^^^^^^^^^^^
 
   Unification error: Pattern doesn't match expected length for constructor args
 
