@@ -199,7 +199,7 @@ unify l k r = do
 instantiateMeta :: End -> Val Z -> Checking ()
 instantiateMeta e val = do
   throwLeft (doesntOccur e val)
-  Define e val (const (Ret ()))
+  defineEnd e val
 
 -- Make the dynamic wiring for a metavariable. This only needs to happen for
 -- numbers because they have nontrivial runtime behaviour.

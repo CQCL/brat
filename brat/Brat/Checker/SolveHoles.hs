@@ -84,7 +84,7 @@ typeEqEta tm stuff@(ny :* _ks :* _sems) hopeSet k exp act = do
 -- TODO: This needs to update the BRAT graph with the solution.
 solveHope :: TypeKind -> End -> Sem -> Checking ()
 solveHope k e v = quote Zy v >>= \v -> case doesntOccur e v of
-  Right () -> Define e v $ \_ -> do
+  Right () -> defineEnd e v >> do
     dangling <- case (k, v) of
       (Nat, VNum v) -> buildNatVal v
       (Nat, _) -> err $ InternalError "Head of Nat wasn't a VNum"
