@@ -46,18 +46,8 @@ parse p s tks = evalState (runParserT p s tks) (Pos 0 0)
 instance ShowErrorComponent CustomError where
   showErrorComponent (Custom s) = s
 
-matchTokFC :: (Tok -> Maybe a) -> Parser (WC a)
-matchTokFC f = token (matchTok f) empty
-
-token0 :: (Tok -> Maybe a) -> Parser a
-token0 f = do
-  WC fc r <- token (matchTok f) empty
-  -- token matched condition f
-  put (end fc)
-  pure r
-
 matchFC :: Tok -> Parser (WC ())
-matchFC tok = label (show tok) $ token (matchTok f) empty
+matchFC tok = label (show tok) $ matchTok f
  where
   f :: Tok -> Maybe ()
   f t | t == tok = Just ()
@@ -66,35 +56,35 @@ matchFC tok = label (show tok) $ token (matchTok f) empty
 match :: Tok -> Parser ()
 match = fmap unWC . matchFC
 
-matchTok :: (Tok -> Maybe a) -> BToken -> Maybe (WC a)
-matchTok f (FlatTok (Token fc t)) = (WC fc) <$> f t
--- Returns the FC at the beginning of the token
-matchTok f (Bracketed _ Paren [t]) = matchTok f t
-matchTok _ _ = Nothing
+matchTok :: (Tok -> Maybe a) -> Parser (WC a)
+matchTok f = token (matcher f) empty
+ where
+  matcher :: (Tok -> Maybe a) -> BToken -> Maybe (WC a)
+  matcher f (FlatTok (Token fc t)) = (WC fc) <$> f t
+  -- Returns the FC at the beginning of the token
+  matcher f (Bracketed _ Paren [t]) = matcher f t
+  matcher _ _ = Nothing
 
-kmatchFC :: Keyword -> Parser (WC ())
-kmatchFC = matchFC . K
-
-kmatch :: Keyword -> Parser ()
-kmatch = match . K
+kmatch :: Keyword -> Parser (WC ())
+kmatch = matchFC . K
 
 matchString :: String -> Parser (WC ())
-matchString s = label (show s) $ matchTokFC $ \case
+matchString s = label (show s) $ matchTok $ \case
   Ident ident | ident == s -> Just ()
   _ -> Nothing
 
 hole :: Parser (WC String)
-hole = label "hole" $ matchTokFC $ \case
+hole = label "hole" $ matchTok $ \case
   Hole h -> Just h
   _ -> Nothing
 
 simpleName :: Parser (WC String)
-simpleName = matchTokFC $ \case
+simpleName = matchTok $ \case
   Ident str -> Just str
   _ -> Nothing
 
 qualifiedName :: Parser (WC UserName)
-qualifiedName = label "qualified name" $ matchTokFC $ \case
+qualifiedName = label "qualified name" $ matchTok $ \case
   QualifiedId prefix str -> Just (PrefixName (toList prefix) str)
   _ -> Nothing
 
@@ -116,22 +106,22 @@ inBracketsFC b p = label lbl $ flip token empty $ \case
 --  f _ _ = Nothing
 
 number :: Parser (WC Int)
-number = label "nat" $ matchTokFC $ \case
+number = label "nat" $ matchTok $ \case
   Number n -> Just n
   _ -> Nothing
 
 float :: Parser (WC Double)
-float = label "float" $ matchTokFC $ \case
+float = label "float" $ matchTok $ \case
   FloatLit x -> Just x
   _ -> Nothing
 
-comment :: Parser ()
-comment = label "Comment" $ token0 $ \case
+comment :: Parser (WC ())
+comment = label "Comment" $ matchTok $ \case
   Comment _ -> Just ()
   _ -> Nothing
 
 string :: Parser (WC String)
-string = matchTokFC $ \case
+string = matchTok $ \case
   Quoted txt -> Just txt
   _ -> Nothing
 
@@ -142,13 +132,13 @@ port :: Parser (WC String)
 port = simpleName
 
 comma :: Parser (WC Flat -> WC Flat -> WC Flat)
-comma = token0 $ \case
+comma = fmap unWC . matchTok $ \case
   Comma -> Just $ \a b ->
     WC (spanFCOf a b) (FJuxt a b)
   _ -> Nothing
 
 arith :: ArithOp -> Parser (WC Flat -> WC Flat -> WC Flat)
-arith op = token0 $ \tok -> case (op, tok) of
+arith op = fmap unWC . matchTok $ \tok -> case (op, tok) of
   (Add, Plus) -> Just make
   (Sub, Minus) -> Just make
   (Mul, Asterisk) -> Just make
@@ -533,7 +523,7 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
 
   letIn :: Parser (WC Flat)
   letIn = label "let ... in" $ do
-    let_ <- kmatchFC KLet
+    let_ <- kmatch KLet
     (lhs, rhs) <- letInBinding
     kmatch KIn
     body <- expr
@@ -579,7 +569,7 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
   composition = subExpr PComp `chainl1` divider Semicolon FCompose
 
   divider :: Tok -> (WC Flat -> WC Flat -> Flat) -> Parser (WC Flat -> WC Flat -> WC Flat)
-  divider tok f = token0 $ \case
+  divider tok f = fmap unWC . matchTok $ \case
     t | t == tok -> Just $ \a b ->
       WC (spanFCOf a b) (f a b)
     _ -> Nothing
