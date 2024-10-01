@@ -20,7 +20,7 @@ import Data.List (intercalate)
 import qualified Data.Map as M
 import qualified Data.Set as S
 
--- import Debug.Trace
+import Debug.Trace
 
 trackM :: Monad m => String -> m ()
 trackM = const (pure ())
@@ -100,7 +100,7 @@ data CheckingSig ty where
   Declare :: End -> Modey m -> BinderType m -> CheckingSig ()
   ANewHope :: (End, FC) -> CheckingSig ()
   AskHopeSet :: CheckingSig HopeSet
-  Fork :: Checking () -> CheckingSig ()
+  Fork :: String -> Checking () -> CheckingSig ()
   AddCapture :: Name -> (UserName, [(Src, BinderType Brat)]) -> CheckingSig ()
 
 localAlias :: (UserName, Alias) -> Checking v -> Checking v
@@ -108,7 +108,7 @@ localAlias _ (Ret v) = Ret v
 localAlias con@(name, alias) (Req (ALup u) k)
   | u == name = localAlias con $ k (Just alias)
 localAlias con (Req (InLvl str c) k) = Req (InLvl str (localAlias con c)) (localAlias con . k)
-localAlias con (Req (Fork c) k) = Req (Fork $ localAlias con c) (localAlias con . k)
+localAlias con (Req (Fork d c) k) = Req (Fork d $ localAlias con c) (localAlias con . k)
 localAlias con (Req r k) = Req r (localAlias con . k)
 localAlias con (Define v e k) = Define v e (localAlias con . k)
 localAlias con (Yield st k) = Yield st (localAlias con . k)
@@ -118,7 +118,7 @@ localFC _ (Ret v) = Ret v
 localFC f (Req AskFC k) = localFC f (k f)
 localFC f (Req (Throw (e@Err{fc=Nothing})) k) = localFC f (Req (Throw (e{fc=Just f})) k)
 localFC f (Req (InLvl str c) k) = Req (InLvl str (localFC f c)) (localFC f . k)
-localFC f (Req (Fork c) k) = Req (Fork $ localFC f c) (localFC f . k)
+localFC f (Req (Fork d c) k) = Req (Fork d $ localFC f c) (localFC f . k)
 localFC f (Req r k) = Req r (localFC f . k)
 localFC f (Define v e k) = Define v e (localFC f . k)
 localFC f (Yield st k) = Yield st (localFC f . k)
@@ -136,7 +136,7 @@ localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
                                    -- ext shadows local vars
                                    localVEnv ext (k (env { locals = M.union ext (locals env) }))
 localVEnv ext (Req (InLvl str c) k) = Req (InLvl str (localVEnv ext c)) (localVEnv ext . k)
-localVEnv ext (Req (Fork c) k) = Req (Fork $ localVEnv ext c) (localVEnv ext . k)
+localVEnv ext (Req (Fork d c) k) = Req (Fork d $ localVEnv ext c) (localVEnv ext . k)
 localVEnv ext (Req r k) = Req r (localVEnv ext . k)
 localVEnv ext (Define v e k) = Define v e (localVEnv ext . k)
 localVEnv ext (Yield st k) = Yield st (localVEnv ext . k)
@@ -152,7 +152,7 @@ captureOuterLocals n c = do
   helper _ (Ret v) = Ret v
   helper avail (Req (VLup x) k) | j@(Just new) <- M.lookup x avail =
     (req $ AddCapture n (x,new)) >> helper avail (k j)
-  helper avail (Req (Fork c) k) = Req (Fork $ helper avail c) (helper avail . k)
+  helper avail (Req (Fork d c) k) = Req (Fork d $ helper avail c) (helper avail . k)
   helper avail (Req r k) = Req r (helper avail . k)
   helper avail (Define e v k) = Define e v (helper avail . k)
   helper avail (Yield st k) = Yield st (helper avail . k)
@@ -161,7 +161,7 @@ wrapError :: (Error -> Error) -> Checking v -> Checking v
 wrapError _ (Ret v) = Ret v
 wrapError f (Req (Throw e) k) = Req (Throw (f e)) k
 wrapError f (Req (InLvl str c) k) = Req (InLvl str (wrapError f c)) (wrapError f . k)
-wrapError f (Req (Fork c) k) = Req (Fork $ wrapError f c) (wrapError f . k)
+wrapError f (Req (Fork d c) k) = Req (Fork d $ wrapError f c) (wrapError f . k)
 wrapError f (Req r k) = Req r (wrapError f . k)
 wrapError f (Define v e k) = Define v e (wrapError f . k)
 wrapError f (Yield st k) = Yield st (wrapError f . k)
@@ -225,7 +225,7 @@ localKVar env (Req KDone k) = case [ x | (x,(One,_)) <- M.assocs env ] of
                                               ,intercalate ", " (fmap show xs)
                                               ,"haven't been used"
                                               ]
-localKVar env (Req (Fork c) k) = Req (Fork $ localKVar env c) (localKVar env . k)
+localKVar env (Req (Fork d c) k) = Req (Fork d $ localKVar env c) (localKVar env . k)
 localKVar env (Req r k) = Req r (localKVar env . k)
 localKVar env (Define e v k) = Define e v (localKVar env . k)
 localKVar env (Yield st k) = Yield st (localKVar env . k)
@@ -300,7 +300,7 @@ handler (Req s k) ctx g ns
 
       ANewHope (e, fc) -> handler (k ()) (ctx { hopeSet = M.insert e fc (hopeSet ctx) }) g ns
       AskHopeSet -> handler (k (hopeSet ctx)) ctx g ns
-      Fork c -> handler (k () <* c) ctx g ns
+      Fork desc c -> handler (trace ("Forking " ++ desc) $ k () <* c) ctx g ns
       AddCapture n (var, ends) ->
         handler (k ()) ctx {captureSets=M.insertWith M.union n (M.singleton var ends) (captureSets ctx)} g ns
 
@@ -368,7 +368,7 @@ instance MonadFail Checking where
 suppressHoles :: Checking a -> Checking a
 suppressHoles (Ret x) = Ret x
 suppressHoles (Req (LogHole _) k) = suppressHoles (k ())
-suppressHoles (Req (Fork c) k) = Req (Fork $ suppressHoles c) (suppressHoles . k)
+suppressHoles (Req (Fork d c) k) = Req (Fork d $ suppressHoles c) (suppressHoles . k)
 suppressHoles (Req c k) = Req c (suppressHoles . k)
 suppressHoles (Define v e k) = Define v e (suppressHoles . k)
 suppressHoles (Yield st k) = Yield st (suppressHoles . k)
@@ -378,7 +378,7 @@ suppressGraph :: Checking a -> Checking a
 suppressGraph (Ret x) = Ret x
 suppressGraph (Req (AddNode _ _) k) = suppressGraph (k ())
 suppressGraph (Req (Wire _) k) = suppressGraph (k ())
-suppressGraph (Req (Fork c) k) = Req (Fork $ suppressGraph c) (suppressGraph . k)
+suppressGraph (Req (Fork d c) k) = Req (Fork d $ suppressGraph c) (suppressGraph . k)
 suppressGraph (Req c k) = Req c (suppressGraph . k)
 suppressGraph (Define v e k) = Define v e (suppressGraph . k)
 suppressGraph (Yield st k) = Yield st (suppressGraph . k)

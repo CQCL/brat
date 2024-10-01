@@ -134,7 +134,7 @@ checkInputs :: (CheckConstraints m KVerb, ?my :: Modey m)
             -> Checking [(Src, BinderType m)]
 checkInputs _ overs [] = pure overs
 checkInputs tm@(WC fc _) (o:overs) (u:unders) = localFC fc $ do
-  req . Fork $ wrapError (addRowContext ?my (o:overs) (u:unders)) $ checkWire ?my tm False o u
+  req . Fork "checkInput" $ wrapError (addRowContext ?my (o:overs) (u:unders)) $ checkWire ?my tm False o u
   checkInputs tm overs unders
  where
   addRowContext :: Show (BinderType m)
@@ -154,7 +154,7 @@ checkOutputs :: (CheckConstraints m k, ?my :: Modey m)
              -> Checking [(Tgt, BinderType m)]
 checkOutputs _ unders [] = pure unders
 checkOutputs tm@(WC fc _) (u:unders) (o:overs) = localFC fc $ do
-  req . Fork $ wrapError (addRowContext ?my (u:unders) (o:overs)) $ checkWire ?my tm True o u
+  req . Fork "checkOutput" $ wrapError (addRowContext ?my (u:unders) (o:overs)) $ checkWire ?my tm True o u
   checkOutputs tm unders overs
  where
   addRowContext :: Show (BinderType m)
@@ -232,7 +232,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
       let usedFakeUnders = (fst <$> allFakeUnders) \\ (fst <$> rightFakeUnders)
       let usedUnders = [ fromJust (lookup tgt tgtMap) | tgt <- usedFakeUnders ]
       let rightUnders = [ fromJust (lookup tgt tgtMap) | (tgt, _) <- rightFakeUnders ]
-      req . Fork $ do
+      req . Fork "LambdaChk" $ do
             sig <- mkSig usedOvers usedUnders
             patOuts <- checkClauses sig usedOvers (c :| cs)
             mkWires patOuts usedUnders
@@ -278,7 +278,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
   checkClauses cty@(ins :->> outs) overs all_cs = do
     (node, patMatchUnders, patMatchOvers, _) <- suppressGraph $
         anext "lambda" Hypo (S0, Some (Zy :* S0)) ins outs
-    req . Fork $ do
+    req . Fork "checkClauses" $ do
       let clauses = NE.zip (NE.fromList [0..]) all_cs <&>
                   \(i, (abs, tm)) -> Clause i (normaliseAbstractor <$> abs) tm
       clauses <- traverse (checkClause ?my "lambda" cty) clauses
@@ -304,7 +304,7 @@ check' (Emb t) (overs, unders) = do
   pure ((ins, ()), (overs, unders))
 check' (Th tm) ((), u@(hungry, ty):unders) = case (?my, ty) of
   (Braty, ty) -> do
-    req . Fork $ evalBinder Braty ty >>= \case
+    req . Fork "check'Th" $ evalBinder Braty ty >>= \case
           -- the case split here is so we can be sure we have the necessary CheckConstraints
           Right ty@(VFun Braty cty) -> checkThunk Braty "thunk" cty tm >>= wire . (,ty, hungry)
           Right ty@(VFun Kerny cty) -> checkThunk Kerny "thunk" cty tm >>= wire . (,ty, hungry)
@@ -444,20 +444,18 @@ check' (VHole (mnemonic, name)) connectors = do
 check' tm@(Con _ _) ((), []) = typeErr $ "No type to check " ++ show tm ++ " against"
 check' tm@(Con vcon vargs) ((), ((hungry, ty):unders)) = do
   traceM ("check' Con vcon=" ++ show vcon ++ "  vargs=" ++ show vargs)
-  req . Fork $ trace "In forked computation for check' Con" $ case (?my, ty) of
+  req . Fork "check'Con" $ case (?my, ty) of
       (Braty, Left k) -> do
-        traceM "Braty Left"
         (_, leftOvers) <- kindCheck [(hungry, k)] (Con vcon vargs)
         ensureEmpty "kindCheck leftovers" leftOvers
       (Braty, Right ty) -> aux Braty clup ty
-      (Kerny, _) -> aux Kerny kclup ty
+      (Kerny, _) -> trace "Kerny" $ aux Kerny kclup ty
   pure (((), ()), ((), unders))
  where
   aux :: Modey m -> (UserName -> UserName -> Checking (CtorArgs m)) -> Val Z -> Checking ()
   aux my lup ty = do
-    traceM $ "In forked aux for check' Con"
-    VCon tycon tyargs <- eval S0 ty
-    (CArgs pats nFree _ argTypeRo) <- lup vcon tycon
+    VCon tycon tyargs <- trace "In forked aux for check' Con" $ eval S0 ty
+    (CArgs pats nFree _ argTypeRo) <- trace "forked aux doing lup" $ lup vcon tycon
     -- Look for vectors to produce better error messages for mismatched lengths
     wrap <- detectVecErrors vcon tycon tyargs pats ty (Left tm)
     Some (ny :* env) <- throwLeft $ valMatches tyargs pats
