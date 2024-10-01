@@ -1,8 +1,6 @@
-Error in test/golden/error/unmatched_bracket.brat@FC {start = Pos {line = 1, col = 17}, end = Pos {line = 1, col = 19}}:
+Error in test/golden/error/unmatched_bracket.brat@FC {start = Pos {line = 1, col = 2}, end = Pos {line = 1, col = 3}}:
 f(n, Vec([], n) -> Vec([], n) -- First bracket never closed
-                ^^
+ ^
 
-  Parse error unexpected -> 
-expecting (...) or )
-
+  File ended before this ( was closed
 

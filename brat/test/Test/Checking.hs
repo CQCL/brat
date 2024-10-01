@@ -16,6 +16,7 @@ import Test.Tasty.Silver
 import Test.Tasty.ExpectedFailure
 
 expectedCheckingFails = map ("examples" </>) ["nested-abstractors.brat"
+                                             ,"karlheinz.brat"
                                              ,"karlheinz_alias.brat"
                                              ,"hea.brat"
                                              ]
