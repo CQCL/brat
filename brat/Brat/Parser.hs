@@ -96,7 +96,7 @@ inBrackets b p = unWC <$> inBracketsFC b p
 
 inBracketsFC :: BracketType -> Parser a -> Parser (WC a)
 inBracketsFC b p = label lbl $ flip token empty $ \case
-  Bracketed fc b' xs | b == b' -> (WC fc) <$> maybeRight (parse p "" xs)
+  Bracketed fc b' xs | b == b' -> (WC fc) <$> maybeRight (parse (p <* eof) "" xs)
   _ -> Nothing
  where
   lbl = showOpen b ++ "..." ++ showClose b
