@@ -2,7 +2,7 @@ module Brat.Checker.SolvePatterns (argProblems, argProblemsWithLeftovers, solve)
 
 import Brat.Checker.Monad
 import Brat.Checker.Helpers
-import Brat.Checker.SolveHoles (buildNatVal, buildNum, invertNatVal)
+import Brat.Checker.SolveHoles (buildNatVal, invertNatVal)
 import Brat.Checker.Types (EndType(..))
 import Brat.Constructors
 import Brat.Constructors.Patterns
@@ -211,16 +211,12 @@ solveNumMeta :: End -> NumVal (VVar Z) -> Checking ()
 solveNumMeta e nv = case (e, vars nv) of
  -- Compute the thing that the rhs should be based on the src, and instantiate src to that
  (ExEnd src,  [VPar (InEnd tgt)]) -> do
-   -- Compute the value of the `tgt` variable from the known `src` value by invering nv
+   -- Compute the value of the `tgt` variable from the known `src` value by inverting nv
    tgtSrc <- invertNatVal nv
-   -- If `nv` is *just* a variable, invertNatVal will return `src`. We need to
-   -- catch this because defining x := x will cause eval to loop.
-   unless (ExEnd src == toEnd tgtSrc) $
-     (defineSrc (NamedPort src "") (VNum (const (VPar (ExEnd tgtSrc)) <$> nv)))
-   defineTgt (NamedPort tgt "") (VNum (nVar tgtSrc))
-   wire (tgtSrc, TNat, NamedPort tgt "")
+   defineSrc (NamedPort src "") (VNum (nVar (VPar (toEnd tgtSrc))))
+   wire (NamedPort src "", TNat, tgtSrc)
 
- (ExEnd src, _) -> defineSrc (NamedPort src "") nv
+ (ExEnd src, _) -> defineSrc (NamedPort src "") (VNum nv)
 
  -- Both targets, we need to create the thing that they both derive from
  (InEnd tgt1, [VPar (InEnd tgt2)]) -> do
@@ -237,7 +233,7 @@ solveNumMeta e nv = case (e, vars nv) of
  -- RHS is constant or Src, wire it into tgt
  (InEnd tgt,  _) -> do
    src <- buildNatVal nv
-   defineTgt (NamedPort tgt "") nv
+   defineTgt (NamedPort tgt "") (VNum nv)
    wire (src, TNat, NamedPort tgt "")
 
  where
@@ -246,6 +242,7 @@ solveNumMeta e nv = case (e, vars nv) of
 
 -- Need to keep track of which way we're solving - which side is known/unknown
 -- Things which are dynamically unknown must be Tgts - information flows from Srcs
+-- ...But we don't need to do any wiring here, right?
 unifyNum :: NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
 unifyNum (NumValue lup lgro) (NumValue rup rgro)
   | lup <= rup = lhsFun00 lgro (NumValue (rup - lup) rgro)
@@ -285,17 +282,18 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   --   2^k * x
   -- = 2^k * (y + 1)
   -- = 2^k + 2^k * y
-  demandSucc sm@(StrictMono k (Linear (VPar (ExEnd x)))) = do
+  demandSucc sm@(StrictMono k (Linear (VPar (ExEnd x)))) = error "Todo..." {-do
+    -- This is sus because we don't have any tgt?
     ySrc <- invertNatVal (NamedPort x "") (NumValue 1 (StrictMonoFun sm))
     let y = nVar (VPar (toEnd ySrc))
     solveNumMeta (ExEnd x) (nPlus 1 y)
     pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k y
+  -}
 
-  demandSucc sm@(StrictMono k (Linear (VPar (InEnd x)))) = do
-    yTgt <- invertNatVal (NamedPort x "") (NumValue 1 (StrictMonoFun sm))
-    let y = nVar (VPar (toEnd yTgt))
-    solveNumMeta (InEnd x) (nPlus 1 y)
-    pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k y
+  demandSucc sm@(StrictMono k (Linear (VPar (InEnd weeEnd)))) = do
+    bigEnd <- invertNatVal (NumValue 1 (StrictMonoFun sm))
+    solveNumMeta (toEnd bigEnd) (NumValue 0 (StrictMonoFun sm))
+    pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k (nVar (VPar (InEnd weeEnd)))
 
   --   2^k * full(n + 1)
   -- = 2^k * (1 + 2 * full(n))
@@ -315,11 +313,11 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     evenGro Constant0 = pure Constant0
     evenGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
       Linear (VPar (ExEnd out)) -> do
-        half <- invertNatVal (NamedPort out "") (NumValue 0 (StrictMonoFun (StrictMono 1 (Linear ()))))
+        half <- invertNatVal (NumValue 0 (StrictMonoFun (StrictMono 1 mono)))
         solveNumMeta (ExEnd out) (n2PowTimes 1 (nVar (VPar (toEnd half))))
         pure (StrictMonoFun (StrictMono 0 (Linear (VPar (toEnd half)))))
       Linear (VPar (InEnd tgt)) -> do
-        halfTgt <- buildNatVal (NumValue 0 (StrictMonoFun (StrictMono 1 (Linear tgt))))
+        halfTgt <- buildNatVal (NumValue 0 (StrictMonoFun (StrictMono 1 (Linear (VPar (toEnd tgt))))))
         let half = nVar (VPar (toEnd halfTgt))
         solveNumMeta (InEnd tgt) (n2PowTimes 1 half)
         pure (StrictMonoFun (StrictMono 0 (Linear (VPar (toEnd halfTgt)))))
@@ -331,13 +329,15 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     oddGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
       Linear (VPar (ExEnd out)) -> do
         -- compute (/2) . (-1)
-        halfSrc <- invertNatVal (NamedPort out "") (NumValue 1 (StrictMonoFun (StrictMono 1 (Linear ()))))
-        solveNumMeta (ExEnd out) (nPlus 1 (n2PowTimes 1 (nVar (VPar (toEnd halfSrc)))))
-        pure (nVar (VPar (toEnd halfSrc)))
-      Linear (VPar (InEnd tgt)) -> do
-        flooredHalfTgt <- buildNatVal (NumValue 1 (StrictMonoFun (StrictMono 1 (Linear (VPar (toEnd tgt))))))
-        let flooredHalf = nVar (VPar (toEnd flooredHalfTgt))
-        solveNumMeta (InEnd tgt) (nPlus 1 (n2PowTimes 1 flooredHalf))
+        doubTgt <- invertNatVal (NumValue 1 (StrictMonoFun (StrictMono 1 mono)))
+        let [VPar (InEnd halfTgt)] = foldMap pure mono
+        solveNumMeta (toEnd doubTgt) (nPlus 1 (n2PowTimes 1 (nVar (VPar (toEnd halfTgt)))))
+        pure (nVar (VPar (toEnd halfTgt)))
+      Linear (VPar (InEnd weeTgt)) -> do
+        -- compute (/2) . (-1)
+        bigTgt <- invertNatVal (NumValue 1 (StrictMonoFun (StrictMono 1 (Linear (VPar (toEnd weeTgt))))))
+        let flooredHalf = nVar (VPar (toEnd weeTgt))
+        solveNumMeta (toEnd bigTgt) (nPlus 1 (n2PowTimes 1 flooredHalf))
         pure flooredHalf
 
       -- full(n + 1) = 1 + 2 * full(n)
