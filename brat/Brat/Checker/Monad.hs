@@ -60,8 +60,7 @@ data Context = Ctx { globalVEnv :: VEnv
 
 data CheckingSig ty where
   Fresh   :: String -> CheckingSig Name
-  GetNS   :: CheckingSig Namespace
-  SetNS   :: Namespace -> CheckingSig ()
+  SplitNS :: String -> CheckingSig Namespace
   Throw   :: Error  -> CheckingSig a
   LogHole :: TypedHole -> CheckingSig ()
   AskFC   :: CheckingSig FC
@@ -212,8 +211,8 @@ handler (Req s k) ctx g ns
   = case s of
       Fresh str -> let (name, root) = fresh str ns in
                      handler (k name) ctx g root
-      GetNS -> handler (k ns) ctx g ns
-      SetNS ns -> handler (k ()) ctx g ns
+      SplitNS str -> let (nameSpace, newRoot) = split str ns in
+                         handler (k nameSpace) ctx g newRoot
       Throw err -> Left err
       LogHole hole -> do (v,ctx,(holes,g)) <- handler (k ()) ctx g ns
                          return (v,ctx,(hole:holes,g))
@@ -290,10 +289,7 @@ typeErr = err . TypeErr
 
 instance FreshMonad Checking where
   freshName x = req $ Fresh x
-  str -! c = do
-    (ns, a) <- inLvl str c
-    req (SetNS ns)
-    pure a
+  str -! c = inLvl str c
 
 -- This way we get file contexts when pattern matching fails
 instance MonadFail Checking where
@@ -312,14 +308,13 @@ suppressGraph (Req (AddNode _ _) k) = suppressGraph (k ())
 suppressGraph (Req (Wire _) k) = suppressGraph (k ())
 suppressGraph (Req c k) = Req c (suppressGraph . k)
 
-inLvl :: String -> Checking a -> Checking (Namespace, a)
-inLvl prefix c = req GetNS >>= \oldNS -> let (prefixNamespace, newRoot) = split prefix oldNS in
-  (newRoot,) <$> localNS prefixNamespace c
+inLvl :: String -> Checking a -> Checking a
+inLvl prefix c = req (SplitNS prefix) >>= \prefixNamespace -> localNS prefixNamespace c
  where
   localNS :: Namespace -> Checking a -> Checking a
   localNS _ (Ret v) = Ret v
   localNS ns (Req (Fresh str) k) = let (name, root) = fresh str ns in
     localNS root (k name)
-  localNS ns (Req GetNS k) = localNS ns (k ns)
-  localNS _ (Req (SetNS newRoot) k) = localNS newRoot (k ())
+  localNS ns (Req (SplitNS str) k) = let (subSpace, newRoot) = split str ns in
+                                        localNS newRoot (k subSpace)
   localNS ns (Req c k) = Req c (localNS ns . k)
