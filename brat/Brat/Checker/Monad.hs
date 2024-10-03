@@ -204,31 +204,28 @@ catchErr (Req r k) = Req r (catchErr . k)
 handler :: Free CheckingSig v
         -> Context
         -> Graph
-        -> Namespace
         -> Either Error (v,Context,([TypedHole],Graph))
-handler (Ret v) ctx g _ = return (v, ctx, ([], g))
-handler (Req s k) ctx g ns
+handler (Ret v) ctx g = return (v, ctx, ([], g))
+handler (Req s k) ctx g
   = case s of
-      Fresh str -> let (name, root) = fresh str ns in
-                     handler (k name) ctx g root
-      SplitNS str -> let (nameSpace, newRoot) = split str ns in
-                         handler (k nameSpace) ctx g newRoot
+      Fresh _ -> error "Fresh in handler, should only happen under `-!`"
+      SplitNS _ -> error "SplitNS in handler, should only happen under `-!`"
       Throw err -> Left err
-      LogHole hole -> do (v,ctx,(holes,g)) <- handler (k ()) ctx g ns
+      LogHole hole -> do (v,ctx,(holes,g)) <- handler (k ()) ctx g
                          return (v,ctx,(hole:holes,g))
       AskFC -> error "AskFC in handler - shouldn't happen, should always be in localFC"
-      VLup s -> handler (k $ M.lookup s (globalVEnv ctx)) ctx g ns
-      ALup s -> handler (k $ M.lookup s (aliasTable ctx)) ctx g ns
-      AddNode name node -> handler (k ()) ctx ((M.singleton name node, []) <> g) ns
-      Wire w -> handler (k ()) ctx ((M.empty,[w]) <> g) ns
+      VLup s -> handler (k $ M.lookup s (globalVEnv ctx)) ctx g
+      ALup s -> handler (k $ M.lookup s (aliasTable ctx)) ctx g
+      AddNode name node -> handler (k ()) ctx ((M.singleton name node, []) <> g)
+      Wire w -> handler (k ()) ctx ((M.empty,[w]) <> g)
       -- We only get a KLup here if the variable has not been found in the kernel context
-      KLup _ -> handler (k Nothing) ctx g ns
+      KLup _ -> handler (k Nothing) ctx g
       -- Receiving KDone may become possible when merging the two check functions
       KDone -> error "KDone in handler - this shouldn't happen"
-      AskVEnv -> handler (k (CtxEnv { globals = globalVEnv ctx, locals = M.empty })) ctx g ns
-      ELup end -> handler (k ((M.lookup end) . valueMap . store $ ctx)) ctx g ns
+      AskVEnv -> handler (k (CtxEnv { globals = globalVEnv ctx, locals = M.empty })) ctx g
+      ELup end -> handler (k ((M.lookup end) . valueMap . store $ ctx)) ctx g
       TypeOf end -> case M.lookup end . typeMap . store $ ctx of
-        Just et -> handler (k et) ctx g ns
+        Just et -> handler (k et) ctx g
         Nothing -> Left (dumbErr . InternalError $ "End " ++ show end ++ " isn't Declared")
       Declare end my bty ->
         let st@Store{typeMap=m} = store ctx
@@ -239,7 +236,7 @@ handler (Req s k) ctx g ns
                        handler (k ())
                        (ctx { store =
                               st { typeMap = M.insert end (EndType my bty) m }
-                            }) g ns
+                            }) g
       Define end v ->
         let st@Store{typeMap=tm, valueMap=vm} = store ctx
         in case track ("Define " ++ show end ++ " = " ++ show v) $ M.lookup end vm of
@@ -250,25 +247,25 @@ handler (Req s k) ctx g ns
               handler (k ())
                 (ctx { store =
                     st { valueMap = M.insert end v vm }
-                }) g ns
+                }) g
       -- TODO: Use the kind argument for partially applied constructors
       TLup key -> do
         let args = M.lookup key (typeConstructors ctx)
-        handler (k args) ctx g ns
+        handler (k args) ctx g
 
       CLup fc vcon tycon -> do
         tbl <- maybeToRight (Err (Just fc) $ VConNotFound $ show vcon) $
                M.lookup vcon (constructors ctx)
         args <- maybeToRight (Err (Just fc) $ TyConNotFound (show tycon) (show vcon)) $
                 M.lookup tycon tbl
-        handler (k args) ctx g ns
+        handler (k args) ctx g
 
       KCLup fc vcon tycon -> do
         tbl <- maybeToRight (Err (Just fc) $ VConNotFound $ show vcon) $
                M.lookup vcon (kconstructors ctx)
         args <- maybeToRight (Err (Just fc) $ TyConNotFound (show tycon) (show vcon)) $
                 M.lookup tycon tbl
-        handler (k args) ctx g ns
+        handler (k args) ctx g
 
 type Checking = Free CheckingSig
 
@@ -310,11 +307,11 @@ suppressGraph (Req c k) = Req c (suppressGraph . k)
 
 inLvl :: String -> Checking a -> Checking a
 inLvl prefix c = req (SplitNS prefix) >>= \prefixNamespace -> localNS prefixNamespace c
- where
-  localNS :: Namespace -> Checking a -> Checking a
-  localNS _ (Ret v) = Ret v
-  localNS ns (Req (Fresh str) k) = let (name, root) = fresh str ns in
-    localNS root (k name)
-  localNS ns (Req (SplitNS str) k) = let (subSpace, newRoot) = split str ns in
-                                        localNS newRoot (k subSpace)
-  localNS ns (Req c k) = Req c (localNS ns . k)
+
+localNS :: Namespace -> Checking a -> Checking a
+localNS _ (Ret v) = Ret v
+localNS ns (Req (Fresh str) k) = let (name, root) = fresh str ns in
+  localNS root (k name)
+localNS ns (Req (SplitNS str) k) = let (subSpace, newRoot) = split str ns in
+                                      localNS newRoot (k subSpace)
+localNS ns (Req c k) = Req c (localNS ns . k)

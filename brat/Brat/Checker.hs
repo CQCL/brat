@@ -950,4 +950,4 @@ run ve initStore ns m =
                 , typeConstructors = defaultTypeConstructors
                 , aliasTable = M.empty
                 } in
-    (\(a,ctx,(holes, graph)) -> (a, (holes, store ctx, graph))) <$> handler m ctx mempty ns
+    (\(a,ctx,(holes, graph)) -> (a, (holes, store ctx, graph))) <$> handler (localNS ns m) ctx mempty
