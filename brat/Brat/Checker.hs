@@ -940,7 +940,7 @@ run :: VEnv
     -> Store
     -> Namespace
     -> Checking a
-    -> Either Error (a, ([TypedHole], Store, Graph, Namespace))
+    -> Either Error (a, ([TypedHole], Store, Graph))
 run ve initStore ns m =
   let ctx = Ctx { globalVEnv = ve
                 , store = initStore
@@ -950,4 +950,4 @@ run ve initStore ns m =
                 , typeConstructors = defaultTypeConstructors
                 , aliasTable = M.empty
                 } in
-    (\(a,ctx,(holes, graph),ns) -> (a, (holes, store ctx, graph, ns))) <$> handler m ctx mempty ns
+    (\(a,ctx,(holes, graph)) -> (a, (holes, store ctx, graph))) <$> handler (localNS ns m) ctx mempty

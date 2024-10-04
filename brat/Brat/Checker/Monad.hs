@@ -60,8 +60,7 @@ data Context = Ctx { globalVEnv :: VEnv
 
 data CheckingSig ty where
   Fresh   :: String -> CheckingSig Name
-  -- Run a sub-process on a new namespace-level
-  InLvl   :: String -> Checking a -> CheckingSig a
+  SplitNS :: String -> CheckingSig Namespace
   Throw   :: Error  -> CheckingSig a
   LogHole :: TypedHole -> CheckingSig ()
   AskFC   :: CheckingSig FC
@@ -95,14 +94,12 @@ localAlias :: (UserName, Alias) -> Checking v -> Checking v
 localAlias _ (Ret v) = Ret v
 localAlias con@(name, alias) (Req (ALup u) k)
   | u == name = localAlias con $ k (Just alias)
-localAlias con (Req (InLvl str c) k) = Req (InLvl str (localAlias con c)) (localAlias con . k)
 localAlias con (Req r k) = Req r (localAlias con . k)
 
 localFC :: FC -> Checking v -> Checking v
 localFC _ (Ret v) = Ret v
 localFC f (Req AskFC k) = localFC f (k f)
 localFC f (Req (Throw (e@Err{fc=Nothing})) k) = localFC f (Req (Throw (e{fc=Just f})) k)
-localFC f (Req (InLvl str c) k) = Req (InLvl str (localFC f c)) (localFC f . k)
 localFC f (Req r k) = Req r (localFC f . k)
 
 localEnv :: (?my :: Modey m) => Env (EnvData m) -> Checking v -> Checking v
@@ -116,7 +113,6 @@ localVEnv ext (Req (VLup x) k) | Just x <- M.lookup x ext = localVEnv ext (k (Ju
 localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
                                    -- ext shadows local vars
                                    localVEnv ext (k (env { locals = M.union ext (locals env) }))
-localVEnv ext (Req (InLvl str c) k) = Req (InLvl str (localVEnv ext c)) (localVEnv ext . k)
 localVEnv ext (Req r k) = Req r (localVEnv ext . k)
 
 -- runs a computation, but intercepts uses of outer *locals* variables and redirects
@@ -130,9 +126,6 @@ captureOuterLocals c = do
   helper :: (VEnv, VEnv) -> Checking v
          -> Checking (v, M.Map UserName [(Src, BinderType Brat)])
   helper (_, captured) (Ret v) = Ret (v, captured)
-  helper state@(avail,_) (Req (InLvl str c) k) = do
-    (v, captured) <- req (InLvl str (helper state c))
-    helper (avail, captured) (k v)
   helper (avail, captured) (Req (VLup x) k) | j@(Just new) <- M.lookup x avail =
     helper (avail, M.insert x new captured) (k j)
   helper state (Req r k) = Req r (helper state . k)
@@ -140,7 +133,6 @@ captureOuterLocals c = do
 wrapError :: (Error -> Error) -> Checking v -> Checking v
 wrapError _ (Ret v) = Ret v
 wrapError f (Req (Throw e) k) = Req (Throw (f e)) k
-wrapError f (Req (InLvl str c) k) = Req (InLvl str (wrapError f c)) (wrapError f . k)
 wrapError f (Req r k) = Req r (wrapError f . k)
 
 throwLeft :: Either ErrorMsg a -> Checking a
@@ -212,34 +204,28 @@ catchErr (Req r k) = Req r (catchErr . k)
 handler :: Free CheckingSig v
         -> Context
         -> Graph
-        -> Namespace
-        -> Either Error (v,Context,([TypedHole],Graph),Namespace)
-handler (Ret v) ctx g ns = return (v, ctx, ([], g), ns)
-handler (Req s k) ctx g ns
+        -> Either Error (v,Context,([TypedHole],Graph))
+handler (Ret v) ctx g = return (v, ctx, ([], g))
+handler (Req s k) ctx g
   = case s of
-      Fresh str -> let (name, root) = fresh str ns in
-                     handler (k name) ctx g root
-      InLvl str c -> do  -- In Either Error monad
-        let (freshNS, newRoot) = split str ns
-        (v, ctx, (holes1, g), _) <- handler c ctx g freshNS
-        (v, ctx, (holes2, g), ns) <- handler (k v) ctx g newRoot
-        pure (v, ctx, (holes1 ++ holes2, g), ns)
+      Fresh _ -> error "Fresh in handler, should only happen under `-!`"
+      SplitNS _ -> error "SplitNS in handler, should only happen under `-!`"
       Throw err -> Left err
-      LogHole hole -> do (v,ctx,(holes,g),ns) <- handler (k ()) ctx g ns
-                         return (v,ctx,(hole:holes,g),ns)
+      LogHole hole -> do (v,ctx,(holes,g)) <- handler (k ()) ctx g
+                         return (v,ctx,(hole:holes,g))
       AskFC -> error "AskFC in handler - shouldn't happen, should always be in localFC"
-      VLup s -> handler (k $ M.lookup s (globalVEnv ctx)) ctx g ns
-      ALup s -> handler (k $ M.lookup s (aliasTable ctx)) ctx g ns
-      AddNode name node -> handler (k ()) ctx ((M.singleton name node, []) <> g) ns
-      Wire w -> handler (k ()) ctx ((M.empty,[w]) <> g) ns
+      VLup s -> handler (k $ M.lookup s (globalVEnv ctx)) ctx g
+      ALup s -> handler (k $ M.lookup s (aliasTable ctx)) ctx g
+      AddNode name node -> handler (k ()) ctx ((M.singleton name node, []) <> g)
+      Wire w -> handler (k ()) ctx ((M.empty,[w]) <> g)
       -- We only get a KLup here if the variable has not been found in the kernel context
-      KLup _ -> handler (k Nothing) ctx g ns
+      KLup _ -> handler (k Nothing) ctx g
       -- Receiving KDone may become possible when merging the two check functions
       KDone -> error "KDone in handler - this shouldn't happen"
-      AskVEnv -> handler (k (CtxEnv { globals = globalVEnv ctx, locals = M.empty })) ctx g ns
-      ELup end -> handler (k ((M.lookup end) . valueMap . store $ ctx)) ctx g ns
+      AskVEnv -> handler (k (CtxEnv { globals = globalVEnv ctx, locals = M.empty })) ctx g
+      ELup end -> handler (k ((M.lookup end) . valueMap . store $ ctx)) ctx g
       TypeOf end -> case M.lookup end . typeMap . store $ ctx of
-        Just et -> handler (k et) ctx g ns
+        Just et -> handler (k et) ctx g
         Nothing -> Left (dumbErr . InternalError $ "End " ++ show end ++ " isn't Declared")
       Declare end my bty ->
         let st@Store{typeMap=m} = store ctx
@@ -250,7 +236,7 @@ handler (Req s k) ctx g ns
                        handler (k ())
                        (ctx { store =
                               st { typeMap = M.insert end (EndType my bty) m }
-                            }) g ns
+                            }) g
       Define end v ->
         let st@Store{typeMap=tm, valueMap=vm} = store ctx
         in case track ("Define " ++ show end ++ " = " ++ show v) $ M.lookup end vm of
@@ -261,25 +247,25 @@ handler (Req s k) ctx g ns
               handler (k ())
                 (ctx { store =
                     st { valueMap = M.insert end v vm }
-                }) g ns
+                }) g
       -- TODO: Use the kind argument for partially applied constructors
       TLup key -> do
         let args = M.lookup key (typeConstructors ctx)
-        handler (k args) ctx g ns
+        handler (k args) ctx g
 
       CLup fc vcon tycon -> do
         tbl <- maybeToRight (Err (Just fc) $ VConNotFound $ show vcon) $
                M.lookup vcon (constructors ctx)
         args <- maybeToRight (Err (Just fc) $ TyConNotFound (show tycon) (show vcon)) $
                 M.lookup tycon tbl
-        handler (k args) ctx g ns
+        handler (k args) ctx g
 
       KCLup fc vcon tycon -> do
         tbl <- maybeToRight (Err (Just fc) $ VConNotFound $ show vcon) $
                M.lookup vcon (kconstructors ctx)
         args <- maybeToRight (Err (Just fc) $ TyConNotFound (show tycon) (show vcon)) $
                 M.lookup tycon tbl
-        handler (k args) ctx g ns
+        handler (k args) ctx g
 
 type Checking = Free CheckingSig
 
@@ -300,7 +286,7 @@ typeErr = err . TypeErr
 
 instance FreshMonad Checking where
   freshName x = req $ Fresh x
-  str -! c = req $ InLvl str c
+  str -! c = inLvl str c
 
 -- This way we get file contexts when pattern matching fails
 instance MonadFail Checking where
@@ -318,3 +304,14 @@ suppressGraph (Ret x) = Ret x
 suppressGraph (Req (AddNode _ _) k) = suppressGraph (k ())
 suppressGraph (Req (Wire _) k) = suppressGraph (k ())
 suppressGraph (Req c k) = Req c (suppressGraph . k)
+
+inLvl :: String -> Checking a -> Checking a
+inLvl prefix c = req (SplitNS prefix) >>= \prefixNamespace -> localNS prefixNamespace c
+
+localNS :: Namespace -> Checking a -> Checking a
+localNS _ (Ret v) = Ret v
+localNS ns (Req (Fresh str) k) = let (name, root) = fresh str ns in
+  localNS root (k name)
+localNS ns (Req (SplitNS str) k) = let (subSpace, newRoot) = split str ns in
+                                      localNS newRoot (k subSpace)
+localNS ns (Req c k) = Req c (localNS ns . k)
