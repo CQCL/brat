@@ -1,6 +1,6 @@
-Error in test/golden/error/vecpat3.brat@FC {start = Pos {line = 3, col = 5}, end = Pos {line = 3, col = 12}}:
+Error in test/golden/error/vecpat3.brat@FC {start = Pos {line = 3, col = 6}, end = Pos {line = 3, col = 11}}:
 fst3([a,b]) = none
-    ^^^^^^^
+     ^^^^^
 
   Unification error: Couldn't force 1 to be 0
 

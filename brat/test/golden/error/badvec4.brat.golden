@@ -1,6 +1,6 @@
-Error in test/golden/error/badvec4.brat@FC {start = Pos {line = 2, col = 6}, end = Pos {line = 2, col = 11}}:
+Error in test/golden/error/badvec4.brat@FC {start = Pos {line = 2, col = 7}, end = Pos {line = 2, col = 10}}:
 v3 = [1,2]
-     ^^^^^
+      ^^^
 
   Expected vector of length 3
 from the type:  Vec(Int, 3)

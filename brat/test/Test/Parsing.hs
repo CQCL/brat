@@ -18,7 +18,6 @@ testParse file = testCase (show file) $ do
     Right _ -> return () -- OK
 
 expectedParsingFails = map ("examples" </>) [
-    "karlheinz.brat",
     "thin.brat"]
 
 expectFailForPaths :: [FilePath] -> (FilePath -> TestTree) -> FilePath -> TestTree
