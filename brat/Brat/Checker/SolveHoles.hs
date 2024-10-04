@@ -74,6 +74,7 @@ typeEqEta tm stuff@(ny :* _ks :* _sems) hopeSet k exp act = do
   unless (not $ any (flip M.member hopeSet) ends) $ typeErr "ends were in hopeset"
   filterM (isSkolem >=> pure . not) ends >>= \case
     [] -> typeEqRigid tm stuff k exp act -- easyish, both rigid i.e. already defined
+    [e1, e2] | e1 == e2 -> pure () -- trivially same, even if they're both still yet-to-be-defined
     es -> -- tricky: must wait for one or other to become more defined
       mkYield "typeEqEta" (S.fromList es) >> typeEq tm stuff k exp act
  where
