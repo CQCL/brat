@@ -1,0 +1,15 @@
+ext "to_float" to_float(i :: Int) -> Float
+
+map1({ Int -> Float }, List(Int)) -> List(Float)
+map1(_, []) = []
+map1(f, x ,- xs) = f(x) ,- map1(f, xs)
+
+test1 :: List(Float)
+test1 = map1(to_float, [5])
+
+map2({ {Int -> Float} -> Float}, List({Int->Float})) -> List(Float)
+map2(_, []) = []
+map2(f, x ,- xs) = f(x) ,- map2(f, xs)
+
+test2 :: List(Float)
+test2 = map2({f => f(5)}, [to_float])
