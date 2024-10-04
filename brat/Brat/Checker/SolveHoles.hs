@@ -14,7 +14,7 @@ import Bwd
 import Hasochism
 import Util (zip_same_length)
 
-import Control.Monad (filterM, unless)
+import Control.Monad (filterM, unless, (>=>))
 import Data.Foldable (traverse_)
 import Data.Functor
 import Data.Maybe (catMaybes)
@@ -70,15 +70,16 @@ typeEqEta _ (Zy :* _ :* _) hopeSet Nat exp act
 typeEqEta tm stuff@(ny :* _ks :* _sems) hopeSet k exp act = do
   exp <- quote ny exp
   act <- quote ny act
-  let ends = [e | (VApp (VPar e) _) <- [exp,act]] ++ catMaybes [getNumVar n | VNum n <- [exp, act]]
+  let ends = catMaybes $ [exp,act] <&> getEnd
   unless (not $ any (flip M.member hopeSet) ends) $ typeErr "ends were in hopeset"
-  filterM shouldWait ends >>= \case
+  filterM (isSkolem >=> pure . not) ends >>= \case
     [] -> typeEqRigid tm stuff k exp act -- easyish, both rigid i.e. already defined
     es -> -- tricky: must wait for one or other to become more defined
       mkYield "typeEqEta" (S.fromList es) >> typeEq tm stuff k exp act
  where
-  shouldWait :: End -> Checking Bool
-  shouldWait e = isSkolem e <&> not
+  getEnd (VApp (VPar e) _) = Just e
+  getEnd (VNum n) = getNumVar n
+  getEnd _ = Nothing
 
 -- This will update the hopeSet, potentially invalidating things that have been eval'd
 -- The Sem is closed, for now.
