@@ -50,12 +50,12 @@ nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   ,"kernel-syntax"
   ,"kinds"
   ,"let"
-  ,"list"
   ,"listpair"
   ,"one"
   ,"patterns"
   ,"qft"
   ,"test"
+  ,"type_alias"
   ,"vector"
   -- Conjecture: These examples don't compile because number patterns in type
   -- signatures causes `kindCheck` to call `abstract`, creating "Selector"
