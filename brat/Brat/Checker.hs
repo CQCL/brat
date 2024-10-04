@@ -965,7 +965,7 @@ run :: VEnv
     -> Store
     -> Namespace
     -> Checking a
-    -> Either Error (a, ([TypedHole], Store, Graph, CaptureSets, Namespace))
+    -> Either Error (a, ([TypedHole], Store, Graph, CaptureSets))
 run ve initStore ns m = do
   let ctx = Ctx { globalVEnv = ve
                 , store = initStore
@@ -977,13 +977,13 @@ run ve initStore ns m = do
                 , hopeSet = M.empty
                 , captureSets = M.empty
                 }
-  (a,ctx,(holes, graph),ns) <- handler m ctx mempty ns
+  (a,ctx,(holes, graph)) <- handler (localNS ns m) ctx mempty
   let tyMap = typeMap $ store ctx
   -- If the hopeSet has any remaining holes with kind Nat, we need to abort.
   -- Even though we didn't need them for typechecking problems, our runtime
   -- behaviour depends on the values of the holes, which we can't account for.
   case M.toList $ M.filterWithKey (\e _ -> isNatKinded tyMap e) (hopeSet ctx) of
-    [] -> pure (a, (holes, store ctx, graph, captureSets ctx, ns))
+    [] -> pure (a, (holes, store ctx, graph, captureSets ctx))
     -- Just use the FC of the first hole while we don't have the capacity to
     -- show multiple error locations
     hs@((_,fc):_) -> Left $ Err (Just fc) (RemainingNatHopes (show . fst <$> hs))

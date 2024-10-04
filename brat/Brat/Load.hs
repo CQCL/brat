@@ -133,8 +133,9 @@ loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addS
   -- Generate some stuff for each entry:
     --  * A map from names to VDecls (aka an Env)
     --  * Some overs and outs??
-  (entries, (holes, kcStore, kcGraph, capSets, ns)) <- run venv initStore ns $
-    withAliases aliases $ ("globals" -!) $ forM decls $ \d -> localFC (fnLoc d) $ do
+  let (globalNS, newRoot) = split "globals" ns
+  (entries, (holes, kcStore, kcGraph, capSets)) <- run venv initStore globalNS $
+    withAliases aliases $ forM decls $ \d -> localFC (fnLoc d) $ do
       let name = PrefixName pre (fnName d)
       (thing, ins :->> outs, sig, prefix) <- case (fnLocality d) of
                         Local -> do
@@ -157,7 +158,7 @@ loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addS
   let vdecls = map fst entries
   -- Now generate environment mapping usernames to nodes in the graph
   venv <- pure $ venv <> M.fromList [(name, overs) | ((name, _), (_, overs)) <- entries]
-  ((), (holes, newEndData, graph, capSets, _)) <- run venv kcStore ns $ withAliases aliases $ do
+  ((), (holes, newEndData, graph, capSets)) <- run venv kcStore newRoot $ withAliases aliases $ do
     remaining <- "check_defs" -! foldM checkDecl' to_define vdecls
     pure $ assert (M.null remaining) () -- all to_defines were defined
   pure (venv, oldDecls <> vdecls, holes, oldEndData <> newEndData, kcGraph <> graph, capSets)

@@ -78,8 +78,7 @@ mkYield desc es = thTrace ("Yielding in " ++ desc) $ Yield (AwaitingAny es) (\_ 
 -- Commands for synchronous operations
 data CheckingSig ty where
   Fresh   :: String -> CheckingSig Name
-  -- Run a sub-process on a new namespace-level
-  InLvl   :: String -> Checking a -> CheckingSig a
+  SplitNS :: String -> CheckingSig Namespace
   Throw   :: Error  -> CheckingSig a
   LogHole :: TypedHole -> CheckingSig ()
   AskFC   :: CheckingSig FC
@@ -113,7 +112,6 @@ data CheckingSig ty where
 
 wrapper :: (forall a. CheckingSig a -> Checking (Maybe a)) -> Checking v -> Checking v
 wrapper _ (Ret v) = Ret v
-wrapper f (Req (InLvl str c) k) = Req (InLvl str (wrapper f c)) (wrapper f . k)
 wrapper f (Req s k) = f s >>= \case
   Just v -> wrapper f (k v)
   Nothing -> Req s (wrapper f . k)
@@ -247,34 +245,28 @@ catchErr (Fork desc par c) = thTrace ("Spawning(catch) " ++ desc) $ catchErr $ p
 handler :: Free CheckingSig v
         -> Context
         -> Graph
-        -> Namespace
-        -> Either Error (v,Context,([TypedHole],Graph),Namespace)
-handler (Ret v) ctx g ns = return (v, ctx, ([], g), ns)
-handler (Req s k) ctx g ns
+        -> Either Error (v,Context,([TypedHole],Graph))
+handler (Ret v) ctx g = return (v, ctx, ([], g))
+handler (Req s k) ctx g
   = case s of
-      Fresh str -> let (name, root) = fresh str ns in
-                     handler (k name) ctx g root
-      InLvl str c -> do  -- In Either Error monad
-        let (freshNS, newRoot) = split str ns
-        (v, ctx, (holes1, g), _) <- handler c ctx g freshNS
-        (v, ctx, (holes2, g), ns) <- handler (k v) ctx g newRoot
-        pure (v, ctx, (holes1 ++ holes2, g), ns)
+      Fresh _ -> error "Fresh in handler, should only happen under `-!`"
+      SplitNS _ -> error "SplitNS in handler, should only happen under `-!`"
       Throw err -> Left err
-      LogHole hole -> do (v,ctx,(holes,g),ns) <- handler (k ()) ctx g ns
-                         return (v,ctx,(hole:holes,g),ns)
+      LogHole hole -> do (v,ctx,(holes,g)) <- handler (k ()) ctx g
+                         return (v,ctx,(hole:holes,g))
       AskFC -> error "AskFC in handler - shouldn't happen, should always be in localFC"
-      VLup s -> handler (k $ M.lookup s (globalVEnv ctx)) ctx g ns
-      ALup s -> handler (k $ M.lookup s (aliasTable ctx)) ctx g ns
-      AddNode name node -> handler (k ()) ctx ((M.singleton name node, []) <> g) ns
-      Wire w -> handler (k ()) ctx ((M.empty,[w]) <> g) ns
+      VLup s -> handler (k $ M.lookup s (globalVEnv ctx)) ctx g
+      ALup s -> handler (k $ M.lookup s (aliasTable ctx)) ctx g
+      AddNode name node -> handler (k ()) ctx ((M.singleton name node, []) <> g)
+      Wire w -> handler (k ()) ctx ((M.empty,[w]) <> g)
       -- We only get a KLup here if the variable has not been found in the kernel context
-      KLup _ -> handler (k Nothing) ctx g ns
+      KLup _ -> handler (k Nothing) ctx g
       -- Receiving KDone may become possible when merging the two check functions
       KDone -> error "KDone in handler - this shouldn't happen"
-      AskVEnv -> handler (k (CtxEnv { globals = globalVEnv ctx, locals = M.empty })) ctx g ns
-      ELup end -> handler (k ((M.lookup end) . valueMap . store $ ctx)) ctx g ns
+      AskVEnv -> handler (k (CtxEnv { globals = globalVEnv ctx, locals = M.empty })) ctx g
+      ELup end -> handler (k ((M.lookup end) . valueMap . store $ ctx)) ctx g
       TypeOf end -> case M.lookup end . typeMap . store $ ctx of
-        Just et -> handler (k et) ctx g ns
+        Just et -> handler (k et) ctx g
         Nothing -> Left (dumbErr . InternalError $ "End " ++ show end ++ " isn't Declared")
       Declare end my bty skol ->
         let st@Store{typeMap=m} = store ctx
@@ -285,32 +277,32 @@ handler (Req s k) ctx g ns
                        handler (k ())
                        (ctx { store =
                               st { typeMap = M.insert end (EndType my bty, skol) m }
-                            }) g ns
+                            }) g
       -- TODO: Use the kind argument for partially applied constructors
       TLup key -> do
         let args = M.lookup key (typeConstructors ctx)
-        handler (k args) ctx g ns
+        handler (k args) ctx g
 
       CLup fc vcon tycon -> do
         tbl <- maybeToRight (Err (Just fc) $ VConNotFound $ show vcon) $
                M.lookup vcon (constructors ctx)
         args <- maybeToRight (Err (Just fc) $ TyConNotFound (show tycon) (show vcon)) $
                 M.lookup tycon tbl
-        handler (k args) ctx g ns
+        handler (k args) ctx g
 
       KCLup fc vcon tycon -> do
         tbl <- maybeToRight (Err (Just fc) $ VConNotFound $ show vcon) $
                M.lookup vcon (kconstructors ctx)
         args <- maybeToRight (Err (Just fc) $ TyConNotFound (show tycon) (show vcon)) $
                 M.lookup tycon tbl
-        handler (k args) ctx g ns
+        handler (k args) ctx g
 
-      ANewHope (e, fc) -> handler (k ()) (ctx { hopeSet = M.insert e fc (hopeSet ctx) }) g ns
-      AskHopeSet -> handler (k (hopeSet ctx)) ctx g ns
+      ANewHope (e, fc) -> handler (k ()) (ctx { hopeSet = M.insert e fc (hopeSet ctx) }) g
+      AskHopeSet -> handler (k (hopeSet ctx)) ctx g
       AddCapture n (var, ends) ->
-        handler (k ()) ctx {captureSets=M.insertWith M.union n (M.singleton var ends) (captureSets ctx)} g ns
+        handler (k ()) ctx {captureSets=M.insertWith M.union n (M.singleton var ends) (captureSets ctx)} g
 
-handler (Define end v k) ctx g ns = let st@Store{typeMap=tm, valueMap=vm} = store ctx in
+handler (Define end v k) ctx g = let st@Store{typeMap=tm, valueMap=vm} = store ctx in
   case track ("Define " ++ show end ++ " = " ++ show v) $ M.lookup end vm of
       Just _ -> Left $ dumbErr (InternalError $ "Redefining " ++ show end)
       Nothing -> case M.lookup end tm of
@@ -327,12 +319,12 @@ handler (Define end v k) ctx g ns = let st@Store{typeMap=tm, valueMap=vm} = stor
           handler (k news)
             (ctx { store = st { valueMap = M.insert end v vm },
                 hopeSet = M.delete end (hopeSet ctx)
-            }) g ns
-handler (Yield Unstuck k) ctx g ns = handler (k mempty) ctx g ns
-handler (Yield (AwaitingAny ends) _k) ctx _ _ = Left $ dumbErr $ TypeErr $ unlines $
+            }) g
+handler (Yield Unstuck k) ctx g = handler (k mempty) ctx g
+handler (Yield (AwaitingAny ends) _k) ctx _ = Left $ dumbErr $ TypeErr $ unlines $
   ("Typechecking blocked on:":(show <$> S.toList ends))
   ++ "":"Hopeset is":(show <$> M.keys (hopeSet ctx)) ++ ["Try writing more types! :-)"]
-handler (Fork desc par c) ctx g ns = handler (thTrace ("Spawning " ++ desc) $ par *> c) ctx g ns
+handler (Fork desc par c) ctx g = handler (thTrace ("Spawning " ++ desc) $ par *> c) ctx g
 
 type Checking = Free CheckingSig
 
@@ -353,7 +345,7 @@ typeErr = err . TypeErr
 
 instance FreshMonad Checking where
   freshName x = req $ Fresh x
-  str -! c = req $ InLvl str c
+  str -! c = inLvl str c
 
 -- This way we get file contexts when pattern matching fails
 instance MonadFail Checking where
@@ -374,3 +366,18 @@ suppressGraph = wrapper2 (\case
 
 defineEnd :: End -> Val Z -> Checking ()
 defineEnd e v = Define e v (const (Ret ()))
+
+inLvl :: String -> Checking a -> Checking a
+inLvl prefix c = req (SplitNS prefix) >>= \prefixNamespace -> localNS prefixNamespace c
+
+localNS :: Namespace -> Checking a -> Checking a
+localNS _ (Ret v) = Ret v
+localNS ns (Req (Fresh str) k) = let (name, root) = fresh str ns in
+  localNS root (k name)
+localNS ns (Req (SplitNS str) k) = let (subSpace, newRoot) = split str ns in
+                                      localNS newRoot (k subSpace)
+localNS ns (Req c k) = Req c (localNS ns . k)
+localNS ns (Define e v k) = Define e v (localNS ns . k)
+localNS ns (Yield st k) = Yield st (localNS ns . k)
+localNS ns (Fork desc par c) = let (subSpace, newRoot) = split desc ns in
+                                 Fork desc (localNS subSpace par) (localNS newRoot c)
