@@ -40,7 +40,10 @@ simpleCheck my ty tm = case (my, ty) of
         Num _ -> typeErr $ "Can't determine whether Int or Nat: " ++ show tm
     else isSkolem e >>= \case
       True -> throwLeft $ helper Braty ty tm
-      False -> mkYield "simpleCheck" (S.singleton e) >> simpleCheck Braty ty tm
+      False -> do
+        mkYield "simpleCheck" (S.singleton e)
+        ty <- eval S0 ty
+        simpleCheck Braty ty tm
   _ -> throwLeft $ helper my ty tm
  where
   helper :: Modey m -> Val Z -> SimpleTerm -> Either ErrorMsg ()
