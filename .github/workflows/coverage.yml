@@ -16,15 +16,15 @@ jobs:
         working-directory: brat/
 
     steps:
-    - uses: actions/checkout@v2
-    - uses: haskell/actions/setup@v1
+    - uses: actions/checkout@v4
+    - uses: haskell-actions/setup@v2
       with:
         ghc-version: '9.6.4'
         cabal-version: '3.4'
         enable-stack: true
 
     # from: https://raehik.github.io/2021/03/01/caching-stack-and-cabal-haskell-builds-on-github-actions.html
-    - uses: actions/cache@v2
+    - uses: actions/cache@v4
       with:
         path: |
           ~/.stack
@@ -38,7 +38,7 @@ jobs:
       run: |
         stack test --coverage --no-run-benchmarks
         echo "artifactPath=$(stack path --local-hpc-root)" >> $GITHUB_ENV
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v4
       with:
         name: coverage
         path: ${{ env.artifactPath }}
