@@ -167,6 +167,7 @@ buildNum :: Integer -> Checking Src
 buildNum n = buildConst (Num (fromIntegral n)) TNat
 
 
+-- Generate wiring to produce a dynamic instance of the numval argument
 buildNatVal :: NumVal (VVar Z) -> Checking Src
 buildNatVal nv@(NumValue n gro) = case n of
   0 -> buildGro gro
@@ -214,30 +215,30 @@ buildNatVal nv@(NumValue n gro) = case n of
     pure out
   buildMono _ = err . InternalError $ "Trying to build a non-closed nat value: " ++ show nv
 
-invertNatVal :: Src -> NumVal a -> Checking Src
-invertNatVal src (NumValue up gro) = case up of
-  0 -> invertGro src gro
+invertNatVal :: Tgt -> NumVal (VVar Z) -> Checking Tgt
+invertNatVal tgt (NumValue up gro) = case up of
+  0 -> invertGro tgt gro
   _ -> do
     ((lhs,rhs),out) <- buildArithOp Sub
     upSrc <- buildNum up
-    wire (src, TNat, lhs)
     wire (upSrc, TNat, rhs)
-    invertGro out gro
+    wire (out, TNat, tgt)
+    invertGro lhs gro
  where
   invertGro _ Constant0 = error "Invariant violated: the numval arg to invertNatVal should contain a variable"
-  invertGro src (StrictMonoFun sm) = invertSM src sm
+  invertGro tgt (StrictMonoFun sm) = invertSM tgt sm
 
-  invertSM src (StrictMono k mono) = case k of
-    0 -> invertMono src mono
+  invertSM tgt (StrictMono k mono) = case k of
+    0 -> invertMono tgt mono
     _ -> do
       divisor <- buildNum (2 ^ k)
       ((lhs,rhs),out) <- buildArithOp Div
-      wire (src, TNat, lhs)
+      wire (out, TNat, tgt)
       wire (divisor, TNat, rhs)
-      invertMono out mono
+      invertMono lhs mono
 
-  invertMono src (Linear _) = pure src
-  invertMono src (Full sm) = do
+  invertMono tgt (Linear (VPar (InEnd e))) = pure (NamedPort e "numval")
+  invertMono tgt (Full sm) = do
     (_, [(llufTgt,_)], [(llufSrc,_)], _) <- next "luff" (Prim ("BRAT","lluf")) (S0, Some (Zy :* S0)) (REx ("n", Nat) R0) (REx ("n", Nat) R0)
-    wire (src, TNat, llufTgt)
-    invertSM llufSrc sm
+    wire (llufSrc, TNat, tgt)
+    invertSM llufTgt sm
