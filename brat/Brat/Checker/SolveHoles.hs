@@ -14,8 +14,10 @@ import Bwd
 import Hasochism
 import Util (zip_same_length)
 
+import Control.Monad (filterM, unless, (>=>))
 import Data.Foldable (traverse_)
 import Data.Functor
+import Data.Maybe (catMaybes)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
@@ -64,20 +66,28 @@ typeEqEta _tm (Zy :* _ks :* _sems) hopeSet k exp (SApp (SPar e) B0)
 typeEqEta _ (Zy :* _ :* _) hopeSet Nat exp act
   | Just (SPar e) <- isNumVar exp, M.member e hopeSet = solveHope Nat e act
   | Just (SPar e) <- isNumVar act, M.member e hopeSet = solveHope Nat e exp
+-- harder cases, neither is in the hopeSet, so we can't define it ourselves
 typeEqEta tm stuff@(ny :* _ks :* _sems) hopeSet k exp act = do
   exp <- quote ny exp
   act <- quote ny act
-  case [e | (VApp (VPar e) _) <- [exp,act], M.member e hopeSet] of
-    [] -> typeEqRigid tm stuff k exp act
-    es -> do
-      Yield (AwaitingAny $ S.fromList es) (\_ -> typeEq tm stuff k exp act)
+  let ends = catMaybes $ [exp,act] <&> getEnd
+  unless (not $ any (flip M.member hopeSet) ends) $ typeErr "ends were in hopeset"
+  filterM (isSkolem >=> pure . not) ends >>= \case
+    [] -> typeEqRigid tm stuff k exp act -- easyish, both rigid i.e. already defined
+    [e1, e2] | e1 == e2 -> pure () -- trivially same, even if they're both still yet-to-be-defined
+    es -> -- tricky: must wait for one or other to become more defined
+      mkYield "typeEqEta" (S.fromList es) >> typeEq tm stuff k exp act
+ where
+  getEnd (VApp (VPar e) _) = Just e
+  getEnd (VNum n) = getNumVar n
+  getEnd _ = Nothing
 
 -- This will update the hopeSet, potentially invalidating things that have been eval'd
 -- The Sem is closed, for now.
 -- TODO: This needs to update the BRAT graph with the solution.
 solveHope :: TypeKind -> End -> Sem -> Checking ()
 solveHope k e v = quote Zy v >>= \v -> case doesntOccur e v of
-  Right () -> Define e v $ \_ -> do
+  Right () -> defineEnd e v >> do
     dangling <- case (k, v) of
       (Nat, VNum v) -> buildNatVal v
       (Nat, _) -> err $ InternalError "Head of Nat wasn't a VNum"

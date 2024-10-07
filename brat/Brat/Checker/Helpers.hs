@@ -1,32 +1,14 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
-module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
-                            ,simpleCheck
-                            ,combineDisjointEnvs
-                            ,ensureEmpty, noUnders
-                            ,rowToSig
-                            ,showMode, getVec
-                            ,mkThunkTy
-                            ,wire
-                            ,next, knext, anext
-                            ,kindType, getThunks
-                            ,binderToValue, valueToBinder
-                            ,kConFields
-                            ,defineSrc, defineTgt
-                            ,declareSrc, declareTgt
-                            ,makeBox
-                            ,uncons
-                            ,evalBinder
-                            ,evalSrcRow, evalTgtRow
-                            )-} where
+module Brat.Checker.Helpers where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd)
+import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd, throwLeft, isSkolem, mkYield)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (eval, EvMode(..), kindType)
 import Brat.FC (FC)
 import Brat.Graph (Node(..), NodeType(..))
-import Brat.Naming (Name, FreshMonad(..))
+import Brat.Naming (Name)
 import Brat.Syntax.Common
 import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Simple
@@ -39,18 +21,34 @@ import Util (log2)
 
 import Control.Monad.Freer
 import Control.Arrow ((***))
+import Data.Functor ((<&>))
 import Data.List (intercalate)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Prelude hiding (last)
 
-simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Either ErrorMsg ()
-simpleCheck Braty TNat (Num n) | n >= 0 = pure ()
-simpleCheck Braty TInt (Num _) = pure ()
-simpleCheck Braty TFloat (Float _) = pure ()
-simpleCheck Braty TText (Text _) = pure ()
-simpleCheck _ ty tm = Left $ TypeErr $ unwords
+simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Checking ()
+simpleCheck my ty tm = case (my, ty) of
+  (Braty, VApp (VPar e) _) -> do
+    isHope <- req AskHopeSet <&> M.member e
+    if isHope then
+      case tm of
+        Float _ -> defineEnd e TFloat
+        Text _ -> defineEnd e TText
+        Num n | n < 0 -> defineEnd e TInt
+        Num _ -> typeErr $ "Can't determine whether Int or Nat: " ++ show tm
+    else isSkolem e >>= \case
+      True -> throwLeft $ helper Braty ty tm
+      False -> mkYield "simpleCheck" (S.singleton e) >> simpleCheck Braty ty tm
+  _ -> throwLeft $ helper my ty tm
+ where
+  helper :: Modey m -> Val Z -> SimpleTerm -> Either ErrorMsg ()
+  helper Braty TNat (Num n) | n >= 0 = pure ()
+  helper Braty TInt (Num _) = pure ()
+  helper Braty TFloat (Float _) = pure ()
+  helper Braty TText (Text _) = pure ()
+  helper _ ty tm = Left $ TypeErr $ unwords
                       ["Expected something of type"
                       ,"`" ++ show ty ++ "`"
                       ,"but got"
@@ -143,11 +141,6 @@ ensureEmpty :: Show ty => String -> [(NamedPort e, ty)] -> Checking ()
 ensureEmpty _ [] = pure ()
 ensureEmpty str xs = err $ InternalError $ "Expected empty " ++ str ++ ", got:\n  " ++ showSig (rowToSig xs)
 
-noUnders m = do
-  ((outs, ()), (overs, unders)) <- m
-  ensureEmpty "unders" unders
-  pure (outs, overs)
-
 rowToSig :: Traversable t => t (NamedPort e, ty) -> t (PortName, ty)
 rowToSig = fmap $ \(p,ty) -> (portName p, ty)
 
@@ -180,26 +173,40 @@ anext :: forall m i j k
       -> Ro m i j -- Inputs and Outputs use de Bruijn indices
       -> Ro m j k
       -> Checking (Name, Unders m Chk, Overs m UVerb, (Semz k, Some Endz))
-anext str th vals0 ins outs = do
+anext str th vals0 ins outs = anext' str th vals0 ins outs $ case th of
+  Source -> True
+  _ -> False
+
+anext' :: forall m i j k
+       . EvMode m
+      => String
+      -> NodeType m
+      -> (Semz i, Some Endz)
+      -> Ro m i j -- Inputs and Outputs use de Bruijn indices
+      -> Ro m j k
+      -> Bool -- whether outports are skolem consts (will never be defined), inports never are
+      -> Checking (Name, Unders m Chk, Overs m UVerb, (Semz k, Some Endz))
+anext' str th vals0 ins outs skol = do
   node <- req (Fresh str) -- Pick a name for the thunk
   -- Use the new name to generate Ends with which to instantiate types
   (unders, vals1) <- endPorts node InEnd In 0 vals0 ins
   (overs, vals2)  <- endPorts node ExEnd Ex 0 vals1 outs
   () <- sequence_ $
         [ declareTgt tgt (modey @m) ty | (tgt, ty) <- unders ] ++
-        [ declareSrc src (modey @m) ty | (src, ty) <- overs ]
+        [ req (Declare (ExEnd (end src)) (modey @m) ty skol) | (src, ty) <- overs ]
+
   let inputs  = [ (portName p, biType @m ty) | (p, ty) <- unders ]
   let outputs = [ (portName p, biType @m ty) | (p, ty) <- overs  ]
 
   () <- req (AddNode node (mkNode (modey @m) th inputs outputs))
   pure (node, unders, overs, vals2)
- where
-  mkNode :: forall m. Modey m -> NodeType m
-         -> [(PortName, Val Z)]
-         -> [(PortName, Val Z)]
-         -> Node
-  mkNode Braty = BratNode
-  mkNode Kerny = KernelNode
+
+mkNode :: forall m. Modey m -> NodeType m
+        -> [(PortName, Val Z)]
+        -> [(PortName, Val Z)]
+        -> Node
+mkNode Braty = BratNode
+mkNode Kerny = KernelNode
 
 type Endz = Ny :* Stack Z End
 
@@ -265,7 +272,11 @@ getThunks Braty row@((src, Right ty):rest) = eval S0 ty >>= \case
     (nodes, unders', overs') <- getThunks Braty rest
     pure (node:nodes, unders <> unders', overs <> overs')
   (VFun _ _) -> err $ ExpectedThunk (showMode Braty) (showRow row)
-  v -> typeErr $ "Force called on non-thunk: " ++ show v
+  v -> do
+    h <- req AskHopeSet
+    case v of
+      VApp (VPar e) _ | M.member e h -> mkYield "getThunks" (S.singleton e) >> getThunks Braty row
+      _ -> typeErr $ "Force called on non-thunk: " ++ show v
 getThunks Kerny row@((src, Right ty):rest) = eval S0 ty >>= \case
   (VFun Kerny (ss :->> ts)) -> do
     (node, unders, overs, _) <- let ?my = Kerny in anext "" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
@@ -298,11 +309,8 @@ defineSrc src v = defineEnd (ExEnd (end src)) v
 defineTgt :: Tgt -> Val Z -> Checking ()
 defineTgt tgt v = defineEnd (InEnd (end tgt)) v
 
-declareSrc :: Src -> Modey m -> BinderType m -> Checking ()
-declareSrc src my ty = req (Declare (ExEnd (end src)) my ty)
-
 declareTgt :: Tgt -> Modey m -> BinderType m -> Checking ()
-declareTgt tgt my ty = req (Declare (InEnd (end tgt)) my ty)
+declareTgt tgt my ty = req (Declare (InEnd (end tgt)) my ty False)
 
 -- listToRow :: [(PortName, BinderType m)] -> Ro m Z i
 -- listToRow [] = R0
@@ -319,14 +327,14 @@ makeBox name cty@(ss :->> ts) body = do
   (tgt, unders, _, _) <- anext (name ++ "/out") Target ctx ts R0
   case (?my, body) of
     (Kerny, _) -> do
-      (_,_,[thunk],_) <- next (name ++ "_thunk") (Box M.empty src tgt) (S0, Some (Zy :* S0))
+      (_,_,[thunk],_) <- next (name ++ "_thunk") (Box src tgt) (S0, Some (Zy :* S0))
                                 R0 (RPr ("thunk", VFun Kerny cty) R0)
-      bres <- name -! body (overs, unders)
+      bres <- body (overs, unders)
       pure (thunk, bres)
     (Braty, body) -> do
-      (bres, captures) <- name -! (captureOuterLocals $ body (overs, unders))
-      (_, [], [thunk], _) <- next (name ++ "_thunk") (Box captures src tgt) (S0, Some (Zy :* S0))
+      (node, [], [thunk], _) <- next (name ++ "_thunk") (Box src tgt) (S0, Some (Zy :* S0))
                                      R0 (RPr ("thunk", VFun ?my cty) R0)
+      bres <- (captureOuterLocals node $ body (overs, unders))
       pure (thunk, bres)
 
 -- Evaluate either mode's BinderType

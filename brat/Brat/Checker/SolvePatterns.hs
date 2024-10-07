@@ -20,6 +20,7 @@ import Hasochism
 
 import Control.Monad (unless)
 import Data.Bifunctor (first)
+import Data.Functor ((<&>))
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import Data.Type.Equality ((:~:)(..), testEquality)
@@ -82,7 +83,7 @@ solve my ((src, Lit tm):p) = do
           unless (n >= 0) $ typeErr "Negative Nat kind"
           unifyNum (nConstant (fromIntegral n)) (nVar (VPar (ExEnd (end src))))
     (Braty, Right ty) -> do
-      throwLeft (simpleCheck Braty ty tm)
+      simpleCheck Braty ty tm
     _ -> typeErr $ "Literal " ++ show tm ++ " isn't valid at this type"
   (tests, sol) <- solve my p
   pure ((src, PrimLitTest tm):tests, sol)
@@ -121,7 +122,7 @@ solve my ((src, PCon c abs):p) = do
 
 
 typeOfEnd :: Modey m -> End -> Checking (BinderType m)
-typeOfEnd my e = req (TypeOf e) >>= \case
+typeOfEnd my e = (req (TypeOf e) <&> fst) >>= \case
   EndType my' ty
     | Just Refl <- testEquality my my' -> case my' of
         Braty -> case ty of
@@ -199,7 +200,7 @@ unify l k r = do
 instantiateMeta :: End -> Val Z -> Checking ()
 instantiateMeta e val = do
   throwLeft (doesntOccur e val)
-  Define e val (const (Ret ()))
+  defineEnd e val
 
 -- Solve a Nat kinded metavariable. Unlike `instantiateMeta`, this function also
 -- makes the dynamic wiring for a metavariable. This only needs to happen for
@@ -218,16 +219,16 @@ solveNumMeta e nv = case (e, vars nv) of
  (ExEnd src, _) -> defineSrc (NamedPort src "") (VNum nv)
 
  -- Both targets, we need to create the thing that they both derive from
- (InEnd tgt1, [VPar (InEnd tgt2)]) -> do
+ (InEnd bigTgt, [VPar (InEnd weeTgt)]) -> do
    (_, [(idTgt, _)], [(idSrc, _)], _) <- anext "numval id" Id (S0, Some (Zy :* S0))
                                          (REx ("n", Nat) R0) (REx ("n", Nat) R0)
    defineSrc idSrc (VNum (nVar (VPar (toEnd idTgt))))
-   defineTgt (NamedPort tgt2 "") (VNum (nVar (VPar (toEnd idSrc))))
-   wire (idSrc, TNat, NamedPort tgt2 "")
+   defineTgt (NamedPort weeTgt "") (VNum (nVar (VPar (toEnd idSrc))))
+   wire (idSrc, TNat, NamedPort weeTgt "")
    let nv' = fmap (const (VPar (toEnd idSrc))) nv
-   src1 <- buildNatVal nv'
-   defineTgt (NamedPort tgt1 "") (VNum nv')
-   wire (src1, TNat, NamedPort tgt1 "")
+   bigSrc <- buildNatVal nv'
+   defineTgt (NamedPort bigTgt "") (VNum nv')
+   wire (bigSrc, TNat, NamedPort bigTgt "")
 
  -- RHS is constant or Src, wire it into tgt
  (InEnd tgt,  _) -> do
