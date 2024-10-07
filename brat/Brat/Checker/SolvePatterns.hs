@@ -210,7 +210,7 @@ instantiateMeta e val = do
 solveNumMeta :: End -> NumVal (VVar Z) -> Checking ()
 solveNumMeta e nv = case (e, vars nv) of
  -- Compute the thing that the rhs should be based on the src, and instantiate src to that
- (ExEnd src,  [VPar (InEnd tgt)]) -> do
+ (ExEnd src,  [VPar (InEnd _)]) -> do
    -- Compute the value of the `tgt` variable from the known `src` value by inverting nv
    tgtSrc <- invertNatVal nv
    defineSrc (NamedPort src "") (VNum (nVar (VPar (toEnd tgtSrc))))
@@ -282,7 +282,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   --   2^k * x
   -- = 2^k * (y + 1)
   -- = 2^k + 2^k * y
-  demandSucc sm@(StrictMono k (Linear (VPar (ExEnd x)))) = error "Todo..." {-do
+  demandSucc (StrictMono _ (Linear (VPar (ExEnd _)))) = error "Todo..." {-do
     -- This is sus because we don't have any tgt?
     ySrc <- invertNatVal (NamedPort x "") (NumValue 1 (StrictMonoFun sm))
     let y = nVar (VPar (toEnd ySrc))
@@ -327,7 +327,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     -- Check a numval is odd, and return its rounded down half
     oddGro :: Fun00 (VVar Z) -> Checking (NumVal (VVar Z))
     oddGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
-      Linear (VPar (ExEnd out)) -> do
+      Linear (VPar (ExEnd _)) -> do
         -- compute (/2) . (-1)
         doubTgt <- invertNatVal (NumValue 1 (StrictMonoFun (StrictMono 1 mono)))
         let [VPar (InEnd halfTgt)] = foldMap pure mono
