@@ -196,18 +196,30 @@ unify l k r = do
       (l, r, _) -> err . UnificationError $ "Can't unify " ++ show l ++ " with " ++ show r
 
 -- Solve a metavariable statically - don't do anything dynamic
+-- Once a metavariable is solved, we expect to not see it again in a normal form.
 instantiateMeta :: End -> Val Z -> Checking ()
 instantiateMeta e val = do
   throwLeft (doesntOccur e val)
   defineEnd e val
 
--- Make the dynamic wiring for a metavariable. This only needs to happen for
+-- solve a Nat kinded metavariable. Unline `instantiateMeta`, this function also
+-- makes the dynamic wiring for a metavariable. This only needs to happen for
 -- numbers because they have nontrivial runtime behaviour.
-computeMeta :: End -> NumVal (VVar Z) -> Checking ()
-computeMeta e nv = case (e, vars nv) of
+--
+-- We assume that the caller has done the occurs check and rules out trivial equations.
+solveNumMeta :: End -> NumVal (VVar Z) -> Checking ()
+solveNumMeta e nv = case (e, vars nv) of
+ -- Compute the thing that the rhs should be based on the src, and instantiate src to that
  (ExEnd src,  [VPar (InEnd tgt)]) -> do
-   src <- invertNatVal (NamedPort src "") nv
-   wire (src, TNat, NamedPort tgt "")
+   -- Compute the value of the `tgt` variable from the known `src` value by invering nv
+   tgtSrc <- invertNatVal (NamedPort src "") nv
+   -- If `nv` is *just* a variable, invertNatVal will return `src`. We need to
+   -- catch this because defining x := x will cause eval to loop.
+   unless (ExEnd src == toEnd tgtSrc) (defineSrc src (VNum (const (VPar (ExEnd tgtSrc)) <$> nv)))
+   defineTgt (InEnd tgt) (VNum (nVar tgtSrc))
+   wire (tgtSrc, TNat, NamedPort tgt "")
+
+ (ExEnd src, _) -> defineSrc src nv
 
  -- Both targets, we need to create the thing that they both derive from
  (InEnd tgt1, [VPar (InEnd tgt2)]) -> do
@@ -216,16 +228,17 @@ computeMeta e nv = case (e, vars nv) of
    defineSrc idSrc (VNum (nVar (VPar (toEnd idTgt))))
    defineTgt (NamedPort tgt2 "") (VNum (nVar (VPar (toEnd idSrc))))
    wire (idSrc, TNat, NamedPort tgt2 "")
-   src1 <- buildNatVal nv
+   let nv' = fmap (const (VPar (toEnd idSrc))) nv
+   src1 <- buildNatVal nv'
+   defineTgt tgt1 (VNum nv')
    wire (src1, TNat, NamedPort tgt1 "")
 
  -- RHS is constant or Src, wire it into tgt
  (InEnd tgt,  _) -> do
    src <- buildNatVal nv
+   defineTgt tgt nv
    wire (src, TNat, NamedPort tgt "")
 
- -- do nothing
- _ -> pure ()
  where
   vars :: NumVal a -> [a]
   vars = foldMap pure
@@ -248,8 +261,9 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     lhsStrictMono (StrictMono (n - 1) mono) num
 
   lhsMono :: Monotone (VVar Z) -> NumVal (VVar Z) -> Checking ()
-  lhsMono (Linear v) num = case v of
-    VPar e -> instantiateMeta e (VNum num) *> computeMeta e num
+  lhsMono (Linear v) (NumValue 0 (StrictMonoFun (StrictMono 0 (Linear v')))) | v == v' = pure ()
+  lhsMono (Linear (VPar e)) num = throwLeft (doesntOccur e (VNum num)) *>
+                                  solveNumMeta e num
   lhsMono (Full sm) (NumValue 0 (StrictMonoFun (StrictMono 0 (Full sm'))))
     = lhsStrictMono sm (NumValue 0 (StrictMonoFun sm'))
   lhsMono m@(Full _) (NumValue 0 gro) = lhsFun00 gro (NumValue 0 (StrictMonoFun (StrictMono 0 m)))
@@ -260,8 +274,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   demand0 :: NumVal (VVar Z) -> Checking ()
   demand0 (NumValue 0 Constant0) = pure ()
   demand0 n@(NumValue 0 (StrictMonoFun (StrictMono _ mono))) = case mono of
-    Linear (VPar e) -> instantiateMeta e (VNum (nConstant 0))
-                    *> computeMeta e (nConstant 0)
+    Linear (VPar e) -> solveNumMeta e (nConstant 0)
     Full sm -> demand0 (NumValue 0 (StrictMonoFun sm))
     _ -> err . UnificationError $ "Couldn't force " ++ show n ++ " to be 0"
   demand0 n = err . UnificationError $ "Couldn't force " ++ show n ++ " to be 0"
@@ -274,7 +287,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   demandSucc sm@(StrictMono k (Linear (VPar (ExEnd x)))) = do
     ySrc <- invertNatVal (NamedPort x "") (NumValue 1 (StrictMonoFun sm))
     let y = nVar (VPar (toEnd ySrc))
-    instantiateMeta (ExEnd x) (VNum (nPlus 1 y))
+    solveNumMeta (ExEnd x) (nPlus 1 y)
     pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k y
 
   demandSucc (StrictMono k (Linear (VPar (InEnd x)))) = do
@@ -283,7 +296,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     wire (one, TNat, rhs)
     wire (out, TNat, NamedPort x "")
     let y = nVar (VPar (toEnd lhs))
-    instantiateMeta (InEnd x) (VNum (nPlus 1 y))
+    solveNumMeta (InEnd x) (nPlus 1 y)
     pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k y
 
   --   2^k * full(n + 1)
@@ -305,7 +318,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     evenGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
       Linear (VPar (ExEnd out)) -> do
         half <- invertNatVal (NamedPort out "") (NumValue 0 (StrictMonoFun (StrictMono 1 (Linear ()))))
-        instantiateMeta (ExEnd out) (VNum (n2PowTimes 1 (nVar (VPar (toEnd half)))))
+        solveNumMeta (ExEnd out) (n2PowTimes 1 (nVar (VPar (toEnd half))))
         pure (StrictMonoFun (StrictMono 0 (Linear (VPar (toEnd half)))))
       Linear (VPar (InEnd tgt)) -> do
         twoSrc <- buildNum 2
@@ -313,7 +326,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
         wire (twoSrc, TNat, twoTgt)
         wire (outSrc, TNat, NamedPort tgt "")
         let half = nVar (VPar (toEnd halfTgt))
-        instantiateMeta (InEnd tgt) (VNum (n2PowTimes 1 half))
+        solveNumMeta (InEnd tgt) (n2PowTimes 1 (nVar (VPar (toEnd halfTgt))))
         pure (StrictMonoFun (StrictMono 0 (Linear (VPar (toEnd halfTgt)))))
       Full sm -> StrictMonoFun sm <$ demand0 (NumValue 0 (StrictMonoFun sm))
     evenGro (StrictMonoFun (StrictMono n mono)) = pure (StrictMonoFun (StrictMono (n - 1) mono))
@@ -324,7 +337,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
       Linear (VPar (ExEnd out)) -> do
         -- compute (/2) . (-1)
         halfSrc <- invertNatVal (NamedPort out "") (NumValue 1 (StrictMonoFun (StrictMono 1 (Linear ()))))
-        instantiateMeta (ExEnd out) (VNum (nPlus 1 (n2PowTimes 1 (nVar (VPar (toEnd halfSrc))))))
+        solveNumMeta (ExEnd out) (nPlus 1 (n2PowTimes 1 (nVar (VPar (toEnd halfSrc)))))
         pure (nVar (VPar (toEnd halfSrc)))
       Linear (VPar (InEnd tgt)) -> do
         twoSrc <- buildNum 2
@@ -337,7 +350,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
         wire (doubleSrc, TNat, doubleTgt)
         wire (addOut, TNat, NamedPort tgt "")
 
-        instantiateMeta (InEnd tgt) (VNum (nPlus 1 (n2PowTimes 1 (nVar (VPar (toEnd flooredHalfTgt))))))
+        solveNumMeta (InEnd tgt) (nPlus 1 (n2PowTimes 1 (nVar (VPar (toEnd flooredHalfTgt)))))
         pure (nVar (VPar (toEnd flooredHalfTgt)))
 
       -- full(n + 1) = 1 + 2 * full(n)
