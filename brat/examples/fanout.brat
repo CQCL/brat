@@ -14,3 +14,6 @@ as_fn = [\/](fanout([1,2,3]))
 
 swap_vec(Vec(Qubit, 2)) -o Vec(Qubit, 2)
 swap_vec(qs) = [\/](swap(Qubit, Qubit)([/\](qs)))
+
+pack_mid(Nat, Nat, Nat, Nat) -> Nat, Vec(Nat, 2), Nat
+pack_mid = { (x=>x), [\/], .. }

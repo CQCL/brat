@@ -1,0 +1,2 @@
+f(Nat, Nat) -> Vec(Nat, 3)
+f = { [\/] }
