@@ -140,7 +140,7 @@ checkInputs tm@(WC fc _) (o:overs) (u:unders) = localFC fc $ do
   addRowContext _ as bs (Err fc (TypeMismatch tm _ _))
    = Err fc $ TypeMismatch tm (showRow as) (showRow bs)
   addRowContext _ _ _ e = e
-checkInputs tm [] unders = typeErr $ "No overs but unders: " ++ show unders ++ " for " ++ show tm
+checkInputs tm [] unders = typeErr $ "No overs but unders: " ++ showRow unders ++ " for " ++ show tm
 
 checkOutputs :: (CheckConstraints m k, ?my :: Modey m)
              => WC (Term Syn k)
@@ -160,7 +160,7 @@ checkOutputs tm@(WC fc _) (u:unders) (o:overs) = localFC fc $ do
   addRowContext _ as bs (Err fc (TypeMismatch tm _ _))
    = Err fc $ TypeMismatch tm (showRow as) (showRow bs)
   addRowContext _ _ _ e = e
-checkOutputs tm [] overs = typeErr $ "No unders but overs: " ++ show overs ++ " for " ++ show tm
+checkOutputs tm [] overs = typeErr $ "No unders but overs: " ++ showRow overs ++ " for " ++ show tm
 
 checkThunk :: (CheckConstraints m UVerb, EvMode m)
            => Modey m
@@ -517,9 +517,9 @@ check' FanIn (overs, ((tgt, ty):unders)) = do
       , Just n <- numValIsConstant n ->
           if n < 0
           then err (InternalError $ "Vector of negative length (" ++ show n ++ ")")
-          else do
-            overs <- faninNodes ?my n (tgt, valueToBinder ?my ty) elTy overs
-            pure (((), ()), (overs, unders))
+          else faninNodes ?my n (tgt, valueToBinder ?my ty) elTy overs >>= \case
+            Just overs -> pure (((), ()), (overs, unders))
+            Nothing -> typeErr ("Not enough inputs to make a vector of size " ++ show n)
       | otherwise -> typeErr $ "Can't fanout a Vec with non-constant length: " ++ show n
     _ -> typeErr "Fanin ([\\/]) only applies to Vec"
  where
@@ -528,14 +528,14 @@ check' FanIn (overs, ((tgt, ty):unders)) = do
              -> (Tgt, BinderType m) -- The place to wire the resulting vector to
              -> Val Z               -- Element type
              -> [(Src, BinderType m)] -- Overs
-             -> Checking [(Src, BinderType m)] -- Leftovers
+             -> Checking (Maybe [(Src, BinderType m)]) -- Leftovers
   faninNodes my 0 (tgt, ty) elTy overs = do
     (_, _, [(dangling, _)], _) <- anext "nil" (Constructor (plain "nil")) (S0, Some (Zy :* S0))
                              (R0 :: Ro m Z Z)
                              (RPr ("value", TVec elTy (VNum nZero)) R0)
     wire (dangling, binderToValue my ty, tgt)
-    pure overs
-  faninNodes _ _ _ _ [] = typeErr "No overs for [\\/]"
+    pure (Just overs)
+  faninNodes _ _ _ _ [] = pure Nothing
   faninNodes my n (hungry, ty) elTy ((over, overTy):overs) = do
     let k = case my of
           Kerny -> Dollar []
