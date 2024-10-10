@@ -1,2 +1,2 @@
-f(Bool, Bool) -> List(Bool
+f(Bool, Bool) -> List(Bool)
 f = { [\/] }

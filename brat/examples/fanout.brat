@@ -17,3 +17,8 @@ swap_vec(qs) = [\/](swap(Qubit, Qubit)([/\](qs)))
 
 pack_mid(Nat, Nat, Nat, Nat) -> Nat, Vec(Nat, 2), Nat
 pack_mid = { (x=>x), [\/], .. }
+
+ext "" f :: { Vec(Qubit, 2) -o Bit }
+
+g(Qubit, Qubit) -o Bit
+g = [\/]; f

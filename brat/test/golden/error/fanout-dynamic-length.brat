@@ -1,2 +1,2 @@
-f(n :: #, Vec(Qubit, n)) -> { Qubit, Qubit }
+f(n :: #) -> { Vec(Qubit, n) -o Qubit, Qubit }
 f(n) = { [/\] }
