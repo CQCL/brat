@@ -252,7 +252,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
           solve ?my >>=
           (solToEnv . snd)
         (((), synthOuts), ((), ())) <- localEnv env $ check body ((), ())
-	pure synthOuts
+        pure synthOuts
 
       sig <- mkSig usedOvers synthOuts
       patOuts <- checkClauses sig usedOvers ((fst c, WC (fcOf body) (Emb body)) :| cs)
@@ -490,10 +490,12 @@ check' FanOut ((p, ty):overs, ()) = do
   case ty of
     TVec elTy n
       | VNum n <- n
-      , Just n <- numValIsConstant n
-      , n >= 0 -> do
-          wires <- fanoutNodes ?my n (p, valueToBinder ?my ty) elTy
-          pure (((), wires), (overs, ()))
+      , Just n <- numValIsConstant n ->
+          if n < 0
+          then err (InternalError $ "Vector of negative length (" ++ show n ++ ")")
+          else do
+            wires <- fanoutNodes ?my n (p, valueToBinder ?my ty) elTy
+            pure (((), wires), (overs, ()))
       | otherwise -> typeErr $ "Can't fanout a Vec with non-constant length: " ++ show n
     _ -> typeErr "Fanout ([/\\]) only applies to Vec"
  where
@@ -512,10 +514,12 @@ check' FanIn (overs, ((tgt, ty):unders)) = do
   case ty of
     TVec elTy n
       | VNum n <- n
-      , Just n <- numValIsConstant n
-      , n >= 0 -> do
-          overs <- faninNodes ?my n (tgt, valueToBinder ?my ty) elTy overs
-          pure (((), ()), (overs, unders))
+      , Just n <- numValIsConstant n ->
+          if n < 0
+          then err (InternalError $ "Vector of negative length (" ++ show n ++ ")")
+          else do
+            overs <- faninNodes ?my n (tgt, valueToBinder ?my ty) elTy overs
+            pure (((), ()), (overs, unders))
       | otherwise -> typeErr $ "Can't fanout a Vec with non-constant length: " ++ show n
     _ -> typeErr "Fanin ([\\/]) only applies to Vec"
  where
