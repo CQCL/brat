@@ -1,0 +1,2 @@
+f(n :: #) -> { Qubit, Qubit -o Vec(Qubit, n) }
+f(n) = { [\/] }

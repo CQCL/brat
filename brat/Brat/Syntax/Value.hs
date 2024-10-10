@@ -592,3 +592,11 @@ copyable (VApp _ _) = Just False
 copyable (TVec elem _) = copyable elem
 copyable TBit = Just True
 copyable _ = Nothing
+
+stkLen :: Stack Z t tot -> Ny tot
+stkLen S0 = Zy
+stkLen (zx :<< _) = Sy (stkLen zx)
+
+numValIsConstant :: NumVal (VVar Z) -> Maybe Integer
+numValIsConstant (NumValue up Constant0) = pure up
+numValIsConstant _ = Nothing

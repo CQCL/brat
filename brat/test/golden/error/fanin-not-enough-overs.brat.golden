@@ -1,0 +1,6 @@
+Error in test/golden/error/fanin-not-enough-overs.brat@FC {start = Pos {line = 2, col = 5}, end = Pos {line = 2, col = 13}}:
+f = { [\/] }
+    ^^^^^^^^
+
+  Type error: Not enough inputs to make a vector of size 3
+
