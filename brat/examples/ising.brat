@@ -1,4 +1,4 @@
-open import lib.kernel (Rx, qid, recons, uncons, vid)
+open import lib.kernel (Rx, recons, uncons)
 
 ext "" ZZ(Float) -> { Qubit, Qubit -o Qubit, Qubit }
 
@@ -10,6 +10,6 @@ nn_ising(succ(succ(n)), x, y) = { qs => qs |>
   uncons(succ(n));
   Rx(x), uncons(n);
   ZZ(y), ..;
-  qid, (recons(n); nn_ising(succ(n), x, y));
+  |, (recons(n); nn_ising(succ(n), x, y));
   recons(succ(n))
 }

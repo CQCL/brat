@@ -1,0 +1,2 @@
+f(Bool) -> { Qubit -o Qubit }
+f = { true => |;||false =>|;|;|}

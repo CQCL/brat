@@ -1,0 +1,4 @@
+f(Bool) -> { Nat -> Nat }
+f = { true => |
+    | false => |
+    }

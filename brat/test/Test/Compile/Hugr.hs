@@ -31,7 +31,6 @@ invalidExamples = map ((++ ".brat") . ("examples" </>))
   ["adder"
   ,"app"
   ,"dollar_kind"
-  ,"pass"
   ,"portpulling"
   ,"repeated_app" -- missing coercions, https://github.com/CQCL-DEV/brat/issues/413
   ,"thunks"]
