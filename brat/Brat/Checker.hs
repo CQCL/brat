@@ -495,7 +495,7 @@ check' FanOut ((p, ty):overs, ()) = do
           wires <- fanoutNodes ?my n (p, valueToBinder ?my ty) elTy
           pure (((), wires), (overs, ()))
       | otherwise -> typeErr $ "Can't fanout a Vec with non-constant length: " ++ show n
-    _ -> typeErr "Fanout only applies to Vec"
+    _ -> typeErr "Fanout ([/\\]) only applies to Vec"
  where
   fanoutNodes :: Modey m -> Integer -> (Src, BinderType m) -> Val Z -> Checking [(Src, BinderType m)]
   fanoutNodes _ 0 _ _ = pure []
@@ -517,7 +517,7 @@ check' FanIn (overs, ((tgt, ty):unders)) = do
           overs <- faninNodes ?my n (tgt, valueToBinder ?my ty) elTy overs
           pure (((), ()), (overs, unders))
       | otherwise -> typeErr $ "Can't fanout a Vec with non-constant length: " ++ show n
-    _ -> typeErr "Fanout only applies to Vec"
+    _ -> typeErr "Fanin ([\\/]) only applies to Vec"
  where
   faninNodes :: Modey m
              -> Integer             -- The number of things left to pack up
