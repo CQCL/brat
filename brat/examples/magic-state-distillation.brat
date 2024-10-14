@@ -1,0 +1,91 @@
+open import lib.kernel
+
+-- TODO: Fill this with holes once we can guess them
+map(X :: $,  Y :: $, n :: #, f :: { X -o Y }) -> { Vec(X, n) -o Vec(Y, n) }
+map(_, _, _, _) = { [] => [] }
+map(X, Y, succ(n), f) = { cons(x,xs) => cons(f(x), map(X, Y, n, f)(xs)) }
+
+fold(X :: $
+    ,{ X, X -o X }
+    ,{ -o X }
+    ,n :: #
+    ) -> { Vec(X, n) -o X }
+fold(X, f, x, 0) = { [] => x() }
+fold(X, f, x, succ(n)) = { cons(y, ys) => f(y, fold(X, f, x, n)(ys)) }
+
+or(Bit, Bit) -o Bit
+or(true, _) = true
+or(_, y) = y
+
+any(n :: #) -> { Vec(Bit, n) -o Bit }
+any(n) = fold(Bit, or, { => false }, n)
+
+-- Decoder for the [[5,3,1]] "perfect" error code
+-- TODO: Add vectorisation and fanin/out
+decoder(Vec(Qubit, 5)) -o Vec(Qubit, 5)
+decoder = {
+  [/\];
+  CZ, CZ, |;
+  |, CZ, CZ;
+  swap, |, swap;
+  |, swap, ..;
+  |, |, CZ, |;
+  |, swap, ..;
+  swap, |, swap;
+  H, H, H, H, H;
+  [\/]
+}
+
+arccos(Float) -> Float
+arccos = ?a
+
+sqrt(Float) -> Float
+sqrt = ?sqrt
+
+phi :: Float
+phi = arccos(1.0 / sqrt(3.0))
+
+pi :: Float
+pi = 3.1415926
+
+prepare_noisy_1(Money) -o Qubit
+prepare_noisy_1 = {
+  fresh;
+  Ry(phi);
+  Rz(pi / 4.0)
+}
+
+measure_all(n :: #) -> { Vec(Qubit, n) -o Vec(Bit, n), Vec(Money, n) }
+measure_all(0) = { [] => [], [] }
+measure_all(succ(n)) = { q ,- qs =>
+  let m, b = measure(q) in
+    let bs, ms = measure_all(n)(qs) in
+      b ,- bs, m ,- ms
+}
+
+measure_syndrome(n :: #)
+             -> { Vec(Qubit, n)
+               -o Bit, Vec(Money, n)
+                }
+measure_syndrome(n) = {
+  measure_all(n);
+  any(n), |
+}
+
+prepare_noisy(n :: #) -> { Vec(Money, n) -o Vec(Qubit, n) }
+prepare_noisy(n) = map(Money, Qubit, n, prepare_noisy_1)
+
+redistill_if_bad(Qubit, Bit, Vec(Money, 4))
+              -o Qubit, Vec(Money, 4)
+redistill_if_bad(q, false, ms) = q, ms
+redistill_if_bad(q, true, ms) = let m, _ = measure(q) in
+                                  distill(cons(m, ms))
+
+distill(Vec(Money, 5)) -o Qubit, Vec(Money, 4)
+distill = {
+  prepare_noisy(5);
+  decoder;
+  uncons(4);
+  |, measure_syndrome(4);
+  redistill_if_bad
+}

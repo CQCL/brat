@@ -1,8 +1,8 @@
 open import lib.kernel
 
-
-rus(Money, Qubit) -o Money, Qubit
-rus = {
+rus(timeout :: Nat) -> { Money, Qubit -o Money, Qubit }
+rus(0) = { .. }
+rus(succ(n)) = {
   fresh, ..;
   (H;T), ..;
       CX;
@@ -10,9 +10,7 @@ rus = {
       CX;
   (T;H), ..;
   measure, ..;
-  rus'
+  ( m, false, q => m, q
+  | m, true, q => rus(n)(m, q)
+  )
 }
-
-rus'(Money, Bit, Qubit) -o Money, Qubit
-rus'(m, false, q) = m, q      -- success
-rus'(m, true, q) = rus(m, q)  -- try again
