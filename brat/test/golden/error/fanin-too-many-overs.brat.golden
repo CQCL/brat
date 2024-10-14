@@ -2,6 +2,5 @@ Error in test/golden/error/fanin-too-many-overs.brat@FC {start = Pos {line = 2, 
 f = { [\/] }
     ^^^^^^^^
 
-  Internal error: Expected empty thunk leftovers, got:
-  (z :: Nat)
+  Expected function to address all inputs, but (z :: Nat) wasn't used
 

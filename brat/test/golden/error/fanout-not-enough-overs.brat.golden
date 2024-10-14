@@ -2,6 +2,5 @@ Error in test/golden/error/fanout-not-enough-overs.brat@FC {start = Pos {line = 
 f = { [/\] }
     ^^^^^^^^
 
-  Internal error: Expected empty thunk leftunders, got:
-  (c1 :: Nat)
+  Expected function to return additional values of type: (c1 :: Nat)
 

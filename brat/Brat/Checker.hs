@@ -171,9 +171,13 @@ checkThunk :: (CheckConstraints m UVerb, EvMode m)
 checkThunk m name cty tm = do
   ((dangling, _), ()) <- let ?my = m in makeBox name cty $
     \(thOvers, thUnders) -> do
-      (((), ()), (emptyOvers, emptyUnders)) <- check tm (thOvers, thUnders)
-      ensureEmpty "thunk leftovers" emptyOvers
-      ensureEmpty "thunk leftunders" emptyUnders
+      (((), ()), leftovers) <- check tm (thOvers, thUnders)
+      case leftovers of
+        ([], []) -> pure ()
+        ([], unders) -> err (ThunkLeftUnders (showRow unders))
+        -- If there are leftovers and leftunders, complain about the leftovers
+        -- Until we can report multiple errors!
+        (overs, _) -> err (ThunkLeftOvers (showRow overs))
   pure dangling
 
 check :: (CheckConstraints m k
