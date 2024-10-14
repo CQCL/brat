@@ -22,3 +22,9 @@ ext "" f :: { Vec(Qubit, 2) -o Bit }
 
 g(Qubit, Qubit) -o Bit
 g = [\/]; f
+
+poly(X :: *) -> { Vec(X, 3) -> X, X, X }
+poly(_) = { [/\] }
+
+poly2(X :: $) -> { X, X, X -o Vec(X, 3) }
+poly2(_) = { [\/] }
