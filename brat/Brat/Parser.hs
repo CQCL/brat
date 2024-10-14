@@ -487,12 +487,17 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
         Nothing -> unWC expr
         Just rest -> FJuxt expr rest
 
+  fanout = square (FFanOut <$ match Slash <* match Backslash)
+  fanin = square (FFanIn <$ match Backslash <* match Slash)
+
   -- Expressions which don't contain juxtaposition or operators
   atomExpr :: Parser Flat
   atomExpr = simpleExpr <|> round expr
    where
     simpleExpr = FHole <$> hole
               <|> try (FSimple <$> simpleTerm)
+              <|> try fanout
+              <|> try fanin
               <|> vec
               <|> cthunk
               <|> try (match DotDot $> FPass)

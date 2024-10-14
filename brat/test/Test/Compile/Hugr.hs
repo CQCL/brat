@@ -56,6 +56,7 @@ nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   ,"qft"
   ,"test"
   ,"vector"
+  ,"fanout" -- Contains Selectors
   -- Conjecture: These examples don't compile because number patterns in type
   -- signatures causes `kindCheck` to call `abstract`, creating "Selector"
   -- nodes, which we don't attempt to compile because we want to get rid of them

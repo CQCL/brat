@@ -81,6 +81,8 @@ data Raw :: Dir -> Kind -> Type where
   RFn       :: RawCType -> Raw Chk Noun
   -- Kernel types
   RKernel   :: RawKType -> Raw Chk Noun
+  RFanOut   :: Raw Syn UVerb
+  RFanIn    :: Raw Chk UVerb
 
 class Dirable d where
   dir :: Raw d k -> Diry d
@@ -123,6 +125,8 @@ instance Show (Raw d k) where
   show (RCon c xs) = "Con(" ++ show c ++ "(" ++ show xs ++ "))"
   show (RFn cty) = show cty
   show (RKernel cty) = show cty
+  show RFanOut = "[/\\]"
+  show RFanIn = "[\\/]"
 
 type Desugar = StateT Namespace (ReaderT (RawEnv, Bwd UserName) (Except Error))
 
@@ -238,6 +242,8 @@ instance (Kindable k) => Desugarable (Raw d k) where
   desugar' (RCon c arg) = Con c <$> desugar arg
   desugar' (RFn cty) = C <$> desugar' cty
   desugar' (RKernel cty) = K <$> desugar' cty
+  desugar' RFanOut = pure FanOut
+  desugar' RFanIn = pure FanIn
 
 instance Desugarable ty => Desugarable (PortName, ty) where
   type Desugared (PortName, ty) = (PortName, Desugared ty)

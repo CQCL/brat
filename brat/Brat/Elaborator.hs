@@ -185,6 +185,8 @@ elaborate' FIdentity = pure $ SomeRaw' RIdentity
 -- We catch underscores in the top-level elaborate so this case
 -- should never be triggered
 elaborate' FUnderscore = Left (dumbErr (InternalError "Unexpected '_'"))
+elaborate' FFanOut = pure $ SomeRaw' RFanOut
+elaborate' FFanIn = pure $ SomeRaw' RFanIn
 
 elabBody :: FBody -> FC -> Either Error (FunBody Raw Noun)
 elabBody (FClauses cs) fc = ThunkOf . WC fc . Clauses <$> traverse elab1Clause cs
