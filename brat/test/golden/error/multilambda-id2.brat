@@ -1,0 +1,2 @@
+g(Nat) -> { Qubit -o Qubit }
+g = { 0 => ||succ(n) => | }

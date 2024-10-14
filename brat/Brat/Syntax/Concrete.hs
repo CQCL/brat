@@ -43,4 +43,5 @@ data Flat
  | FKernel RawKType
  | FUnderscore
  | FPass
+ | FIdentity
  deriving Show
