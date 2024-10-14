@@ -1,4 +1,4 @@
-Error in test/golden/error/fanin-dynamic-length.brat@FC {start = Pos {line = 2, col = 8}, end = Pos {line = 2, col = 16}}:
+Error in test/golden/error/fanin-dynamic-length.brat@2:8
 f(n) = { [\/] }
        ^^^^^^^^
 

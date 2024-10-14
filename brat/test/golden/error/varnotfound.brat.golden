@@ -1,4 +1,4 @@
-Error in test/golden/error/varnotfound.brat@FC {start = Pos {line = 2, col = 8}, end = Pos {line = 2, col = 9}}:
+Error in test/golden/error/varnotfound.brat@2:8
 f(x) = g(x)
        ^
 

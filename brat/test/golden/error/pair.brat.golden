@@ -1,4 +1,4 @@
-Error in test/golden/error/pair.brat@FC {start = Pos {line = 5, col = 8}, end = Pos {line = 5, col = 11}}:
+Error in test/golden/error/pair.brat@5:8
 pair = row -- Distinct from a pair
        ^^^
 
