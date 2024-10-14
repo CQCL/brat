@@ -36,6 +36,7 @@ unelab dy _ (Lambda (abs,rhs) cs) = FLambda ((abs, unelab dy Nouny <$> rhs) :| (
 unelab _ _ (Con c args) = FCon c (unelab Chky Nouny <$> args)
 unelab _ _ (C (ss :-> ts)) = FFn (toRawRo ss :-> toRawRo ts)
 unelab _ _ (K cty) = FKernel $ fmap (\(p, ty) -> Named p (toRaw ty)) cty
+unelab _ _ Identity = FIdentity
 
 -- This is needed for concrete terms which embed a type as a list of `Raw` things
 toRaw :: Term d k -> Raw d k
@@ -61,6 +62,7 @@ toRaw (Lambda (abs,rhs) cs) = RLambda (abs, toRaw <$> rhs) (second (fmap toRaw) 
 toRaw (Con c args) = RCon c (toRaw <$> args)
 toRaw (C (ss :-> ts)) = RFn (toRawRo ss :-> toRawRo ts)
 toRaw (K cty) = RKernel $ (\(p, ty) -> Named p (toRaw ty)) <$> cty
+toRaw Identity = RIdentity
 
 toRawRo :: [(PortName, KindOr (Term Chk Noun))] -> [TypeRowElem (KindOr RawVType)]
 toRawRo = fmap (\(p, bty) -> Named p (second toRaw bty))
