@@ -503,6 +503,7 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
               <|> try (match DotDot $> FPass)
               <|> var
               <|> match Underscore $> FUnderscore
+              <|> match Pipe $> FIdentity
 
 
 cnoun :: Parser Flat -> Parser (WC (Raw 'Chk 'Noun))

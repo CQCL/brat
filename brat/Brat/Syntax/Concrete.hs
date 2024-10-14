@@ -45,4 +45,5 @@ data Flat
  | FPass
  | FFanOut
  | FFanIn
+ | FIdentity
  deriving Show

@@ -548,7 +548,7 @@ check' FanIn (overs, ((tgt, ty):unders)) = do
     wire (over, elTy, hungryHead)
     wire (danglingResult, binderToValue ?my ty, hungry)
     faninNodes my (n - 1) (hungryTail, tailTy) elTy overs
-
+check' Identity ((this:leftovers), ()) = pure (((), [this]), (leftovers, ()))
 check' tm _ = error $ "check' " ++ show tm
 
 
