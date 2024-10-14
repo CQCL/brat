@@ -18,10 +18,12 @@ newtype ParseError = PE { pretty :: String }
 instance Show ParseError where
   show = pretty
 
-data LengthConstraintF a = Length a | LongerThan a deriving (Eq, Functor)
+data LengthConstraintF a = Length a | LongerThan a | LengthEven | LengthOdd deriving (Eq, Functor)
 instance Show a => Show (LengthConstraintF a) where
-  show (Length a) = show a
-  show (LongerThan a) = "(> " ++ show a ++ ")"
+  show (Length a) = "of length " ++ show a
+  show (LongerThan a) = "with length (> " ++ show a ++ ")"
+  show LengthEven = "of even length"
+  show LengthOdd = "of odd length"
 
 type LengthConstraint = LengthConstraintF Int
 
@@ -102,12 +104,12 @@ instance Show ErrorMsg where
   show (VecLength tm ty exp act) = unlines ["Expected vector of length " ++ exp
                                        ,"from the type:  " ++ ty
                                        ,"but got vector: " ++ tm
-                                       ,"of length " ++ show act
+                                       ,show act
                                        ]
   show (VecPatLength abs ty exp act) = unlines ["Pattern: " ++ abs
                                        ,"doesn't match type " ++ ty
                                        ,"(expected vector pattern of length " ++ exp ++
-                                        " but got vector pattern of length " ++ show act ++ ")"
+                                        " but got vector pattern " ++ show act ++ ")"
                                        ]
   show (NotVecPat tm ty)= unwords ["Expected", tm
                                   ,"to be a vector pattern when binding type", ty]
