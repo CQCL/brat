@@ -10,12 +10,12 @@ entangle(n :: #, Nat)
            Qubit, Vec(Qubit, n) }
 entangle(zero, _) = { q, qs => q, qs }
 entangle(succ(n), x) = {
-    qid, uncons(n);
-    CRx(2.0 * pi / 2.0 ^ to_float(x)), vid(n);
-    swap, vid(n);
-    qid, entangle(n, x + 1);
-    swap, vid(n);
-    qid, recons(n)
+    |, uncons(n);
+    CRx(2.0 * pi / 2.0 ^ to_float(x)), |;
+    swap, |;
+    |, entangle(n, x + 1);
+    swap, |;
+    |, recons(n)
 }
 
 qft(n :: #) ->
@@ -24,8 +24,8 @@ qft(n :: #) ->
 qft(zero) = { [] => [] }
 qft(succ(n)) = {
     uncons(n);
-    H, vid(n);
+    H, |;
     entangle(n, 2);
-    qid, qft(n);
+    |, qft(n);
     recons(n)
 }

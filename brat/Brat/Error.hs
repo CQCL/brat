@@ -82,6 +82,10 @@ data ErrorMsg
  | WrongModeForType String
  -- TODO: Add file context here
  | CompilingHoles [String]
+ -- For thunks which don't address enough inputs, or produce enough outputs.
+ -- The argument is the row of unused connectors
+ | ThunkLeftOvers String
+ | ThunkLeftUnders String
 
 instance Show ErrorMsg where
   show (TypeErr x) = "Type error: " ++ x
@@ -166,6 +170,9 @@ instance Show ErrorMsg where
   show (CompilingHoles hs) = unlines ("Can't compile file with remaining holes": indent hs)
    where
     indent = fmap ("  " ++)
+  show (ThunkLeftOvers overs) = "Expected function to address all inputs, but " ++ overs ++ " wasn't used"
+  show (ThunkLeftUnders unders) = "Expected function to return additional values of type: " ++ unders
+
 
 data Error = Err { fc  :: Maybe FC
                  , msg :: ErrorMsg
