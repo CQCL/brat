@@ -1,4 +1,4 @@
-Error in test/golden/kernel/typed_th.brat@FC {start = Pos {line = 5, col = 17}, end = Pos {line = 5, col = 24}}:
+Error in test/golden/kernel/typed_th.brat@5:17
 id2 = { let f = {id;id} in q,q' => f(q),f(q') }
                 ^^^^^^^
 

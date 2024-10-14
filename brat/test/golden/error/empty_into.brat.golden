@@ -1,4 +1,4 @@
-Error in test/golden/error/empty_into.brat@FC {start = Pos {line = 5, col = 11}, end = Pos {line = 5, col = 21}}:
+Error in test/golden/error/empty_into.brat@5:11
 intoErr = |> makeInt
           ^^^^^^^^^^
 

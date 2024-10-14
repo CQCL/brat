@@ -1,4 +1,4 @@
-Error in test/golden/error/kbadvec3.brat@FC {start = Pos {line = 2, col = 19}, end = Pos {line = 2, col = 31}}:
+Error in test/golden/error/kbadvec3.brat@2:19
 constNil = { b => cons(1, nil) }
                   ^^^^^^^^^^^^
 

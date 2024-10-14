@@ -186,7 +186,7 @@ instance Show SrcErr where
   show (SrcErr prelim Err{msg=msg}) = unlines [prelim, "  " ++ show msg]
 
 errHeader :: String -> String
-errHeader name = "Error in " ++ name ++ ":"
+errHeader name = "Error in " ++ name
 
 addSrcName :: String -> Error -> SrcErr
 addSrcName fname = SrcErr (errHeader fname)
@@ -196,7 +196,7 @@ addSrcContext _ _ (Right r) = Right r
 addSrcContext fname cts (Left err@Err{fc=fc}) = Left (SrcErr msg err)
  where
   msg = case fc of
-    Just fc -> unlines (errHeader (fname ++ '@':show fc):showFileContext cts fc)
+    Just fc -> unlines (errHeader (fname ++ '@':show (start fc)):showFileContext cts fc)
     Nothing -> errHeader fname
 
 showFileContext :: String -> FC -> [String]

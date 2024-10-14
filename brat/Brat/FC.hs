@@ -2,7 +2,11 @@ module Brat.FC where
 
 data Pos = Pos { line :: Int
                , col  :: Int
-               } deriving (Eq, Show)
+               } deriving Eq
+
+instance Show Pos where
+  show (Pos { .. }) = show line ++ ":" ++ show col
+
 
 instance Ord Pos where
   compare (Pos l c) (Pos l' c') | l == l' = compare c c'

@@ -1,3 +1,3 @@
-Error in cycle_aux:
+Error in cycle_aux
   Cyclic imports: modules all transitively import each other: cycle_aux, cycle
 

@@ -1,4 +1,4 @@
-Error in alias-clash@FC {start = Pos {line = 2, col = 15}, end = Pos {line = 2, col = 16}}:
+Error in alias-clash@2:15
 import lib as A (z)
               ^
 
