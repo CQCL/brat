@@ -5,6 +5,6 @@ constNil = { b => cons(1, nil) }
   Expected vector of length 0
 from the type:  Vec(Bit, 0)
 but got vector: [1]
-of length (> 0)
+with length (> 0)
 
 

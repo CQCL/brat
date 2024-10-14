@@ -866,9 +866,9 @@ detectVecErrors :: UserName  -- Term constructor name
                 -> Checking (Error -> Error)  -- Returns error wrapper to use for recursion
 detectVecErrors vcon (PrefixName [] "Vec") [_, VNum n] [_, VPNum p] ty tp =
   case numMatch B0 n p of
-    Left (NumMatchFail _ _) -> do
-      p' <- toLenConstr p
-      err $ getVecErr tp (show ty) (show n) p'
+    Left (NumMatchFail _ _) -> case (toLenConstr p) of
+      Right p' -> err $ getVecErr tp (show ty) (show n) p'
+      Left p' -> err $ InternalError ("detectVecErrors: Unexpected pattern: " ++ show (toLenConstr p'))
     -- Even if we succed here, the error might pop up when checking the
     -- rest of the vector. We return a function here that intercepts the
     -- error and extends it to the whole vector.
@@ -877,13 +877,14 @@ detectVecErrors vcon (PrefixName [] "Vec") [_, VNum n] [_, VPNum p] ty tp =
                  pure (consError fc tp (show ty) n)
          else pure id
  where
-  -- For constructors that produce something of type Vec we should
-  -- only ever get the patterns NP0 (if vcon == PrefixName [] "nil")
-  -- and NP1Plus (if vcon == PrefixName [] "cons")
-  toLenConstr :: NumPat -> Checking LengthConstraint
+  -- Try to work out the length of a vector
+  -- We only want to know if the vector length is nil or a successor
+  toLenConstr :: NumPat -> Either NumPat (LengthConstraint)
   toLenConstr NP0 = pure $ Length 0
+  toLenConstr (NP1Plus (NP2Times np)) = either (const (Right LengthOdd)) Right (toLenConstr np)
   toLenConstr (NP1Plus _) = pure $ LongerThan 0
-  toLenConstr p = err $ InternalError ("detectVecErrors: Unexpected pattern: " ++ show p)
+  toLenConstr (NP2Times np) = either (const (Right LengthEven)) Right (toLenConstr np)
+  toLenConstr p = Left p
 detectVecErrors _ _ _ _ _ _ = pure id
 
 getVecErr :: Either (Term d k) Pattern -> (String -> String -> LengthConstraint -> ErrorMsg)

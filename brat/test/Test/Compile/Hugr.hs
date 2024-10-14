@@ -60,7 +60,8 @@ nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   -- Conjecture: These examples don't compile because number patterns in type
   -- signatures causes `kindCheck` to call `abstract`, creating "Selector"
   -- nodes, which we don't attempt to compile because we want to get rid of them
-  ,"vec-pats"
+  ,"brick" -- Creates Selectors
+
   -- Victims of #389
   ,"arith"
   ,"bell"
