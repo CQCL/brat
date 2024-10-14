@@ -34,6 +34,7 @@ The [`brat/examples`](brat/examples) directory contains some examples of BRAT pr
 For example:
 - Quantum teleportation: [teleportation.brat](brat/examples/teleportation.brat)
 - Quantum Fourier transform: [teleportation.brat](brat/examples/teleportation.brat)
+- Magic State Distillation: [magic-state-distillation.brat](brat/examples/magic-state-distillation.brat)
 - Simple Repeat-Until-Success: [rus.brat](brat/examples/rus.brat)
 - Ising Hamiltonian: [ising.brat](brat/examples/ising.brat)
 
