@@ -1,0 +1,20 @@
+-- Create a "brickwork" state
+-- Apply a parameterised unitary U to entangle every adjacent pair of qubits in a line architecture.
+-- (don't apply the gate to (q0, qn-1))
+brick(n :: #, -- The number of entangling gates
+      Vec(Float, n), -- Angles for each of the gates
+      U :: { Float -> { Qubit, Qubit -o Qubit, Qubit }}) -- Parameterised unitary
+  -> { Vec(Qubit, n + 1) -o Vec(Qubit, n + 1) }
+brick(0, [], _) = { .. }
+-- Odd number of gates, even number of qubits
+brick(succ(doub(n)), th ,- ths, U) = {
+  (q0 ,- qsEven) =%= (q1 ,- qsOdd) =>
+     let q0, q1 = U(th)(q0, q1) in
+       q0 ,- brick(doub(n), ths, U)(q1 ,- (qsEven =%= qsOdd))
+}
+-- Even number of gates, odd number of qubits
+brick(doub(succ(n)), th ,- ths, U) = { (q0 ,- qsl) =, qmid ,= qsr =>
+  let q1 ,- qs = brick(succ(doub(n)), ths, U)((qsl -, qmid) =,= qsr) in
+    let q0, q1 = U(th)(q0, q1) in
+      q0 ,- q1 ,- qs
+}

@@ -121,6 +121,28 @@ kernelConstructors = M.fromList
        (RPr ("tail", TVec (VApp (VInx (VS VZ)) B0) (VNum $ nVar (VInx VZ)))
         (RPr ("head", VApp (VInx (VS VZ)) B0) R0)))
      ])
+  ,(CConcatEqEven, M.fromList
+     [(CVec, CArgs [VPVar, VPNum (NP2Times NPVar)] (Sy (Sy Zy))
+      -- Star should be a TypeFor m forall m?
+      (REx ("elementType", Star []) ((REx ("halfLength", Nat) (R0))))
+      (RPr ("lhs", TVec (VApp (VInx (VS VZ)) B0) (VApp (VInx VZ) B0))
+        (RPr ("rhs", TVec (VApp (VInx (VS VZ)) B0) (VApp (VInx VZ) B0)) R0)))
+     ])
+  ,(CRiffle, M.fromList
+     [(CVec, CArgs [VPVar, VPNum (NP2Times NPVar)] (Sy (Sy Zy))
+      -- Star should be a TypeFor m forall m?
+      (REx ("elementType", Star []) ((REx ("halfLength", Nat) (R0))))
+      (RPr ("evens", TVec (VApp (VInx (VS VZ)) B0) (VApp (VInx VZ) B0))
+        (RPr ("odds", TVec (VApp (VInx (VS VZ)) B0) (VApp (VInx VZ) B0)) R0)))
+     ])
+  ,(CConcatEqOdd, M.fromList
+     [(CVec, CArgs [VPVar, VPNum (NP1Plus (NP2Times NPVar))] (Sy (Sy Zy))
+      -- Star should be a TypeFor m forall m?
+      (REx ("elementType", Star []) ((REx ("halfLength", Nat) (R0))))
+      (RPr ("lhs", TVec (VApp (VInx (VS VZ)) B0) (VApp (VInx VZ) B0))
+        (RPr ("mid", VApp (VInx (VS VZ)) B0)
+          (RPr ("rhs", TVec (VApp (VInx (VS VZ)) B0) (VApp (VInx VZ) B0)) R0))))
+     ])
   ,(CTrue, M.fromList [(CBit, CArgs [] Zy R0 R0)])
   ,(CFalse, M.fromList [(CBit, CArgs [] Zy R0 R0)])
   ]
