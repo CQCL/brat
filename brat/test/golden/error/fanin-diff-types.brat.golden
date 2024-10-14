@@ -1,0 +1,9 @@
+Error in test/golden/error/fanin-diff-types.brat@FC {start = Pos {line = 2, col = 5}, end = Pos {line = 2, col = 13}}:
+f = { [\/] }
+    ^^^^^^^^
+
+  Type mismatch when checking [\/]
+Expected: Qubit
+But got:  Bit
+
+
