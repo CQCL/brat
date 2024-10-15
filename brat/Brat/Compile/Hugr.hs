@@ -395,8 +395,8 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
       ((p, _ty), ()) <- compileConstDfg parent n box_sig $ \dfg_id -> do
         ins <- addNodeWithInputs ("Inputs" ++ n) (OpIn (InputNode dfg_id inputTys)) [] inputTys
         outs <- addNodeWithInputs n (OpCustom (CustomOp dfg_id ext op box_sig [])) ins outputTys
-        addNodeWithInputs ("Outputs" ++ n) (OpOut (OutputNode dfg_id outputTys)) outs [] >>= \case
-          [] -> pure ()
+        addNodeWithInputs ("Outputs" ++ n) (OpOut (OutputNode dfg_id outputTys)) outs []
+        pure ()
       case p of
         (Port loadConst 0) -> pure $ default_edges loadConst
 
