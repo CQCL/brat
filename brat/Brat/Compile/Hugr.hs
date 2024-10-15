@@ -387,8 +387,17 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
     -- This should only have one outgoing wire which leads to an `Id` node for
     -- the brat representation of the function, and that wire should have a
     -- function type
-    Prim _ -> error $ "TODO: Compiling a Prim node being used as a thunk, not directly Evaled."
-                      ++ " Should construct trivial 4-node DFG+I/O+CustomOp Hugr."
+    Prim (ext,op) -> do
+      let n = ext ++ ('_':op)
+      let [] = ins
+      let [(_, VFun Braty cty)] = outs
+      box_sig@(FunctionType inputTys outputTys) <- body <$> compileSig Braty cty
+      ((Port loadConst _, _ty), ()) <- compileConstDfg parent n box_sig $ \dfg_id -> do
+        ins <- addNodeWithInputs ("Inputs" ++ n) (OpIn (InputNode dfg_id inputTys)) [] inputTys
+        outs <- addNodeWithInputs n (OpCustom (CustomOp dfg_id ext op box_sig [])) ins outputTys
+        addNodeWithInputs ("Outputs" ++ n) (OpOut (OutputNode dfg_id outputTys)) outs []
+        pure ()
+      pure $ default_edges loadConst
 
     -- Check if the node has prefix "globals", hence should be a direct call
     Eval (Ex outNode outPort) -> do

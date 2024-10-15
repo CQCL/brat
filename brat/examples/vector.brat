@@ -1,15 +1,6 @@
 swap(Nat, Nat) -> Nat, Nat
 swap = a, b => b, a
 
-nat :: Nat
-nat = 0
-
-test :: Nat
-test = 1
-
-ha :: Nat
-ha = ?idk
-
 type A = Nat
 
 isNil :: { Vec(A, 0) -> Bool }
