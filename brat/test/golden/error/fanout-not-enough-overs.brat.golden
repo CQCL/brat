@@ -1,0 +1,6 @@
+Error in test/golden/error/fanout-not-enough-overs.brat@FC {start = Pos {line = 2, col = 5}, end = Pos {line = 2, col = 13}}:
+f = { [/\] }
+    ^^^^^^^^
+
+  Expected function to return additional values of type: (c1 :: Nat)
+

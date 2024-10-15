@@ -1,0 +1,2 @@
+f(Vec(Nat, 2)) -> Nat, Nat, Nat
+f = { [/\] }

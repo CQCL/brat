@@ -140,7 +140,7 @@ checkInputs tm@(WC fc _) (o:overs) (u:unders) = localFC fc $ do
   addRowContext _ as bs (Err fc (TypeMismatch tm _ _))
    = Err fc $ TypeMismatch tm (showRow as) (showRow bs)
   addRowContext _ _ _ e = e
-checkInputs tm [] unders = typeErr $ "No overs but unders: " ++ show unders ++ " for " ++ show tm
+checkInputs tm [] unders = typeErr $ "No overs but unders: " ++ showRow unders ++ " for " ++ show tm
 
 checkOutputs :: (CheckConstraints m k, ?my :: Modey m)
              => WC (Term Syn k)
@@ -160,7 +160,7 @@ checkOutputs tm@(WC fc _) (u:unders) (o:overs) = localFC fc $ do
   addRowContext _ as bs (Err fc (TypeMismatch tm _ _))
    = Err fc $ TypeMismatch tm (showRow as) (showRow bs)
   addRowContext _ _ _ e = e
-checkOutputs tm [] overs = typeErr $ "No unders but overs: " ++ show overs ++ " for " ++ show tm
+checkOutputs tm [] overs = typeErr $ "No unders but overs: " ++ showRow overs ++ " for " ++ show tm
 
 checkThunk :: (CheckConstraints m UVerb, EvMode m)
            => Modey m
@@ -171,9 +171,13 @@ checkThunk :: (CheckConstraints m UVerb, EvMode m)
 checkThunk m name cty tm = do
   ((dangling, _), ()) <- let ?my = m in makeBox name cty $
     \(thOvers, thUnders) -> do
-      (((), ()), (emptyOvers, emptyUnders)) <- check tm (thOvers, thUnders)
-      ensureEmpty "thunk leftovers" emptyOvers
-      ensureEmpty "thunk leftunders" emptyUnders
+      (((), ()), leftovers) <- check tm (thOvers, thUnders)
+      case leftovers of
+        ([], []) -> pure ()
+        ([], unders) -> err (ThunkLeftUnders (showRow unders))
+        -- If there are leftovers and leftunders, complain about the leftovers
+        -- Until we can report multiple errors!
+        (overs, _) -> err (ThunkLeftOvers (showRow overs))
   pure dangling
 
 check :: (CheckConstraints m k
@@ -252,7 +256,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
           solve ?my >>=
           (solToEnv . snd)
         (((), synthOuts), ((), ())) <- localEnv env $ check body ((), ())
-	pure synthOuts
+        pure synthOuts
 
       sig <- mkSig usedOvers synthOuts
       patOuts <- checkClauses sig usedOvers ((fst c, WC (fcOf body) (Emb body)) :| cs)
@@ -485,6 +489,70 @@ check' (Simple tm) ((), ((hungry, ty):unders)) = do
                                      R0 (RPr ("value", vty) R0)
       wire (dangling, vty, hungry)
       pure (((), ()), ((), unders))
+check' FanOut ((p, ty):overs, ()) = do
+  ty <- eval S0 (binderToValue ?my ty)
+  case ty of
+    TVec elTy n
+      | VNum n <- n
+      , Just n <- numValIsConstant n ->
+          if n < 0
+          then err (InternalError $ "Vector of negative length (" ++ show n ++ ")")
+          else do
+            wires <- fanoutNodes ?my n (p, valueToBinder ?my ty) elTy
+            pure (((), wires), (overs, ()))
+      | otherwise -> typeErr $ "Can't fanout a Vec with non-constant length: " ++ show n
+    _ -> typeErr "Fanout ([/\\]) only applies to Vec"
+ where
+  fanoutNodes :: Modey m -> Integer -> (Src, BinderType m) -> Val Z -> Checking [(Src, BinderType m)]
+  fanoutNodes _ 0 _ _ = pure []
+  fanoutNodes my n (dangling, ty) elTy = do
+    (_, [(hungry, _)], [danglingHead, danglingTail], _) <- anext "fanoutNodes" (Selector (plain "cons")) (S0, Some (Zy :* S0))
+      (RPr ("value", binderToValue my ty) R0)
+      ((RPr ("head", elTy) (RPr ("tail", TVec elTy (VNum (nConstant (n - 1)))) R0)) :: Ro m Z Z)
+    -- Wire the input into the selector node
+    wire (dangling, binderToValue my ty, hungry)
+    (danglingHead:) <$> fanoutNodes my (n - 1) danglingTail elTy
+
+check' FanIn (overs, ((tgt, ty):unders)) = do
+  ty <- eval S0 (binderToValue ?my ty)
+  case ty of
+    TVec elTy n
+      | VNum n <- n
+      , Just n <- numValIsConstant n ->
+          if n < 0
+          then err (InternalError $ "Vector of negative length (" ++ show n ++ ")")
+          else faninNodes ?my n (tgt, valueToBinder ?my ty) elTy overs >>= \case
+            Just overs -> pure (((), ()), (overs, unders))
+            Nothing -> typeErr ("Not enough inputs to make a vector of size " ++ show n)
+      | otherwise -> typeErr $ "Can't fanout a Vec with non-constant length: " ++ show n
+    _ -> typeErr "Fanin ([\\/]) only applies to Vec"
+ where
+  faninNodes :: Modey m
+             -> Integer             -- The number of things left to pack up
+             -> (Tgt, BinderType m) -- The place to wire the resulting vector to
+             -> Val Z               -- Element type
+             -> [(Src, BinderType m)] -- Overs
+             -> Checking (Maybe [(Src, BinderType m)]) -- Leftovers
+  faninNodes my 0 (tgt, ty) elTy overs = do
+    (_, _, [(dangling, _)], _) <- anext "nil" (Constructor (plain "nil")) (S0, Some (Zy :* S0))
+                             (R0 :: Ro m Z Z)
+                             (RPr ("value", TVec elTy (VNum nZero)) R0)
+    wire (dangling, binderToValue my ty, tgt)
+    pure (Just overs)
+  faninNodes _ _ _ _ [] = pure Nothing
+  faninNodes my n (hungry, ty) elTy ((over, overTy):overs) = do
+    let k = case my of
+          Kerny -> Dollar []
+          Braty -> Star []
+    typeEq (show FanIn) k elTy (binderToValue my overTy)
+    let tailTy = TVec elTy (VNum (nConstant (n - 1)))
+    (_, [(hungryHead, _), (hungryTail, tailTy)], [(danglingResult, _)], _) <- anext "faninNodes" (Constructor (plain "cons")) (S0, Some (Zy :* S0))
+      ((RPr ("head", elTy) (RPr ("tail", tailTy) R0)) :: Ro m Z Z)
+      (RPr ("value", binderToValue my ty) R0)
+    wire (over, elTy, hungryHead)
+    wire (danglingResult, binderToValue ?my ty, hungry)
+    faninNodes my (n - 1) (hungryTail, tailTy) elTy overs
+check' Identity ((this:leftovers), ()) = pure (((), [this]), (leftovers, ()))
 check' tm _ = error $ "check' " ++ show tm
 
 

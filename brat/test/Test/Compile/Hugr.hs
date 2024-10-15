@@ -31,7 +31,6 @@ invalidExamples = map ((++ ".brat") . ("examples" </>))
   ["adder"
   ,"app"
   ,"dollar_kind"
-  ,"pass"
   ,"portpulling"
   ,"repeated_app" -- missing coercions, https://github.com/CQCL-DEV/brat/issues/413
   ,"thunks"]
@@ -57,6 +56,7 @@ nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   ,"test"
   ,"type_alias"
   ,"vector"
+  ,"fanout" -- Contains Selectors
   -- Conjecture: These examples don't compile because number patterns in type
   -- signatures causes `kindCheck` to call `abstract`, creating "Selector"
   -- nodes, which we don't attempt to compile because we want to get rid of them

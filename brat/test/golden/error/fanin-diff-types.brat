@@ -1,0 +1,2 @@
+f(Qubit, Bit) -o Vec(Qubit, 2)
+f = { [\/] }

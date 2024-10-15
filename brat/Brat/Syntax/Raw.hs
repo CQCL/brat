@@ -70,6 +70,7 @@ data Raw :: Dir -> Kind -> Type where
   RForget   :: WC (Raw d KVerb) -> Raw d UVerb
   RPull     :: [PortName] -> WC (Raw Chk k) -> Raw Chk k
   RVar      :: UserName -> Raw Syn Noun
+  RIdentity :: Raw Syn UVerb
   RArith    :: ArithOp -> WC (Raw Chk Noun) -> WC (Raw Chk Noun) -> Raw Chk Noun
   (:::::)   :: WC (Raw Chk Noun) -> [RawIO] -> Raw Syn Noun
   (::-::)   :: WC (Raw Syn k) -> WC (Raw d UVerb) -> Raw d k -- vertical juxtaposition (diagrammatic composition)
@@ -80,6 +81,8 @@ data Raw :: Dir -> Kind -> Type where
   RFn       :: RawCType -> Raw Chk Noun
   -- Kernel types
   RKernel   :: RawKType -> Raw Chk Noun
+  RFanOut   :: Raw Syn UVerb
+  RFanIn    :: Raw Chk UVerb
 
 class Dirable d where
   dir :: Raw d k -> Diry d
@@ -110,6 +113,7 @@ instance Show (Raw d k) where
   show (RPull [] x) = "[]:" ++ show x
   show (RPull ps x) = concat ((++":") <$> ps) ++ show x
   show (RVar x) = show x
+  show RIdentity = "|"
   show (RArith op a b) = "(" ++ show op ++ " " ++ show a ++ " " ++ show b ++ ")"
   show (fun ::$:: arg) = show fun ++ ('(' : show arg ++ ")")
   show (tm ::::: ty) = show tm ++ " :: " ++ show ty
@@ -121,6 +125,8 @@ instance Show (Raw d k) where
   show (RCon c xs) = "Con(" ++ show c ++ "(" ++ show xs ++ "))"
   show (RFn cty) = show cty
   show (RKernel cty) = show cty
+  show RFanOut = "[/\\]"
+  show RFanIn = "[\\/]"
 
 type Desugar = StateT Namespace (ReaderT (RawEnv, Bwd UserName) (Except Error))
 
@@ -223,6 +229,7 @@ instance (Kindable k) => Desugarable (Raw d k) where
   desugar' (RForget kv) = Forget <$> desugar kv
   desugar' (RPull ps raw) = Pull ps <$> desugar raw
   desugar' (RVar name) = pure $ Var name
+  desugar' RIdentity = pure Identity
   desugar' (RArith op a b) = Arith op <$> desugar a <*> desugar b
   desugar' (fun ::$:: arg) = (:$:) <$> desugar fun <*> desugar arg
   desugar' (tm ::::: outputs) = do
@@ -235,6 +242,8 @@ instance (Kindable k) => Desugarable (Raw d k) where
   desugar' (RCon c arg) = Con c <$> desugar arg
   desugar' (RFn cty) = C <$> desugar' cty
   desugar' (RKernel cty) = K <$> desugar' cty
+  desugar' RFanOut = pure FanOut
+  desugar' RFanIn = pure FanIn
 
 instance Desugarable ty => Desugarable (PortName, ty) where
   type Desugared (PortName, ty) = (PortName, Desugared ty)
