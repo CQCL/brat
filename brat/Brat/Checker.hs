@@ -134,17 +134,14 @@ checkIO tm@(WC fc _) exps acts wireFn errMsg = do
   let (rows, rest) = extractSuffixes exps acts
   localFC fc $ forM rows $ \(e:|exps, a:|acts) ->
       wrapError (addRowContext (showRow $ e:exps) (showRow $ a:acts)) $ wireFn e a
-  case rest of
-    Left rest -> pure rest
-    Right (u:|unfilled) -> typeErr $ errMsg ++ showRow (u:unfilled) ++ " for " ++ show tm
+  throwLeft rest
  where
   addRowContext :: String -> String -> Error -> Error
   addRowContext exp act = \case
     (Err fc (TypeMismatch tm _ _)) -> Err fc $ TypeMismatch tm exp act
     e -> e
-  extractSuffixes :: [a] -> [b] -> ([(NonEmpty a, NonEmpty b)], Either [a] (NonEmpty b))
-  extractSuffixes as [] = ([], Left as)
-  extractSuffixes [] (b:bs) = ([], Right (b:|bs))
+  extractSuffixes as [] = ([], Right as)
+  extractSuffixes [] bs = ([], Left $ TypeErr $ errMsg ++ showRow bs ++ " for " ++ show tm)
   extractSuffixes (a:as) (b:bs) = first ((a:|as,b:|bs):) $ extractSuffixes as bs
 
 checkInputs :: forall m d . (CheckConstraints m KVerb, ?my :: Modey m)
