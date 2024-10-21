@@ -2,7 +2,17 @@ map(X :: *, Y :: *, { X -> Y }, List(X)) -> List(Y)
 map(_, _, _, []) = []
 map(_, _, f, x ,- xs) = f(x) ,- map(!, !, f, xs)
 
--- This not working at the moment, see https://github.com/CQCL/brat/issues/35
---mapVec(X :: *, Y :: *, { X -> Y }, n :: #, Vec(X, n)) -> Vec(Y, n)
---mapVec(_, _, _, _, []) = []
---mapVec(_, _, f, _, x ,- xs) = f(x) ,- mapVec(!, !, f, !, xs)
+-- The "succ" being required in all 3 of these cases is https://github.com/CQCL/brat/issues/35
+mapVec(X :: *, Y :: *, { X -> Y }, n :: #, Vec(X, n)) -> Vec(Y, n)
+mapVec(_, _, _, _, []) = []
+mapVec(_, _, f, succ(_), x ,- xs) = f(x) ,- mapVec(!, !, f, !, xs)
+
+-- While map above can infer the holes from the other arguments,
+-- here we need to infer the holes (arguments) from the results:
+repeat(X :: *, n :: #, x :: X) -> Vec(X, n)
+repeat(_, 0, _) = []
+repeat(_, succ(_), x) = x ,- repeat(!, !, x) -- X can be inferred from x but n cannot
+
+mapFirst(X :: *, Y :: *, { X -> Y}, n :: #, Vec(X, n)) -> Vec(Y, n)
+mapFirst(_, _, _, _, []) = []
+mapFirst(_, _, f, succ(_), x ,- _) = repeat(!, !, f(x)) -- first ! (X) is second _ (Y)
