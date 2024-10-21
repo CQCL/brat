@@ -8,7 +8,7 @@ module Brat.Checker (checkBody
                     ) where
 
 import Control.Arrow (first)
-import Control.Monad (foldM)
+import Control.Monad (foldM, forM)
 import Control.Monad.Freer
 import Data.Bifunctor (second)
 import Data.Functor (($>), (<&>))
@@ -127,10 +127,12 @@ checkInputs :: forall m d . (CheckConstraints m KVerb, ?my :: Modey m)
             -> [(Src, BinderType m)] -- Expected
             -> [(Tgt, BinderType m)] -- Actual
             -> Checking [(Src, BinderType m)]
-checkInputs _ overs [] = pure overs
-checkInputs tm@(WC fc _) (o:overs) (u:unders) = localFC fc $ do
-  wrapError (addRowContext (o:overs) (u:unders)) $ checkWire ?my tm False o u
-  checkInputs tm overs unders
+checkInputs tm@(WC fc _) overs unders = let (pairs, rest) = extractSuffixes overs unders in do
+  localFC fc $ forM pairs $ \(o:|overs, u:|unders) ->
+      wrapError (addRowContext (o:overs) (u:unders)) $ checkWire ?my tm False o u
+  case rest of
+    Left overs -> pure overs
+    Right (u:|unders) -> typeErr $ "No more overs but unders: " ++ showRow (u:unders) ++ " for " ++ show tm
  where
   addRowContext :: [(Src, BinderType m)] -- Expected
               -> [(Tgt, BinderType m)] -- Actual
@@ -138,7 +140,10 @@ checkInputs tm@(WC fc _) (o:overs) (u:unders) = localFC fc $ do
   addRowContext as bs (Err fc (TypeMismatch tm _ _))
    = Err fc $ TypeMismatch tm (showRow as) (showRow bs)
   addRowContext _ _ e = e
-checkInputs tm [] unders = typeErr $ "No overs but unders: " ++ showRow unders ++ " for " ++ show tm
+  extractSuffixes :: [a] -> [b] -> ([(NonEmpty a, NonEmpty b)], Either [a] (NonEmpty b))
+  extractSuffixes as [] = ([], Left as)
+  extractSuffixes [] (b:bs) = ([], Right (b:|bs))
+  extractSuffixes (a:as) (b:bs) = first ((a:|as,b:|bs):) $ extractSuffixes as bs
 
 checkOutputs :: forall m k . (CheckConstraints m k, ?my :: Modey m)
              => WC (Term Syn k)
