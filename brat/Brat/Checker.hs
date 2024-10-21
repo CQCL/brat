@@ -133,15 +133,14 @@ checkIO tm@(WC fc _) exps acts wireFn errMsg = do
   let _ = ?my -- otherwise ?my is "redundant" but typechecking fails without it
   let (rows, rest) = extractSuffixes exps acts
   localFC fc $ forM rows $ \(e:|exps, a:|acts) ->
-      wrapError (addRowContext (e:exps) (a:acts)) $ wireFn e a
+      wrapError (addRowContext (showRow $ e:exps) (showRow $ a:acts)) $ wireFn e a
   case rest of
     Left rest -> pure rest
     Right (u:|unfilled) -> typeErr $ errMsg ++ showRow (u:unfilled) ++ " for " ++ show tm
  where
-  addRowContext :: [(NamedPort exp, BinderType m)] -> [(NamedPort act, BinderType m)]
-              -> Error -> Error
-  addRowContext exps acts = \case
-    (Err fc (TypeMismatch tm _ _)) -> Err fc $ TypeMismatch tm (showRow exps) (showRow acts)
+  addRowContext :: String -> String -> Error -> Error
+  addRowContext exp act = \case
+    (Err fc (TypeMismatch tm _ _)) -> Err fc $ TypeMismatch tm exp act
     e -> e
   extractSuffixes :: [a] -> [b] -> ([(NonEmpty a, NonEmpty b)], Either [a] (NonEmpty b))
   extractSuffixes as [] = ([], Left as)
