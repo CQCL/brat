@@ -9,6 +9,7 @@ module Brat.Checker.Types (Overs, Unders
                           ,emptyEnv
                           ,TypedHole(..), HoleTag(..), HoleData(..)
                           ,initStore
+                          ,kindForMode
                           ) where
 
 import Brat.Checker.Quantity
@@ -94,7 +95,7 @@ instance Show EndType where
   show (EndType Braty (Right ty)) = show ty
 
 data Store = Store
-  { typeMap  :: M.Map End EndType
+  { typeMap  :: M.Map End (EndType, Bool) -- True = is skolem const, will never be defined
   , valueMap :: M.Map End (Val Z)
   }
 
@@ -111,3 +112,7 @@ initStore = Store M.empty M.empty
 
 instance Semigroup Store where
   (Store ks vs) <> (Store ks' vs') = Store (ks <> ks') (vs <> vs')
+
+kindForMode :: Modey m -> TypeKind
+kindForMode Braty = Star []
+kindForMode Kerny = Dollar []

@@ -4,23 +4,29 @@ module Brat.Eval (EvMode(..)
                  ,ValPat(..)
                  ,NumPat(..)
                  ,apply
+                 ,applySem
                  ,eval
                  ,sem
+                 ,semLvl
+                 ,doesntOccur
                  ,evalCTy
                  ,eqTest
+                 ,getNum
                  ,kindEq
+                 ,kindOf
                  ,kindType
                  ,numVal
-                 ,typeEq
+                 ,quote
+                 ,getNumVar
                  ) where
 
 import Brat.Checker.Monad
-import Brat.Checker.Types (EndType(..))
+import Brat.Checker.Types (EndType(..), kindForMode)
 import Brat.Error (ErrorMsg(..))
-import Brat.Syntax.Value
 import Brat.Syntax.Common
+import Brat.Syntax.Value
 import Brat.UserName (plain)
-import Control.Monad.Freer (req)
+import Control.Monad.Freer
 import Bwd
 import Hasochism
 import Util (zip_same_length)
@@ -29,6 +35,7 @@ import Data.Bifunctor (second)
 import Data.Functor
 import Data.Kind (Type)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
+import Data.Foldable (traverse_)
 
 kindType :: TypeKind -> Val Z
 kindType Nat = TNat
@@ -184,21 +191,15 @@ kindEq (TypeFor m xs) (TypeFor m' ys) | m == m' = kindListEq xs ys
 kindEq k k' = Left . TypeErr $ "Unequal kinds " ++ show k ++ " and " ++ show k'
 
 kindOf :: VVar Z -> Checking TypeKind
-kindOf (VPar e) = req (TypeOf e) >>= \case
+kindOf (VPar e) = (req (TypeOf e) <&> fst) >>= \case
   EndType Braty (Left k) -> pure k
   EndType my ty -> typeErr $ "End " ++ show e ++ " isn't a kind, it's type is " ++ case my of
     Braty -> show ty
     Kerny -> show ty
 kindOf (VInx n) = case n of {}
 
--- We should have made sure that the two values share the given kind
-typeEq :: String -- String representation of the term for error reporting
-   -> TypeKind -- The kind we're comparing at
-   -> Val Z -- Expected
-   -> Val Z -- Actual
-   -> Checking ()
-typeEq str k exp act = eqTest str k exp act >>= throwLeft
-
+-------- for SolvePatterns usage: not allowed to solve hopes,
+-- and if pattern insoluble, it's not a type error (it's a "pattern match case unreachable")
 eqTest :: String -- String representation of the term for error reporting
        -> TypeKind -- The kind we're comparing at
        -> Val Z -- Expected
@@ -275,9 +276,7 @@ eqRowTest :: Modey m
                                        ))
 eqRowTest _ _ lvkz (stk0, R0) (stk1, R0) = pure $ Right (Some lvkz, stk0, stk1)
 eqRowTest m tm lvkz (stk0, RPr (_, ty0) r0) (stk1, RPr (_, ty1) r1) = do
-  let k = case m of
-        Braty -> Star []
-        Kerny -> Dollar []
+  let k = kindForMode m
   ty0 <- sem stk0 ty0
   ty1 <- sem stk1 ty1
   eqWorker tm lvkz k ty0 ty1 >>= \case
@@ -302,3 +301,38 @@ eqTests tm lvkz = go
     Left e -> pure $ Left e
   go _ us vs = pure . Left . TypeErr $ "Arity mismatch in type constructor arguments:\n  "
                    ++ show us ++ "\n  " ++ show vs
+
+getNumVar :: NumVal (VVar n) -> Maybe End
+getNumVar (NumValue _ (StrictMonoFun (StrictMono _ mono))) = case mono of
+  Linear v -> case v of
+    VPar e -> Just e
+    _ -> Nothing
+  Full sm -> getNumVar (numValue sm)
+getNumVar _ = Nothing
+
+-- Be conservative, fail if in doubt. Not dangerous like being wrong while succeeding
+-- We can have bogus failures here because we're not normalising under lambdas
+-- N.B. the value argument is normalised.
+doesntOccur :: End -> Val n -> Either ErrorMsg ()
+doesntOccur e (VNum nv) = case getNumVar nv of
+  Just e' -> collision e e'
+  _ -> pure ()
+doesntOccur e (VApp var args) = case var of
+  VPar e' -> collision e e' *> traverse_ (doesntOccur e) args
+  _ -> pure ()
+doesntOccur e (VCon _ args) = traverse_ (doesntOccur e) args
+doesntOccur e (VLam body) = doesntOccur e body
+doesntOccur e (VFun my (ins :->> outs)) = case my of
+  Braty -> doesntOccurRo my e ins *> doesntOccurRo my e outs
+  Kerny -> doesntOccurRo my e ins *> doesntOccurRo my e outs
+doesntOccur e (VSum my rows) = traverse_ (\(Some ro) -> doesntOccurRo my e ro) rows
+
+collision :: End -> End -> Either ErrorMsg ()
+collision e v | e == v = Left . UnificationError $
+                         show e ++ " is cyclic"
+              | otherwise = pure ()
+
+doesntOccurRo :: Modey m -> End -> Ro m i j -> Either ErrorMsg ()
+doesntOccurRo _ _ R0 = pure ()
+doesntOccurRo my e (RPr (_, ty) ro) = doesntOccur e ty *> doesntOccurRo my e ro
+doesntOccurRo Braty e (REx _ ro) = doesntOccurRo Braty e ro

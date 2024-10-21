@@ -20,7 +20,7 @@ import System.Exit (die)
 printDeclsHoles :: [FilePath] -> String -> IO ()
 printDeclsHoles libDirs file = do
   env <- runExceptT $ loadFilename root libDirs file
-  (_, decls, holes, _, _) <- eitherIO env
+  (_, decls, holes, _, _, _) <- eitherIO env
   putStrLn "Decls:"
   print decls
   putStrLn ""
@@ -53,7 +53,8 @@ printAST printRaw printAST file = do
 writeDot :: [FilePath] -> String -> String -> IO ()
 writeDot libDirs file out = do
   env <- runExceptT $ loadFilename root libDirs file
-  (_, _, _, _, graph) <- eitherIO env
+  -- Discard captureSets; perhaps we could incorporate into the graph
+  (_, _, _, _, graph, _) <- eitherIO env
   writeFile out (toDotString graph)
 {-
  where
@@ -65,9 +66,9 @@ compileFile :: [FilePath] -> String -> IO (Either String BS.ByteString)
 compileFile libDirs file = do
   let (checkRoot, newRoot) = split "checking" root
   env <- runExceptT $ loadFilename checkRoot libDirs file
-  (venv, _, holes, defs, outerGraph) <- eitherIO env
+  (venv, _, holes, defs, outerGraph, capSets) <- eitherIO env
   pure $ case holes of
-    [] -> Right $ compile defs newRoot outerGraph venv
+    [] -> Right $ compile defs newRoot outerGraph capSets venv
     xs -> Left (show (CompilingHoles (show <$> xs)))
 
 compileAndPrintFile :: [FilePath] -> String -> IO ()

@@ -1,9 +1,9 @@
 module Test.Substitution where
 
 import Brat.Checker.Monad
+import Brat.Checker.SolveHoles
 import Brat.Checker.Types
 import Brat.Error
-import Brat.Eval (typeEq)
 import Brat.Naming
 import Brat.Syntax.Common
 import Brat.Syntax.Value

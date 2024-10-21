@@ -8,6 +8,7 @@ use hugr::{
         OpDef, SignatureError, SignatureFromArgs, SignatureFunc,
     },
     ops::OpName,
+    std_extensions::arithmetic::int_types::INT_TYPES,
     types::{type_param::TypeParam, FunctionType, PolyFuncType, Type, TypeArg, TypeBound},
 };
 
@@ -17,6 +18,10 @@ use smol_str::{format_smolstr, SmolStr};
 use strum::ParseError;
 
 use crate::ctor::Ctor;
+
+lazy_static! {
+    static ref U64: Type = INT_TYPES[6].clone();
+}
 
 /// Brat extension operation definitions.
 #[derive(Clone, Copy, Debug, Hash, Sequence, PartialEq, Eq)]
@@ -28,6 +33,7 @@ pub enum BratOpDef {
     Panic,
     Ctor(BratCtor),
     PrimCtorTest(BratCtor),
+    Lluf,
 }
 
 impl OpName for BratOpDef {
@@ -40,6 +46,7 @@ impl OpName for BratOpDef {
             Panic => "Panic".into(),
             Ctor(ctor) => format_smolstr!("Ctor::{}", ctor.name()),
             PrimCtorTest(ctor) => format_smolstr!("PrimCtorTest::{}", ctor.name()),
+            Lluf => "Lluf".into()
         }
     }
 }
@@ -56,6 +63,7 @@ impl FromStr for BratOpDef {
             ["Panic"] => Ok(BratOpDef::Panic),
             ["Ctor", ctor] => Ok(BratOpDef::Ctor(BratCtor::from_str(ctor)?)),
             ["PrimCtorTest", ctor] => Ok(BratOpDef::PrimCtorTest(BratCtor::from_str(ctor)?)),
+            ["Lluf"] => Ok(BratOpDef::Lluf),
             _ => Err(ParseError::VariantNotFound),
         }
     }
@@ -80,7 +88,8 @@ impl MakeOpDef for BratOpDef {
                 let output = Type::new_tuple_sum(vec![input.clone(), sig.body().input().clone()]);
                 PolyFuncType::new(sig.params(), FunctionType::new(input.clone(), vec![output]))
                     .into()
-            }
+            },
+            Lluf => FunctionType::new(vec![U64.clone()], vec![U64.clone()]).into()
         }
     }
 }
