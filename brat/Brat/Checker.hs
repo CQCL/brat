@@ -122,46 +122,45 @@ checkWire Kerny (WC fc tm) outputs (dangling, ot) (hungry, ut) = localFC fc $ do
     else typeEq (show tm) (Dollar []) ut ot
   wire (dangling, ot, hungry)
 
+checkIO :: forall m d k exp act . (CheckConstraints m k, ?my :: Modey m)
+        => WC (Term d k)
+        -> [(NamedPort exp, BinderType m)]
+        -> [(NamedPort act, BinderType m)]
+        -> ((NamedPort exp, BinderType m) -> (NamedPort act, BinderType m) -> Checking ())
+        -> String
+        -> Checking [(NamedPort exp, BinderType m)] -- left(overs/unders)
+checkIO tm@(WC fc _) overs unders wireFn errMsg = do
+  let _ = ?my -- otherwise ?my is "redundant" but typechecking fails without it
+  let (pairs, rest) = extractSuffixes overs unders
+  localFC fc $ forM pairs $ \(o:|overs, u:|unders) ->
+      wrapError (addRowContext (o:overs) (u:unders)) $ wireFn o u
+  case rest of
+    Left overs -> pure overs
+    Right (u:|unders) -> typeErr $ errMsg ++ showRow (u:unders) ++ " for " ++ show tm
+ where
+  addRowContext :: [(NamedPort exp, BinderType m)] -> [(NamedPort act, BinderType m)]
+              -> Error -> Error
+  addRowContext as bs = \case
+    (Err fc (TypeMismatch tm _ _)) -> Err fc $ TypeMismatch tm (showRow as) (showRow bs)
+    e -> e
+  extractSuffixes :: [a] -> [b] -> ([(NonEmpty a, NonEmpty b)], Either [a] (NonEmpty b))
+  extractSuffixes as [] = ([], Left as)
+  extractSuffixes [] (b:bs) = ([], Right (b:|bs))
+  extractSuffixes (a:as) (b:bs) = first ((a:|as,b:|bs):) $ extractSuffixes as bs
+
 checkInputs :: forall m d . (CheckConstraints m KVerb, ?my :: Modey m)
             => WC (Term d KVerb)
             -> [(Src, BinderType m)] -- Expected
             -> [(Tgt, BinderType m)] -- Actual
             -> Checking [(Src, BinderType m)]
-checkInputs tm@(WC fc _) overs unders = let (pairs, rest) = extractSuffixes overs unders in do
-  localFC fc $ forM pairs $ \(o:|overs, u:|unders) ->
-      wrapError (addRowContext (o:overs) (u:unders)) $ checkWire ?my tm False o u
-  case rest of
-    Left overs -> pure overs
-    Right (u:|unders) -> typeErr $ "No more overs but unders: " ++ showRow (u:unders) ++ " for " ++ show tm
- where
-  addRowContext :: [(Src, BinderType m)] -- Expected
-              -> [(Tgt, BinderType m)] -- Actual
-              -> Error -> Error
-  addRowContext as bs (Err fc (TypeMismatch tm _ _))
-   = Err fc $ TypeMismatch tm (showRow as) (showRow bs)
-  addRowContext _ _ e = e
-  extractSuffixes :: [a] -> [b] -> ([(NonEmpty a, NonEmpty b)], Either [a] (NonEmpty b))
-  extractSuffixes as [] = ([], Left as)
-  extractSuffixes [] (b:bs) = ([], Right (b:|bs))
-  extractSuffixes (a:as) (b:bs) = first ((a:|as,b:|bs):) $ extractSuffixes as bs
+checkInputs tm overs unders = checkIO tm overs unders (checkWire ?my tm False) "No overs but unders: "
 
 checkOutputs :: forall m k . (CheckConstraints m k, ?my :: Modey m)
              => WC (Term Syn k)
              -> [(Tgt, BinderType m)] -- Expected
              -> [(Src, BinderType m)] -- Actual
              -> Checking [(Tgt, BinderType m)]
-checkOutputs _ unders [] = pure unders
-checkOutputs tm@(WC fc _) (u:unders) (o:overs) = localFC fc $ do
-  wrapError (addRowContext (u:unders) (o:overs)) $ checkWire ?my tm True o u
-  checkOutputs tm unders overs
- where
-  addRowContext :: [(Tgt, BinderType m)] -- Expected
-              -> [(Src, BinderType m)] -- Actual
-              -> Error -> Error
-  addRowContext as bs (Err fc (TypeMismatch tm _ _))
-   = Err fc $ TypeMismatch tm (showRow as) (showRow bs)
-  addRowContext _ _ e = e
-checkOutputs tm [] overs = typeErr $ "No unders but overs: " ++ showRow overs ++ " for " ++ show tm
+checkOutputs tm unders overs = checkIO tm unders overs (flip $ checkWire ?my tm True) "No unders but overs: "
 
 checkThunk :: (CheckConstraints m UVerb, EvMode m)
            => Modey m
