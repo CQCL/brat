@@ -7,10 +7,9 @@ module Brat.Checker (checkBody
                     ,tensor
                     ) where
 
-import Control.Arrow (first)
 import Control.Monad (foldM, forM)
 import Control.Monad.Freer
-import Data.Bifunctor (second)
+import Data.Bifunctor (first, second)
 import Data.Functor (($>), (<&>))
 import Data.List ((\\))
 import Data.List.NonEmpty (NonEmpty(..))
@@ -134,14 +133,15 @@ checkIO tm@(WC fc _) exps acts wireFn errMsg = do
   let (rows, rest) = extractSuffixes exps acts
   localFC fc $ forM rows $ \(e:|exps, a:|acts) ->
       wrapError (addRowContext (showRow $ e:exps) (showRow $ a:acts)) $ wireFn e a
-  throwLeft rest
+  throwLeft $ first (\bs -> TypeErr $ errMsg ++ showRow bs ++ " for " ++ show tm) rest
  where
   addRowContext :: String -> String -> Error -> Error
   addRowContext exp act = \case
     (Err fc (TypeMismatch tm _ _)) -> Err fc $ TypeMismatch tm exp act
     e -> e
+  extractSuffixes :: [a] -> [b] -> ([(NonEmpty a, NonEmpty b)], Either [b] [a])
   extractSuffixes as [] = ([], Right as)
-  extractSuffixes [] bs = ([], Left $ TypeErr $ errMsg ++ showRow bs ++ " for " ++ show tm)
+  extractSuffixes [] bs = ([], Left bs) -- indicates error
   extractSuffixes (a:as) (b:bs) = first ((a:|as,b:|bs):) $ extractSuffixes as bs
 
 checkInputs :: forall m d . (CheckConstraints m KVerb, ?my :: Modey m)
