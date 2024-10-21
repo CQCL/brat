@@ -257,7 +257,10 @@ eqWorker tm lvkz (TypeFor _ []) (SSum m0 stk0 rs0) (SSum m1 stk1 rs1)
       Just rs -> traverse eqVariant rs <&> sequence_
  where
   eqVariant (Some r0, Some r1) = eqRowTest m0 tm lvkz (stk0,r0) (stk1,r1) <&> dropRight
-eqWorker tm _ _ v0 v1 = pure . Left $ TypeMismatch tm (show v0) (show v1)
+eqWorker tm _ _ s0 s1 = do
+  v0 <- quote Zy s0
+  v1 <- quote Zy s1
+  pure . Left $ TypeMismatch tm (show v0) (show v1)
 
 -- Type rows have bot0,bot1 dangling de Bruijn indices, which we instantiate with
 -- de Bruijn levels. As we go under binders in these rows, we add to the scope's

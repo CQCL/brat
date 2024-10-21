@@ -81,6 +81,10 @@ data ErrorMsg
  -- TODO: Add file context here
  | CompilingHoles [String]
  | RemainingNatHopes [String]
+ -- For thunks which don't address enough inputs, or produce enough outputs.
+ -- The argument is the row of unused connectors
+ | ThunkLeftOvers String
+ | ThunkLeftUnders String
 
 instance Show ErrorMsg where
   show (TypeErr x) = "Type error: " ++ x
@@ -164,6 +168,8 @@ instance Show ErrorMsg where
   show UnreachableBranch = "Branch cannot be reached"
   show (CompilingHoles hs) = unlines ("Can't compile file with remaining holes":indent hs)
   show (RemainingNatHopes hs) = unlines ("Expected to work out values for these holes:":indent (indent hs))
+  show (ThunkLeftOvers overs) = "Expected function to address all inputs, but " ++ overs ++ " wasn't used"
+  show (ThunkLeftUnders unders) = "Expected function to return additional values of type: " ++ unders
 
 indent = fmap ("  " ++)
 

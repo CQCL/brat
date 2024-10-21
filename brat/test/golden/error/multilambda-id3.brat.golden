@@ -1,0 +1,6 @@
+Error in test/golden/error/multilambda-id3.brat@FC {start = Pos {line = 2, col = 15}, end = Pos {line = 2, col = 18}}:
+f = { true => |;||false =>|;|;|}
+              ^^^
+
+  Elab error "Noun required at this position"
+

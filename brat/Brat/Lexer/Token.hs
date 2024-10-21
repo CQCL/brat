@@ -36,6 +36,7 @@ data Tok
  | Plus
  | Minus
  | Asterisk
+ | Backslash
  | Slash
  | Caret
  | Hash
@@ -81,6 +82,7 @@ instance Show Tok where
   show Plus = "+"
   show Minus = "-"
   show Asterisk = "*"
+  show Backslash = "\\"
   show Slash = "/"
   show Caret = "^"
   show Hash = "#"

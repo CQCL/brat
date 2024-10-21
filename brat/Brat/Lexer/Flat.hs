@@ -50,7 +50,7 @@ space = (many $ (satisfy isSpace >> return ()) <|> comment) >> return ()
   comment = string "--" *> ((printChar `manyTill` lookAhead (void newline <|> void eof)) >> return ())
 
 tok :: Lexer Tok
-tok = (   try (char '(' $> LParen)
+tok = try (char '(' $> LParen)
       <|> try (char ')' $> RParen)
       <|> try (char '{' $> LBrace)
       <|> try (char '}' $> RBrace)
@@ -62,6 +62,7 @@ tok = (   try (char '(' $> LParen)
       <|> try (Number <$> number)
       <|> try (string "+" $> Plus)
       <|> try (string "/" $> Slash)
+      <|> try (string "\\" $> Backslash)
       <|> try (string "^" $> Caret)
       <|> try (string "->") $> Arrow
       <|> try (string "=>") $> FatArrow
@@ -90,7 +91,6 @@ tok = (   try (char '(' $> LParen)
       <|> try (K <$> try keyword)
       <|> try qualified
       <|> Ident <$> ident
-      )
  where
   float :: Lexer Double
   float = label "float literal" $ do
