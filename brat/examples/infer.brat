@@ -2,6 +2,7 @@ map(X :: *, Y :: *, { X -> Y }, List(X)) -> List(Y)
 map(_, _, _, []) = []
 map(_, _, f, x ,- xs) = f(x) ,- map(!, !, f, xs)
 
-mapVec(X :: *, Y :: *, { X -> Y }, n :: #, Vec(X, n)) -> Vec(Y, n)
-mapVec(_, _, _, _, []) = []
-mapVec(_, _, f, _, x ,- xs) = f(x) ,- mapVec(!, !, f, !, xs)
+-- This not working at the moment, see https://github.com/CQCL/brat/issues/35
+--mapVec(X :: *, Y :: *, { X -> Y }, n :: #, Vec(X, n)) -> Vec(Y, n)
+--mapVec(_, _, _, _, []) = []
+--mapVec(_, _, f, _, x ,- xs) = f(x) ,- mapVec(!, !, f, !, xs)
