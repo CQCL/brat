@@ -129,19 +129,19 @@ checkIO :: forall m d k exp act . (CheckConstraints m k, ?my :: Modey m)
         -> ((NamedPort exp, BinderType m) -> (NamedPort act, BinderType m) -> Checking ())
         -> String
         -> Checking [(NamedPort exp, BinderType m)] -- left(overs/unders)
-checkIO tm@(WC fc _) overs unders wireFn errMsg = do
+checkIO tm@(WC fc _) exps acts wireFn errMsg = do
   let _ = ?my -- otherwise ?my is "redundant" but typechecking fails without it
-  let (pairs, rest) = extractSuffixes overs unders
-  localFC fc $ forM pairs $ \(o:|overs, u:|unders) ->
-      wrapError (addRowContext (o:overs) (u:unders)) $ wireFn o u
+  let (rows, rest) = extractSuffixes exps acts
+  localFC fc $ forM rows $ \(e:|exps, a:|acts) ->
+      wrapError (addRowContext (e:exps) (a:acts)) $ wireFn e a
   case rest of
-    Left overs -> pure overs
-    Right (u:|unders) -> typeErr $ errMsg ++ showRow (u:unders) ++ " for " ++ show tm
+    Left rest -> pure rest
+    Right (u:|unfilled) -> typeErr $ errMsg ++ showRow (u:unfilled) ++ " for " ++ show tm
  where
   addRowContext :: [(NamedPort exp, BinderType m)] -> [(NamedPort act, BinderType m)]
               -> Error -> Error
-  addRowContext as bs = \case
-    (Err fc (TypeMismatch tm _ _)) -> Err fc $ TypeMismatch tm (showRow as) (showRow bs)
+  addRowContext exps acts = \case
+    (Err fc (TypeMismatch tm _ _)) -> Err fc $ TypeMismatch tm (showRow exps) (showRow acts)
     e -> e
   extractSuffixes :: [a] -> [b] -> ([(NonEmpty a, NonEmpty b)], Either [a] (NonEmpty b))
   extractSuffixes as [] = ([], Left as)
