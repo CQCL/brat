@@ -122,44 +122,40 @@ checkWire Kerny (WC fc tm) outputs (dangling, ot) (hungry, ut) = localFC fc $ do
     else typeEq (show tm) (Dollar []) ut ot
   wire (dangling, ot, hungry)
 
-checkInputs :: (CheckConstraints m KVerb, ?my :: Modey m)
+checkInputs :: forall m d . (CheckConstraints m KVerb, ?my :: Modey m)
             => WC (Term d KVerb)
             -> [(Src, BinderType m)] -- Expected
             -> [(Tgt, BinderType m)] -- Actual
             -> Checking [(Src, BinderType m)]
 checkInputs _ overs [] = pure overs
 checkInputs tm@(WC fc _) (o:overs) (u:unders) = localFC fc $ do
-  wrapError (addRowContext ?my (o:overs) (u:unders)) $ checkWire ?my tm False o u
+  wrapError (addRowContext (o:overs) (u:unders)) $ checkWire ?my tm False o u
   checkInputs tm overs unders
  where
-  addRowContext :: Show (BinderType m)
-              => Modey m
-              -> [(Src, BinderType m)] -- Expected
+  addRowContext :: [(Src, BinderType m)] -- Expected
               -> [(Tgt, BinderType m)] -- Actual
               -> Error -> Error
-  addRowContext _ as bs (Err fc (TypeMismatch tm _ _))
+  addRowContext as bs (Err fc (TypeMismatch tm _ _))
    = Err fc $ TypeMismatch tm (showRow as) (showRow bs)
-  addRowContext _ _ _ e = e
+  addRowContext _ _ e = e
 checkInputs tm [] unders = typeErr $ "No overs but unders: " ++ showRow unders ++ " for " ++ show tm
 
-checkOutputs :: (CheckConstraints m k, ?my :: Modey m)
+checkOutputs :: forall m k . (CheckConstraints m k, ?my :: Modey m)
              => WC (Term Syn k)
              -> [(Tgt, BinderType m)] -- Expected
              -> [(Src, BinderType m)] -- Actual
              -> Checking [(Tgt, BinderType m)]
 checkOutputs _ unders [] = pure unders
 checkOutputs tm@(WC fc _) (u:unders) (o:overs) = localFC fc $ do
-  wrapError (addRowContext ?my (u:unders) (o:overs)) $ checkWire ?my tm True o u
+  wrapError (addRowContext (u:unders) (o:overs)) $ checkWire ?my tm True o u
   checkOutputs tm unders overs
  where
-  addRowContext :: Show (BinderType m)
-              => Modey m
-              -> [(Tgt, BinderType m)] -- Expected
+  addRowContext :: [(Tgt, BinderType m)] -- Expected
               -> [(Src, BinderType m)] -- Actual
               -> Error -> Error
-  addRowContext _ as bs (Err fc (TypeMismatch tm _ _))
+  addRowContext as bs (Err fc (TypeMismatch tm _ _))
    = Err fc $ TypeMismatch tm (showRow as) (showRow bs)
-  addRowContext _ _ _ e = e
+  addRowContext _ _ e = e
 checkOutputs tm [] overs = typeErr $ "No unders but overs: " ++ showRow overs ++ " for " ++ show tm
 
 checkThunk :: (CheckConstraints m UVerb, EvMode m)
