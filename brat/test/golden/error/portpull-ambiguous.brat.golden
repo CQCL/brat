@@ -1,4 +1,4 @@
-Error in test/golden/error/portpull-ambiguous.brat@FC {start = Pos {line = 6, col = 22}, end = Pos {line = 6, col = 31}}:
+Error in test/golden/error/portpull-ambiguous.brat@6:22
 id2 = x, y => (id,id)(a1:x, y)
                      ^^^^^^^^^
 

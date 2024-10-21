@@ -1,4 +1,4 @@
-Error in test/golden/imports/use-illegal-z4.brat@FC {start = Pos {line = 4, col = 22}, end = Pos {line = 4, col = 27}}:
+Error in test/golden/imports/use-illegal-z4.brat@4:22
 main = lib.x, lib.y, lib.z
                      ^^^^^
 

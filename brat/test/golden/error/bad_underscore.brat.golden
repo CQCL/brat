@@ -1,4 +1,4 @@
-Error in test/golden/error/bad_underscore.brat@FC {start = Pos {line = 2, col = 12}, end = Pos {line = 2, col = 18}}:
+Error in test/golden/error/bad_underscore.brat@2:12
 uscore = { i => _ }
            ^^^^^^
 

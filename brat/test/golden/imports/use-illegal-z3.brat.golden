@@ -1,4 +1,4 @@
-Error in test/golden/imports/use-illegal-z3.brat@FC {start = Pos {line = 4, col = 14}, end = Pos {line = 4, col = 15}}:
+Error in test/golden/imports/use-illegal-z3.brat@4:14
 main = x, y, z
              ^
 
