@@ -1,0 +1,5 @@
+f(X :: *, n :: #, Vec(X, n)) -> Vec(X, n)
+f(X, n, xs) = xs
+
+g :: Vec(Nat, 4)
+g = f(Nat, 4, [1] =, 2 ,= [3])

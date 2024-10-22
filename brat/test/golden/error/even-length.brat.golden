@@ -1,0 +1,10 @@
+Error in test/golden/error/even-length.brat@FC {start = Pos {line = 5, col = 15}, end = Pos {line = 5, col = 26}}:
+g = f(Nat, 3, [1] =,= [2])
+              ^^^^^^^^^^^
+
+  Expected vector of length 3
+from the type:  Vec(VApp VPar In checking_check_defs_1_g_1_ 0 B0, VPar In checking_check_defs_1_g_1_ 1)
+but got vector: concatEqEven([1], [2])
+of even length
+
+
