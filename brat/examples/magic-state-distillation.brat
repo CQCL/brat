@@ -36,11 +36,8 @@ decoder = {
   [\/]
 }
 
-arccos(Float) -> Float
-arccos = ?a
-
-sqrt(Float) -> Float
-sqrt = ?sqrt
+ext "TODO" arccos :: { Float -> Float }
+ext "TODO_sqrt" sqrt :: { Float -> Float }
 
 phi :: Float
 phi = arccos(1.0 / sqrt(3.0))
