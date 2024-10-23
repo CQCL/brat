@@ -198,7 +198,7 @@ registerCompiled from to = do
 
 compileConst :: NodeId -> SimpleTerm -> HugrType -> Compile NodeId
 compileConst parent tm ty = do
-  constId <- addNode "Const" (OpConst (ConstOp parent (constFromSimple tm) ty))
+  constId <- addNode "Const" (OpConst (ConstOp parent (valFromSimple tm) ty))
   loadId <- addNode "LoadConst" (OpLoadConstant (LoadConstantOp parent ty))
   addEdge (Port constId 0, Port loadId 0)
   pure loadId
@@ -523,7 +523,7 @@ compileConstDfg parent desc box_sig contents = do
   let nestedHugr = renameAndSortHugr (nodes cs) (edges cs)
   let ht = HTFunc $ PolyFuncType [] box_sig
 
-  constNode <- addNode ("ConstTemplate_" ++ desc) (OpConst (ConstOp parent (HCFunction nestedHugr) ht))
+  constNode <- addNode ("ConstTemplate_" ++ desc) (OpConst (ConstOp parent (HVFunction nestedHugr) ht))
   lcPort <- head <$> addNodeWithInputs ("LoadTemplate_" ++ desc) (OpLoadConstant (LoadConstantOp parent ht))
             [(Port constNode 0, ht)] [ht]
   pure (lcPort, res)
@@ -762,7 +762,7 @@ compilePrimTest parent (port, ty) (PrimCtorTest c tycon unpackingNode outputs) =
   pure (Port testId 0, sumOut)
 compilePrimTest parent port@(_, ty) (PrimLitTest tm) = do
   -- Make a Const node that holds the value we test against
-  constId <- addNode "LitConst" (OpConst (ConstOp parent (constFromSimple tm) ty))
+  constId <- addNode "LitConst" (OpConst (ConstOp parent (valFromSimple tm) ty))
   loadPort <- head <$> addNodeWithInputs "LitLoad" (OpLoadConstant (LoadConstantOp parent ty))
                        [(Port constId 0, ty)] [ty]
   -- Connect to a test node
@@ -790,7 +790,7 @@ undoPrimTest parent inPorts outTy (PrimCtorTest c tycon _ _) = do
            [outTy]
 undoPrimTest parent inPorts outTy (PrimLitTest tm) = do
   unless (null inPorts) $ error "Unexpected inPorts"
-  constId <- addNode "LitConst" (OpConst (ConstOp parent (constFromSimple tm) outTy))
+  constId <- addNode "LitConst" (OpConst (ConstOp parent (valFromSimple tm) outTy))
   head <$> addNodeWithInputs "LitLoad" (OpLoadConstant (LoadConstantOp parent outTy))
            [(Port constId 0, outTy)] [outTy]
 
