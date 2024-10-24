@@ -1,17 +1,6 @@
+open import lib.functional
 open import lib.kernel
-
--- TODO: Fill this with holes once we can guess them
-map(X :: $,  Y :: $, n :: #, f :: { X -o Y }) -> { Vec(X, n) -o Vec(Y, n) }
-map(_, _, _, _) = { [] => [] }
-map(X, Y, succ(n), f) = { cons(x,xs) => cons(f(x), map(X, Y, n, f)(xs)) }
-
-fold(X :: $
-    ,{ X, X -o X }
-    ,{ -o X }
-    ,n :: #
-    ) -> { Vec(X, n) -o X }
-fold(X, f, x, 0) = { [] => x() }
-fold(X, f, x, succ(n)) = { cons(y, ys) => f(y, fold(X, f, x, n)(ys)) }
+open import lib.math
 
 or(Bit, Bit) -o Bit
 or(true, _) = true
@@ -36,14 +25,8 @@ decoder = {
   [\/]
 }
 
-ext "TODO" arccos :: { Float -> Float }
-ext "TODO_sqrt" sqrt :: { Float -> Float }
-
 phi :: Float
 phi = arccos(1.0 / sqrt(3.0))
-
-pi :: Float
-pi = 3.1415926
 
 prepare_noisy_1(Money) -o Qubit
 prepare_noisy_1 = {
