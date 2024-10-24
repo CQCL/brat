@@ -61,13 +61,14 @@ nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   -- signatures causes `kindCheck` to call `abstract`, creating "Selector"
   -- nodes, which we don't attempt to compile because we want to get rid of them
   ,"vec-pats"
-  -- Victims of #389
+  -- Victims of #13
   ,"arith"
   ,"bell"
   ,"cqcconf"
   ,"imports"
   ,"ising"
   ,"klet"
+  ,"magic-state-distillation" -- also makes selectors
   ,"rus"
   ,"teleportation"
   ,"vlup_covering"
