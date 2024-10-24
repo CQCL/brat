@@ -68,7 +68,7 @@ nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   ,"imports"
   ,"ising"
   ,"klet"
-  ,"magit-state-distillation" -- also makes selectors
+  ,"magic-state-distillation" -- also makes selectors
   ,"rus"
   ,"teleportation"
   ,"vlup_covering"
