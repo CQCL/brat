@@ -1,4 +1,4 @@
-Error in test/golden/error/fanin-diff-types.brat@2:5
+Error in test/golden/error/fanin-diff-types.brat@2:5-13
 f = { [\/] }
     ^^^^^^^^
 

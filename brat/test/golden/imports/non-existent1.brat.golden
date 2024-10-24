@@ -1,4 +1,4 @@
-Error in non-existent1@1:16
+Error in non-existent1@1:16-17
 import lib (x, a)
                ^
 

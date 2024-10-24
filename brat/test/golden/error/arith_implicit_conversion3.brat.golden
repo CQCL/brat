@@ -1,4 +1,4 @@
-Error in test/golden/error/arith_implicit_conversion3.brat@2:11
+Error in test/golden/error/arith_implicit_conversion3.brat@2:11-12
 f(x, y) = y + x
           ^
 

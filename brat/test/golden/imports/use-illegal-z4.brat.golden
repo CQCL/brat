@@ -1,4 +1,4 @@
-Error in test/golden/imports/use-illegal-z4.brat@4:22
+Error in test/golden/imports/use-illegal-z4.brat@4:22-27
 main = lib.x, lib.y, lib.z
                      ^^^^^
 

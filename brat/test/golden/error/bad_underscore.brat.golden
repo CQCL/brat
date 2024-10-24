@@ -1,4 +1,4 @@
-Error in test/golden/error/bad_underscore.brat@2:12
+Error in test/golden/error/bad_underscore.brat@2:12-18
 uscore = { i => _ }
            ^^^^^^
 

@@ -1,4 +1,4 @@
-Error in test/golden/error/badvec3.brat@2:6
+Error in test/golden/error/badvec3.brat@2:6-18
 v3 = cons(1, nil)
      ^^^^^^^^^^^^
 

@@ -1,4 +1,4 @@
-Error in test/golden/error/pass.brat@5:12
+Error in test/golden/error/pass.brat@5:12-13
 f = { .., (x => x) }
            ^
 

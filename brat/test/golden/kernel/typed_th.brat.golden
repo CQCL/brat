@@ -1,4 +1,4 @@
-Error in test/golden/kernel/typed_th.brat@5:17
+Error in test/golden/kernel/typed_th.brat@5:17-24
 id2 = { let f = {id;id} in q,q' => f(q),f(q') }
                 ^^^^^^^
 

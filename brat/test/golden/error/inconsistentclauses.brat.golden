@@ -1,4 +1,4 @@
-Error in test/golden/error/inconsistentclauses.brat@1:1
+Error in test/golden/error/inconsistentclauses.brat@1:1-3:9
 f(Bool, Nat) -> Nat
 ^^^^^^^^^^^^^^^^^^^
 f(true, n) = 1

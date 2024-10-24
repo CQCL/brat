@@ -1,4 +1,4 @@
-Error in test/golden/error/fanout-dynamic-length.brat@2:8
+Error in test/golden/error/fanout-dynamic-length.brat@2:8-16
 f(n) = { [/\] }
        ^^^^^^^^
 

@@ -1,4 +1,4 @@
-Error in test/golden/error/multilambda-id2.brat@2:12
+Error in test/golden/error/multilambda-id2.brat@2:12-13
 g = { 0 => ||succ(n) => | }
            ^
 

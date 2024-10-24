@@ -1,4 +1,4 @@
-Error in test/golden/binding/let.brat@7:14
+Error in test/golden/binding/let.brat@7:14-36
 badBinding = let x = twoThings in x
              ^^^^^^^^^^^^^^^^^^^^^^
 

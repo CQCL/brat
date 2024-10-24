@@ -1,4 +1,4 @@
-Error in test/golden/error/type-arith2.brat@1:20
+Error in test/golden/error/type-arith2.brat@1:20-25
 f(n :: #, Vec(Nat, n * n)) -> Bool
                    ^^^^^
 

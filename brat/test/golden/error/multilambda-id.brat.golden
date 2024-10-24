@@ -1,4 +1,4 @@
-Error in test/golden/error/multilambda-id.brat@2:15
+Error in test/golden/error/multilambda-id.brat@2:15-16
 f = { true => |
               ^
 

@@ -1,4 +1,4 @@
-Error in test/golden/imports/use-illegal-z.brat@4:14
+Error in test/golden/imports/use-illegal-z.brat@4:14-15
 main = x, y, z
              ^
 

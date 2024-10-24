@@ -1,4 +1,4 @@
-Error in test/golden/kernel/let_del.brat@4:12
+Error in test/golden/kernel/let_del.brat@4:12-33
 f = { q => let q' = X(q) in true }
            ^^^^^^^^^^^^^^^^^^^^^
 

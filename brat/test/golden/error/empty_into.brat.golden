@@ -1,4 +1,4 @@
-Error in test/golden/error/empty_into.brat@5:11
+Error in test/golden/error/empty_into.brat@5:11-21
 intoErr = |> makeInt
           ^^^^^^^^^^
 

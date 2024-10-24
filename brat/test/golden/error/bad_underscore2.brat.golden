@@ -1,4 +1,4 @@
-Error in test/golden/error/bad_underscore2.brat@2:13
+Error in test/golden/error/bad_underscore2.brat@2:13-14
 uscore(i) = _
             ^
 

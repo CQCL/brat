@@ -1,4 +1,4 @@
-Error in test/golden/error/arith_implicit_conversion2.brat@2:16
+Error in test/golden/error/arith_implicit_conversion2.brat@2:16-17
 f(x, y) = x + (y - x)
                ^
 

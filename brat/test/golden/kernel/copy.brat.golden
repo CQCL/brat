@@ -1,4 +1,4 @@
-Error in test/golden/kernel/copy.brat@2:8
+Error in test/golden/kernel/copy.brat@2:8-21
 copy = { q => q, q }
        ^^^^^^^^^^^^^
 

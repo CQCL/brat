@@ -1,4 +1,4 @@
-Error in test/golden/error/fanout-list.brat@2:5
+Error in test/golden/error/fanout-list.brat@2:5-13
 f = { [/\] }
     ^^^^^^^^
 

@@ -1,4 +1,4 @@
-Error in non-existent2@1:23
+Error in non-existent2@1:23-24
 import lib hiding (y, a)
                       ^
 

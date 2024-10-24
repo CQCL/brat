@@ -1,4 +1,4 @@
-Error in test/golden/error/pair.brat@5:8
+Error in test/golden/error/pair.brat@5:8-11
 pair = row -- Distinct from a pair
        ^^^
 
