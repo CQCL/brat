@@ -12,7 +12,6 @@ import Brat.FC
 import Data.Functor ((<&>))
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.PartialOrd as PO
-import qualified Data.Set as S
 import Test.Tasty
 import Test.Tasty.HUnit
 
