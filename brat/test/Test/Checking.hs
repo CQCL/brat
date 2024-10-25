@@ -1,7 +1,7 @@
 module Test.Checking (getCheckingTests, expectedCheckingFails) where
 
-import Test.Parsing (expectedParsingFails, expectFailForPaths)
-import Test.Util (parseAndCheck)
+import Test.Parsing (expectedParsingFails)
+import Test.Util (parseAndCheck, expectFailForPaths)
 
 import System.FilePath
 import Test.Tasty

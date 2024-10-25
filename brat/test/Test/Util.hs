@@ -11,6 +11,7 @@ import Brat.Naming
 import Control.Monad.Except
 import Test.Tasty
 import Test.Tasty.HUnit
+import Test.Tasty.ExpectedFailure
 
 runEmpty m = run emptyEnv initStore root m
 
@@ -26,3 +27,6 @@ parseAndCheck libDirs file = testCase (show file) $ do
     Left err -> assertFailure (show err)
     Right (venv, nouns, holes, _, _) ->
       ((length venv) + (length nouns) + (length holes) > 0) @? "Should produce something"
+
+expectFailForPaths :: [FilePath] -> (FilePath -> TestTree) -> FilePath -> TestTree
+expectFailForPaths xf f path = (if path `elem` xf then expectFail else id) $ f path

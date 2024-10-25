@@ -2,7 +2,8 @@ module Test.Compile.Hugr where
 
 import Brat.Compiler (compileFile)
 import Test.Checking (expectedCheckingFails)
-import Test.Parsing (expectedParsingFails, expectFailForPaths)
+import Test.Parsing (expectedParsingFails)
+import Test.Util (expectFailForPaths)
 
 import qualified Data.ByteString.Lazy as BS
 import System.Directory (createDirectoryIfMissing)

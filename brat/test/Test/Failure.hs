@@ -10,7 +10,7 @@ import System.IO.Silently
 import Data.Text (pack)
 
 import Brat.Compiler
-import Test.Parsing (expectFailForPaths)
+import Test.Util (expectFailForPaths)
 
 goldenTest file = goldenVsAction (takeBaseName file) (file <.> "golden") (runGetStderr file $ compileAndPrintFile [] file) pack
 
