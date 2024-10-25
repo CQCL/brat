@@ -65,9 +65,7 @@ nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
 compileToOutput :: FilePath -> TestTree
 compileToOutput file = testCase (show file) $ compileFile [] file >>= \case
     Right bs -> do
-      -- for non-compiling examples we end up writing out an empty file so that's invalid too
-      let isValid = not (file `elem` nonCompilingExamples || file `elem` invalidExamples)
-      let outputExt = if isValid  then "json" else "json.invalid"
+      let outputExt = if file `elem` invalidExamples then "json.invalid" else "json"
       let outFile = outputDir </> replaceExtension (takeFileName file) outputExt
       BS.writeFile outFile bs
     Left (CompilingHoles _) -> pure () -- pass, don't write out anything

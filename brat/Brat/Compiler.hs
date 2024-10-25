@@ -14,6 +14,7 @@ import Brat.Error
 import Brat.Load
 import Brat.Naming (root, split)
 
+import Control.Exception (evaluate)
 import Control.Monad (when)
 import Control.Monad.Except
 import qualified Data.ByteString.Lazy as BS
@@ -74,9 +75,10 @@ compileFile libDirs file = do
   let (checkRoot, newRoot) = split "checking" root
   env <- runExceptT $ loadFilename checkRoot libDirs file
   (venv, _, holes, defs, outerGraph) <- eitherIO env
-  pure $ case holes of
-    [] -> Right $ compile defs newRoot outerGraph venv
-    hs -> Left (CompilingHoles hs)
+  case holes of
+    [] -> Right <$> (evaluate $ -- turns 'error' into IO 'die'
+          compile defs newRoot outerGraph venv)
+    hs -> pure $ Left (CompilingHoles hs)
 
 compileAndPrintFile :: [FilePath] -> String -> IO ()
 compileAndPrintFile libDirs file = compileFile libDirs file >>= \case
