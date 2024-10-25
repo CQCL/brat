@@ -27,7 +27,6 @@ invalidExamples = map ((++ ".brat") . ("examples" </>))
 
 -- examples that we expect not to compile.
 -- Note this does not include those with remaining holes; these are automatically skipped.
--- ()
 nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   map ((++ ".brat") . ("examples" </>))
   ["fzbz"
