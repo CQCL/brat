@@ -3,8 +3,7 @@ module Test.Compile.Hugr where
 import Brat.Checker (run)
 import Brat.Checker.Monad (Checking)
 import Brat.Checker.Types (TypedHole)
-import Brat.Compiler (compileFile)
-import Brat.Error (Error)
+import Brat.Compiler (compileFile, CompilingHoles(..))
 import Brat.Graph (Graph)
 import Brat.Naming (root)
 import Test.Checking (expectedCheckingFails)
@@ -82,7 +81,7 @@ compileToOutput file = testCase (show file) $ do
   let outFile = outputDir </> replaceExtension (takeFileName file) outputExt
   compileFile [] file >>= \case
     Right bs -> BS.writeFile outFile bs
-    Left err -> assertFailure err
+    Left err -> assertFailure (show err)
 
 setupCompilationTests :: IO TestTree
 setupCompilationTests = do
