@@ -1,0 +1,2 @@
+bad2(Nat) -> Vec(Nat, 42), Vec(Nat, 43)
+bad2(_) = 42 of 3

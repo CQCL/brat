@@ -1,0 +1,6 @@
+Error in test/golden/error/vectorise-type-mismatch2.brat@FC {start = Pos {line = 2, col = 12}, end = Pos {line = 2, col = 14}}:
+bad = 1 of 42
+           ^^
+
+  Type error: Expected something of type `Float` but got `42`
+

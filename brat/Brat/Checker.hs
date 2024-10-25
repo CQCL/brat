@@ -387,8 +387,12 @@ check' (Arith op l r) ((), u@(hungry, ty):unders) = case (?my, ty) of
 check' (fun :$: arg) (overs, unders) = do
   ((ins, outputs), ((), leftUnders)) <- check fun ((), unders)
   ((argIns, ()), (leftOvers, argUnders)) <- check arg (overs, ins)
-  ensureEmpty "leftover function args" argUnders
-  pure ((argIns, outputs), (leftOvers, leftUnders))
+  if null argUnders
+  then pure ((argIns, outputs), (leftOvers, leftUnders))
+  else typeErr $ unwords ["Expected function", show fun
+                         ,"to consume all of its arguments (" ++ show arg ++ ")\n"
+                         ,"but found leftovers:", showRow argUnders
+                         ]
 check' (Let abs x y) conn = do
   (((), dangling), ((), ())) <- check x ((), ())
   env <- abstractAll dangling (unWC abs)
@@ -567,6 +571,9 @@ check' (Of n e) ((), unders) = case ?my of
     ensureEmpty "" leftovers
     case diry @d of
       Chky -> getVecs n unders >>= \case
+        ([], [], _) -> let expected = if null unders then "empty row" else showRow unders in
+                        typeErr $ unlines ["Got: Vector of length " ++ show n
+                                          ,"Expected: " ++ expected]
         (elemUnders, vecUnders, rightUnders) -> do
           (Some (_ :* stk)) <- rowToRo ?my [ (portName tgt, tgt, Right ty) | (tgt, ty) <- elemUnders ] S0
           case stk of

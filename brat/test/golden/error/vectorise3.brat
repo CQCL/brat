@@ -1,0 +1,2 @@
+f(X :: *, Y :: *, n :: #, { X, X  -> Y }, Vec(X, n)) -> Vec(Y, n)
+f(_, _, n, f, xs) = (n of f)(xs)

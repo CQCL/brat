@@ -40,11 +40,11 @@ withTypeArgs(X, n, m, xss) = X, n, xss |> m of f
 leftovers(n :: #, Vec(Nat, succ(n))) -> Vec(Nat, n), Vec(Nat, succ(n))
 leftovers(n, xs) = (n of 3), xs
 
-diff-lengths(n :: #) -> Vec(Nat, n), Vec(Nat, succ(n))
-diff-lengths(n) = (n of 3), (succ(n) of 4)
+diffLengths(n :: #) -> Vec(Nat, n), Vec(Nat, succ(n))
+diffLengths(n) = (n of 3), (succ(n) of 4)
 
 g(Vec(Nat, 43)) -> Vec(Nat, 42), Vec(Nat, 43)
 g(xs) = (42 of 3), xs
 
-const-len-of-noun :: Vec(Nat, 2)
-const-len-of-noun = 2 of 42
+constLenNoun :: Vec(Nat, 2)
+constLenNoun = 2 of 42
