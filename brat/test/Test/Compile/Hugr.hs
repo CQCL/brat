@@ -53,12 +53,13 @@ nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   ])
 
 compileToOutput :: FilePath -> TestTree
-compileToOutput file = testCase (show file) $ compileFile [] file >>= \case
+compileToOutput file = testCaseInfo (show file) $ compileFile [] file >>= \case
     Right bs -> do
       let outputExt = if file `elem` invalidExamples then "json.invalid" else "json"
       let outFile = outputDir </> replaceExtension (takeFileName file) outputExt
       BS.writeFile outFile bs
-    Left (CompilingHoles _) -> pure () -- pass, don't write out anything
+      pure $ "Written to " ++ outFile
+    Left (CompilingHoles _) -> pure "Skipped as contains holes"
 
 setupCompilationTests :: IO TestTree
 setupCompilationTests = do
