@@ -579,13 +579,12 @@ check' (Of n e) ((), unders) = case ?my of
                 defineTgt tgt n
               -- There might be rightunders, which need glued to the start of the remaining rightunders
               (((), ()), ((), elemRightUnders)) <- check e ((), repUnders)
+              ensureEmpty "inputs to `of`" elemRightUnders
               let unusedElemTgts :: [Tgt] = (fromJust . flip lookup tgtMap . fst) <$> elemRightUnders
-              let usedVecUnders :: [(Tgt, Val Z)]= [ u | u@(tgt, _) <- vecUnders, not (tgt `elem` unusedElemTgts) ]
+              let usedVecUnders :: [(Tgt, Val Z)] = [ u | u@(tgt, _) <- vecUnders, not (tgt `elem` unusedElemTgts) ]
               assert (length repOvers == length usedVecUnders) $ do
                 zipWithM (\(dangling, _) (hungry, ty) -> wire (dangling, ty, hungry)) repOvers usedVecUnders
-                let finalRightUnders = [ (tgt, Right ty) | (tgt, ty) <- vecUnders, not (tgt `elem` unusedElemTgts) ]
-                                       ++ rightUnders
-                pure (((), ()), ((), finalRightUnders))
+                pure (((), ()), ((), rightUnders))
 
             _ -> localFC (fcOf e) $ typeErr "No type dependency allowed when using `of`"
       Syny -> do
