@@ -1,9 +1,7 @@
 module Test.Parsing (getParsingTests, expectedParsingFails, expectFailForPaths) where
 
 import Brat.Load
-import Brat.Parser
 
-import Control.Monad.Except
 import System.FilePath
 import Test.Tasty
 import Test.Tasty.HUnit

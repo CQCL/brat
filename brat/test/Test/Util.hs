@@ -7,10 +7,6 @@ import Brat.Error
 import Brat.FC
 import Brat.Load
 import Brat.Naming
-import Brat.Syntax.Common (CType'(..), TypeKind)
-import Brat.Syntax.Port
-import Brat.Syntax.Value
-import Bwd
 
 import Control.Monad.Except
 import Test.Tasty

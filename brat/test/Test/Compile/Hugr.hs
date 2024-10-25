@@ -1,25 +1,15 @@
 module Test.Compile.Hugr where
 
-import Brat.Checker (run)
-import Brat.Checker.Monad (Checking)
-import Brat.Checker.Types (TypedHole)
 import Brat.Compiler (compileFile)
-import Brat.Error (Error)
-import Brat.Graph (Graph)
-import Brat.Naming (root)
 import Test.Checking (expectedCheckingFails)
 import Test.Parsing (expectedParsingFails, expectFailForPaths)
-import Test.Util (parseAndCheck)
 
 import qualified Data.ByteString.Lazy as BS
-import Data.List (partition)
-import Data.Traversable (for)
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.Silver
-import Test.Tasty.ExpectedFailure
 
 prefix = "test/compilation"
 examplesPrefix = "examples"
