@@ -44,14 +44,9 @@ nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   ,"one"
   ,"patterns"
   ,"qft"
-  ,"test"
   ,"type_alias"
   ,"vector"
   ,"fanout" -- Contains Selectors
-  -- Conjecture: These examples don't compile because number patterns in type
-  -- signatures causes `kindCheck` to call `abstract`, creating "Selector"
-  -- nodes, which we don't attempt to compile because we want to get rid of them
-  ,"vec-pats"
   -- Victims of #13
   ,"arith"
   ,"bell"
@@ -81,6 +76,6 @@ setupCompilationTests = do
   examples <- findByExtension [".brat"] examplesPrefix
   createDirectoryIfMissing False outputDir
   let compileTests = compileToOutput <$> tests
-  let examplesTests = testGroup "examples" $ expectFailForPaths nonCompilingExamples compileToOutput <$> examples
+  let examplesTests = testGroup "examples" $ expectFailForPaths nonCompilingExamples compileToOutput examples
 
   pure $ testGroup "compilation" (examplesTests:compileTests)

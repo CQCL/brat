@@ -22,4 +22,4 @@ expectedParsingFails = map ("examples" </>) [
 parseXF = expectFailForPaths expectedParsingFails testParse
 
 getParsingTests :: IO TestTree
-getParsingTests = testGroup "parsing" . fmap parseXF <$> findByExtension [".brat"] "examples"
+getParsingTests = testGroup "parsing" . parseXF <$> findByExtension [".brat"] "examples"

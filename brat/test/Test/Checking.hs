@@ -16,11 +16,11 @@ expectedCheckingFails = map ("examples" </>) ["nested-abstractors.brat"
                                              ,"hea.brat"
                                              ]
 
-parseAndCheckXF :: FilePath -> TestTree
+parseAndCheckXF :: [FilePath] -> [TestTree]
 parseAndCheckXF = expectFailForPaths (expectedParsingFails ++ expectedCheckingFails) (parseAndCheck [])
 
 getCheckingTests :: IO TestTree
-getCheckingTests = testGroup "checking" . fmap parseAndCheckXF <$> findByExtension [".brat"] "examples"
+getCheckingTests = testGroup "checking" . parseAndCheckXF <$> findByExtension [".brat"] "examples"
 
 parseAndCheck :: [FilePath] -> FilePath -> TestTree
 parseAndCheck libDirs file = testCase (show file) $ do
