@@ -584,7 +584,6 @@ check' (Of n e) ((), unders) = case ?my of
               for lenIns $ \(tgt, _) -> do
                 wire (natOver, kindType Nat, tgt)
                 defineTgt tgt n
-              -- There might be rightunders, which need glued to the start of the remaining rightunders
               (((), ()), ((), elemRightUnders)) <- check e ((), repUnders)
               ensureEmpty "inputs to `of`" elemRightUnders
               let unusedElemTgts :: [Tgt] = (fromJust . flip lookup tgtMap . fst) <$> elemRightUnders
