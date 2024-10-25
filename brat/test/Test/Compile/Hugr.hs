@@ -34,27 +34,17 @@ invalidExamples = map ((++ ".brat") . ("examples" </>))
   ,"repeated_app" -- missing coercions, https://github.com/CQCL-DEV/brat/issues/413
   ,"thunks"]
 
--- examples that we expect not to compile
--- Note this includes those with remaining holes; it would be better
--- to detect those automatically (as this is not a bug, they *shouldn't* compile)
+-- examples that we expect not to compile.
+-- Note this does not include those with remaining holes; these are automatically skipped.
+-- ()
 nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   map ((++ ".brat") . ("examples" </>))
   ["fzbz"
-  ,"full"
-  ,"graph"
-  ,"holes"
   ,"ising"
-  ,"kernel"
-  ,"kernel-syntax"
-  ,"kinds"
   ,"let"
-  ,"listpair"
-  ,"one"
   ,"patterns"
   ,"qft"
   ,"test"
-  ,"type_alias"
-  ,"vector"
   ,"fanout" -- Contains Selectors
   -- Conjecture: These examples don't compile because number patterns in type
   -- signatures causes `kindCheck` to call `abstract`, creating "Selector"
@@ -62,7 +52,6 @@ nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   ,"vec-pats"
   -- Victims of #13
   ,"arith"
-  ,"bell"
   ,"cqcconf"
   ,"imports"
   ,"ising"
@@ -74,14 +63,14 @@ nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   ])
 
 compileToOutput :: FilePath -> TestTree
-compileToOutput file = testCase (show file) $ do
-  -- for non-compiling examples we end up writing out an empty file so that's invalid too
-  let isValid = not (file `elem` nonCompilingExamples || file `elem` invalidExamples)
-  let outputExt = if isValid  then "json" else "json.invalid"
-  let outFile = outputDir </> replaceExtension (takeFileName file) outputExt
-  compileFile [] file >>= \case
-    Right bs -> BS.writeFile outFile bs
-    Left err -> assertFailure (show err)
+compileToOutput file = testCase (show file) $ compileFile [] file >>= \case
+    Right bs -> do
+      -- for non-compiling examples we end up writing out an empty file so that's invalid too
+      let isValid = not (file `elem` nonCompilingExamples || file `elem` invalidExamples)
+      let outputExt = if isValid  then "json" else "json.invalid"
+      let outFile = outputDir </> replaceExtension (takeFileName file) outputExt
+      BS.writeFile outFile bs
+    Left (CompilingHoles _) -> pure () -- pass, don't write out anything
 
 setupCompilationTests :: IO TestTree
 setupCompilationTests = do
