@@ -10,10 +10,29 @@ map'(_, _, f, n, xs) = xs |> n of f
 mapKernel(X :: $, Y :: $, { X -o Y }, n :: #) -> { Vec(X, n) -o Vec(Y, n) }
 mapKernel(_, _, f, n) = { n of f }
 
-mkPair(X :: *, Y :: *, X, Y) -> [X, Y]
-mkPair(_, _, x, y) = [x,y]
-
 zip(X :: *, Y :: *, n :: #, Vec(X, n), Vec(Y, n)) -> Vec([X, Y], n)
 zip(X, Y, n, xs, ys) =
  xs, ys |>
  (n of ({[_,_]} :: { X, Y -> [X,Y] }))
+
+mkPair(X :: *, Y :: *) -> { X, Y -> [X, Y] }
+mkPair(_, _) = { x, y => [x,y] }
+
+zip2(X :: *, Y :: *, n :: #, Vec(X, n), Vec(Y, n)) -> Vec([X, Y], n)
+zip2(X, Y, n, xs, ys) =
+ xs, ys |>
+ n of mkPair(X, Y)
+
+rank2(X :: *, Y :: *, Z :: *,
+      n :: #, m :: #,
+      Vec(Vec(X, n), m), Vec(Vec(Y, n), m),
+      { X, Y -> Z }) -> Vec(Vec(Z, n), m)
+--rank2(_, _, _, n, m, fstArgs, sndArgs, f) = fstArgs, sndArgs |> m of n of f
+rank2(_, _, _, n, m, fstArgs, sndArgs, f) = (m of n of f)(fstArgs, sndArgs)
+
+f(X :: *, n :: #, Vec(X, n)) -> Vec(X, 2 * n)
+f(X, 0, []) = []
+f(X, succ(n), x ,- xs) = x ,- x ,- f(X, n, xs)
+
+withTypeArgs(X :: *, n :: #, m :: #, Vec(Vec(X, n), m)) -> Vec(Vec(X, 2 * n), m)
+withTypeArgs(X, n, m, xss) = X, n, xss |> m of f
