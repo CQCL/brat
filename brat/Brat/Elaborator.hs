@@ -28,6 +28,7 @@ assertChk s@(WC _ r) = case dir r of
   deepEmb (WC fc (a ::-:: b)) = WC fc (a ::-:: deepEmb b)
   deepEmb (WC fc (RLambda c cs)) = WC fc (RLambda ((id *** deepEmb) c) cs)
   deepEmb (WC fc (RLet abs a b)) = WC fc (RLet abs a (deepEmb b))
+  deepEmb (WC fc (ROf num exp)) = WC fc (ROf num (deepEmb exp))
   -- We like to avoid RTypedTh because the body doesn't know whether it's Brat or Kernel
   deepEmb (WC fc (RTypedTh bdy)) = WC fc (RTh (WC fc $ RForget $ deepEmb bdy))
   deepEmb (WC fc a) = WC fc (REmb (WC fc a))
