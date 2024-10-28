@@ -3,7 +3,6 @@ module Test.Failure (getFailureTests) where
 import Test.Tasty
 import Test.Tasty.Silver
 import System.Exit (ExitCode(..))
-import Control.Monad (unless)
 import Control.Exception
 import System.FilePath
 import System.IO

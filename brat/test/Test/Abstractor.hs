@@ -8,7 +8,6 @@ import Test.Tasty.QuickCheck
 
 import Brat.Syntax.Abstractor
 import Brat.Syntax.Simple
-import Brat.UserName
 import Util
 
 abstractor :: Int -> Gen Abstractor
