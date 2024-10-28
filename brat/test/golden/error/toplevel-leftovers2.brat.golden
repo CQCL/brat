@@ -1,0 +1,9 @@
+Error in test/golden/error/toplevel-leftovers2.brat@FC {start = Pos {line = 2, col = 8}, end = Pos {line = 2, col = 9}}:
+f(x) = x
+       ^
+
+  Type mismatch when checking (x,「x」)
+Expected: (a1 :: Nat), (b1 :: Bool)
+But got:  (a1 :: Nat)
+
+

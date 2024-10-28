@@ -12,7 +12,7 @@ import Control.Monad (foldM)
 import Control.Monad.Freer
 import Data.Bifunctor (second)
 import Data.Functor (($>), (<&>))
-import Data.List ((\\))
+import Data.List ((\\), filter)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
@@ -614,14 +614,23 @@ checkBody :: (CheckConstraints m UVerb, EvMode m, ?my :: Modey m)
           -> Checking Src
 checkBody fnName body cty = case body of
   NoLhs tm -> do
-    ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \(overs, unders) -> check tm (overs, unders)
+    ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
+      (((), ()), leftovers) <- check tm conns
+      checkConnectorsUsed (fcOf tm, fcOf tm) (show tm) conns leftovers
     pure src
   Clauses (c :| cs) -> do
     fc <- req AskFC
-    ((box, _), _) <- makeBox (fnName ++ ".box") cty (check (WC fc (Lambda c cs)))
+    ((box, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
+      (((), ()), leftovers) <- check (WC fc (Lambda c cs)) conns
+      checkConnectorsUsed (fcOf (fst c), fcOf (snd c)) (show c) conns leftovers
     pure box
   Undefined -> err (InternalError "Checking undefined clause")
-
+ where
+  checkConnectorsUsed _ _ _ ([], []) = pure ()
+  checkConnectorsUsed (_, tmFC) tm (_, unders) ([], rightUnders) = localFC tmFC $
+    err (TypeMismatch tm (showRow unders) (showRow (filter ((`notElem` (fst <$> rightUnders)) . fst) unders)))
+  checkConnectorsUsed (absFC, _) _ _ (rightOvers, _) = localFC absFC $
+    typeErr ("Inputs " ++ showRow rightOvers ++ " weren't used")
 -- Constructs row from a list of ends and types. Uses standardize to ensure that dependency is
 -- detected. Fills in the first bot ends from a stack. The stack grows every time we go under
 -- a binder. The final stack is returned, so we can compute an output row after an input row.
