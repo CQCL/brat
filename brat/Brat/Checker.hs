@@ -13,7 +13,7 @@ import Control.Monad (foldM, zipWithM)
 import Control.Monad.Freer
 import Data.Bifunctor (second)
 import Data.Functor (($>), (<&>))
-import Data.List ((\\))
+import Data.List ((\\), partition)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
@@ -570,7 +570,9 @@ check' (Of n e) ((), unders) = case ?my of
     defineSrc natOver n
     ensureEmpty "" leftovers
     case diry @d of
+      -- Get the largest prefix of unders whose types are vectors of the right length
       Chky -> getVecs n unders >>= \case
+        -- If none of the unders have the right type, we should fail
         ([], [], _) -> let expected = if null unders then "empty row" else showRow unders in
                         typeErr $ unlines ["Got: Vector of length " ++ show n
                                           ,"Expected: " ++ expected]
@@ -585,12 +587,16 @@ check' (Of n e) ((), unders) = case ?my of
                 wire (natOver, kindType Nat, tgt)
                 defineTgt tgt n
               (((), ()), ((), elemRightUnders)) <- check e ((), repUnders)
-              ensureEmpty "inputs to `of`" elemRightUnders
-              let unusedElemTgts :: [Tgt] = (fromJust . flip lookup tgtMap . fst) <$> elemRightUnders
-              let usedVecUnders :: [(Tgt, Val Z)] = [ u | u@(tgt, _) <- vecUnders, not (tgt `elem` unusedElemTgts) ]
+              -- If `elemRightUnders` isn't empty, it means we were too greedy
+              -- in the call to getVecs, so we should work out which elements of
+              -- the original unders weren't used, and make sure they prefix the
+              -- unders returned from here.
+              --ensureEmpty "inputs to `of`" elemRightUnders
+              let unusedVecTgts :: [Tgt] = (fromJust . flip lookup tgtMap . fst) <$> elemRightUnders
+              let (unusedVecUnders, usedVecUnders) = partition ((`elem` unusedVecTgts) . fst) vecUnders
               assert (length repOvers == length usedVecUnders) $ do
                 zipWithM (\(dangling, _) (hungry, ty) -> wire (dangling, ty, hungry)) repOvers usedVecUnders
-                pure (((), ()), ((), rightUnders))
+                pure (((), ()), ((), (second Right <$> unusedVecUnders) ++ rightUnders))
 
             _ -> localFC (fcOf e) $ typeErr "No type dependency allowed when using `of`"
       Syny -> do
