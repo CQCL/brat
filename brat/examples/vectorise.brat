@@ -48,3 +48,6 @@ g(xs) = (42 of 3), xs
 
 constLenNoun :: Vec(Nat, 2)
 constLenNoun = 2 of 42
+
+juxt :: Vec(Nat, 42), Vec(Bool, 42)
+juxt = 42 of 1, 42 of true

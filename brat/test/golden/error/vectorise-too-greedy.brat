@@ -1,2 +1,0 @@
-f :: Vec(Nat, 42), Vec(Bool, 42)
-f = 42 of 1, 42 of true
