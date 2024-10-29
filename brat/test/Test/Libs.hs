@@ -1,6 +1,6 @@
 module Test.Libs where
 
-import Test.Util
+import Test.Checking (parseAndCheck)
 
 import Test.Tasty
 

@@ -2,7 +2,8 @@ module Test.Compile.Hugr where
 
 import Brat.Compiler (compileFile, CompilingHoles(..))
 import Test.Checking (expectedCheckingFails)
-import Test.Parsing (expectedParsingFails, expectFailForPaths)
+import Test.Parsing (expectedParsingFails)
+import Test.Util (expectFailForPaths)
 
 import qualified Data.ByteString.Lazy as BS
 import System.Directory (createDirectoryIfMissing)
@@ -34,12 +35,7 @@ nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   ,"let"
   ,"patterns"
   ,"qft"
-  ,"test"
   ,"fanout" -- Contains Selectors
-  -- Conjecture: These examples don't compile because number patterns in type
-  -- signatures causes `kindCheck` to call `abstract`, creating "Selector"
-  -- nodes, which we don't attempt to compile because we want to get rid of them
-  ,"vec-pats"
   -- Victims of #13
   ,"arith"
   ,"cqcconf"
@@ -67,6 +63,6 @@ setupCompilationTests = do
   examples <- findByExtension [".brat"] examplesPrefix
   createDirectoryIfMissing False outputDir
   let compileTests = compileToOutput <$> tests
-  let examplesTests = testGroup "examples" $ expectFailForPaths nonCompilingExamples compileToOutput <$> examples
+  let examplesTests = testGroup "examples" $ expectFailForPaths nonCompilingExamples compileToOutput examples
 
   pure $ testGroup "compilation" (examplesTests:compileTests)
