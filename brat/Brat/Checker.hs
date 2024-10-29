@@ -628,9 +628,11 @@ checkBody fnName body cty = case body of
  where
   checkConnectorsUsed _ _ _ ([], []) = pure ()
   checkConnectorsUsed (_, tmFC) tm (_, unders) ([], rightUnders) = localFC tmFC $
-    err (TypeMismatch tm (showRow unders) (showRow (filter ((`notElem` (fst <$> rightUnders)) . fst) unders)))
+    let numUsed = length unders - length rightUnders in
+     err (TypeMismatch tm (showRow unders) (showRow (take numUsed unders)))
   checkConnectorsUsed (absFC, _) _ _ (rightOvers, _) = localFC absFC $
     typeErr ("Inputs " ++ showRow rightOvers ++ " weren't used")
+
 -- Constructs row from a list of ends and types. Uses standardize to ensure that dependency is
 -- detected. Fills in the first bot ends from a stack. The stack grows every time we go under
 -- a binder. The final stack is returned, so we can compute an output row after an input row.
