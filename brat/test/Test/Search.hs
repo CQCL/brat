@@ -3,24 +3,18 @@
 module Test.Search {- (searchTests) -} where
 
 import Brat.Checker (check)
-import Brat.Checker.Types (Modey(..))
 import Brat.FC
 import Brat.Naming
 import Brat.Search (vsearch)
 import Brat.Syntax.Common
-import Brat.Syntax.Core
-import Brat.Syntax.Simple (SimpleTerm(..))
 import Hasochism (N(..))
 import Util (names)
 import Test.Util (runEmpty)
 
-import Data.Either (isRight)
 import Data.Functor ((<&>))
 import Test.QuickCheck
 import Test.Tasty.QuickCheck (testProperty)
-import Test.Tasty
 import Brat.Syntax.Value
-import Bwd
 
 
 -- Bounds for row lengths

@@ -2,13 +2,11 @@
 module Test.TypeArith where
 
 import Brat.Checker.Helpers (runArith)
-import Brat.FC
 import Brat.Naming (Name(..))
-import Brat.Syntax.Common (ArithOp(..), TypeKind(Nat))
+import Brat.Syntax.Common (ArithOp(..))
 import Brat.Syntax.Port
-import Brat.Syntax.Simple (SimpleTerm(..))
 import Brat.Syntax.Value
-import Hasochism (N(..), Ny(..), Some(..), (:*)(..))
+import Hasochism (N(..))
 
 import Data.List (sort)
 import Test.Tasty
