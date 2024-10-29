@@ -1,6 +1,6 @@
 module Test.Compile.Hugr where
 
-import Brat.Compiler (compileFile)
+import Brat.Compiler (compileFile, CompilingHoles(..))
 import Test.Checking (expectedCheckingFails)
 import Test.Parsing (expectedParsingFails)
 import Test.Util (expectFailForPaths)
@@ -26,30 +26,18 @@ invalidExamples = map ((++ ".brat") . ("examples" </>))
   ,"repeated_app" -- missing coercions, https://github.com/CQCL-DEV/brat/issues/413
   ,"thunks"]
 
--- examples that we expect not to compile
--- Note this includes those with remaining holes; it would be better
--- to detect those automatically (as this is not a bug, they *shouldn't* compile)
+-- examples that we expect not to compile.
+-- Note this does not include those with remaining holes; these are automatically skipped.
 nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   map ((++ ".brat") . ("examples" </>))
   ["fzbz"
-  ,"full"
-  ,"graph"
-  ,"holes"
   ,"ising"
-  ,"kernel"
-  ,"kernel-syntax"
-  ,"kinds"
   ,"let"
-  ,"listpair"
-  ,"one"
   ,"patterns"
   ,"qft"
-  ,"type_alias"
-  ,"vector"
   ,"fanout" -- Contains Selectors
   -- Victims of #13
   ,"arith"
-  ,"bell"
   ,"cqcconf"
   ,"imports"
   ,"ising"
@@ -61,14 +49,13 @@ nonCompilingExamples = (expectedCheckingFails ++ expectedParsingFails ++
   ])
 
 compileToOutput :: FilePath -> TestTree
-compileToOutput file = testCase (show file) $ do
-  -- for non-compiling examples we end up writing out an empty file so that's invalid too
-  let isValid = not (file `elem` nonCompilingExamples || file `elem` invalidExamples)
-  let outputExt = if isValid  then "json" else "json.invalid"
-  let outFile = outputDir </> replaceExtension (takeFileName file) outputExt
-  compileFile [] file >>= \case
-    Right bs -> BS.writeFile outFile bs
-    Left err -> assertFailure err
+compileToOutput file = testCaseInfo (show file) $ compileFile [] file >>= \case
+    Right bs -> do
+      let outputExt = if file `elem` invalidExamples then "json.invalid" else "json"
+      let outFile = outputDir </> replaceExtension (takeFileName file) outputExt
+      BS.writeFile outFile bs
+      pure $ "Written to " ++ outFile ++ " pending validation"
+    Left (CompilingHoles _) -> pure "Skipped as contains holes"
 
 setupCompilationTests :: IO TestTree
 setupCompilationTests = do
