@@ -12,7 +12,7 @@ import Control.Monad (foldM)
 import Control.Monad.Freer
 import Data.Bifunctor (second)
 import Data.Functor (($>), (<&>))
-import Data.List ((\\), filter)
+import Data.List ((\\))
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
@@ -621,8 +621,9 @@ checkBody fnName body cty = case body of
   Clauses (c :| cs) -> do
     fc <- req AskFC
     ((box, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
-      (((), ()), leftovers) <- check (WC fc (Lambda c cs)) conns
-      checkConnectorsUsed (fcOf (fst c), fcOf (snd c)) (show c) conns leftovers
+      let tm = Lambda c cs
+      (((), ()), leftovers) <- check (WC fc tm) conns
+      checkConnectorsUsed (fcOf (fst c), fcOf (snd c)) (show tm) conns leftovers
     pure box
   Undefined -> err (InternalError "Checking undefined clause")
  where
