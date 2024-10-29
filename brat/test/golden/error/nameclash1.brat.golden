@@ -1,4 +1,4 @@
-Error in test/golden/error/nameclash1.brat@1:1
+Error in test/golden/error/nameclash1.brat on line 1:
 type Nat(x) = x
 ^^^^^^^^^^^^^^^
 

@@ -1,4 +1,4 @@
-Error in test/golden/kernel/classical_return.brat@5:1
+Error in test/golden/kernel/classical_return.brat on line 5:
 -- `Bool`. We could probably catch this and make the error message nicer.
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 f :: { Qubit -o Qubit, Int }

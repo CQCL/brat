@@ -1,4 +1,4 @@
-Error in test/golden/kernel/kernel_application.brat@16:17
+Error in test/golden/kernel/kernel_application.brat on line 16:
 rotate = { q => maybeRotate(true) }
                 ^^^^^^^^^^^
 

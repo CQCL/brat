@@ -1,4 +1,4 @@
-Error in test/golden/error/kbadvec3.brat@2:19
+Error in test/golden/error/kbadvec3.brat on line 2:
 constNil = { b => cons(1, nil) }
                   ^^^^^^^^^^^^
 

@@ -1,4 +1,4 @@
-Error in test/golden/error/no_thunk.brat@8:14
+Error in test/golden/error/no_thunk.brat on line 8:
     Rz(2.0 / n); X
              ^
 

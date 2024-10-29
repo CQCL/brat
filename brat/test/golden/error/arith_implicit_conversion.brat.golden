@@ -1,4 +1,4 @@
-Error in test/golden/error/arith_implicit_conversion.brat@2:20
+Error in test/golden/error/arith_implicit_conversion.brat on line 2:
 f(x, y) = x + (x * y)
                    ^
 

@@ -1,4 +1,4 @@
-Error in test/golden/error/fanin-dynamic-length.brat@2:8
+Error in test/golden/error/fanin-dynamic-length.brat on line 2:
 f(n) = { [\/] }
        ^^^^^^^^
 

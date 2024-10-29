@@ -1,4 +1,4 @@
-Error in test/golden/kernel/duplicate_abs.brat@5:8
+Error in test/golden/kernel/duplicate_abs.brat on line 5:
 h2 = { p, p => f(p) }
        ^^^^
 

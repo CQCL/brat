@@ -1,4 +1,4 @@
-Error in test/golden/error/simpleterm.brat@2:10
+Error in test/golden/error/simpleterm.brat on line 2:
 simple = true
          ^^^^
 

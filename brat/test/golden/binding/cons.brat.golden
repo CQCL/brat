@@ -1,4 +1,4 @@
-Error in test/golden/binding/cons.brat@7:10
+Error in test/golden/binding/cons.brat on line 7:
 badUncons(cons(stuff)) = stuff
          ^^^^^^^^^^^^^
 

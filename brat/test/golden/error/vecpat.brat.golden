@@ -1,4 +1,4 @@
-Error in test/golden/error/vecpat.brat@3:5
+Error in test/golden/error/vecpat.brat on line 3:
 fst3(nil) = none
     ^^^^^
 

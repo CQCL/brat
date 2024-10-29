@@ -1,4 +1,4 @@
-Error in test/golden/imports/use-without-rename.brat@4:8
+Error in test/golden/imports/use-without-rename.brat on line 4:
 main = lib.x
        ^^^^^
 

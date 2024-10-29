@@ -1,4 +1,4 @@
-Error in test/golden/error/kvarnotfound.brat@2:12
+Error in test/golden/error/kvarnotfound.brat on line 2:
 f = { x => y }
            ^
 

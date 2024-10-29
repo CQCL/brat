@@ -1,4 +1,4 @@
-Error in test/golden/kernel/deleteFst.brat@2:13
+Error in test/golden/kernel/deleteFst.brat on line 2:
 deleteFst = { q0, q1 => q1 }
             ^^^^^^^^^^^^^^^^
 

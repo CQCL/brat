@@ -1,4 +1,4 @@
-Error in test/golden/error/noovers.brat@2:2
+Error in test/golden/error/noovers.brat on line 2:
 f(a, b) = []
  ^^^^^^
 

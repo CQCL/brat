@@ -1,4 +1,4 @@
-Error in test/golden/error/nameclash2.brat@2:1
+Error in test/golden/error/nameclash2.brat on line 2:
 type A(x,y) = y
 ^^^^^^^^^^^^^^^
 

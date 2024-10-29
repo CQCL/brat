@@ -1,4 +1,4 @@
-Error in test/golden/error/vecpat3.brat@3:5
+Error in test/golden/error/vecpat3.brat on line 3:
 fst3([a,b]) = none
     ^^^^^^^
 

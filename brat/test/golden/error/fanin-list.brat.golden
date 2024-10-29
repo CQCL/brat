@@ -1,4 +1,4 @@
-Error in test/golden/error/fanin-list.brat@2:5
+Error in test/golden/error/fanin-list.brat on line 2:
 f = { [\/] }
     ^^^^^^^^
 

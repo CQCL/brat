@@ -1,4 +1,4 @@
-Error in test/golden/error/badvec.brat@2:6
+Error in test/golden/error/badvec.brat on line 2:
 v3 = [1]
      ^^^
 

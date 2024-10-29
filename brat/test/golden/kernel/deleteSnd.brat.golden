@@ -1,4 +1,4 @@
-Error in test/golden/kernel/deleteSnd.brat@2:13
+Error in test/golden/kernel/deleteSnd.brat on line 2:
 deleteSnd = { q0, q1 => q0 }
             ^^^^^^^^^^^^^^^^
 

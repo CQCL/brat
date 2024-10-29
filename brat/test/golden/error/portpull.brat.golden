@@ -1,4 +1,4 @@
-Error in test/golden/error/portpull.brat@6:22
+Error in test/golden/error/portpull.brat on line 6:
 id2 = x,y => (id, id)(a1:x, y)
                      ^^^^^^^^^
 

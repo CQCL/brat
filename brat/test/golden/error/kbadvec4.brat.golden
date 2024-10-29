@@ -1,4 +1,4 @@
-Error in test/golden/error/kbadvec4.brat@2:7
+Error in test/golden/error/kbadvec4.brat on line 2:
 f = { [1,2] => true }
       ^^^^^
 

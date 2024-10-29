@@ -1,4 +1,4 @@
-Error in test/golden/error/apply_two_thunks.brat@9:9
+Error in test/golden/error/apply_two_thunks.brat on line 9:
 go(n) = thunks(n)
         ^^^^^^^^^
 
