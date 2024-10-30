@@ -51,3 +51,6 @@ constLenNoun = 2 of 42
 
 juxt :: Vec(Nat, 42), Vec(Bool, 42)
 juxt = 42 of 1, 42 of true
+
+notTooGreedy(Vec(Nat, 42)) -> Vec(Nat, 42), Vec(Nat, 42)
+notTooGreedy(xs) = 42 of 0, xs
