@@ -13,7 +13,7 @@ import Control.Monad (foldM, zipWithM)
 import Control.Monad.Freer
 import Data.Bifunctor (second)
 import Data.Functor (($>), (<&>))
-import Data.List ((\\))
+import Data.List ((\\), partition)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
@@ -592,7 +592,7 @@ check' (Of n e) ((), unders) = case ?my of
               -- the original unders weren't used, and make sure they prefix the
               -- unders returned from here.
               let unusedVecTgts :: [Tgt] = (fromJust . flip lookup tgtMap . fst) <$> elemRightUnders
-              let (usedVecUnders, unusedVecUnders) = splitAt (length vecUnders - length unusedVecTgts) vecUnders
+              let (unusedVecUnders, usedVecUnders) = partition ((`elem` unusedVecTgts) . fst) vecUnders
               assert (length repOvers == length usedVecUnders) $ do
                 zipWithM (\(dangling, _) (hungry, ty) -> wire (dangling, ty, hungry)) repOvers usedVecUnders
                 pure (((), ()), ((), (second Right <$> unusedVecUnders) ++ rightUnders))
