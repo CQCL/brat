@@ -1,4 +1,4 @@
-Error in test/golden/error/vectorise-type-mismatch.brat@FC {start = Pos {line = 2, col = 9}, end = Pos {line = 2, col = 16}}:
+Error in test/golden/error/vectorise-type-mismatch.brat on line 2:
 panic = 2 of 42
         ^^^^^^^
 

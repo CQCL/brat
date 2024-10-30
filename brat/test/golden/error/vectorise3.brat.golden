@@ -1,4 +1,4 @@
-Error in test/golden/error/vectorise3.brat@FC {start = Pos {line = 2, col = 21}, end = Pos {line = 2, col = 33}}:
+Error in test/golden/error/vectorise3.brat on line 2:
 f(_, _, n, f, xs) = (n of f)(xs)
                     ^^^^^^^^^^^^
 

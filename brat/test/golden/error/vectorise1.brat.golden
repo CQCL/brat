@@ -1,4 +1,4 @@
-Error in test/golden/error/vectorise1.brat@FC {start = Pos {line = 2, col = 28}, end = Pos {line = 2, col = 36}}:
+Error in test/golden/error/vectorise1.brat on line 2:
 bad1(n) = (n of (1, 2.0)), (n of 3)
                            ^^^^^^^^
 
