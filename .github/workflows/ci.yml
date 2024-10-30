@@ -16,6 +16,7 @@ jobs:
         working-directory: brat/
 
     steps:
+    # from: https://raehik.github.io/2021/03/01/caching-stack-and-cabal-haskell-builds-on-github-actions.html
     - uses: actions/checkout@v4
     - uses: haskell-actions/setup@v2
       with:
@@ -23,7 +24,6 @@ jobs:
         cabal-version: '3.4'
         enable-stack: true
 
-    # from: https://raehik.github.io/2021/03/01/caching-stack-and-cabal-haskell-builds-on-github-actions.html
     - uses: actions/cache@v4
       with:
         path: |
@@ -31,6 +31,9 @@ jobs:
           .stack-work
           */.stack-work
           ~/.cargo
+          ${{ steps.setup.outputs.ghc-path }}
+          ${{ steps.setup.outputs.cabal-path }}
+          ${{ steps.setup.outputs.stack-path }}
         # best effort for cache: tie it to Stack resolver and package config
         key: ${{ runner.os }}-stack-${{ hashFiles('brat/stack.yaml',
                                                   'hugr_validator/Cargo.toml',
