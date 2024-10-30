@@ -13,7 +13,7 @@ import Control.Monad (foldM, zipWithM)
 import Control.Monad.Freer
 import Data.Bifunctor (second)
 import Data.Functor (($>), (<&>))
-import Data.List ((\\), partition)
+import Data.List ((\\))
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
@@ -592,7 +592,7 @@ check' (Of n e) ((), unders) = case ?my of
               -- the original unders weren't used, and make sure they prefix the
               -- unders returned from here.
               let unusedVecTgts :: [Tgt] = (fromJust . flip lookup tgtMap . fst) <$> elemRightUnders
-              let (unusedVecUnders, usedVecUnders) = partition ((`elem` unusedVecTgts) . fst) vecUnders
+              let (usedVecUnders, unusedVecUnders) = splitAt (length vecUnders - length unusedVecTgts) vecUnders
               -- Wire up the outputs of the replicate nodes to the _used_ vec
               -- unders. The remainder of the replicate nodes don't get used.
               -- (their inputs live in `elemRightUnders`)
