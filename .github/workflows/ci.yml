@@ -37,7 +37,8 @@ jobs:
         # best effort for cache: tie it to Stack resolver and package config
         key: ${{ runner.os }}-stack-${{ hashFiles('brat/stack.yaml',
                                                   'hugr_validator/Cargo.toml',
-                                                  'hugr_extension/Cargo.toml') }}
+                                                  'hugr_extension/Cargo.toml'
+                                                  ${{ steps.setup.outputs.ghc-version }}) }}
         restore-keys: |
           ${{ runner.os }}-stack
         save-always: true
