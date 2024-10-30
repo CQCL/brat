@@ -593,7 +593,10 @@ check' (Of n e) ((), unders) = case ?my of
               -- unders returned from here.
               let unusedVecTgts :: [Tgt] = (fromJust . flip lookup tgtMap . fst) <$> elemRightUnders
               let (unusedVecUnders, usedVecUnders) = partition ((`elem` unusedVecTgts) . fst) vecUnders
-              assert (length repOvers == length usedVecUnders) $ do
+              -- Wire up the outputs of the replicate nodes to the _used_ vec
+              -- unders. The remainder of the replicate nodes don't get used.
+              -- (their inputs live in `elemRightUnders`)
+              assert (length repOvers >= length usedVecUnders) $ do
                 zipWithM (\(dangling, _) (hungry, ty) -> wire (dangling, ty, hungry)) repOvers usedVecUnders
                 pure (((), ()), ((), (second Right <$> unusedVecUnders) ++ rightUnders))
 
