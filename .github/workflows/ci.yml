@@ -42,8 +42,8 @@ jobs:
         key: ${{ runner.os }}-stack-${{ hashFiles('brat/stack.yaml',
                                                   'hugr_validator/Cargo.toml',
                                                   'hugr_extension/Cargo.toml',
-                                                  '${{ env.GHC_VERSION }}',
-                                                  '${{ env.CABAL_VERSION }}'
+                                                  '${{ steps.setup.outputs.ghc-exe }}',
+                                                  '${{ steps.setup.outputs.cabal-exe }}'
                                                   )}}
         save-always: true
 
