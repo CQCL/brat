@@ -713,13 +713,25 @@ checkBody :: (CheckConstraints m UVerb, EvMode m, ?my :: Modey m)
           -> Checking Src
 checkBody fnName body cty = case body of
   NoLhs tm -> do
-    ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \(overs, unders) -> check tm (overs, unders)
+    ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
+      (((), ()), leftovers) <- check tm conns
+      checkConnectorsUsed (fcOf tm, fcOf tm) (show tm) conns leftovers
     pure src
   Clauses (c :| cs) -> do
     fc <- req AskFC
-    ((box, _), _) <- makeBox (fnName ++ ".box") cty (check (WC fc (Lambda c cs)))
+    ((box, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
+      let tm = Lambda c cs
+      (((), ()), leftovers) <- check (WC fc tm) conns
+      checkConnectorsUsed (fcOf (fst c), fcOf (snd c)) (show tm) conns leftovers
     pure box
   Undefined -> err (InternalError "Checking undefined clause")
+ where
+  checkConnectorsUsed _ _ _ ([], []) = pure ()
+  checkConnectorsUsed (_, tmFC) tm (_, unders) ([], rightUnders) = localFC tmFC $
+    let numUsed = length unders - length rightUnders in
+     err (TypeMismatch tm (showRow unders) (showRow (take numUsed unders)))
+  checkConnectorsUsed (absFC, _) _ _ (rightOvers, _) = localFC absFC $
+    typeErr ("Inputs " ++ showRow rightOvers ++ " weren't used")
 
 -- Constructs row from a list of ends and types. Uses standardize to ensure that dependency is
 -- detected. Fills in the first bot ends from a stack. The stack grows every time we go under

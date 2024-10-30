@@ -1,4 +1,4 @@
-Error in test/golden/error/pass.brat@FC {start = Pos {line = 5, col = 12}, end = Pos {line = 5, col = 13}}:
+Error in test/golden/error/pass.brat on line 5:
 f = { .., (x => x) }
            ^
 

@@ -1,4 +1,4 @@
-Error in test/golden/error/type-arith.brat@FC {start = Pos {line = 1, col = 20}, end = Pos {line = 1, col = 25}}:
+Error in test/golden/error/type-arith.brat on line 1:
 f(n :: #, Vec(Nat, n ^ 3)) -> Bool
                    ^^^^^
 

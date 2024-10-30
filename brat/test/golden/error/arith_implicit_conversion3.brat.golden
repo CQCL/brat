@@ -1,4 +1,4 @@
-Error in test/golden/error/arith_implicit_conversion3.brat@FC {start = Pos {line = 2, col = 11}, end = Pos {line = 2, col = 12}}:
+Error in test/golden/error/arith_implicit_conversion3.brat on line 2:
 f(x, y) = y + x
           ^
 
