@@ -1,4 +1,4 @@
-Error in test/golden/error/multilambda-id.brat@FC {start = Pos {line = 2, col = 15}, end = Pos {line = 2, col = 16}}:
+Error in test/golden/error/multilambda-id.brat on line 2:
 f = { true => |
               ^
 

@@ -1,4 +1,4 @@
-Error in test/golden/error/kbadvec4.brat@FC {start = Pos {line = 2, col = 7}, end = Pos {line = 2, col = 12}}:
+Error in test/golden/error/kbadvec4.brat on line 2:
 f = { [1,2] => true }
       ^^^^^
 

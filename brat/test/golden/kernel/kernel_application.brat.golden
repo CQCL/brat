@@ -1,4 +1,4 @@
-Error in test/golden/kernel/kernel_application.brat@FC {start = Pos {line = 16, col = 17}, end = Pos {line = 16, col = 28}}:
+Error in test/golden/kernel/kernel_application.brat on line 16:
 rotate = { q => maybeRotate(true) }
                 ^^^^^^^^^^^
 

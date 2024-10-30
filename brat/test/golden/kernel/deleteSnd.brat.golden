@@ -1,4 +1,4 @@
-Error in test/golden/kernel/deleteSnd.brat@FC {start = Pos {line = 2, col = 13}, end = Pos {line = 2, col = 29}}:
+Error in test/golden/kernel/deleteSnd.brat on line 2:
 deleteSnd = { q0, q1 => q0 }
             ^^^^^^^^^^^^^^^^
 

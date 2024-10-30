@@ -1,4 +1,4 @@
-Error in test/golden/error/toplevel-leftovers3.brat@FC {start = Pos {line = 2, col = 2}, end = Pos {line = 2, col = 5}}:
+Error in test/golden/error/toplevel-leftovers3.brat on line 2:
 f(x) = x
  ^^^
 
