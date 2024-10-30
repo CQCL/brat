@@ -181,7 +181,7 @@ instance Show SrcErr where
   show (SrcErr prelim Err{msg=msg}) = unlines [prelim, "  " ++ show msg]
 
 errHeader :: String -> String
-errHeader name = "Error in " ++ name
+errHeader name = "Error in " ++ name ++ ":"
 
 addSrcName :: String -> Error -> SrcErr
 addSrcName fname = SrcErr (errHeader fname)
@@ -199,8 +199,8 @@ addSrcContext fname cts (Left err@Err{fc=fc}) = Left (SrcErr msg err)
   prettyFC fc = let Pos startLine _ = start fc
                     Pos endLine _ = end fc
                 in  if startLine == endLine
-                    then " on line " ++ show startLine ++ ":"
-                    else " on lines " ++ show startLine ++ "-" ++ show endLine ++ ":"
+                    then " on line " ++ show startLine
+                    else " on lines " ++ show startLine ++ "-" ++ show endLine
 
 showFileContext :: String -> FC -> [String]
 showFileContext contents fc = let
