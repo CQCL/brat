@@ -591,7 +591,6 @@ check' (Of n e) ((), unders) = case ?my of
               -- in the call to getVecs, so we should work out which elements of
               -- the original unders weren't used, and make sure they prefix the
               -- unders returned from here.
-              --ensureEmpty "inputs to `of`" elemRightUnders
               let unusedVecTgts :: [Tgt] = (fromJust . flip lookup tgtMap . fst) <$> elemRightUnders
               let (usedVecUnders, unusedVecUnders) = splitAt (length vecUnders - length unusedVecTgts) vecUnders
               assert (length repOvers == length usedVecUnders) $ do
