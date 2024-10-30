@@ -25,6 +25,7 @@ lazy_static! {
         let reqs = ExtensionSet::from_iter([int_types::EXTENSION_ID, collections::EXTENSION_NAME]);
 
         let mut extension = Extension::new_with_reqs(EXTENSION_ID, reqs);
+
         for op in all::<BratOpDef>() {
             op.add_to_extension(&mut extension).unwrap();
         }

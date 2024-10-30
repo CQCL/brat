@@ -4,10 +4,12 @@ use crate::ctor::BratCtor;
 use enum_iterator::Sequence;
 use hugr::{
     extension::{
+        prelude::USIZE_T,
         simple_op::{MakeOpDef, OpLoadError},
         OpDef, SignatureError, SignatureFromArgs, SignatureFunc,
     },
     ops::OpName,
+    std_extensions::collections::list_type,
     types::{type_param::TypeParam, FunctionType, PolyFuncType, Type, TypeArg, TypeBound},
 };
 
@@ -19,7 +21,7 @@ use strum::ParseError;
 use crate::ctor::Ctor;
 
 /// Brat extension operation definitions.
-#[derive(Clone, Copy, Debug, Hash, Sequence, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Sequence)]
 #[allow(missing_docs)]
 pub enum BratOpDef {
     Hole,
@@ -28,6 +30,7 @@ pub enum BratOpDef {
     Panic,
     Ctor(BratCtor),
     PrimCtorTest(BratCtor),
+    Replicate,
 }
 
 impl OpName for BratOpDef {
@@ -40,6 +43,7 @@ impl OpName for BratOpDef {
             Panic => "Panic".into(),
             Ctor(ctor) => format_smolstr!("Ctor::{}", ctor.name()),
             PrimCtorTest(ctor) => format_smolstr!("PrimCtorTest::{}", ctor.name()),
+            Replicate => "Replicate".into(),
         }
     }
 }
@@ -56,6 +60,7 @@ impl FromStr for BratOpDef {
             ["Panic"] => Ok(BratOpDef::Panic),
             ["Ctor", ctor] => Ok(BratOpDef::Ctor(BratCtor::from_str(ctor)?)),
             ["PrimCtorTest", ctor] => Ok(BratOpDef::PrimCtorTest(BratCtor::from_str(ctor)?)),
+            ["Replicate"] => Ok(BratOpDef::Replicate),
             _ => Err(ParseError::VariantNotFound),
         }
     }
@@ -81,6 +86,16 @@ impl MakeOpDef for BratOpDef {
                 PolyFuncType::new(sig.params(), FunctionType::new(input.clone(), vec![output]))
                     .into()
             }
+            Replicate => PolyFuncType::new(
+                [TypeParam::Type {
+                    b: TypeBound::Copyable,
+                }],
+                FunctionType::new(
+                    vec![USIZE_T, Type::new_var_use(0, TypeBound::Copyable)],
+                    vec![list_type(Type::new_var_use(0, TypeBound::Copyable))],
+                ),
+            )
+            .into(),
         }
     }
 }
