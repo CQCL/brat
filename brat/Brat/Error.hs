@@ -191,11 +191,16 @@ addSrcContext _ _ (Right r) = Right r
 addSrcContext fname cts (Left err@Err{fc=fc}) = Left (SrcErr msg err)
  where
   msg = case fc of
-    Just fc -> let Pos startLine _ = start fc in
-                   unlines (errHeader (fname ++ " on line " ++ show startLine ++ ":")
-                           :showFileContext cts fc
-                           )
+    Just fc -> unlines (errHeader (fname ++ prettyFC fc)
+                       :showFileContext cts fc
+                       )
     Nothing -> errHeader fname
+
+  prettyFC fc = let Pos startLine _ = start fc
+                    Pos endLine _ = end fc
+                in  if startLine == endLine
+                    then " on line " ++ show startLine ++ ":"
+                    else " on lines " ++ show startLine ++ "-" ++ show endLine ++ ":"
 
 showFileContext :: String -> FC -> [String]
 showFileContext contents fc = let
