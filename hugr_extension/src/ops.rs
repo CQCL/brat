@@ -144,7 +144,7 @@ impl MakeExtensionOp for BratOp {
             BratOp::Panic { sig } => vec![arg_from_row(sig.input()), arg_from_row(sig.output())],
             BratOp::Ctor { args, .. } => args.clone(),
             BratOp::PrimCtorTest { args, .. } => args.clone(),
-            BratOp::Replicate(_) => vec![],
+            BratOp::Replicate(arg) => vec![arg],
         }
     }
 }
