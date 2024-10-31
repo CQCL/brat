@@ -50,6 +50,8 @@ data Term :: Dir -> Kind -> Type where
   Var      :: UserName -> Term Syn Noun  -- Look up in noun (value) env
   Identity :: Term Syn UVerb
   Arith    :: ArithOp -> WC (Term Chk Noun) -> WC (Term Chk Noun) -> Term Chk Noun
+  Of       :: WC (Term Chk Noun) -> WC (Term d Noun) -> Term d Noun
+
   -- Type annotations (annotating a term with its outputs)
   (:::)    :: WC (Term Chk Noun) -> [Output] -> Term Syn Noun
   -- Composition: values fed from source (first) into dest (second),
@@ -107,7 +109,10 @@ instance Show (Term d k) where
    where
     showList [] = "[]:"
     showList ps = concatMap (++":") ps
-
+  show (Of n e) = unwords [bracket POf n
+                          ,"of"
+                          ,bracket POf e
+                          ]
   show (Var x) = show x
   show Identity = "|"
   -- Nested applications should be bracketed too, hence 4 instead of 3
@@ -151,6 +156,7 @@ precedence (Con c _)
   | c `elem` [CCons,CSnoc,CConcatEqEven,CConcatEqOdd,CRiffle] = Just PVecPat
 precedence (_ :$: _)    = Just PApp
 precedence (_ ::: _)    = Just PAnn
+precedence (Of _ _)     = Just POf
 precedence (Arith op _ _) = Just $ case op of
   Add -> PAddSub
   Sub -> PAddSub

@@ -1,0 +1,2 @@
+bad :: Vec(Float, 1)
+bad = 1 of 42

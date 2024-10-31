@@ -72,6 +72,7 @@ data Raw :: Dir -> Kind -> Type where
   RVar      :: UserName -> Raw Syn Noun
   RIdentity :: Raw Syn UVerb
   RArith    :: ArithOp -> WC (Raw Chk Noun) -> WC (Raw Chk Noun) -> Raw Chk Noun
+  ROf       :: WC (Raw Chk Noun) -> WC (Raw d Noun) -> Raw d Noun
   (:::::)   :: WC (Raw Chk Noun) -> [RawIO] -> Raw Syn Noun
   (::-::)   :: WC (Raw Syn k) -> WC (Raw d UVerb) -> Raw d k -- vertical juxtaposition (diagrammatic composition)
   (::$::)   :: WC (Raw d KVerb) -> WC (Raw Chk k) -> Raw d k -- Eval with ChkRaw n argument
@@ -127,6 +128,7 @@ instance Show (Raw d k) where
   show (RKernel cty) = show cty
   show RFanOut = "[/\\]"
   show RFanIn = "[\\/]"
+  show (ROf n e) = "(" ++ show n ++ " of " ++ show e ++ ")"
 
 type Desugar = StateT Namespace (ReaderT (RawEnv, Bwd UserName) (Except Error))
 
@@ -244,6 +246,7 @@ instance (Kindable k) => Desugarable (Raw d k) where
   desugar' (RKernel cty) = K <$> desugar' cty
   desugar' RFanOut = pure FanOut
   desugar' RFanIn = pure FanIn
+  desugar' (ROf n e) = Of <$> desugar n <*> desugar e
 
 instance Desugarable ty => Desugarable (PortName, ty) where
   type Desugared (PortName, ty) = (PortName, Desugared ty)

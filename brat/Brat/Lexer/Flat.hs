@@ -25,6 +25,7 @@ keyword
      <|> string "import" $> KImport
      <|> string "let" $> KLet
      <|> string "in" $> KIn
+     <|> string "of" $> KOf
     ) <* notFollowedBy identChar
 
 identChar :: Lexer Char

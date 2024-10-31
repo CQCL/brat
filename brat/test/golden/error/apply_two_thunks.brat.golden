@@ -2,6 +2,6 @@ Error in test/golden/error/apply_two_thunks.brat on line 9:
 go(n) = thunks(n)
         ^^^^^^^^^
 
-  Internal error: Expected empty leftover function args, got:
-  (a1 :: Int)
+  Type error: Expected function thunks() to consume all of its arguments (「n」)
+ but found leftovers: (a1 :: Int)
 
