@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ main ]
 
+env:
+  GHC_VERSION: 9.6.4
+  CABAL_VERSION: 3.4
+
 jobs:
   build:
 
@@ -17,26 +21,34 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - uses: haskell-actions/setup@v2
-      with:
-        ghc-version: '9.6.4'
-        cabal-version: '3.4'
-        enable-stack: true
 
-    # from: https://raehik.github.io/2021/03/01/caching-stack-and-cabal-haskell-builds-on-github-actions.html
-    - uses: actions/cache@v4
+    # From: https://raehik.github.io/2021/03/01/caching-stack-and-cabal-haskell-builds-on-github-actions.html
+    - name: cache
+      uses: actions/cache@v4
       with:
         path: |
           ~/.stack
           .stack-work
+          */.stack-work
           ~/.cargo
+          # From: https://github.com/commercialhaskell/stack/issues/5754#issuecomment-1696156869
+          ~/.ghcup/bin/*
+          ~/.ghcup/cache/*
+          ~/.ghcup/config.yaml
+          ~/.ghcup/ghc/${{ env.GHC_VERSION }}
         # best effort for cache: tie it to Stack resolver and package config
         key: ${{ runner.os }}-stack-${{ hashFiles('brat/stack.yaml',
                                                   'hugr_validator/Cargo.toml',
-                                                  'hugr_extension/Cargo.toml') }}
-        restore-keys: |
-          ${{ runner.os }}-stack
+                                                  'hugr_extension/Cargo.toml'
+                                                  )}}-GHC-${{ env.GHC_VERSION }}
         save-always: true
+
+    - uses: haskell-actions/setup@v2
+      if: steps.cache.outputs.cache-hit != 'true'
+      with:
+        ghc-version: ${{ env.GHC_VERSION }}
+        cabal-version: ${{ env.CABAL_VERSION }}
+        enable-stack: true
 
     - name: Install dependencies
       run: stack build --only-dependencies
