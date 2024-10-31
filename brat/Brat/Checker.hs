@@ -189,7 +189,7 @@ check :: (CheckConstraints m k
       -> ChkConnectors m d k
       -> Checking (SynConnectors m d k
                   ,ChkConnectors m d k)
-check (WC fc tm) conn = let x = fc in localFC x (check' tm conn)
+check (WC fc tm) conn = localFC fc (check' tm conn)
 
 check' :: forall m d k
         . (CheckConstraints m k
