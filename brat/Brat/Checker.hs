@@ -7,11 +7,10 @@ module Brat.Checker (checkBody
                     ,tensor
                     ) where
 
-import Control.Arrow (first)
 import Control.Exception (assert)
-import Control.Monad (foldM, zipWithM)
+import Control.Monad (foldM, forM, zipWithM)
 import Control.Monad.Freer
-import Data.Bifunctor (second)
+import Data.Bifunctor (first, second)
 import Data.Functor (($>), (<&>))
 import Data.List ((\\))
 import Data.List.NonEmpty (NonEmpty(..))
@@ -124,45 +123,41 @@ checkWire Kerny (WC fc tm) outputs (dangling, ot) (hungry, ut) = localFC fc $ do
     else typeEq (show tm) (Dollar []) ut ot
   wire (dangling, ot, hungry)
 
-checkInputs :: (CheckConstraints m KVerb, ?my :: Modey m)
+checkIO :: forall m d k exp act . (CheckConstraints m k, ?my :: Modey m)
+        => WC (Term d k)
+        -> [(NamedPort exp, BinderType m)]
+        -> [(NamedPort act, BinderType m)]
+        -> ((NamedPort exp, BinderType m) -> (NamedPort act, BinderType m) -> Checking ())
+        -> String
+        -> Checking [(NamedPort exp, BinderType m)] -- left(overs/unders)
+checkIO tm@(WC fc _) exps acts wireFn errMsg = modily ?my $ do
+  let (rows, rest) = zipSuffixes exps acts
+  localFC fc $ forM rows $ \(e:|exps, a:|acts) ->
+      wrapError (addRowContext (showRow $ e:exps) (showRow $ a:acts)) $ wireFn e a
+  throwLeft $ first (\(b:|bs) -> TypeErr $ errMsg ++ showRow (b:bs) ++ " for " ++ show tm) rest
+ where
+  addRowContext :: String -> String -> Error -> Error
+  addRowContext exp act = \case
+    (Err fc (TypeMismatch tm _ _)) -> Err fc $ TypeMismatch tm exp act
+    e -> e
+  zipSuffixes :: [a] -> [b] -> ([(NonEmpty a, NonEmpty b)], Either (NonEmpty b) [a])
+  zipSuffixes as [] = ([], Right as)
+  zipSuffixes [] (b:bs) = ([], Left (b:|bs)) -- indicates error
+  zipSuffixes (a:as) (b:bs) = first ((a:|as,b:|bs):) $ zipSuffixes as bs
+
+checkInputs :: forall m d . (CheckConstraints m KVerb, ?my :: Modey m)
             => WC (Term d KVerb)
             -> [(Src, BinderType m)] -- Expected
             -> [(Tgt, BinderType m)] -- Actual
             -> Checking [(Src, BinderType m)]
-checkInputs _ overs [] = pure overs
-checkInputs tm@(WC fc _) (o:overs) (u:unders) = localFC fc $ do
-  wrapError (addRowContext ?my (o:overs) (u:unders)) $ checkWire ?my tm False o u
-  checkInputs tm overs unders
- where
-  addRowContext :: Show (BinderType m)
-              => Modey m
-              -> [(Src, BinderType m)] -- Expected
-              -> [(Tgt, BinderType m)] -- Actual
-              -> Error -> Error
-  addRowContext _ as bs (Err fc (TypeMismatch tm _ _))
-   = Err fc $ TypeMismatch tm (showRow as) (showRow bs)
-  addRowContext _ _ _ e = e
-checkInputs tm [] unders = typeErr $ "No overs but unders: " ++ showRow unders ++ " for " ++ show tm
+checkInputs tm overs unders = checkIO tm overs unders (checkWire ?my tm False) "No overs but unders: "
 
-checkOutputs :: (CheckConstraints m k, ?my :: Modey m)
+checkOutputs :: forall m k . (CheckConstraints m k, ?my :: Modey m)
              => WC (Term Syn k)
              -> [(Tgt, BinderType m)] -- Expected
              -> [(Src, BinderType m)] -- Actual
              -> Checking [(Tgt, BinderType m)]
-checkOutputs _ unders [] = pure unders
-checkOutputs tm@(WC fc _) (u:unders) (o:overs) = localFC fc $ do
-  wrapError (addRowContext ?my (u:unders) (o:overs)) $ checkWire ?my tm True o u
-  checkOutputs tm unders overs
- where
-  addRowContext :: Show (BinderType m)
-              => Modey m
-              -> [(Tgt, BinderType m)] -- Expected
-              -> [(Src, BinderType m)] -- Actual
-              -> Error -> Error
-  addRowContext _ as bs (Err fc (TypeMismatch tm _ _))
-   = Err fc $ TypeMismatch tm (showRow as) (showRow bs)
-  addRowContext _ _ _ e = e
-checkOutputs tm [] overs = typeErr $ "No unders but overs: " ++ showRow overs ++ " for " ++ show tm
+checkOutputs tm unders overs = checkIO tm unders overs (flip $ checkWire ?my tm True) "No unders but overs: "
 
 checkThunk :: (CheckConstraints m UVerb, EvMode m)
            => Modey m
