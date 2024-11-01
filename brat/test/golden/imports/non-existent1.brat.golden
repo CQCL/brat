@@ -1,4 +1,4 @@
-Error in non-existent1@FC {start = Pos {line = 1, col = 16}, end = Pos {line = 1, col = 17}}:
+Error in non-existent1 on line 1:
 import lib (x, a)
                ^
 

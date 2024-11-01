@@ -367,6 +367,7 @@ cthunk = try bratFn <|> try kernel <|> thunk
    ;  (left-assoc)
    , & port-pull
    -, ,- =,= =,_,= =%=  (vector builders) (all right-assoc (for now!) and same precedence)
+   _of_ (right-assoc)
    + -  (left-assoc)
    * /  (left-assoc)
    ^    (left-assoc)
@@ -386,6 +387,7 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
     PComp -> composition <?> "composition"
     PJuxtPull -> pullAndJuxt <?> "juxtaposition"
     PVecPat -> vectorBuild <?> "vector pattern"
+    POf -> ofExpr <?> "vectorisation"
     PAddSub -> addSub <?> "addition or subtraction"
     PMulDiv -> mulDiv <?> "multiplication or division"
     PPow -> pow <?> "power"
@@ -413,6 +415,13 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
         rhs <- withFC vectorBuild
         pure (FCon c (mkJuxt (args ++ [rhs])))
       Nothing -> pure (unWC lhs)
+
+  ofExpr :: Parser Flat
+  ofExpr = do
+    lhs <- withFC (subExpr POf)
+    optional (kmatch KOf) >>= \case
+      Nothing -> pure (unWC lhs)
+      Just () -> FOf lhs <$> (withFC ofExpr)
 
   mkJuxt [x] = x
   mkJuxt (x:xs) = let rest = mkJuxt xs in WC (FC (start (fcOf x)) (end (fcOf rest))) (FJuxt x rest)

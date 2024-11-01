@@ -469,6 +469,12 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
       pure dfgId
     ArithNode op -> default_edges <$> compileArithNode parent op (snd $ head ins)
     Selector _c -> error "Todo: selector"
+    Replicate -> default_edges <$> do
+      ins <- compilePorts ins
+      let [_, elemTy] = ins
+      outs <- compilePorts outs
+      let sig = FunctionType ins outs
+      addNode "Replicate" (OpCustom (CustomOp parent "BRAT" "Replicate" sig [TAType elemTy]))
     x -> error $ show x ++ " should have been compiled outside of compileNode"
 
 compileConstructor :: NodeId -> UserName -> UserName -> FunctionType -> Compile NodeId

@@ -8,7 +8,7 @@ import Control.Monad.Except (runExceptT)
 import Data.List (sortOn)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (pack)
-import System.FilePath ((<.>), FilePath, takeBaseName)
+import System.FilePath ((<.>), takeBaseName)
 import Test.Tasty
 import Test.Tasty.HUnit (assertFailure)
 import Test.Tasty.Silver

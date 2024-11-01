@@ -3,7 +3,6 @@ module Test.Failure (getFailureTests) where
 import Test.Tasty
 import Test.Tasty.Silver
 import System.Exit (ExitCode(..))
-import Control.Monad (unless)
 import Control.Exception
 import System.FilePath
 import System.IO
@@ -11,7 +10,7 @@ import System.IO.Silently
 import Data.Text (pack)
 
 import Brat.Compiler
-import Test.Parsing (expectFailForPaths)
+import Test.Util (expectFailForPaths)
 
 goldenTest file = goldenVsAction (takeBaseName file) (file <.> "golden") (runGetStderr file $ compileAndPrintFile [] file) pack
 
@@ -32,7 +31,7 @@ getBindingTests :: IO TestTree
 getBindingTests = testGroup "binding" . fmap goldenTest <$> findByExtension [".brat"] "test/golden/binding"
 
 getErrorTests :: IO TestTree
-getErrorTests = testGroup "error" . fmap (expectFailForPaths ["test/golden/error/unreachablebranch.brat"] goldenTest) <$> findByExtension [".brat"] "test/golden/error"
+getErrorTests = testGroup "error" . expectFailForPaths ["test/golden/error/unreachablebranch.brat"] goldenTest <$> findByExtension [".brat"] "test/golden/error"
 
 runGetStderr :: String -> IO () -> IO String
 runGetStderr name action = do

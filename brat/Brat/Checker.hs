@@ -7,7 +7,8 @@ module Brat.Checker (checkBody
                     ,tensor
                     ) where
 
-import Control.Monad (foldM, forM)
+import Control.Exception (assert)
+import Control.Monad (foldM, forM, zipWithM)
 import Control.Monad.Freer
 import Data.Bifunctor (first, second)
 import Data.Functor (($>), (<&>))
@@ -16,6 +17,7 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
+import Data.Traversable (for)
 import Data.Type.Equality ((:~:)(..))
 import Prelude hiding (filter)
 
@@ -380,8 +382,12 @@ check' (Arith op l r) ((), u@(hungry, ty):unders) = case (?my, ty) of
 check' (fun :$: arg) (overs, unders) = do
   ((ins, outputs), ((), leftUnders)) <- check fun ((), unders)
   ((argIns, ()), (leftOvers, argUnders)) <- check arg (overs, ins)
-  ensureEmpty "leftover function args" argUnders
-  pure ((argIns, outputs), (leftOvers, leftUnders))
+  if null argUnders
+  then pure ((argIns, outputs), (leftOvers, leftUnders))
+  else typeErr $ unwords ["Expected function", show fun
+                         ,"to consume all of its arguments (" ++ show arg ++ ")\n"
+                         ,"but found leftovers:", showRow argUnders
+                         ]
 check' (Let abs x y) conn = do
   (((), dangling), ((), ())) <- check x ((), ())
   env <- abstractAll dangling (unWC abs)
@@ -548,6 +554,102 @@ check' FanIn (overs, ((tgt, ty):unders)) = do
     wire (danglingResult, binderToValue ?my ty, hungry)
     faninNodes my (n - 1) (hungryTail, tailTy) elTy overs
 check' Identity ((this:leftovers), ()) = pure (((), [this]), (leftovers, ()))
+check' (Of n e) ((), unders) = case ?my of
+  Kerny -> typeErr $ "`of` not supported in kernel contexts"
+  Braty -> do
+    -- TODO: Our expectations about Id nodes in compilation might need updated?
+    (_, [(natUnder,Left k)], [(natOver, _)], _) <- anext "Of_len" Id (S0, Some (Zy :* S0))
+                                                   (REx ("value", Nat) R0)
+                                                   (REx ("value", Nat) R0)
+    ([n], leftovers) <- kindCheck [(natUnder, k)] (unWC n)
+    defineSrc natOver n
+    ensureEmpty "" leftovers
+    case diry @d of
+      -- Get the largest prefix of unders whose types are vectors of the right length
+      Chky -> getVecs n unders >>= \case
+        -- If none of the unders have the right type, we should fail
+        ([], [], _) -> let expected = if null unders then "empty row" else showRow unders in
+                        typeErr $ unlines ["Got: Vector of length " ++ show n
+                                          ,"Expected: " ++ expected]
+        (elemUnders, vecUnders, rightUnders) -> do
+          (Some (_ :* stk)) <- rowToRo ?my [ (portName tgt, tgt, Right ty) | (tgt, ty) <- elemUnders ] S0
+          case stk of
+            S0 -> do
+              (repConns, tgtMap) <- mkReplicateNodes n elemUnders
+              let (lenIns, repUnders, repOvers) = unzip3 repConns
+              -- Wire the length into all the replicate nodes
+              for lenIns $ \(tgt, _) -> do
+                wire (natOver, kindType Nat, tgt)
+                defineTgt tgt n
+              (((), ()), ((), elemRightUnders)) <- check e ((), repUnders)
+              -- If `elemRightUnders` isn't empty, it means we were too greedy
+              -- in the call to getVecs, so we should work out which elements of
+              -- the original unders weren't used, and make sure they prefix the
+              -- unders returned from here.
+              let unusedVecTgts :: [Tgt] = (fromJust . flip lookup tgtMap . fst) <$> elemRightUnders
+              let (usedVecUnders, unusedVecUnders) = splitAt (length vecUnders - length unusedVecTgts) vecUnders
+              -- Wire up the outputs of the replicate nodes to the _used_ vec
+              -- unders. The remainder of the replicate nodes don't get used.
+              -- (their inputs live in `elemRightUnders`)
+              assert (length repOvers >= length usedVecUnders) $ do
+                zipWithM (\(dangling, _) (hungry, ty) -> wire (dangling, ty, hungry)) repOvers usedVecUnders
+                pure (((), ()), ((), (second Right <$> unusedVecUnders) ++ rightUnders))
+
+            _ -> localFC (fcOf e) $ typeErr "No type dependency allowed when using `of`"
+      Syny -> do
+        (((), outputs), ((), ())) <- check e ((), ())
+        Some (_ :* stk) <- rowToRo ?my [(portName src, src, ty) | (src, ty) <- outputs] S0
+        case stk of
+          S0 -> do
+            -- Use of `outputs` and the map returned here are nonsensical, but we're
+            -- ignoring the map anyway
+            outputs <- getVals outputs
+            (conns, _) <- mkReplicateNodes n outputs
+            let (lenIns, elemIns, vecOuts) = unzip3 conns
+            for lenIns $ \(tgt,_) -> do
+              wire (natOver, kindType Nat, tgt)
+              defineTgt tgt n
+            zipWithM (\(dangling, ty) (hungry, _) -> wire (dangling, ty, hungry)) outputs elemIns
+            pure (((), vecOuts), ((), ()))
+          _ -> localFC (fcOf e) $ typeErr "No type dependency allowed when using `of`"
+ where
+  getVals :: [(t, BinderType Brat)] -> Checking [(t, Val Z)]
+  getVals [] = pure []
+  getVals ((t, Right ty):rest) = ((t, ty):) <$> getVals rest
+  getVals ((_, Left _):_) = localFC (fcOf e) $ typeErr "No type dependency allowed when using `of`"
+
+  mkReplicateNodes :: forall t
+                    . ToEnd t
+                   => Val Z
+                   -> [(t, Val Z)] -- The unders from getVec, only used for building the map
+                   -> Checking ([((Tgt, BinderType Brat) -- The Tgt for the vector length
+                                 ,(Tgt, BinderType Brat) -- The Tgt for the element
+                                 ,(Src, BinderType Brat) -- The vectorised element output
+                                 )]
+                               ,[(Tgt, t)] -- A map from element tgts to the original vector tgts
+                               )
+  mkReplicateNodes _ [] = pure ([], [])
+  mkReplicateNodes len ((t, ty):unders) = do
+    let weakTy = changeVar (Thinning (ThDrop ThNull)) ty
+    (_, [lenUnder, repUnder], [repOver], _) <- anext "replicate" Replicate (S0, Some (Zy :* S0))
+                                               (REx ("n", Nat) (RPr ("elem", weakTy) R0)) -- the type of e
+                                               (RPr ("vec", TVec weakTy (VApp (VInx VZ) B0)) R0) -- a vector of e's of length n??
+    (conns, tgtMap) <- mkReplicateNodes len unders
+    pure ((lenUnder, repUnder, repOver):conns, ((fst repUnder), t):tgtMap)
+
+  getVecs :: Val Z -- The length of vectors we're looking for
+          -> [(Tgt, BinderType Brat)]
+          -> Checking ([(Tgt, Val Z)] -- element types for which we need vecs of the given length
+                      ,[(Tgt, Val Z)] -- The vector type unders which we'll wire to
+                      ,[(Tgt, BinderType Brat)] -- Rightunders
+                      )
+  getVecs len ((tgt, Right ty@(TVec el n)):unders) = eqTest "" Nat len n >>= \case
+    Left _ -> pure ([], [], (tgt, Right ty):unders)
+    Right () -> do
+      (elems, unders, rightUnders) <- getVecs len unders
+      pure ((tgt, el):elems, (tgt, ty):unders, rightUnders)
+  getVecs _ unders = pure ([], [], unders)
+
 check' tm _ = error $ "check' " ++ show tm
 
 
@@ -609,13 +711,25 @@ checkBody :: (CheckConstraints m UVerb, EvMode m, ?my :: Modey m)
           -> Checking Src
 checkBody fnName body cty = case body of
   NoLhs tm -> do
-    ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \(overs, unders) -> check tm (overs, unders)
+    ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
+      (((), ()), leftovers) <- check tm conns
+      checkConnectorsUsed (fcOf tm, fcOf tm) (show tm) conns leftovers
     pure src
   Clauses (c :| cs) -> do
     fc <- req AskFC
-    ((box, _), _) <- makeBox (fnName ++ ".box") cty (check (WC fc (Lambda c cs)))
+    ((box, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
+      let tm = Lambda c cs
+      (((), ()), leftovers) <- check (WC fc tm) conns
+      checkConnectorsUsed (fcOf (fst c), fcOf (snd c)) (show tm) conns leftovers
     pure box
   Undefined -> err (InternalError "Checking undefined clause")
+ where
+  checkConnectorsUsed _ _ _ ([], []) = pure ()
+  checkConnectorsUsed (_, tmFC) tm (_, unders) ([], rightUnders) = localFC tmFC $
+    let numUsed = length unders - length rightUnders in
+     err (TypeMismatch tm (showRow unders) (showRow (take numUsed unders)))
+  checkConnectorsUsed (absFC, _) _ _ (rightOvers, _) = localFC absFC $
+    typeErr ("Inputs " ++ showRow rightOvers ++ " weren't used")
 
 -- Constructs row from a list of ends and types. Uses standardize to ensure that dependency is
 -- detected. Fills in the first bot ends from a stack. The stack grows every time we go under
