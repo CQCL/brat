@@ -159,24 +159,6 @@ checkOutputs :: forall m k . (CheckConstraints m k, ?my :: Modey m)
              -> Checking [(Tgt, BinderType m)]
 checkOutputs tm unders overs = checkIO tm unders overs (flip $ checkWire ?my tm True) "No unders but overs: "
 
-checkThunk :: (CheckConstraints m UVerb, EvMode m)
-           => Modey m
-           -> String
-           -> CTy m Z
-           -> WC (Term Chk UVerb)
-           -> Checking Src
-checkThunk m name cty tm = do
-  ((dangling, _), ()) <- let ?my = m in makeBox name cty $
-    \(thOvers, thUnders) -> do
-      (((), ()), leftovers) <- check tm (thOvers, thUnders)
-      case leftovers of
-        ([], []) -> pure ()
-        ([], unders) -> err (ThunkLeftUnders (showRow unders))
-        -- If there are leftovers and leftunders, complain about the leftovers
-        -- Until we can report multiple errors!
-        (overs, _) -> err (ThunkLeftOvers (showRow overs))
-  pure dangling
-
 check :: (CheckConstraints m k
          ,EvMode m
          ,TensorOutputs (Outputs m d)
@@ -315,6 +297,24 @@ check' (Th tm) ((), u@(hungry, ty):unders) = case (?my, ty) of
       _ -> err . ExpectedThunk "" $ showRow (u:unders)
     pure (((), ()), ((), unders))
   (Kerny, _) -> err . ThunkInKernel $ show (Th tm)
+ where
+  checkThunk :: forall m. (CheckConstraints m UVerb, EvMode m)
+           => Modey m
+           -> String
+           -> CTy m Z
+           -> WC (Term Chk UVerb)
+           -> Checking Src
+  checkThunk m name cty tm = do
+    ((dangling, _), ()) <- let ?my = m in makeBox name cty $
+      \(thOvers, thUnders) -> do
+        (((), ()), leftovers) <- check tm (thOvers, thUnders)
+        case leftovers of
+          ([], []) -> pure ()
+          ([], unders) -> err (ThunkLeftUnders (showRow unders))
+          -- If there are leftovers and leftunders, complain about the leftovers
+          -- Until we can report multiple errors!
+          (overs, _) -> err (ThunkLeftOvers (showRow overs))
+    pure dangling
 check' (TypedTh t) ((), ()) = case ?my of
   -- the thunk itself must be Braty
   Kerny -> err . ThunkInKernel $ show (TypedTh t)
