@@ -128,8 +128,7 @@ checkIO :: forall m d k exp act . (CheckConstraints m k, ?my :: Modey m)
         -> ((NamedPort exp, BinderType m) -> (NamedPort act, BinderType m) -> Checking ())
         -> String
         -> Checking [(NamedPort exp, BinderType m)] -- left(overs/unders)
-checkIO tm@(WC fc _) exps acts wireFn errMsg = do
-  let _ = ?my -- otherwise ?my is "redundant" but typechecking fails without it
+checkIO tm@(WC fc _) exps acts wireFn errMsg = modily ?my $ do
   let (rows, rest) = extractSuffixes exps acts
   localFC fc $ forM rows $ \(e:|exps, a:|acts) ->
       wrapError (addRowContext (showRow $ e:exps) (showRow $ a:acts)) $ wireFn e a
