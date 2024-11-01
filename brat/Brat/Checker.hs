@@ -129,7 +129,7 @@ checkIO :: forall m d k exp act . (CheckConstraints m k, ?my :: Modey m)
         -> String
         -> Checking [(NamedPort exp, BinderType m)] -- left(overs/unders)
 checkIO tm@(WC fc _) exps acts wireFn errMsg = modily ?my $ do
-  let (rows, rest) = extractSuffixes exps acts
+  let (rows, rest) = zipSuffixes exps acts
   localFC fc $ forM rows $ \(e:|exps, a:|acts) ->
       wrapError (addRowContext (showRow $ e:exps) (showRow $ a:acts)) $ wireFn e a
   throwLeft $ first (\bs -> TypeErr $ errMsg ++ showRow bs ++ " for " ++ show tm) rest
@@ -138,10 +138,10 @@ checkIO tm@(WC fc _) exps acts wireFn errMsg = modily ?my $ do
   addRowContext exp act = \case
     (Err fc (TypeMismatch tm _ _)) -> Err fc $ TypeMismatch tm exp act
     e -> e
-  extractSuffixes :: [a] -> [b] -> ([(NonEmpty a, NonEmpty b)], Either [b] [a])
-  extractSuffixes as [] = ([], Right as)
-  extractSuffixes [] bs = ([], Left bs) -- indicates error
-  extractSuffixes (a:as) (b:bs) = first ((a:|as,b:|bs):) $ extractSuffixes as bs
+  zipSuffixes :: [a] -> [b] -> ([(NonEmpty a, NonEmpty b)], Either [b] [a])
+  zipSuffixes as [] = ([], Right as)
+  zipSuffixes [] bs = ([], Left bs) -- indicates error
+  zipSuffixes (a:as) (b:bs) = first ((a:|as,b:|bs):) $ zipSuffixes as bs
 
 checkInputs :: forall m d . (CheckConstraints m KVerb, ?my :: Modey m)
             => WC (Term d KVerb)
