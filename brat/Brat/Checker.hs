@@ -132,15 +132,15 @@ checkIO tm@(WC fc _) exps acts wireFn errMsg = modily ?my $ do
   let (rows, rest) = zipSuffixes exps acts
   localFC fc $ forM rows $ \(e:|exps, a:|acts) ->
       wrapError (addRowContext (showRow $ e:exps) (showRow $ a:acts)) $ wireFn e a
-  throwLeft $ first (\bs -> TypeErr $ errMsg ++ showRow bs ++ " for " ++ show tm) rest
+  throwLeft $ first (\(b:|bs) -> TypeErr $ errMsg ++ showRow (b:bs) ++ " for " ++ show tm) rest
  where
   addRowContext :: String -> String -> Error -> Error
   addRowContext exp act = \case
     (Err fc (TypeMismatch tm _ _)) -> Err fc $ TypeMismatch tm exp act
     e -> e
-  zipSuffixes :: [a] -> [b] -> ([(NonEmpty a, NonEmpty b)], Either [b] [a])
+  zipSuffixes :: [a] -> [b] -> ([(NonEmpty a, NonEmpty b)], Either (NonEmpty b) [a])
   zipSuffixes as [] = ([], Right as)
-  zipSuffixes [] bs = ([], Left bs) -- indicates error
+  zipSuffixes [] (b:bs) = ([], Left (b:|bs)) -- indicates error
   zipSuffixes (a:as) (b:bs) = first ((a:|as,b:|bs):) $ zipSuffixes as bs
 
 checkInputs :: forall m d . (CheckConstraints m KVerb, ?my :: Modey m)
