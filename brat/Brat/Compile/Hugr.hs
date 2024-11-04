@@ -23,8 +23,7 @@ import Brat.Syntax.Value
 import Brat.UserName
 import Bwd
 import Control.Monad.Freer
-import Data.Hugr.Ops
-import Data.Hugr.Types
+import Data.Hugr
 import Hasochism
 
 import Control.Exception (assert)
