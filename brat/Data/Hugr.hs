@@ -189,14 +189,19 @@ instance ToJSON HugrValue where
                                   ,"vs" .= vs
                                   ]
   toJSON (HVExtension exts ty val) = object ["v" .= ("Extension" :: Text)
-                                            ,"extensions" .= exts
                                             ,"typ" .= ty
-                                            ,"val" .= val
+                                            ,"value" .= val
+                                            ,"extensions" .= exts
                                             ]
 
 hvUnit = HVTuple []
-hvFloat x = HVExtension ["arithmetic.float_types"] hugrFloat (mkCC "ConstF64" x)
-hvInt x = HVExtension ["arithmetic.int_types"] hugrInt (mkCC "ConstInt" x)
+hvFloat x = HVExtension ["arithmetic.float_types"] hugrFloat
+            (CC "ConstF64" (KeyMap.singleton "value" x))
+-- Default to using 64-bit ints. At some point we need to update this so that
+-- we don't need to worry about int size when writing BRAT code. To do this, we
+-- need to add a bunch of widening operations during compilation.
+hvInt x = HVExtension ["arithmetic.int_types"] hugrInt
+          (CC "ConstInt" (KeyMap.insert "log_width" 6 (KeyMap.singleton "value" x)))
 
 valFromSimple :: SimpleTerm -> HugrValue
 valFromSimple (Num x) = hvInt x
@@ -233,19 +238,19 @@ instance ToJSON node => ToJSON (FuncDefn node) where
                                     ,"signature" .= signature_
                                     ]
 
-data CustomConst = CC String String
- deriving Eq
+data CustomConst where
+  CC :: forall a. (Eq a, Show a, ToJSON a) => String -> a -> CustomConst
+
+instance Eq CustomConst where
+  _ == _ = False
 
 instance Show CustomConst where
   show (CC tag cts) = "Const(" ++ tag ++ ")(" ++ show cts ++ ")"
 
 instance ToJSON CustomConst where
   toJSON (CC tag cts) = object ["c" .= (pack tag)
-                               ,"v" .= (pack cts)
+                               ,"v" .= cts
                                ]
-
-mkCC :: ToJSON a => String -> a -> CustomConst
-mkCC tag content = CC tag (encode (toJSON content))
 
 type ExtensionName = String
 
