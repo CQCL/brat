@@ -158,20 +158,20 @@ compileType TBool = HTSum (SU (UnitSum 2))
 compileType TInt = hugrInt
 compileType TNat = hugrInt
 compileType TFloat = hugrFloat
-compileType ty@(TCons _ _) = HTTuple (tuple ty)
+compileType ty@(TCons _ _) = htTuple (tuple ty)
  where
   tuple :: Val n -> [HugrType]
   tuple (TCons hd rest) = (compileType hd):(tuple rest)
   tuple TNil = []
   tuple ty = error $ "Found " ++ show ty  ++ " in supposed tuple type"
-compileType TNil = HTTuple []
+compileType TNil = htTuple []
 compileType (VSum my ros) = case my of
   Braty -> error "Todo: compileTypeWorker for BRAT"
-  Kerny -> HTSum (SG (GeneralSum $ map (\(Some ro) -> HTTuple (compileRo ro)) ros))
+  Kerny -> HTSum (SG (GeneralSum $ map (\(Some ro) -> compileRo ro) ros))
 compileType (TVec el _) = hugrList (compileType el)
 compileType (TList el)  = hugrList (compileType el)
 -- All variables are of kind `TypeFor m xs`, we already checked in `kindCheckRow`
-compileType (VApp _ _) = HTTuple []
+compileType (VApp _ _) = htTuple []
 -- VFun is already evaluated here, so we don't need to call `compileSig`
 compileType (VFun _ cty) = HTFunc $ compileCTy cty
 compileType ty = error $ "todo: compile type " ++ show ty
@@ -198,7 +198,7 @@ registerCompiled from to = do
 
 compileConst :: NodeId -> SimpleTerm -> HugrType -> Compile NodeId
 compileConst parent tm ty = do
-  constId <- addNode "Const" (OpConst (ConstOp parent (valFromSimple tm) ty))
+  constId <- addNode "Const" (OpConst (ConstOp parent (valFromSimple tm)))
   loadId <- addNode "LoadConst" (OpLoadConstant (LoadConstantOp parent ty))
   addEdge (Port constId 0, Port loadId 0)
   pure loadId
@@ -482,7 +482,7 @@ compileConstructor parent tycon con sig
       -- A boolean value is a tuple and a tag
       -- This is the same thing that happens in Brat.Checker.Clauses (makeDiscriminator)
       makeTuple <- addNode "bool.MakeTuple" (OpMakeTuple (MakeTupleOp parent []))
-      tag <- addNode "bool.tag" (OpTag (TagOp parent (if b then 1 else 0) [HTTuple [], HTTuple []]))
+      tag <- addNode "bool.tag" (OpTag (TagOp parent (if b then 1 else 0) [[], []]))
       addEdge (Port makeTuple 0, Port tag 0)
       pure tag
   | otherwise = let name = "Constructor " ++ show tycon ++ "::" ++ show con in
@@ -523,7 +523,7 @@ compileConstDfg parent desc box_sig contents = do
   let nestedHugr = renameAndSortHugr (nodes cs) (edges cs)
   let ht = HTFunc $ PolyFuncType [] box_sig
 
-  constNode <- addNode ("ConstTemplate_" ++ desc) (OpConst (ConstOp parent (HVFunction nestedHugr) ht))
+  constNode <- addNode ("ConstTemplate_" ++ desc) (OpConst (ConstOp parent (HVFunction nestedHugr)))
   lcPort <- head <$> addNodeWithInputs ("LoadTemplate_" ++ desc) (OpLoadConstant (LoadConstantOp parent ht))
             [(Port constNode 0, ht)] [ht]
   pure (lcPort, res)
@@ -684,16 +684,12 @@ compileMatchSequence parent portTable (MatchSequence {..}) = do
 
 makeRowTag :: String -> NodeId -> Int -> SumOfRows -> [TypedPort] -> Compile [TypedPort]
 makeRowTag hint parent tag sor@(SoR sumRows) ins = assert (sumRows !! tag == (snd <$> ins)) $ do
-  tuple <- addNodeWithInputs (hint ++ "_MakeTuple") (OpMakeTuple (MakeTupleOp parent (snd <$> ins))) ins [HTTuple (snd <$> ins)]
-  addNodeWithInputs (hint ++ "_Tag") (OpTag (TagOp parent tag (HTTuple <$> sumRows))) tuple [compileSumOfRows sor]
+  tuple <- addNodeWithInputs (hint ++ "_MakeTuple") (OpMakeTuple (MakeTupleOp parent (snd <$> ins))) ins [htTuple (snd <$> ins)]
+  addNodeWithInputs (hint ++ "_Tag") (OpTag (TagOp parent tag sumRows)) tuple [compileSumOfRows sor]
 
 getSumVariants :: HugrType -> [[HugrType]]
 getSumVariants (HTSum (SU (UnitSum n))) = replicate n []
-getSumVariants (HTSum (SG (GeneralSum rows))) = fromTuple <$> rows
- where
-  fromTuple :: HugrType -> [HugrType]
-  fromTuple (HTTuple row) = row
-  fromTuple _ = error "Expected row of tuples in getSumVariants"
+getSumVariants (HTSum (SG (GeneralSum rows))) = rows
 getSumVariants ty = error $ "Expected a sum type, got " ++ show ty
 
 
@@ -748,7 +744,7 @@ compilePrimTest :: NodeId
                 -> PrimTest HugrType -- The test to run
                 -> Compile TypedPort
 compilePrimTest parent (port, ty) (PrimCtorTest c tycon unpackingNode outputs) = do
-  let sumOut = (HTSum (SG (GeneralSum [HTTuple [ty], HTTuple (snd <$> outputs)])))
+  let sumOut = (HTSum (SG (GeneralSum [[ty], snd <$> outputs])))
   let sig = FunctionType [ty] [sumOut]
   testId <- addNode ("PrimCtorTest " ++ show c)
             (OpCustom (CustomOp
@@ -762,11 +758,11 @@ compilePrimTest parent (port, ty) (PrimCtorTest c tycon unpackingNode outputs) =
   pure (Port testId 0, sumOut)
 compilePrimTest parent port@(_, ty) (PrimLitTest tm) = do
   -- Make a Const node that holds the value we test against
-  constId <- addNode "LitConst" (OpConst (ConstOp parent (valFromSimple tm) ty))
+  constId <- addNode "LitConst" (OpConst (ConstOp parent (valFromSimple tm)))
   loadPort <- head <$> addNodeWithInputs "LitLoad" (OpLoadConstant (LoadConstantOp parent ty))
                        [(Port constId 0, ty)] [ty]
   -- Connect to a test node
-  let sumOut = HTSum (SG (GeneralSum [HTTuple [ty], HTTuple []]))
+  let sumOut = HTSum (SG (GeneralSum [[ty], []]))
   let sig = FunctionType [ty, ty] [sumOut]
   head <$> addNodeWithInputs ("PrimLitTest " ++ show tm)
            (OpCustom (CustomOp parent "BRAT" ("PrimLitTest::" ++ show ty) sig []))
@@ -790,7 +786,7 @@ undoPrimTest parent inPorts outTy (PrimCtorTest c tycon _ _) = do
            [outTy]
 undoPrimTest parent inPorts outTy (PrimLitTest tm) = do
   unless (null inPorts) $ error "Unexpected inPorts"
-  constId <- addNode "LitConst" (OpConst (ConstOp parent (valFromSimple tm) outTy))
+  constId <- addNode "LitConst" (OpConst (ConstOp parent (valFromSimple tm)))
   head <$> addNodeWithInputs "LitLoad" (OpLoadConstant (LoadConstantOp parent outTy))
            [(Port constId 0, outTy)] [outTy]
 

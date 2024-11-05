@@ -8,8 +8,7 @@ module Data.Hugr where
 -- Values.
 
 import Data.Aeson
-import qualified Data.Aeson.Internal.ByteString as BSA
-import qualified Data.ByteString as BS
+import qualified Data.Aeson.KeyMap as KeyMap
 import Data.Text (Text, pack)
 
 import Brat.Syntax.Simple
@@ -19,7 +18,7 @@ import Brat.Syntax.Simple
 
 data UnitSum = UnitSum { size :: Int }
  deriving (Eq, Show)
-data GeneralSum = GeneralSum { row :: [HugrType] }
+data GeneralSum = GeneralSum { row :: [[HugrType]] }
  deriving (Eq, Show)
 
 data SumType = SU UnitSum | SG GeneralSum
@@ -29,22 +28,17 @@ newtype SumOfRows = SoR [[HugrType]] deriving Show
 
 -- Convert from a hugr sum of tuples to a SumOfRows
 sumOfRows :: HugrType -> SumOfRows
-sumOfRows (HTSum (SG (GeneralSum rows))) = SoR (unpackTuple <$> rows)
- where
-  unpackTuple :: HugrType -> [HugrType]
-  unpackTuple (HTTuple row) = row
-  unpackTuple _ = error "sumOfRows expects a sum of row tuples"
+sumOfRows (HTSum (SG (GeneralSum rows))) = SoR rows
 sumOfRows ty = error $ show ty ++ " isn't a sum of row tuples"
 
 compileSumOfRows :: SumOfRows -> HugrType
-compileSumOfRows (SoR rows) = HTSum (SG (GeneralSum (HTTuple <$> rows)))
+compileSumOfRows (SoR rows) = HTSum (SG (GeneralSum rows))
 
 -- Depends on HugrValue (via TypeArg in HTOpaque)
 data HugrType
   = HTQubit
   | HTUSize
   | HTArray
-  | HTTuple [HugrType]
   | HTSum SumType
   | HTOpaque {-extension :: -}String {-type id :: -}String [TypeArg] TypeBound
   | HTFunc PolyFuncType
@@ -56,13 +50,10 @@ instance ToJSON HugrType where
                                               ,"s" .= ("Unit" :: Text)
                                               ,"size" .= size
                                               ]
-  toJSON (HTSum (SG (GeneralSum row))) = object ["t" .= ("Sum" :: Text)
-                                                ,"s" .= ("General" :: Text)
-                                                ,"row" .= row
-                                                ]
-  toJSON (HTTuple inner) = object ["t" .= ("Tuple" :: Text)
-                                  ,"inner" .= inner
-                                  ]
+  toJSON (HTSum (SG (GeneralSum rows))) = object ["t" .= ("Sum" :: Text)
+                                                 ,"s" .= ("General" :: Text)
+                                                 ,"rows" .= rows
+                                                 ]
   toJSON HTUSize = object ["t" .= ("I" :: Text)]
   toJSON (HTOpaque ext id args bound) = object ["t" .= ("Opaque" :: Text)
                                                ,"extension" .= pack ext
@@ -76,6 +67,9 @@ instance ToJSON HugrType where
                                ,"extension_reqs" .= ([] :: [Text])
                                ]
   toJSON ty = error $ "todo: json of " ++ show ty
+
+htTuple :: [HugrType] -> HugrType
+htTuple row = HTSum (SG (GeneralSum [row]))
 
 data PolyFuncType = PolyFuncType
  { params :: [TypeParam]
@@ -154,9 +148,12 @@ boundOf :: HugrType -> TypeBound
 boundOf HTQubit = TBAny
 boundOf (HTOpaque _ _ _ b) = b
 boundOf HTUSize = TBEq
-boundOf (HTTuple tys) = maximum (TBEq : (boundOf <$> tys))
 boundOf (HTSum (SU _)) = TBEq
-boundOf (HTSum (SG (GeneralSum rows))) = maximum (TBEq : (boundOf <$> rows))
+boundOf (HTSum (SG (GeneralSum rows))) = maximum (TBEq:(boundOfList <$> rows))
+ where
+  boundOfList :: [HugrType] -> TypeBound
+  boundOfList [] = TBEq
+  boundOfList xs = maximum (boundOf <$> xs)
 boundOf (HTFunc _) = TBCopy
 boundOf _ = error "unimplemented bound"
 
