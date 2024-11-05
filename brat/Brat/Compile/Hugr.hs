@@ -479,12 +479,10 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
 compileConstructor :: NodeId -> UserName -> UserName -> FunctionType -> Compile NodeId
 compileConstructor parent tycon con sig
   | Just b <- isBool con = do
-      -- A boolean value is a tuple and a tag
-      -- This is the same thing that happens in Brat.Checker.Clauses (makeDiscriminator)
-      makeTuple <- addNode "bool.MakeTuple" (OpMakeTuple (MakeTupleOp parent []))
-      tag <- addNode "bool.tag" (OpTag (TagOp parent (if b then 1 else 0) [[], []]))
-      addEdge (Port makeTuple 0, Port tag 0)
-      pure tag
+      -- A boolean value is a tag which takes no inputs and produces an empty tuple
+      -- This is the same thing that happens in Brat.Checker.Clauses to make the
+      -- discriminator (makeRowTag)
+      addNode "bool.tag" (OpTag (TagOp parent (if b then 1 else 0) [[], []]))
   | otherwise = let name = "Constructor " ++ show tycon ++ "::" ++ show con in
                   addNode name (constructorOp parent tycon con sig)
  where
@@ -684,8 +682,12 @@ compileMatchSequence parent portTable (MatchSequence {..}) = do
 
 makeRowTag :: String -> NodeId -> Int -> SumOfRows -> [TypedPort] -> Compile [TypedPort]
 makeRowTag hint parent tag sor@(SoR sumRows) ins = assert (sumRows !! tag == (snd <$> ins)) $ do
-  tuple <- addNodeWithInputs (hint ++ "_MakeTuple") (OpMakeTuple (MakeTupleOp parent (snd <$> ins))) ins [htTuple (snd <$> ins)]
-  addNodeWithInputs (hint ++ "_Tag") (OpTag (TagOp parent tag sumRows)) tuple [compileSumOfRows sor]
+  wires <- case sumRows !! tag of
+    -- Tag ops which produce an empty row (i.e. what we use for bools) don't
+    -- require any inputs
+    [] -> pure []
+    _ -> addNodeWithInputs (hint ++ "_MakeTuple") (OpMakeTuple (MakeTupleOp parent (snd <$> ins))) ins [htTuple (snd <$> ins)]
+  addNodeWithInputs (hint ++ "_Tag") (OpTag (TagOp parent tag sumRows)) wires [compileSumOfRows sor]
 
 getSumVariants :: HugrType -> [[HugrType]]
 getSumVariants (HTSum (SU (UnitSum n))) = replicate n []
