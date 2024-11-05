@@ -56,7 +56,7 @@ impl MakeRegisteredOp for BratOpDef {
 mod test {
     use hugr::{
         extension::simple_op::MakeExtensionOp,
-        ops::{custom::ExtensionOp, OpName},
+        ops::{custom::ExtensionOp, NamedOp},
         types::{type_param::TypeParam, FunctionType, Type, TypeArg},
     };
 

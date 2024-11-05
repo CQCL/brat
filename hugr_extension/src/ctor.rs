@@ -1,6 +1,6 @@
 use enum_iterator::Sequence;
 use hugr::{
-    ops::OpName,
+    ops::NamedOp,
     std_extensions::{arithmetic::int_types, collections},
     types::{
         type_param::TypeParam, CustomType, FunctionType, PolyFuncType, Type, TypeArg, TypeBound,
@@ -31,7 +31,7 @@ pub enum VecCtor {
     cons,
 }
 
-impl OpName for BratCtor {
+impl NamedOp for BratCtor {
     fn name(&self) -> SmolStr {
         match self {
             BratCtor::Nat(ctor) => format_smolstr!("Nat::{}", ctor.name()),

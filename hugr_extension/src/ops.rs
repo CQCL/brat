@@ -3,7 +3,7 @@ use hugr::{
         simple_op::{MakeExtensionOp, MakeOpDef, OpLoadError},
         SignatureError,
     },
-    ops::{custom::ExtensionOp, OpName, OpTrait},
+    ops::{custom::ExtensionOp, NamedOp, OpTrait},
     types::{FunctionType, TypeArg, TypeEnum, TypeRow},
 };
 use smol_str::{format_smolstr, SmolStr};
@@ -40,7 +40,7 @@ pub enum BratOp {
     Replicate(TypeArg),
 }
 
-impl OpName for BratOp {
+impl NamedOp for BratOp {
     fn name(&self) -> SmolStr {
         use BratOp::*;
         match self {
@@ -74,12 +74,12 @@ impl MakeExtensionOp for BratOp {
                     let hole_sigs: Result<Vec<_>, OpLoadError> = hole_sigs
                         .iter()
                         .map(|ty| match ty.as_type_enum() {
-                            TypeEnum::Function(f) => Ok(f.body().clone()),
+                            TypeEnum::Function(f) => Ok(*f.clone()),
                             _ => Err(SignatureError::InvalidTypeArgs.into()),
                         })
                         .collect();
                     Ok(BratOp::Substitute {
-                        func_sig: func_sig.body().clone(),
+                        func_sig: *func_sig.clone(),
                         hole_sigs: hole_sigs?,
                     })
                 }
@@ -92,7 +92,7 @@ impl MakeExtensionOp for BratOp {
                     };
                     Ok(BratOp::Partial {
                         inputs: partial_inputs.to_vec().into(),
-                        output_sig: output_sig.body().clone(),
+                        output_sig: *output_sig.clone(),
                     })
                 }
                 _ => Err(OpLoadError::InvalidArgs(SignatureError::InvalidTypeArgs)),
@@ -144,7 +144,7 @@ impl MakeExtensionOp for BratOp {
             BratOp::Panic { sig } => vec![arg_from_row(sig.input()), arg_from_row(sig.output())],
             BratOp::Ctor { args, .. } => args.clone(),
             BratOp::PrimCtorTest { args, .. } => args.clone(),
-            BratOp::Replicate(arg) => vec![arg],
+            BratOp::Replicate(arg) => vec![arg.clone()],
         }
     }
 }
