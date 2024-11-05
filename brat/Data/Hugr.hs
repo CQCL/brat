@@ -518,6 +518,24 @@ instance ToJSON node => ToJSON (LoadConstantOp node) where
                                         ,"datatype" .= datatype
                                         ]
 
+data LoadFunctionOp node = LoadFunctionOp
+  { parent :: node
+  , func_sig :: PolyFuncType
+  , type_args :: [TypeArg]
+  , signature :: FunctionType
+  } deriving (Eq, Functor, Show)
+
+instance Eq node => Ord (LoadFunctionOp node) where
+  compare _ _ = EQ
+
+instance ToJSON node => ToJSON (LoadFunctionOp node) where
+  toJSON (LoadFunctionOp {..}) = object ["parent" .= parent
+                                        ,"op" .= ("LoadFunction" :: Text)
+                                        ,"func_sig" .= func_sig
+                                        ,"type_args" .= type_args
+                                        ,"signature" .= signature
+                                        ]
+
 data NoopOp node = NoopOp
   { parent :: node
   , ty :: HugrType
@@ -551,6 +569,7 @@ data HugrOp node
   | OpCall (CallOp node)
   | OpCallIndirect (CallIndirectOp node)
   | OpLoadConstant (LoadConstantOp node)
+  | OpLoadFunction (LoadFunctionOp node)
   | OpNoop (NoopOp node)
  deriving (Eq, Functor, Ord, Show)
 
@@ -569,6 +588,7 @@ instance ToJSON node => ToJSON (HugrOp node) where
   toJSON (OpCall op) = toJSON op
   toJSON (OpCallIndirect op) = toJSON op
   toJSON (OpLoadConstant op) = toJSON op
+  toJSON (OpLoadFunction op) = toJSON op
   toJSON (OpNoop op) = toJSON op
 
 getParent :: HugrOp node -> node
@@ -586,6 +606,7 @@ getParent (OpCustom (CustomOp { parent = parent })) = parent
 getParent (OpCall (CallOp { parent = parent })) = parent
 getParent (OpCallIndirect (CallIndirectOp { parent = parent })) = parent
 getParent (OpLoadConstant (LoadConstantOp { parent = parent })) = parent
+getParent (OpLoadFunction (LoadFunctionOp { parent = parent })) = parent
 getParent (OpNoop (NoopOp { parent = parent })) = parent
 
 data Hugr node = Hugr [HugrOp node] [(PortId node, PortId node)]

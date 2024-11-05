@@ -199,7 +199,11 @@ registerCompiled from to = do
 compileConst :: NodeId -> SimpleTerm -> HugrType -> Compile NodeId
 compileConst parent tm ty = do
   constId <- addNode "Const" (OpConst (ConstOp parent (valFromSimple tm)))
-  loadId <- addNode "LoadConst" (OpLoadConstant (LoadConstantOp parent ty))
+  loadId <- case ty of
+    HTFunc poly@(PolyFuncType [] _) ->
+      addNode "LoadFunction" (OpLoadFunction (LoadFunctionOp parent poly [] (FunctionType [] [HTFunc poly])))
+    HTFunc (PolyFuncType _ _) -> error "Trying to compile function with type args"
+    _ -> addNode "LoadConst" (OpLoadConstant (LoadConstantOp parent ty))
   addEdge (Port constId 0, Port loadId 0)
   pure loadId
 
@@ -336,8 +340,12 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
                   (OpCall (CallOp parent (FunctionType [] hTys)))
       -- We are loading idNode as a value (not an Eval'd thing), and it is a FuncDef directly
       -- corresponding to a Brat TLD (not that produces said TLD when eval'd)
-      False -> addNode ("load_thunk(" ++ show funcDef ++ ")")
-                  (OpLoadConstant (LoadConstantOp parent (let [ty] = hTys in ty)))
+      False -> case hTys of
+        [HTFunc poly@(PolyFuncType [] _)] ->
+          addNode ("load_thunk(" ++ show funcDef ++ ")")
+          (OpLoadFunction (LoadFunctionOp parent poly [] (FunctionType [] [HTFunc poly])))
+        [HTFunc (PolyFuncType args _)] -> error $ "Unexpected type args to " ++ show funcDef ++ ": " ++ show args
+        _ -> error $ "Expected a function argument when loading thunk, got: " ++ show hTys
     -- the only input
     pure $ Just (nod, [(Port funcDef 0, 0)])
   compileNode in_edges = do
