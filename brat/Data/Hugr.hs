@@ -173,8 +173,7 @@ hugrFloat = HTOpaque "arithmetic.float.types" "float64" [] TBCopy
 ------------------------------------ VALUES ------------------------------------
 -----------------------  (Depends on Hugr and HugrType)  -----------------------
 
--- Depends on `Hugr` (Maybe it should be parametric in the argument to `Hugr`?)
--- And on `HugrType` (for `HVExtension`)
+-- Depends on `Hugr` and on `HugrType` (for `HVExtension`)
 data HugrValue
  = HVFunction (Hugr Int)
  | HVTuple [HugrValue]
@@ -197,9 +196,6 @@ instance ToJSON HugrValue where
 hvUnit = HVTuple []
 hvFloat x = HVExtension ["arithmetic.float_types"] hugrFloat
             (CC "ConstF64" (KeyMap.singleton "value" x))
--- Default to using 64-bit ints. At some point we need to update this so that
--- we don't need to worry about int size when writing BRAT code. To do this, we
--- need to add a bunch of widening operations during compilation.
 hvInt x = HVExtension ["arithmetic.int_types"] hugrInt
           (CC "ConstInt" (KeyMap.insert "log_width" 6 (KeyMap.singleton "value" x)))
 
@@ -242,7 +238,7 @@ data CustomConst where
   CC :: forall a. (Eq a, Show a, ToJSON a) => String -> a -> CustomConst
 
 instance Eq CustomConst where
-  _ == _ = False
+  (CC tag cts) == (CC tag' cts') = tag == tag' && (toJSON cts == toJSON cts')
 
 instance Show CustomConst where
   show (CC tag cts) = "Const(" ++ tag ++ ")(" ++ show cts ++ ")"
@@ -502,8 +498,6 @@ partialOp parent funcSig numSupplied = CustomOp parent "Brat" "Partial" sig args
   otherInputs = drop numSupplied (input funcSig)
 
 
--- N.B. We don't need an implementation of LoadFunction because we're not using
--- hugr's type parameters.
 data LoadConstantOp node = LoadConstantOp
   { parent :: node
   , datatype :: HugrType
