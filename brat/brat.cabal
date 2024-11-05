@@ -85,8 +85,7 @@ library
                        Brat.UserName,
                        Bwd,
                        Control.Monad.Freer,
-                       Data.Hugr.Ops,
-                       Data.Hugr.Types,
+                       Data.Hugr,
                        Hasochism,
                        Util
 
