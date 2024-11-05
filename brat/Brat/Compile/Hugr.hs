@@ -681,13 +681,8 @@ compileMatchSequence parent portTable (MatchSequence {..}) = do
     makeRowTag "DidNotMatch" parent 0 sumTy ins
 
 makeRowTag :: String -> NodeId -> Int -> SumOfRows -> [TypedPort] -> Compile [TypedPort]
-makeRowTag hint parent tag sor@(SoR sumRows) ins = assert (sumRows !! tag == (snd <$> ins)) $ do
-  wires <- case sumRows !! tag of
-    -- Tag ops which produce an empty row (i.e. what we use for bools) don't
-    -- require any inputs
-    [] -> pure []
-    _ -> addNodeWithInputs (hint ++ "_MakeTuple") (OpMakeTuple (MakeTupleOp parent (snd <$> ins))) ins [htTuple (snd <$> ins)]
-  addNodeWithInputs (hint ++ "_Tag") (OpTag (TagOp parent tag sumRows)) wires [compileSumOfRows sor]
+makeRowTag hint parent tag sor@(SoR sumRows) ins = assert (sumRows !! tag == (snd <$> ins)) $
+  addNodeWithInputs (hint ++ "_Tag") (OpTag (TagOp parent tag sumRows)) ins [compileSumOfRows sor]
 
 getSumVariants :: HugrType -> [[HugrType]]
 getSumVariants (HTSum (SU (UnitSum n))) = replicate n []
