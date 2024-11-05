@@ -592,9 +592,10 @@ data Hugr node = Hugr [HugrOp node] [(PortId node, PortId node)]
   deriving (Eq, Functor, Show)
 
 instance ToJSON node => ToJSON (Hugr node) where
-  toJSON (Hugr ns es) = object ["version" .= ("v0" :: Text)
+  toJSON (Hugr ns es) = object ["version" .= ("v1" :: Text)
                                ,"nodes" .= ns
                                ,"edges" .= es
+                               ,"encoder" .= ("BRAT" :: Text)
                                ]
 
 orderEdgeOffset :: Int
