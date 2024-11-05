@@ -1,26 +1,5 @@
--- id :: Nat -> Nat
--- id = x => x
-
--- fst :: Nat, Nat -> Nat
--- fst = x, y => x
-
 swap(Nat, Nat) -> Nat, Nat
 swap = a, b => b, a
-
-nat :: Nat
-nat = 0
-
--- comp :: Nat, Nat -> Nat
--- comp = x, y => fst(swap(x, y))
-
--- te :: Vec Bool 2
--- te = [true, true]
-
-test :: Nat
-test = 1
-
-ha :: Nat
-ha = ?idk
 
 type A = Nat
 

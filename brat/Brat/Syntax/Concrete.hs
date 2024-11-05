@@ -43,4 +43,8 @@ data Flat
  | FKernel RawKType
  | FUnderscore
  | FPass
+ | FFanOut
+ | FFanIn
+ | FIdentity
+ | FOf ({- number :: -}WC Flat) {- of -} ({- expr -}WC Flat)
  deriving Show

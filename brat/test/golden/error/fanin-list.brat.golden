@@ -1,0 +1,6 @@
+Error in test/golden/error/fanin-list.brat on line 2:
+f = { [\/] }
+      ^^^^
+
+  Type error: Fanin ([\/]) only applies to Vec
+

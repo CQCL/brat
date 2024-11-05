@@ -48,7 +48,10 @@ data Term :: Dir -> Kind -> Type where
   Forget   :: WC (Term d KVerb) -> Term d UVerb
   Pull     :: [PortName] -> WC (Term Chk k) -> Term Chk k
   Var      :: UserName -> Term Syn Noun  -- Look up in noun (value) env
+  Identity :: Term Syn UVerb
   Arith    :: ArithOp -> WC (Term Chk Noun) -> WC (Term Chk Noun) -> Term Chk Noun
+  Of       :: WC (Term Chk Noun) -> WC (Term d Noun) -> Term d Noun
+
   -- Type annotations (annotating a term with its outputs)
   (:::)    :: WC (Term Chk Noun) -> [Output] -> Term Syn Noun
   -- Composition: values fed from source (first) into dest (second),
@@ -66,6 +69,8 @@ data Term :: Dir -> Kind -> Type where
   C        :: CType' (PortName, KindOr (Term Chk Noun)) -> Term Chk Noun
   -- Kernel types
   K        :: CType' (PortName, Term Chk Noun) -> Term Chk Noun
+  FanOut   :: Term Syn UVerb
+  FanIn    :: Term Chk UVerb
 
 deriving instance Eq (Term d k)
 
@@ -104,8 +109,12 @@ instance Show (Term d k) where
    where
     showList [] = "[]:"
     showList ps = concatMap (++":") ps
-
+  show (Of n e) = unwords [bracket POf n
+                          ,"of"
+                          ,bracket POf e
+                          ]
   show (Var x) = show x
+  show Identity = "|"
   -- Nested applications should be bracketed too, hence 4 instead of 3
   show (fun :$: arg) = bracket PApp fun ++ ('(' : show arg ++ ")")
   show (tm ::: ty) = bracket PAnn tm ++ " :: " ++ show ty
@@ -126,6 +135,9 @@ instance Show (Term d k) where
 
   show (C f) = "{" ++ show f ++ "}"
   show (K (ss :-> ts)) = "{" ++ showSig ss ++ " -o " ++ showSig ts ++ "}"
+  show FanOut = "[/\\]"
+  show FanIn = "[\\/]"
+
 
 -- Wrap a term in brackets if its `precedence` is looser than `n`
 bracket :: Precedence -> WC (Term d k) -> String
@@ -144,6 +156,7 @@ precedence (Con c _)
   | c `elem` [CCons,CSnoc,CConcatEqEven,CConcatEqOdd,CRiffle] = Just PVecPat
 precedence (_ :$: _)    = Just PApp
 precedence (_ ::: _)    = Just PAnn
+precedence (Of _ _)     = Just POf
 precedence (Arith op _ _) = Just $ case op of
   Add -> PAddSub
   Sub -> PAddSub

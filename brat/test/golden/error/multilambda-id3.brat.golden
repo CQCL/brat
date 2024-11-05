@@ -1,0 +1,8 @@
+Error in test/golden/error/multilambda-id3.brat on line 2:
+f = { true => |;||false =>|;|;|}
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+  Parse error unexpected {[true,=>,|,;,|,|,false,=>,|,;,|,;,|]}
+expecting (...), .., [...], _, addition or subtraction, application, composition, hole, into, juxtaposition, lambda, let ... in, multiplication or division, name, nat, power, type annotation, vector pattern, vectorisation, or {...}
+
+

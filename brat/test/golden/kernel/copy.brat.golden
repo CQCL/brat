@@ -1,4 +1,4 @@
-Error in test/golden/kernel/copy.brat@FC {start = Pos {line = 2, col = 10}, end = Pos {line = 2, col = 19}}:
+Error in test/golden/kernel/copy.brat on line 2:
 copy = { q => q, q }
          ^^^^^^^^^
 

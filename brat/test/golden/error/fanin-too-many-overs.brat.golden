@@ -1,0 +1,6 @@
+Error in test/golden/error/fanin-too-many-overs.brat on line 2:
+f = { [\/] }
+    ^^^^^^^^
+
+  Expected function to address all inputs, but (z :: Nat) wasn't used
+

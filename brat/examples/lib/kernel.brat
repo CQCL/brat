@@ -21,23 +21,11 @@ ext "tket.M" M :: { Qubit -o Bit }
 ext "builtin.measure" measure :: { Qubit -o q::Money, b::Bit }
 ext "builtin.fresh" fresh :: { Money -o Qubit }
 
-bid :: { Bit -o Bit }
-bid = { b => b }
-
-qid :: { Qubit -o Qubit }
-qid = { q => q }
-
-mid :: { Money -o Money }
-mid = { m => m }
-
 uncons(n :: #) -> { Vec(Qubit, succ(n)) -o Qubit, Vec(Qubit, n) }
 uncons(_) = { cons(q, qs) => q, qs }
 
 recons(n :: #) -> { Qubit, Vec(Qubit, n) -o Vec(Qubit, succ(n)) }
 recons(_) = { q, qs => cons(q, qs) }
-
-vid(n :: #) -> { Vec(Qubit, n) -o Vec(Qubit, n) }
-vid(_) = { qs => qs }
 
 swap(Qubit, Qubit) -o Qubit, Qubit
 swap(a, b) = b, a

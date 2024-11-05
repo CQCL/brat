@@ -430,11 +430,14 @@ atomExpr = simpleExpr <|> inBrackets Paren expr
   simpleExpr :: Parser (WC Flat)
   simpleExpr = fmap FHole <$> hole
             <|> try (fmap FSimple <$> simpleTerm)
+            <|> try fanin
+            <|> try fanout
             <|> vec
             <|> cthunk
             <|> fmap (const FPass) <$> matchFC DotDot
             <|> var
             <|> fmap (const FUnderscore) <$> matchFC Underscore
+            <|> fmap (const FIdentity) <$> matchFC Pipe
 
 
 {- Infix operator precedence table (See Brat.Syntax.Common.Precedence)
@@ -444,6 +447,7 @@ atomExpr = simpleExpr <|> inBrackets Paren expr
    ;  (left-assoc)
    , & port-pull
    -, ,- =,= =,_,= =%=  (vector builders) (all right-assoc (for now!) and same precedence)
+   _of_ (right-assoc)
    + -  (left-assoc)
    * /  (left-assoc)
    ^    (left-assoc)
@@ -463,6 +467,7 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
     PComp -> composition <?> "composition"
     PJuxtPull -> pullAndJuxt <?> "juxtaposition"
     PVecPat -> vectorBuild <?> "vector pattern"
+    POf -> ofExpr <?> "vectorisation"
     PAddSub -> addSub <?> "addition or subtraction"
     PMulDiv -> mulDiv <?> "multiplication or division"
     PPow -> pow <?> "power"
@@ -493,6 +498,15 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
               (a:as) -> a :| (as ++ [rhs])
         pure (WC (spanFCOf lhs rhs) (FCon c (mkJuxt juxtElems)))
       Nothing -> pure lhs
+
+  ofExpr :: Parser (WC Flat)
+  ofExpr = do
+    lhs <- subExpr POf
+    optional (kmatch KOf) >>= \case
+      Nothing -> pure lhs
+      Just _ -> do
+        rhs <- ofExpr
+        pure (WC (spanFCOf lhs rhs) (lhs `FOf` rhs))
 
   mkJuxt :: NonEmpty (WC Flat) -> WC Flat
   mkJuxt (x :| []) = x
@@ -594,6 +608,9 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
       pure $ case rest of
         Nothing -> expr
         Just rest@(WC restFC _) -> WC (spanFC (fcOf expr) restFC) (FJuxt expr rest)
+
+fanout = inBracketsFC Bracket (FFanOut <$ match Slash <* match Backslash)
+fanin = inBracketsFC Bracket (FFanIn <$ match Backslash <* match Slash)
 
 cnoun :: Parser (WC Flat) -> Parser (WC (Raw 'Chk 'Noun))
 cnoun pe = do

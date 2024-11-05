@@ -1,4 +1,4 @@
-Error in test/golden/error/badvec4.brat@FC {start = Pos {line = 2, col = 7}, end = Pos {line = 2, col = 10}}:
+Error in test/golden/error/badvec4.brat on line 2:
 v3 = [1,2]
       ^^^
 

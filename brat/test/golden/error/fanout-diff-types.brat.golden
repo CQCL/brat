@@ -1,0 +1,9 @@
+Error in test/golden/error/fanout-diff-types.brat on line 2:
+f = { [/\] }
+      ^^^^
+
+  Type mismatch when checking [/\]
+Expected: (b1 :: Bit)
+But got:  (head :: Qubit)
+
+

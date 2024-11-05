@@ -56,7 +56,7 @@ idq = { q => q }
 
 phasedBell :: { (th :: Float) -> { c :: Qubit, d :: Qubit -o c :: Bit, d :: Bit } }
 phasedBell(th) = {
-  H,qid;
-  Rz(th),qid;
+  H,|;
+  Rz(th),|;
   M,M
 }

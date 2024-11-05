@@ -1,0 +1,6 @@
+Error in test/golden/error/fanout-list.brat on line 2:
+f = { [/\] }
+      ^^^^
+
+  Type error: Fanout ([/\]) only applies to Vec
+

@@ -1,4 +1,4 @@
-Error in test/golden/error/no_thunk.brat@FC {start = Pos {line = 8, col = 14}, end = Pos {line = 8, col = 15}}:
+Error in test/golden/error/no_thunk.brat on line 8:
     Rz(2.0 / n); X
              ^
 

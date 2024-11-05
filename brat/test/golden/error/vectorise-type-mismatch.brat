@@ -1,0 +1,2 @@
+panic :: Vec(Nat, 1)
+panic = 2 of 42

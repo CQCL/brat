@@ -1,4 +1,4 @@
-Error in test/golden/error/kbadvec2.brat@FC {start = Pos {line = 2, col = 17}, end = Pos {line = 2, col = 20}}:
+Error in test/golden/error/kbadvec2.brat on line 2:
 triple = { b => nil }
                 ^^^
 

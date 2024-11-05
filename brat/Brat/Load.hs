@@ -67,8 +67,14 @@ checkDecl pre (VDecl FuncDecl{..}) to_define = (fnName -!) $ localFC fnLoc $ do
     -- We must have a row of nouns as the definition
     Nothing -> case fnBody of
       NoLhs body -> do
-        (((), ()), ((), [])) <- let ?my = Braty in check body ((), to_define)
-        pure ()
+        (((), ()), ((), rightUnders)) <- let ?my = Braty in check body ((), to_define)
+        case rightUnders of
+          [] -> pure ()
+          _ -> localFC (fcOf body) $
+               err $
+               TypeMismatch fnName
+               (showRow to_define)
+               (showRow $ filter ((`notElem` (fst <$> rightUnders)) . fst) to_define)
       Undefined -> error "No body in `checkDecl`"
       ThunkOf _ -> case fnSig of
         Some ro -> err $ ExpectedThunk (showMode Braty) (show ro)
@@ -131,8 +137,9 @@ loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addS
   -- Generate some stuff for each entry:
     --  * A map from names to VDecls (aka an Env)
     --  * Some overs and outs??
-  (entries, (_holes, kcStore, kcGraph, ns)) <- run venv initStore ns $
-    withAliases aliases $ ("globals" -!) $ forM decls $ \d -> localFC (fnLoc d) $ do
+  let (globalNS, newRoot) = split "globals" ns
+  (entries, (_holes, kcStore, kcGraph)) <- run venv initStore globalNS $
+    withAliases aliases $ forM decls $ \d -> localFC (fnLoc d) $ do
       let name = PrefixName pre (fnName d)
       (thing, ins :->> outs, sig, prefix) <- case (fnLocality d) of
                         Local -> do
@@ -153,7 +160,7 @@ loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addS
   let vdecls = map fst entries
   -- Now generate environment mapping usernames to nodes in the graph
   venv <- pure $ venv <> M.fromList [(name, overs) | ((name, _), (_, overs)) <- entries]
-  ((), (holes, newEndData, graph, _)) <- run venv kcStore ns $ withAliases aliases $ do
+  ((), (holes, newEndData, graph)) <- run venv kcStore newRoot $ withAliases aliases $ do
     remaining <- "check_defs" -! foldM checkDecl' to_define vdecls
     pure $ assert (M.null remaining) () -- all to_defines were defined
   pure (venv, oldDecls <> vdecls, holes, oldEndData <> newEndData, kcGraph <> graph)

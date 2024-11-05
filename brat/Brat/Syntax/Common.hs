@@ -2,6 +2,7 @@ module Brat.Syntax.Common (PortName,
                            Dir(..),
                            Kind(..),
                            Diry(..),
+                           DIRY(..),
                            Kindy(..),
                            CType'(..),
                            Import(..),
@@ -216,6 +217,7 @@ data Precedence
  | PComp
  | PJuxtPull -- Juxtaposition has the same precedence as port pulling
  | PVecPat
+ | POf
  | PAddSub
  | PMulDiv
  | PPow

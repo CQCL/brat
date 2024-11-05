@@ -27,6 +27,7 @@ unelab dy _ (Forget tm) = unelab dy KVerby (unWC tm)
 unelab _ ky (Pull ps tm) = FPull ps (unelab Chky ky <$> tm)
 unelab _ _ (Var v) = FVar v
 unelab dy ky (Arith op lhs rhs) = FArith op (unelab dy ky <$> lhs) (unelab dy ky <$> rhs)
+unelab dy _ (Of n e) = FOf (unelab Chky Nouny <$> n) (unelab dy Nouny <$> e)
 unelab _ _ (tm ::: outs) = FAnnotation (unelab Chky Nouny <$> tm) (toRawRo outs)
 unelab dy ky (top :-: bot) = case ky of
   Nouny -> FInto (unelab Syny Nouny <$> top) (unelab dy UVerby <$> bot)
@@ -36,6 +37,9 @@ unelab dy _ (Lambda (abs,rhs) cs) = FLambda ((abs, unelab dy Nouny <$> rhs) :| (
 unelab _ _ (Con c args) = FCon c (unelab Chky Nouny <$> args)
 unelab _ _ (C (ss :-> ts)) = FFn (toRawRo ss :-> toRawRo ts)
 unelab _ _ (K cty) = FKernel $ fmap (\(p, ty) -> Named p (toRaw ty)) cty
+unelab _ _ Identity = FIdentity
+unelab _ _ FanIn = FFanIn
+unelab _ _ FanOut = FFanOut
 
 -- This is needed for concrete terms which embed a type as a list of `Raw` things
 toRaw :: Term d k -> Raw d k
@@ -54,6 +58,7 @@ toRaw (Forget tm) = RForget $ toRaw <$> tm
 toRaw (Pull ps tm) = RPull ps $ toRaw <$> tm
 toRaw (Var v) = RVar v
 toRaw (Arith op lhs rhs) = RArith op (toRaw <$> lhs) (toRaw <$> rhs)
+toRaw (Of n e) = ROf (toRaw <$> n) (toRaw <$> e)
 toRaw (tm ::: outs) = (toRaw <$> tm) ::::: toRawRo outs
 toRaw (top :-: bot) = (toRaw <$> top) ::-:: (toRaw <$> bot)
 toRaw (f :$: s) = (toRaw <$> f) ::$:: (toRaw <$> s)
@@ -61,6 +66,9 @@ toRaw (Lambda (abs,rhs) cs) = RLambda (abs, toRaw <$> rhs) (second (fmap toRaw) 
 toRaw (Con c args) = RCon c (toRaw <$> args)
 toRaw (C (ss :-> ts)) = RFn (toRawRo ss :-> toRawRo ts)
 toRaw (K cty) = RKernel $ (\(p, ty) -> Named p (toRaw ty)) <$> cty
+toRaw Identity = RIdentity
+toRaw FanIn = RFanIn
+toRaw FanOut = RFanOut
 
 toRawRo :: [(PortName, KindOr (Term Chk Noun))] -> [TypeRowElem (KindOr RawVType)]
 toRawRo = fmap (\(p, bty) -> Named p (second toRaw bty))

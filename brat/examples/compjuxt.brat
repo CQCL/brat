@@ -1,7 +1,5 @@
 ext "" f :: { Nat -> Int }
 ext "" g :: { Int -> Nat }
-ext "" idi :: { Int -> Int }
-ext "" idn(Nat) -> Nat
 ext "" addn(Nat, Nat) -> Nat
 
 id2 :: { Nat, Nat -> Nat, Nat }
@@ -21,9 +19,9 @@ id2b = { f,g; (g,f) }
 id2c :: { Nat, Int -> Nat, Int }
 id2c = { (f,g); (g,f) }
 
--- Note brackets here; without them, would be parsed as (idi(), f()); (g(), idn())
+-- Note brackets here; without them, would be parsed as (|, f()); (g(), |)
 mixture :: { Int, Nat, Nat -> Int, Nat, Nat }
-mixture = { idi, (f; g), idn }
+mixture = { |, (f; g), | }
 
 
 swap :: { a :: Nat, b :: Nat -> b :: Nat, a :: Nat }
@@ -36,16 +34,15 @@ funky_application = { x, y => x, y |> addn }
 funky_application' :: { a :: Nat, b :: Nat -> Nat }
 funky_application' = x, y => x, y |> addn
 
-
 int :: { -> Int }
-int = { => idi(1) }
+int = { => |(1 :: Int) }
 int' :: Int
-int' = idi(1)
+int' = |(1 :: Int)
 
 port_pull(Nat) -> n :: Nat, i :: Int
-port_pull = { x => i:(x, x |> f, idn) }
+port_pull = { x => i:(x, x |> f, |) }
 port_pull' :: { Nat -> nat :: Nat, int :: Int }
-port_pull' = x => int:(x, x |> f, idn)
+port_pull' = x => int:(x, x |> f, |)
 
 
 addi(Int, Int) -> Nat
@@ -53,13 +50,13 @@ addi = { g, g; addn }
 
 
 juxt_in_comp2 :: { Nat, Nat, Int -> Int, Nat, Int}
-juxt_in_comp2 = { f,f,idi ; idi,g,idi }
+juxt_in_comp2 = { f,f,| ; |,g,| }
 
 sverb_cverb :: { Int -> Nat }
-sverb_cverb = { idi; (z => 4) }
+sverb_cverb = { |; (z => 4) }
 
 sverb_sverb_cverb :: { Int -> Nat }
-sverb_sverb_cverb = { idi; idi; (z => 4) }
+sverb_sverb_cverb = { |; |; (z => 4) }
 
 num_lit :: { -> Nat, Nat }
 num_lit = { => (1, 2) |> id2 }

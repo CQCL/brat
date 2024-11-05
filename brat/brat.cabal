@@ -87,8 +87,7 @@ library
                        Brat.UserName,
                        Bwd,
                        Control.Monad.Freer,
-                       Data.Hugr.Ops,
-                       Data.Hugr.Types,
+                       Data.Hugr,
                        Hasochism,
                        Util
 
@@ -154,6 +153,8 @@ test-suite tests
   import:              ghc-perf, haskell
   type:                exitcode-stdio-1.0
   default-language:    GHC2021
+  ghc-options:
+    -Werror=unused-imports
   hs-source-dirs:      test
   main-is:             Main.hs
   other-modules:       Test.Abstractor,

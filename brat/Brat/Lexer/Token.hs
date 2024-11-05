@@ -36,6 +36,7 @@ data Tok
  | Plus
  | Minus
  | Asterisk
+ | Backslash
  | Slash
  | Caret
  | Hash
@@ -80,6 +81,7 @@ instance Show Tok where
   show Plus = "+"
   show Minus = "-"
   show Asterisk = "*"
+  show Backslash = "\\"
   show Slash = "/"
   show Caret = "^"
   show Hash = "#"
@@ -112,6 +114,7 @@ data Keyword
   | KImport
   | KLet
   | KIn
+  | KOf
   deriving Eq
 
 instance Show Keyword where
@@ -120,6 +123,7 @@ instance Show Keyword where
   show KImport = "import"
   show KLet = "let"
   show KIn = "in"
+  show KOf = "of"
 
 tokLen :: Tok -> Int
 tokLen = length . show

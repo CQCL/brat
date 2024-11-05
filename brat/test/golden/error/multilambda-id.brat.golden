@@ -1,0 +1,6 @@
+Error in test/golden/error/multilambda-id.brat on line 2:
+f = { true => |
+              ^
+
+  Elab error "Noun required at this position"
+

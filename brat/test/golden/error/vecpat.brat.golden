@@ -1,4 +1,4 @@
-Error in test/golden/error/vecpat.brat@FC {start = Pos {line = 3, col = 6}, end = Pos {line = 3, col = 9}}:
+Error in test/golden/error/vecpat.brat on line 3:
 fst3(nil) = none
      ^^^
 

@@ -1,0 +1,6 @@
+Error in test/golden/error/fanin-not-enough-overs.brat on line 2:
+f = { [\/] }
+      ^^^^
+
+  Type error: Not enough inputs to make a vector of size 3
+

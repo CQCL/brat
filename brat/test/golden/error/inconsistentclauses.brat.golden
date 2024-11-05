@@ -1,4 +1,4 @@
-Error in test/golden/error/inconsistentclauses.brat@FC {start = Pos {line = 1, col = 1}, end = Pos {line = 3, col = 9}}:
+Error in test/golden/error/inconsistentclauses.brat on lines 1-3:
 f(Bool, Nat) -> Nat
 ^^^^^^^^^^^^^^^^^^^
 f(true, n) = 1

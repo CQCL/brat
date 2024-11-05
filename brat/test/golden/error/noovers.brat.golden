@@ -1,4 +1,4 @@
-Error in test/golden/error/noovers.brat@FC {start = Pos {line = 2, col = 3}, end = Pos {line = 2, col = 7}}:
+Error in test/golden/error/noovers.brat on line 2:
 f(a, b) = []
   ^^^^
 
