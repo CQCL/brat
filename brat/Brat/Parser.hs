@@ -521,10 +521,15 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
     pure (WC (spanFCOf let_ body) (FLetIn lhs rhs body))
    where
     letInBinding = do
-      abs <- abstractor
+      abss <- (:|) <$> abstractor <*> many (match Comma *> try abstractor)
       match Equal
+      -- eqFC is bad, but we don't have a good alternative :(
+      let abs = worker abss
       thing <- expr
       pure (abs, thing)
+
+    worker (x :| []) = x
+    worker (x :| (y:ys)) = let z = worker (y :| ys) in WC (spanFCOf x z) (unWC x :||: unWC z)
 
   -- Sequence of `abstractor => expr` separated by `|`
   lambda :: Parser (WC Flat)
