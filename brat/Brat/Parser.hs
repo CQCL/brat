@@ -22,7 +22,6 @@ import Util ((**^))
 import Control.Monad (void)
 import Control.Monad.State (State, evalState, runState, get, put)
 import Data.Bifunctor
-import Data.Either.HT (maybeRight)
 import Data.Foldable (msum)
 import Data.Functor (($>), (<&>))
 import Data.List (intercalate, uncons)
@@ -95,15 +94,11 @@ inBrackets :: BracketType -> Parser a -> Parser a
 inBrackets b p = unWC <$> inBracketsFC b p
 
 inBracketsFC :: BracketType -> Parser a -> Parser (WC a)
-inBracketsFC b p = label lbl $ flip token empty $ \case
-  Bracketed fc b' xs | b == b' -> (WC fc) <$> maybeRight (parse (p <* eof) "" xs)
-  _ -> Nothing
+inBracketsFC b p = contents >>= \(outerFC, toks) -> either (customFailure . Custom . errorBundlePretty) (pure . WC outerFC) (parse (p <* eof) "" toks)
  where
-  lbl = showOpen b ++ "..." ++ showClose b
-
---  f :: Parser a -> BToken -> Maybe (WC a)
---  f p (Bracketed fc b' xs) | b == b' = (WC fc) <$> parseMaybe p xs
---  f _ _ = Nothing
+  contents = flip token empty $ \case
+    Bracketed fc b' xs | b == b' -> Just (fc, xs)
+    _ -> Nothing
 
 number :: Parser (WC Int)
 number = label "nat" $ matchTok $ \case
@@ -320,24 +315,6 @@ spanningFC (x:xs) = pure (WC (spanFC (fcOf $ forgetPortName x) (fcOf . forgetPor
 rawIOWithSpanFC :: Parser (WC [RawIO])
 rawIOWithSpanFC = spanningFC =<< rawIOFC
 
-functionType :: Parser (WC RawVType)
-functionType = try (fmap RFn <$> ctype) <|> (fmap RKernel <$> kernel)
- where
-  ctype :: Parser (WC RawCType)
-  ctype = do
-    WC startFC ins <- inBracketsFC Paren $ rawIO
-    match Arrow
-    WC endFC outs <- rawIOWithSpanFC
-    pure (WC (spanFC startFC endFC) (ins :-> outs))
-
-  kernel :: Parser (WC RawKType)
-  kernel = do
-    WC startFC ins <- inBracketsFC Paren $ rawIO' (unWC <$> vtype)
-    match Lolly
-    WC endFC outs <- spanningFC =<< rawIO' vtype
-    pure (WC (spanFC startFC endFC) (ins :-> outs))
-
-
 vec :: Parser (WC Flat)
 vec = (\(WC fc x) -> vec2Cons fc x) <$> (inBracketsFC Bracket elems)
   where
@@ -425,7 +402,7 @@ cthunk = try bratFn <|> try kernel <|> thunk
 -- Expressions that can occur inside juxtapositions and vectors (i.e. everything with a higher
 -- precedence than juxtaposition). Precedence table (loosest to tightest binding):
 atomExpr :: Parser (WC Flat)
-atomExpr = simpleExpr <|> inBrackets Paren expr
+atomExpr = simpleExpr <|> inBracketsFC Paren (unWC <$> expr)
  where
   simpleExpr :: Parser (WC Flat)
   simpleExpr = fmap FHole <$> hole
@@ -805,7 +782,27 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
 declSignature :: Parser (WC [RawIO])
 declSignature = try nDecl <|> vDecl where
  nDecl = match TypeColon >> rawIOWithSpanFC
- vDecl = functionType <&> fmap (\ty -> [Named "thunk" (Right ty)])
+ vDecl = functionSignature <&> fmap (\ty -> [Named "thunk" (Right ty)])
+
+ functionSignature :: Parser (WC RawVType)
+ functionSignature = try (fmap RFn <$> ctype) <|> (fmap RKernel <$> kernel)
+  where
+   ctype :: Parser (WC RawCType)
+   ctype = do
+     WC startFC ins <- inBracketsFC Paren $ rawIO
+     match Arrow
+     WC endFC outs <- rawIOWithSpanFC
+     pure (WC (spanFC startFC endFC) (ins :-> outs))
+
+   kernel :: Parser (WC RawKType)
+   kernel = do
+     WC startFC ins <- inBracketsFC Paren $ rawIO' (unWC <$> vtype)
+     match Lolly
+     WC endFC outs <- spanningFC =<< rawIO' vtype
+     pure (WC (spanFC startFC endFC) (ins :-> outs))
+
+
+
 
 pfile :: Parser ([Import], FEnv)
 pfile = do

@@ -1,8 +1,6 @@
 Error in test/golden/error/multilambda-id2.brat on line 2:
 g = { 0 => ||succ(n) => | }
-    ^^^^^^^^^^^^^^^^^^^^^^^
+           ^
 
-  Parse error unexpected {[0,=>,|,|,succ,([n]),=>,|]}
-expecting (...), .., [...], _, addition or subtraction, application, composition, hole, into, juxtaposition, lambda, let ... in, multiplication or division, name, nat, power, type annotation, vector pattern, vectorisation, or {...}
-
+  Elab error "Noun required at this position"
 

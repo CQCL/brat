@@ -1,4 +1,4 @@
-module Brat.Lexer.Token (Tok(..), Token(..), Keyword(..)) where
+module Brat.Lexer.Token (Tok(..), Token(..), Keyword(..), tokenLen) where
 
 import Brat.FC
 
@@ -127,6 +127,8 @@ instance Show Keyword where
 
 tokLen :: Tok -> Int
 tokLen = length . show
+
+tokenLen = tokLen . _tok
 
 instance VisualStream [Token] where
   showTokens _ ts = concatMap show ts

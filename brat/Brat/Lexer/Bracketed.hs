@@ -6,7 +6,8 @@ import Brat.FC
 import Brat.Lexer.Token
 import Bwd
 
-import Text.Megaparsec (VisualStream(..))
+import Text.Megaparsec (PosState(..), SourcePos(..), TraversableStream(..), VisualStream(..))
+import Text.Megaparsec.Pos (mkPos)
 
 opener :: Tok -> Maybe BracketType
 opener LParen = Just Paren
@@ -26,9 +27,9 @@ data BToken
   | FlatTok Token
  deriving (Eq, Ord)
 
-tokLen :: BToken -> Int
-tokLen (FlatTok tok) = length (show tok)
-tokLen (Bracketed _ _ bs) = sum (tokLen <$> bs) + 2
+btokLen :: BToken -> Int
+btokLen (FlatTok tok) = length (show tok)
+btokLen (Bracketed _ _ bs) = sum (btokLen <$> bs) + 2
 
 instance Show BToken where
   show (FlatTok t) = show t
@@ -36,7 +37,30 @@ instance Show BToken where
 
 instance VisualStream [BToken] where
   showTokens _ ts = concatMap show ts
-  tokensLength _ = sum . fmap tokLen
+  tokensLength _ = sum . fmap btokLen
+
+instance TraversableStream [BToken] where
+  reachOffsetNoLine i pos = let fileName = sourceName (pstateSourcePos pos)
+                                (Pos line col, rest) = worker (i - pstateOffset pos + 1) (pstateInput pos)
+                            in pos
+                            { pstateInput = rest
+                            , pstateOffset = max (pstateOffset pos) i
+                            , pstateSourcePos = SourcePos fileName (mkPos line) (mkPos col)
+                            }
+   where
+    worker :: Int -> [BToken] -> (Pos, [BToken])
+    worker 0 inp@(Bracketed fc _ _:_) = (start fc, inp)
+    worker 0 inp@(FlatTok t:_) = (start (fc t), inp)
+    worker i ((Bracketed fc b bts):rest) = let Pos closeLine closeCol = end fc
+                                               closeFC = FC (Pos closeLine (closeCol - 1)) (Pos closeLine closeCol)
+                                           in  worker (i - 1) (bts ++ [FlatTok (Token closeFC (closeTok b))] ++ rest)
+    worker i (FlatTok t:rest)
+     | i >= tokenLen t = worker (i - tokenLen t) rest
+     | otherwise = (start (fc t), FlatTok t:rest)
+
+    closeTok Paren = RParen
+    closeTok Bracket = RBracket
+    closeTok Brace = RBrace
 
 eofErr :: FC -> BracketType -> Error
 eofErr fc b = Err (Just fc) (BracketErr (EOFInBracket b))
