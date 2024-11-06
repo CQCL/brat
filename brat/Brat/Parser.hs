@@ -316,7 +316,7 @@ rawIOWithSpanFC :: Parser (WC [RawIO])
 rawIOWithSpanFC = spanningFC =<< rawIOFC
 
 vec :: Parser (WC Flat)
-vec = (\(WC fc x) -> vec2Cons fc x) <$> (inBracketsFC Bracket elems)
+vec = (\(WC fc x) -> WC fc (unWC (vec2Cons fc x))) <$> (inBracketsFC Bracket elems)
   where
     elems = (element `chainl1` (try vecComma)) <|> pure []
     vecComma = match Comma $> (++)

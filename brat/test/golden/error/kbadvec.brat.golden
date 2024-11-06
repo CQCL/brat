@@ -1,6 +1,6 @@
 Error in test/golden/error/kbadvec.brat on line 2:
 triple = { b => [b] }
-                 ^
+                ^^^
 
   Expected vector of length 3
 from the type:  Vec(Bit, 3)
