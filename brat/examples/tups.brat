@@ -1,6 +1,9 @@
 nil :: []
 nil = []
 
+single :: [Bool]
+single = [true]
+
 double :: [Bool, Int]
 double = [true, 1]
 

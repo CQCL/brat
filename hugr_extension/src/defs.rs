@@ -8,7 +8,7 @@ use hugr::{
         simple_op::{MakeOpDef, OpLoadError},
         OpDef, SignatureError, SignatureFromArgs, SignatureFunc,
     },
-    ops::OpName,
+    ops::NamedOp,
     std_extensions::collections::list_type,
     types::{type_param::TypeParam, FunctionType, PolyFuncType, Type, TypeArg, TypeBound},
 };
@@ -33,7 +33,7 @@ pub enum BratOpDef {
     Replicate,
 }
 
-impl OpName for BratOpDef {
+impl NamedOp for BratOpDef {
     fn name(&self) -> SmolStr {
         use BratOpDef::*;
         match self {
@@ -82,7 +82,7 @@ impl MakeOpDef for BratOpDef {
             PrimCtorTest(ctor) => {
                 let sig = ctor.signature();
                 let input = sig.body().output(); // Ctor output is input for the test
-                let output = Type::new_tuple_sum(vec![input.clone(), sig.body().input().clone()]);
+                let output = Type::new_sum(vec![input.clone(), sig.body().input().clone()]);
                 PolyFuncType::new(sig.params(), FunctionType::new(input.clone(), vec![output]))
                     .into()
             }
