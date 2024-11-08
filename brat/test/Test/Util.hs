@@ -5,13 +5,14 @@ import Brat.Checker.Monad
 import Brat.Checker.Types (initStore, emptyEnv)
 import Brat.Error
 import Brat.FC
+import Brat.Naming
 
 import qualified Data.Set as S
 import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.ExpectedFailure
 
-runEmpty m = run emptyEnv initStore m
+runEmpty m = run emptyEnv initStore root m
 
 assertChecking :: Checking a -> Assertion
 assertChecking m = case runEmpty $ localFC (FC (Pos 0 0) (Pos 0 0)) m of

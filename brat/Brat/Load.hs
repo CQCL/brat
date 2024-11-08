@@ -138,7 +138,7 @@ loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addS
     --  * A map from names to VDecls (aka an Env)
     --  * Some overs and outs??
   let (globalNS, newRoot) = split "globals" ns
-  (entries, (_holes, kcStore, kcGraph)) <- run venv initStore $ localNS globalNS $
+  (entries, (_holes, kcStore, kcGraph)) <- run venv initStore globalNS $
     withAliases aliases $ forM decls $ \d -> localFC (fnLoc d) $ do
       let name = PrefixName pre (fnName d)
       (thing, ins :->> outs, sig, prefix) <- case (fnLocality d) of
@@ -160,7 +160,7 @@ loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addS
   let vdecls = map fst entries
   -- Now generate environment mapping usernames to nodes in the graph
   venv <- pure $ venv <> M.fromList [(name, overs) | ((name, _), (_, overs)) <- entries]
-  ((), (holes, newEndData, graph)) <- run venv kcStore $ localNS newRoot $ withAliases aliases $ do
+  ((), (holes, newEndData, graph)) <- run venv kcStore newRoot $ withAliases aliases $ do
     remaining <- "check_defs" -! foldM checkDecl' to_define vdecls
     pure $ assert (M.null remaining) () -- all to_defines were defined
   pure (venv, oldDecls <> vdecls, holes, oldEndData <> newEndData, kcGraph <> graph)

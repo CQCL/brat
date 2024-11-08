@@ -1122,9 +1122,10 @@ abstractEndz ez = changeVar (ParToInx (AddZ (stackLen ez)) ez)
 
 run :: VEnv
     -> Store
+    -> Namespace
     -> Checking a
     -> Either Error (a, ([TypedHole], Store, Graph))
-run ve initStore m = do
+run ve initStore ns m = do
   let ctx = Ctx { globalVEnv = ve
                 , store = initStore
                 -- TODO: fill with default constructors
@@ -1134,7 +1135,7 @@ run ve initStore m = do
                 , aliasTable = M.empty
                 , hopeSet = M.empty
                 }
-  (a,ctx,(holes, graph)) <- handler m ctx mempty
+  (a,ctx,(holes, graph)) <- handler (localNS ns m) ctx mempty
   let tyMap = typeMap $ store ctx
   -- If the hopeSet has any remaining holes with kind Nat, we need to abort.
   -- Even though we didn't need them for typechecking problems, our runtime
