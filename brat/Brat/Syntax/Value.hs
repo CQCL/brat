@@ -51,6 +51,8 @@ data Inx :: N -> Type where
   VZ :: Inx (S n)
   VS :: Inx n -> Inx (S n)
 
+deriving instance Eq (Inx n)
+
 instance Show (Inx n) where
   show = show . toNat
    where
@@ -144,7 +146,7 @@ deriving instance Show (VVar n)
 
 instance Eq (VVar n) where
   (VPar e0) == (VPar e1) = e0 == e1
-  (VInx _) == (VInx _) = error "tried to compare VInxs"
+  (VInx i) == (VInx i') = i == i'
   _ == _ = False
 
 -- More syntactic, called "Term" elsewhere in literature (not in BRAT)

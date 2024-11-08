@@ -24,6 +24,7 @@ import Prelude hiding (filter)
 import Brat.Checker.Helpers
 import Brat.Checker.Monad
 import Brat.Checker.Quantity
+import Brat.Checker.SolveHoles (typeEq)
 import Brat.Checker.SolvePatterns (argProblems, argProblemsWithLeftovers, solve)
 import Brat.Checker.Types
 import Brat.Constructors
@@ -114,13 +115,13 @@ checkWire Braty (WC fc tm) outputs (dangling, o) (hungry, u) = localFC fc $ do
   let ot = binderToValue Braty o
   let ut = binderToValue Braty u
   if outputs
-    then typeEq (show tm) (Star []) ot ut
-    else typeEq (show tm) (Star []) ut ot
+    then typeEq (show tm) (Zy :* S0 :* S0) (Star []) ot ut
+    else typeEq (show tm) (Zy :* S0 :* S0) (Star []) ut ot
   wire (dangling, ot, hungry)
 checkWire Kerny (WC fc tm) outputs (dangling, ot) (hungry, ut) = localFC fc $ do
   if outputs
-    then typeEq (show tm) (Dollar []) ot ut
-    else typeEq (show tm) (Dollar []) ut ot
+    then typeEq (show tm) (Zy :* S0 :* S0) (Dollar []) ot ut
+    else typeEq (show tm) (Zy :* S0 :* S0) (Dollar []) ut ot
   wire (dangling, ot, hungry)
 
 checkIO :: forall m d k exp act . (CheckConstraints m k, ?my :: Modey m)
@@ -545,7 +546,7 @@ check' FanIn (overs, ((tgt, ty):unders)) = do
     let k = case my of
           Kerny -> Dollar []
           Braty -> Star []
-    typeEq (show FanIn) k elTy (binderToValue my overTy)
+    typeEq (show FanIn) (Zy :* S0 :* S0) k elTy (binderToValue my overTy)
     let tailTy = TVec elTy (VNum (nConstant (n - 1)))
     (_, [(hungryHead, _), (hungryTail, tailTy)], [(danglingResult, _)], _) <- anext "faninNodes" (Constructor (plain "cons")) (S0, Some (Zy :* S0))
       ((RPr ("head", elTy) (RPr ("tail", tailTy) R0)) :: Ro m Z Z)
@@ -649,7 +650,13 @@ check' (Of n e) ((), unders) = case ?my of
       (elems, unders, rightUnders) <- getVecs len unders
       pure ((tgt, el):elems, (tgt, ty):unders, rightUnders)
   getVecs _ unders = pure ([], [], unders)
-
+check' Hope ((), ((tgt, ty):unders)) = case (?my, ty) of
+  (Braty, Left _k) -> do
+    fc <- req AskFC
+    req (ANewHope (toEnd tgt, fc))
+    pure (((), ()), ((), unders))
+  (Braty, Right _ty) -> typeErr "Can only infer kinded things with !"
+  (Kerny, _) -> typeErr "Won't infer kernel typed !"
 check' tm _ = error $ "check' " ++ show tm
 
 
@@ -1115,10 +1122,9 @@ abstractEndz ez = changeVar (ParToInx (AddZ (stackLen ez)) ez)
 
 run :: VEnv
     -> Store
-    -> Namespace
     -> Checking a
     -> Either Error (a, ([TypedHole], Store, Graph))
-run ve initStore ns m =
+run ve initStore m = do
   let ctx = Ctx { globalVEnv = ve
                 , store = initStore
                 -- TODO: fill with default constructors
@@ -1126,5 +1132,19 @@ run ve initStore ns m =
                 , kconstructors = kernelConstructors
                 , typeConstructors = defaultTypeConstructors
                 , aliasTable = M.empty
-                } in
-    (\(a,ctx,(holes, graph)) -> (a, (holes, store ctx, graph))) <$> handler (localNS ns m) ctx mempty
+                , hopeSet = M.empty
+                }
+  (a,ctx,(holes, graph)) <- handler m ctx mempty
+  let tyMap = typeMap $ store ctx
+  -- If the hopeSet has any remaining holes with kind Nat, we need to abort.
+  -- Even though we didn't need them for typechecking problems, our runtime
+  -- behaviour depends on the values of the holes, which we can't account for.
+  case M.toList $ M.filterWithKey (\e _ -> isNatKinded tyMap e) (hopeSet ctx) of
+    [] -> pure (a, (holes, store ctx, graph))
+    -- Just use the FC of the first hole while we don't have the capacity to
+    -- show multiple error locations
+    hs@((_,fc):_) -> Left $ Err (Just fc) (RemainingNatHopes (show . fst <$> hs))
+ where
+  isNatKinded tyMap e = case tyMap M.! e of
+    EndType Braty (Left Nat) -> True
+    _ -> False

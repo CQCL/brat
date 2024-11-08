@@ -18,6 +18,7 @@ import Control.Monad.Freer
 import Control.Monad.Fail ()
 import Data.List (intercalate)
 import qualified Data.Map as M
+import qualified Data.Set as S
 
 -- import Debug.Trace
 
@@ -50,12 +51,16 @@ data CtxEnv = CtxEnv
   , locals :: VEnv
   }
 
+type HopeSet = M.Map End FC
+
 data Context = Ctx { globalVEnv :: VEnv
                    , store :: Store
                    , constructors :: ConstructorMap Brat
                    , kconstructors :: ConstructorMap Kernel
                    , typeConstructors :: M.Map (Mode, UserName) [(PortName, TypeKind)]
                    , aliasTable :: M.Map UserName Alias
+                   -- All the ends here should be targets
+                   , hopeSet :: HopeSet
                    }
 
 data CheckingSig ty where
@@ -89,6 +94,8 @@ data CheckingSig ty where
   AskVEnv :: CheckingSig CtxEnv
   Declare :: End -> Modey m -> BinderType m -> CheckingSig ()
   Define  :: End -> Val Z -> CheckingSig ()
+  ANewHope :: (End, FC) -> CheckingSig ()
+  AskHopeSet :: CheckingSig HopeSet
 
 localAlias :: (UserName, Alias) -> Checking v -> Checking v
 localAlias _ (Ret v) = Ret v
@@ -267,6 +274,31 @@ handler (Req s k) ctx g
                 M.lookup tycon tbl
         handler (k args) ctx g
 
+      ANewHope (e, fc) -> handler (k ()) (ctx { hopeSet = M.insert e fc (hopeSet ctx) }) g
+
+      AskHopeSet -> handler (k (hopeSet ctx)) ctx g
+
+howStuck :: Val n -> Stuck
+howStuck (VApp (VPar e) _) = AwaitingAny (S.singleton e)
+howStuck (VLam bod) = howStuck bod
+howStuck (VCon _ _) = Unstuck
+howStuck (VFun _ _) = Unstuck
+howStuck (VSum _ _) = Unstuck
+-- Numbers are likely to cause problems.
+-- Whether they are stuck or not depends on the question we're asking!
+howStuck (VNum (NumValue 0 gro)) = howStuckGro gro
+ where
+  howStuckGro Constant0 = Unstuck
+  howStuckGro (StrictMonoFun f) = howStuckSM f
+
+  howStuckSM (StrictMono 0 mono) = howStuckMono mono
+  howStuckSM _ = AwaitingAny mempty
+
+  howStuckMono (Full sm) = howStuckSM sm
+  howStuckMono (Linear (VPar e)) = AwaitingAny (S.singleton e) -- ALAN was VHop
+  howStuckMono (Linear _) = AwaitingAny mempty
+howStuck _ = AwaitingAny mempty
+
 type Checking = Free CheckingSig
 
 instance Semigroup a => Semigroup (Checking a) where
@@ -315,3 +347,6 @@ localNS ns (Req (Fresh str) k) = let (name, root) = fresh str ns in
 localNS ns (Req (SplitNS str) k) = let (subSpace, newRoot) = split str ns in
                                       localNS newRoot (k subSpace)
 localNS ns (Req c k) = Req c (localNS ns . k)
+
+defineEnd :: End -> Val Z -> Checking ()
+defineEnd e v = req (Define e v)

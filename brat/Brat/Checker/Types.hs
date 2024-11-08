@@ -9,6 +9,7 @@ module Brat.Checker.Types (Overs, Unders
                           ,emptyEnv
                           ,TypedHole(..), HoleTag(..), HoleData(..)
                           ,initStore
+                          ,kindForMode
                           ) where
 
 import Brat.Checker.Quantity
@@ -111,3 +112,7 @@ initStore = Store M.empty M.empty
 
 instance Semigroup Store where
   (Store ks vs) <> (Store ks' vs') = Store (ks <> ks') (vs <> vs')
+
+kindForMode :: Modey m -> TypeKind
+kindForMode Braty = Star []
+kindForMode Kerny = Dollar []

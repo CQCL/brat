@@ -20,7 +20,7 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
                             ,evalSrcRow, evalTgtRow
                             )-} where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows)
+import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (eval, EvMode(..), kindType)
@@ -391,10 +391,10 @@ valueToBinder Braty = Right
 valueToBinder Kerny = id
 
 defineSrc :: Src -> Val Z -> Checking ()
-defineSrc src v = req (Define (ExEnd (end src)) v)
+defineSrc src v = defineEnd (ExEnd (end src)) v
 
 defineTgt :: Tgt -> Val Z -> Checking ()
-defineTgt tgt v = req (Define (InEnd (end tgt)) v)
+defineTgt tgt v = defineEnd (InEnd (end tgt)) v
 
 declareSrc :: Src -> Modey m -> BinderType m -> Checking ()
 declareSrc src my ty = req (Declare (ExEnd (end src)) my ty)
@@ -508,3 +508,13 @@ runArith (NumValue upl grol) Pow (NumValue upr gror)
  -- 2^(2^k * upr) + 2^(2^k * upr) * (full(2^(k + k') * mono))
  = pure $ NumValue (upl ^ upr) (StrictMonoFun (StrictMono (l * upr) (Full (StrictMono (k + k') mono))))
 runArith _ _ _ = Nothing
+
+buildArithOp :: ArithOp -> Checking ((Tgt, Tgt), Src)
+buildArithOp op = do
+  (_, [(lhs,_), (rhs,_)], [(out,_)], _) <- next "" (ArithNode op) (S0, Some (Zy :* S0)) (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0)) (RPr ("value", TNat) R0)
+  pure ((lhs, rhs), out)
+
+buildConst :: SimpleTerm -> Val Z -> Checking Src
+buildConst tm ty = do
+  (_, _, [(out,_)], _) <- next "" (Const tm) (S0, Some (Zy :* S0)) R0 (RPr ("value", ty) R0)
+  pure out
