@@ -1,0 +1,9 @@
+Error in test/golden/error/bad_swap.brat on line 2:
+swap(_, _, x, y) = x, y
+                   ^
+
+  Type mismatch when checking x
+Expected: (a1 :: VApp VPar Ex checking_check_defs_1_swap_swap.box_2_lambda_fake_source 1 B0), (b1 :: VApp VPar Ex checking_check_defs_1_swap_swap.box_2_lambda_fake_source 0 B0)
+But got:  (x :: VApp VPar Ex checking_check_defs_1_swap_swap.box_2_lambda_fake_source 0 B0)
+
+
