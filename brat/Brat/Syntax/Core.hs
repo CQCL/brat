@@ -86,7 +86,7 @@ instance Show (Term d k) where
   show (VHole (name, _)) = '?' : name
   show Empty = "()"
   show (a :|: b) = bracket PJuxtPull a ++ ", " ++ bracket PJuxtPull b
-  show Pass = "pass"
+  show Pass = ".."
   show (Th comp) = '{' : show comp ++ "}"
   show (TypedTh comp) = "{:" ++ show comp ++ ":}"
   show (Force th) = show th ++ "()"
