@@ -89,6 +89,8 @@ data CheckingSig ty where
   AskVEnv :: CheckingSig CtxEnv
   Declare :: End -> Modey m -> BinderType m -> CheckingSig ()
   Define  :: End -> Val Z -> CheckingSig ()
+  NameMeta :: End -> String -> CheckingSig ()
+  AskNames :: CheckingSig (M.Map End String)
 
 localAlias :: (QualName, Alias) -> Checking v -> Checking v
 localAlias _ (Ret v) = Ret v
@@ -266,6 +268,13 @@ handler (Req s k) ctx g
         args <- maybeToRight (Err (Just fc) $ TyConNotFound (show tycon) (show vcon)) $
                 M.lookup tycon tbl
         handler (k args) ctx g
+
+      NameMeta end name -> let names = nameMap (store ctx) in
+                             case M.lookup end names of
+                               Just oldName -> error $ "Trying to name end (" ++ show end ++ ")\nas " ++ show name ++ " but it's already called " ++ oldName
+                               Nothing -> let st = store ctx in
+                                            handler (k ()) (ctx { store = st { nameMap = M.insert end name (nameMap st) } }) g
+      AskNames -> handler (k (nameMap (store ctx))) ctx g
 
 type Checking = Free CheckingSig
 

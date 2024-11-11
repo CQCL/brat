@@ -10,8 +10,6 @@ module Brat.Syntax.Common (PortName,
                            Pattern(..),
                            Abstractor(..), occursInAbstractor,
                            TypeKind(..), KindOr,
-                           showSig,
-                           showRow,
                            NamedPort(..),
                            Src, Tgt,
                            OutPort(..), InPort(..),
@@ -38,7 +36,9 @@ module Brat.Syntax.Common (PortName,
                            ArithOp(..),
                            pattern Dollar,
                            pattern Star,
-                           Precedence(..)
+                           Precedence(..),
+                           showSig,
+                           NameMap
                           ) where
 
 import Brat.FC
@@ -46,9 +46,9 @@ import Brat.QualName
 import Brat.Syntax.Abstractor
 import Brat.Syntax.Port
 
-import Data.Bifunctor (first)
-import Data.List (intercalate)
 import Data.Kind (Type)
+import Data.List (intercalate)
+import qualified Data.Map as M
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 
 data Mode = Brat | Kernel deriving (Eq, Ord, Show)
@@ -164,6 +164,8 @@ deriving instance Eq io => Eq (CType' io)
 instance Semigroup (CType' (PortName, ty)) where
   (ss :-> ts) <> (us :-> vs) = (ss <> us) :-> (ts <> vs)
 
+type NameMap = M.Map End String
+
 data Import
   = Import { importName :: WC QualName
            , importQualified :: Bool
@@ -188,16 +190,6 @@ instance Show Import where
     showSelection (ImportPartial fns) = "(":(unWC <$> fns) ++ [")"]
     showSelection (ImportHiding fns) = "hiding (":(unWC <$> fns) ++ [")"]
 
-showSig :: Show ty => [(String, ty)] -> String
-showSig [] = "()"
-showSig (x:xs)
-  = intercalate ", " [ '(':p ++ " :: " ++ show ty ++ ")"
-                     | (p, ty) <- x:xs]
-
-showRow :: Show ty => [(NamedPort e, ty)] -> String
-showRow = showSig . fmap (first portName)
-
-
 data ArithOp = Add | Sub | Mul | Div | Pow deriving (Eq, Show)
 
 -- Operator precedence for non-atomic expressions
@@ -216,3 +208,9 @@ data Precedence
  | PAnn
  | PApp
  deriving (Bounded, Enum, Eq, Ord, Show)
+
+showSig :: (ty -> String) -> [(String, ty)] -> String
+showSig _ [] = "()"
+showSig showTy (x:xs) =
+  intercalate ", " [ '(':p ++ " :: " ++ showTy ty ++ ")"
+                   | (p, ty) <- x:xs]
