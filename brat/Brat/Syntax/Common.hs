@@ -111,7 +111,17 @@ instance Eq ty => Eq (TypeRowElem ty) where
   Anon ty == Anon ty' = ty == ty'
 
 data TypeKind = TypeFor Mode [(PortName, TypeKind)] | Nat
-  deriving (Eq, Show)
+  deriving Eq
+
+instance Show TypeKind where
+  show Nat = "#"
+  show (TypeFor m ks) = case m of
+    Brat -> "*" ++ showArgs ks
+    Kernel -> "$" ++ showArgs ks
+   where
+    showArgs [] = ""
+    showArgs args = '(':intercalate ", " (showArg <$> args) ++ ")"
+    showArg (p, k) = p ++ " :: " ++ show k
 
 pattern Star, Dollar :: [(PortName, TypeKind)] -> TypeKind
 pattern Star ks = TypeFor Brat ks
