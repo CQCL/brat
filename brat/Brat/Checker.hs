@@ -101,6 +101,7 @@ instance CombineInputs [(Tgt, a)] where
 
 type CheckConstraints m k =
   (Show (BinderType m)
+  ,ShowWithMetas (BinderType m)
   ,TensorOutputs (Outputs m Syn)
   ,TensorOutputs (Outputs m Chk)
   ,CombineInputs (Inputs m k)
@@ -143,9 +144,10 @@ checkIO :: forall m d k exp act . (CheckConstraints m k, ?my :: Modey m)
         -> Checking [(NamedPort exp, BinderType m)] -- left(overs/unders)
 checkIO tm@(WC fc _) exps acts wireFn errMsg = modily ?my $ do
   let (rows, rest) = zipSuffixes exps acts
+  nm <- req AskNames
   localFC fc $ forM rows $ \(e:|exps, a:|acts) ->
-      wrapError (addRowContext (showRow $ e:exps) (showRow $ a:acts)) $ wireFn e a
-  throwLeft $ first (\(b:|bs) -> TypeErr $ errMsg ++ showRow (b:bs) ++ " for " ++ show tm) rest
+      wrapError (addRowContext (showRow nm $ e:exps) (showRow nm $ a:acts)) $ wireFn e a
+  throwLeft $ first (\(b:|bs) -> TypeErr $ errMsg ++ showRow nm (b:bs) ++ " for " ++ show tm) rest
  where
   addRowContext :: String -> String -> Error -> Error
   addRowContext exp act = \case
@@ -305,7 +307,9 @@ check' (Th tm) ((), u@(hungry, ty):unders) = case (?my, ty) of
       Right ty@(VFun Braty cty) -> checkThunk Braty "thunk" cty tm >>= wire . (,ty, hungry)
       Right ty@(VFun Kerny cty) -> checkThunk Kerny "thunk" cty tm >>= wire . (,ty, hungry)
       Left (Star args) -> kindCheck [(hungry, Star args)] (Th tm) $> ()
-      _ -> err . ExpectedThunk "" $ showRow (u:unders)
+      _ -> do
+        nm <- req AskNames
+        err . ExpectedThunk "" $ showRow nm (u:unders)
     pure (((), ()), ((), unders))
   (Kerny, _) -> err . ThunkInKernel $ show (Th tm)
  where
@@ -319,12 +323,13 @@ check' (Th tm) ((), u@(hungry, ty):unders) = case (?my, ty) of
     ((dangling, _), ()) <- let ?my = m in makeBox name cty $
       \(thOvers, thUnders) -> do
         (((), ()), leftovers) <- check tm (thOvers, thUnders)
+        nm <- req AskNames
         case leftovers of
           ([], []) -> pure ()
-          ([], unders) -> err (ThunkLeftUnders (showRow unders))
+          ([], unders) -> err (ThunkLeftUnders (showRow nm unders))
           -- If there are leftovers and leftunders, complain about the leftovers
           -- Until we can report multiple errors!
-          (overs, _) -> err (ThunkLeftOvers (showRow overs))
+          (overs, _) -> err (ThunkLeftOvers (showRow nm overs))
     pure dangling
 check' (TypedTh t) ((), ()) = case ?my of
   -- the thunk itself must be Braty
@@ -393,11 +398,12 @@ check' (Arith op l r) ((), u@(hungry, ty):unders) = case (?my, ty) of
 check' (fun :$: arg) (overs, unders) = do
   ((ins, outputs), ((), leftUnders)) <- check fun ((), unders)
   ((argIns, ()), (leftOvers, argUnders)) <- check arg (overs, ins)
+  nm <- req AskNames
   if null argUnders
   then pure ((argIns, outputs), (leftOvers, leftUnders))
   else typeErr $ unwords ["Expected function", show fun
                          ,"to consume all of its arguments (" ++ show arg ++ ")\n"
-                         ,"but found leftovers:", showRow argUnders
+                         ,"but found leftovers:", showRow nm argUnders
                          ]
 check' (Let abs x y) conn = do
   (((), dangling), ((), ())) <- check x ((), ())
@@ -577,9 +583,9 @@ check' (Of n e) ((), unders) = case ?my of
     ensureEmpty "" leftovers
     case diry @d of
       -- Get the largest prefix of unders whose types are vectors of the right length
-      Chky -> getVecs n unders >>= \case
+      Chky -> req AskNames >>= \nm -> getVecs n unders >>= \case
         -- If none of the unders have the right type, we should fail
-        ([], [], _) -> let expected = if null unders then "empty row" else showRow unders in
+        ([], [], _) -> let expected = if null unders then "empty row" else showRow nm unders in
                         typeErr $ unlines ["Got: Vector of length " ++ show n
                                           ,"Expected: " ++ expected]
         (elemUnders, vecUnders, rightUnders) -> do
@@ -727,6 +733,7 @@ checkBody :: (CheckConstraints m UVerb, EvMode m, ?my :: Modey m)
           -> CTy m Z -- Function type
           -> Checking Src
 checkBody fnName body cty = do
+  nm <- req AskNames
   (tm, (absFC, tmFC)) <- case body of
     NoLhs tm -> pure (tm, (fcOf tm, fcOf tm))
     Clauses (c@(abs, tm) :| cs) -> do
@@ -739,9 +746,9 @@ checkBody fnName body cty = do
       ([], []) -> pure ()
       ([], rightUnders) -> localFC tmFC $
         let numUsed = length unders - length rightUnders
-        in err (TypeMismatch (show tm) (showRow unders) (showRow (take numUsed unders)))
+        in err (TypeMismatch (show tm) (showRow nm unders) (showRow nm (take numUsed unders)))
       (rightOvers, _) -> localFC absFC $
-        typeErr ("Inputs " ++ showRow rightOvers ++ " weren't used")
+        typeErr ("Inputs " ++ showRow nm rightOvers ++ " weren't used")
   pure src
 
 -- Constructs row from a list of ends and types. Uses standardize to ensure that dependency is
@@ -986,17 +993,18 @@ detectVecErrors :: QualName  -- Term constructor name
                 -> Val Z     -- Type
                 -> Either (Term d k) Pattern  -- Term or pattern
                 -> Checking (Error -> Error)  -- Returns error wrapper to use for recursion
-detectVecErrors vcon (PrefixName [] "Vec") [_, VNum n] [_, VPNum p] ty tp =
+detectVecErrors vcon (PrefixName [] "Vec") [_, VNum n] [_, VPNum p] ty tp = do
+  nm <- req AskNames
   case numMatch B0 n p of
     Left (NumMatchFail _ _) -> do
       p' <- toLenConstr p
-      err $ getVecErr tp (show ty) (show n) p'
+      err $ getVecErr tp (showWithMetas nm ty) (showWithMetas nm n) p'
     -- Even if we succed here, the error might pop up when checking the
     -- rest of the vector. We return a function here that intercepts the
     -- error and extends it to the whole vector.
     _ -> if vcon == PrefixName [] "cons"
          then do fc <- req AskFC
-                 pure (consError fc tp (show ty) n)
+                 pure (consError fc tp (showWithMetas nm ty) (showWithMetas nm n))
          else pure id
  where
   -- For constructors that produce something of type Vec we should
@@ -1013,15 +1021,15 @@ getVecErr (Left tm) = VecLength (show tm)
 getVecErr (Right pat) = VecPatLength (show pat)
 
 -- Wrapper extending an error occurring on the RHS of a cons to the whole vector
-consError :: Show v => FC -> Either (Term d k) Pattern -> String -> NumVal v -> Error -> Error
+consError :: FC -> Either (Term d k) Pattern -> String -> String -> Error -> Error
 consError fc tp ty exp err = case (tp, msg err) of
     (Left _, VecLength _ _ _ act) -> mkVecError act
     (Right _, VecPatLength _ _ _ act) -> mkVecError act
     _ -> err
  where
-  mkVecError act = Err (Just fc) $ getVecErr tp ty (show exp) ((1+) <$> act)
+  mkVecError act = Err (Just fc) $ getVecErr tp ty exp ((1+) <$> act)
 
-abstractAll :: (Show (BinderType m), EvMode m, ?my :: Modey m)
+abstractAll :: (ShowWithMetas (BinderType m), EvMode m, ?my :: Modey m)
             => [(Src, BinderType m)] -> Abstractor
             -> Checking (Env (EnvData m))
 abstractAll stuff binder = do
@@ -1030,7 +1038,7 @@ abstractAll stuff binder = do
     pure env
 
 abstract :: forall m
-          . (Show (BinderType m), ?my :: Modey m, EvMode m)
+          . (ShowWithMetas (BinderType m), ?my :: Modey m, EvMode m)
          => [(Src, BinderType m)]
          -> Abstractor
          -> Checking (Env (EnvData m) -- Local env for checking body of lambda
@@ -1048,7 +1056,7 @@ abstract ((src, ty):inputs) (APat p) = (,inputs) <$> abstractPattern ?my (src, t
 abstract [] a = err (NothingToBind (show a))
 
 abstractPattern :: forall m
-                 . (EvMode m, Show (BinderType m))
+                 . (EvMode m, ShowWithMetas (BinderType m))
                 => Modey m
                 -> (Src, BinderType m)
                 -> Pattern
