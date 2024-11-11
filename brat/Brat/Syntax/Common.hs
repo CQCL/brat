@@ -110,7 +110,7 @@ instance Eq ty => Eq (TypeRowElem ty) where
   Named _ ty == Anon ty' = ty == ty'
   Anon ty == Anon ty' = ty == ty'
 
-data TypeKind = TypeFor Mode [(PortName, TypeKind)] | Nat | Row
+data TypeKind = TypeFor Mode [(PortName, TypeKind)] | Nat
   deriving (Eq, Show)
 
 pattern Star, Dollar :: [(PortName, TypeKind)] -> TypeKind
