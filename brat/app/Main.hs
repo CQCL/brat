@@ -24,7 +24,7 @@ dotOption = strOption (long "dot" <> value "" <> help "Write graph in Dot format
 libOption = strOption (long "lib" <> value "" <> help "Look in extra directories for libraries (delimited with ;)")
 
 opts :: Parser Options
-opts = Opt <$> astFlag <*> dotOption <*> compileFlag <*> (strArgument (metavar "FILE")) <*> libOption <*> rawFlag
+opts = Opt <$> astFlag <*> dotOption <*> compileFlag <*> strArgument (metavar "FILE") <*> libOption <*> rawFlag
 
 -- Parse a list of library directories delimited by a semicolon
 parseLibs :: String -> [String]

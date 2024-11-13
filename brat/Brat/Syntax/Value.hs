@@ -42,7 +42,7 @@ instance MODEY Brat => Show VDecl where
    where
     aux :: FuncDecl (Some (Ro Brat Z)) body -> FuncDecl String body
     aux (FuncDecl { .. }) = case fnSig of
-      Some sig -> FuncDecl { fnName = fnName, fnSig = (show sig), fnBody = fnBody, fnLoc = fnLoc, fnLocality = fnLocality }
+      Some sig -> FuncDecl { fnName = fnName, fnSig = show sig, fnBody = fnBody, fnLoc = fnLoc, fnLocality = fnLocality }
 
 ------------------------------------ Variable Indices ------------------------------------
 -- Well scoped de Bruijn indices
@@ -56,7 +56,7 @@ instance Show (Inx n) where
    where
     toNat :: forall n. Inx n -> Int
     toNat VZ = 0
-    toNat (VS n) = 1 + (toNat n)
+    toNat (VS n) = 1 + toNat n
 
 data AddR :: N -> N -> N -> Type where
   AddZ :: Ny out -> AddR out Z out
@@ -71,7 +71,7 @@ outOrInn (AddZ _) inx = Left inx
 outOrInn (AddS _) (VZ {- :: Inx (S tot) -}) = Right (VZ {- Inx (S inn) -})
 outOrInn (AddS a) (VS inx) = case outOrInn a inx of
   -- inx is inner, put the VS back
-  Right (inx {- :: Inx inn -}) -> Right ((VS inx) {- :: Inx (S inn) -})
+  Right (inx {- :: Inx inn -}) -> Right (VS inx {- :: Inx (S inn) -})
   -- inx is outer, we don't care how many inner vars we passed to get to it
   Left (inx {- :: Inx out -}) -> Left (inx {- :: Inx out -})
 
@@ -291,7 +291,7 @@ instance Show x => Show (StrictMono x) where
   show (StrictMono 0 m) = show m
   show (StrictMono n m) = let a = "2^" ++ show n
                               b = show (2 ^ n :: Int)
-                          in (minimumBy (comparing length) [b,a]) ++ " * " ++ show m
+                          in minimumBy (comparing length) [b,a] ++ " * " ++ show m
 
 data Monotone x
  = Linear x
@@ -315,7 +315,7 @@ instance NumFun Fun00 where
   calculate Constant0 = 0
   calculate (StrictMonoFun mono) = calculate mono
 
-  numValue fun00 = NumValue 0 fun00
+  numValue = NumValue 0
 
 instance NumFun StrictMono where
   calculate StrictMono{..} = (2 ^ multBy2ToThe) * calculate monotone
@@ -514,7 +514,7 @@ instance DeBruijn VVar where
 
 instance DeBruijn Val where
   changeVar vc (VNum n) = VNum (fmap (changeVar vc) n)
-  changeVar vc (VCon c vs) = VCon c ((changeVar vc) <$> vs)
+  changeVar vc (VCon c vs) = VCon c (changeVar vc <$> vs)
   changeVar vc (VApp v ss)
     = VApp (changeVar vc v) (changeVar vc <$> ss)
   changeVar vc (VLam sc) = VLam (changeVar (weakenVC vc) sc)
@@ -559,7 +559,7 @@ endVal' Kerny _ e = KVar (VPar e)
 endVal :: TypeKind -> End -> Val Z
 endVal k e = varVal k (VPar e)
 
-varVal :: TypeKind -> (VVar n) -> Val n
+varVal :: TypeKind -> VVar n -> Val n
 varVal Nat v = VNum (nVar v)
 varVal _ v = VApp v B0
 

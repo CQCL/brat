@@ -112,14 +112,14 @@ instance Show (Raw d k) where
   show (RForget kv) = "(Forget " ++ show kv ++ ")"
   show (REmb x) = '「' : show x ++ "」"
   show (RPull [] x) = "[]:" ++ show x
-  show (RPull ps x) = concat ((++":") <$> ps) ++ show x
+  show (RPull ps x) = concatMap (++":") ps ++ show x
   show (RVar x) = show x
   show RIdentity = "|"
   show (RArith op a b) = "(" ++ show op ++ " " ++ show a ++ " " ++ show b ++ ")"
   show (fun ::$:: arg) = show fun ++ ('(' : show arg ++ ")")
   show (tm ::::: ty) = show tm ++ " :: " ++ show ty
   show (a ::-:: b) = show a ++ "; " ++ show b
-  show (RLambda c cs) = unlines $ (showClause c : (("| "++) . showClause <$> cs))
+  show (RLambda c cs) = unlines (showClause c : (("| "++) . showClause <$> cs))
    where
     showClause :: forall d k. (WC Abstractor, WC (Raw d k)) -> String
     showClause (abs, bod) = show abs ++ " => " ++ show bod
@@ -215,12 +215,12 @@ instance (Kindable k) => Desugarable (Raw d k) where
   table of either known constructors or known type aliases. We must transform
   these into `Con c arg` when desugaring.
   -}
-  desugar' (REmb syn) = case (unWC syn) of
+  desugar' (REmb syn) = case unWC syn of
     (WC _ (RForce (WC _ (RVar c)))) ::$:: a -> do
       isConOrAlias c >>= \case
-        True -> case (kind $ unWC a) of
+        True -> case kind $ unWC a of
           Nouny -> Con c <$> desugar a
-          _ -> throwError $ desugarErr ("Constructor applied to something that isn't a noun")
+          _ -> throwError $ desugarErr "Constructor applied to something that isn't a noun"
         False -> Emb <$> desugar syn
     (RVar c) -> do
       isConOrAlias c >>= \case
@@ -239,7 +239,7 @@ instance (Kindable k) => Desugarable (Raw d k) where
     (tys, ()) <- desugarBind outputs $ pure ()
     pure (tm ::: tys)
   desugar' (syn ::-:: verb) = (:-:) <$> desugar syn <*> desugar verb
-  desugar' (RLambda c cs) = Lambda <$> (id **^ desugar) c <*> (traverse (id **^ desugar) cs)
+  desugar' (RLambda c cs) = Lambda <$> (id **^ desugar) c <*> traverse (id **^ desugar) cs
   desugar' (RLet abs thing body) = Let abs <$> desugar thing <*> desugar body
   desugar' (RCon c arg) = Con c <$> desugar arg
   desugar' (RFn cty) = C <$> desugar' cty

@@ -244,7 +244,7 @@ instance Show CustomConst where
   show (CC tag cts) = "Const(" ++ tag ++ ")(" ++ show cts ++ ")"
 
 instance ToJSON CustomConst where
-  toJSON (CC tag cts) = object ["c" .= (pack tag)
+  toJSON (CC tag cts) = object ["c" .= pack tag
                                ,"v" .= cts
                                ]
 
@@ -423,7 +423,7 @@ instance ToJSON node => ToJSON (CallOp node) where
   toJSON (CallOp parent signature_) =
     object ["parent" .= parent
            ,"op" .= ("Call" :: Text)
-           ,"func_sig" .= (PolyFuncType [] signature_)
+           ,"func_sig" .= PolyFuncType [] signature_
            ,"type_args" .= ([] :: [TypeArg])
            ,"instantiation" .= signature_
            ]
@@ -591,7 +591,7 @@ getParent (OpDefn (FuncDefn { parent = parent })) = parent
 getParent (OpConst (ConstOp { parent = parent })) = parent
 getParent (OpDFG (DFG { parent = parent })) = parent
 getParent (OpConditional (Conditional { parent = parent })) = parent
-getParent (OpCase (_, (Case { parent = parent }))) = parent
+getParent (OpCase (_, Case { parent = parent })) = parent
 getParent (OpIn (InputNode { parent = parent })) = parent
 getParent (OpOut (OutputNode { parent = parent })) = parent
 getParent (OpTag (TagOp { parent = parent })) = parent

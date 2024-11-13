@@ -24,7 +24,7 @@ maxDepth = 5
 
 row :: Int -> Int -> Gen (Ro Kernel Z Z)
 row d n = sequence [ (name,) <$> arbitrarySValue d | name <- take n names ] <&>
-          foldr (\this rest -> RPr this rest) R0
+          foldr RPr R0
 
 arbitrarySValue :: Int -> Gen (Val Z)
 arbitrarySValue d = case d of

@@ -55,14 +55,14 @@ data Abstractor
  | Abstractor :||: Abstractor
  -- Pull port name being abstracted to the front
  -- b:x, c:y, z -> ...
- | APull [PortName] (Abstractor)
+ | APull [PortName] Abstractor
  | APat Pattern
  deriving Eq
 
-instance Show (Abstractor) where
+instance Show Abstractor where
   show AEmpty = "<empty>"
   show (x :||: y) = show x ++ ", " ++ show y
-  show (APull ps abs) = concat ((++":") <$> ps) ++ show abs
+  show (APull ps abs) = concatMap (++":") ps ++ show abs
   show (APat p) = show p
 
 occursInAbstractor :: String -> Abstractor -> Bool
