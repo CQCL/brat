@@ -12,7 +12,7 @@ import Brat.Syntax.Abstractor
 import Brat.Syntax.Common
 import Brat.Syntax.Simple
 import Brat.Syntax.Value
-import Brat.UserName
+import Brat.QualName
 import Bwd
 import Control.Monad.Freer
 import Hasochism
@@ -131,7 +131,7 @@ typeOfEnd my e = req (TypeOf e) >>= \case
 solveConstructor :: EvMode m
                  => Modey m
                  -> Src
-                 -> (UserName, Abstractor)
+                 -> (QualName, Abstractor)
                  -> Val Z
                  -> Problem
                  -> Checking ([(Src, PrimTest (BinderType m))]
@@ -367,11 +367,11 @@ argProblemsWithLeftovers srcs (NA AEmpty) p = pure (p, srcs)
 argProblemsWithLeftovers [] abst _ = err $ NothingToBind (show abst)
 
 lookupConstructor :: Modey m
-                  -> UserName -- A value constructor
+                  -> QualName -- A value constructor
                   -> Val Z    -- A corresponding type to normalise
                   -- TODO: Something with this m
                   -> Checking (CtorArgs m -- The needed args to the value constructor
-                              ,(UserName, [Val Z])  -- The type constructor we normalised and its args
+                              ,(QualName, [Val Z])  -- The type constructor we normalised and its args
                               )
 lookupConstructor my c ty = eval S0 ty >>= \case
   (VCon tycon args) -> (,(tycon, args)) <$> case my of

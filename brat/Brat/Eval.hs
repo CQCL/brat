@@ -17,9 +17,9 @@ module Brat.Eval (EvMode(..)
 import Brat.Checker.Monad
 import Brat.Checker.Types (EndType(..))
 import Brat.Error (ErrorMsg(..))
+import Brat.QualName (plain)
 import Brat.Syntax.Value
 import Brat.Syntax.Common
-import Brat.UserName (plain)
 import Control.Monad.Freer (req)
 import Bwd
 import Hasochism

@@ -5,17 +5,17 @@ module Test.Syntax.Let where
 import Brat.Error (showError)
 import Brat.Checker
 import Brat.FC
+import Brat.QualName
 import Brat.Syntax.Common
 import Brat.Syntax.Core
 import Brat.Syntax.Simple
 import Brat.Syntax.Value
-import Brat.UserName
 import Test.Util (runEmpty)
 
 import Data.String
 import Test.Tasty.HUnit
 
-instance IsString UserName where
+instance IsString QualName where
   fromString = PrefixName []
 
 instance IsString Abstractor where

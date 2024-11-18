@@ -1,15 +1,14 @@
-module Brat.UserName where
+module Brat.QualName where
 
 import Data.List (intercalate)
 
 type Prefix = [String]
 
-data UserName
-  = PrefixName Prefix String
+data QualName = PrefixName Prefix String
   deriving (Eq, Ord)
 
-instance Show UserName where
+instance Show QualName where
   show (PrefixName ps file) = intercalate "." (ps ++ [file])
 
-plain :: String -> UserName
+plain :: String -> QualName
 plain = PrefixName []

@@ -6,6 +6,7 @@ import Brat.FC
 import Brat.Lexer (lex)
 import Brat.Lexer.Token (Keyword(..), Token(..), Tok(..))
 import qualified Brat.Lexer.Token as Lexer
+import Brat.QualName ( plain, QualName(..) )
 import Brat.Syntax.Abstractor
 import Brat.Syntax.Common hiding (end)
 import qualified Brat.Syntax.Common as Syntax
@@ -13,7 +14,6 @@ import Brat.Syntax.FuncDecl (FuncDecl(..), Locality(..))
 import Brat.Syntax.Concrete
 import Brat.Syntax.Raw
 import Brat.Syntax.Simple
-import Brat.UserName ( plain, UserName(..) )
 import Brat.Elaborator
 import Util ((**^))
 
@@ -84,12 +84,12 @@ simpleName = token0 $ \case
   Ident str -> Just str
   _ -> Nothing
 
-qualifiedName :: Parser UserName
+qualifiedName :: Parser QualName
 qualifiedName = (<?> "qualified name") . token0 $ \case
   QualifiedId prefix str -> Just (PrefixName (toList prefix) str)
   _ -> Nothing
 
-userName :: Parser UserName
+userName :: Parser QualName
 userName = (<?> "name") $ try qualifiedName <|> (PrefixName [] <$> simpleName)
 
 round :: Parser a -> Parser a
@@ -643,7 +643,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
   alias = withFC aliasContents <&>
           \(WC fc (name, args, ty)) -> TypeAlias fc name args ty
 
-  aliasContents :: Parser (UserName, [(String, TypeKind)], RawVType)
+  aliasContents :: Parser (QualName, [(String, TypeKind)], RawVType)
   aliasContents = do
     match (K KType)
     alias <- userName

@@ -27,12 +27,12 @@ import Brat.Eval (eval, EvMode(..), kindType)
 import Brat.FC (FC)
 import Brat.Graph (Node(..), NodeType(..))
 import Brat.Naming (Name, FreshMonad(..))
+import Brat.QualName
 import Brat.Syntax.Common
 import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Simple
 import Brat.Syntax.Port (ToEnd(..))
 import Brat.Syntax.Value
-import Brat.UserName
 import Bwd
 import Hasochism
 import Util (log2)
@@ -131,7 +131,7 @@ pullPorts toPort showFn (p:ports) types = do
      else pure (x, xs)
    | otherwise = second (x:) <$> pull1Port p xs
 
-combineDisjointEnvs :: M.Map UserName v -> M.Map UserName v -> Checking (M.Map UserName v)
+combineDisjointEnvs :: M.Map QualName v -> M.Map QualName v -> Checking (M.Map QualName v)
 combineDisjointEnvs l r =
   let commonKeys = S.intersection (M.keysSet l) (M.keysSet r)
   in if S.null commonKeys

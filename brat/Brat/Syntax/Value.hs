@@ -23,10 +23,10 @@ module Brat.Syntax.Value {-(VDecl
                          )-} where
 
 import Brat.Error
+import Brat.QualName
 import Brat.Syntax.Common
 import Brat.Syntax.Core (Term (..))
 import Brat.Syntax.FuncDecl (FunBody, FuncDecl(..))
-import Brat.UserName
 import Bwd
 import Hasochism
 
@@ -151,7 +151,7 @@ instance Eq (VVar n) where
 -- Contains Inx's up to n-1, no Lvl's
 data Val :: N -> Type where
   VNum :: NumVal (VVar n) -> Val n
-  VCon :: UserName -> [Val n] -> Val n
+  VCon :: QualName -> [Val n] -> Val n
   VLam :: Val (S n) -> Val n -- Just body (binds DeBruijn index n)
   VFun :: MODEY m => Modey m -> CTy m n -> Val n
   VApp :: VVar n -> Bwd (Val n) -> Val n
@@ -163,7 +163,7 @@ data SVar = SPar End | SLvl Int
 -- Semantic value, used internally by normalization; contains Lvl's but no Inx's
 data Sem where
   SNum :: NumVal SVar -> Sem
-  SCon :: UserName -> [Sem] -> Sem
+  SCon :: QualName -> [Sem] -> Sem
   -- Second is just body, we do NOT substitute under the binder,
   -- instead we stash Sem's for each free DeBruijn index into the first member:
   SLam :: Stack Z Sem n -> Val (S n) -> Sem
@@ -398,7 +398,7 @@ instance EvenOrOdd Monotone where
 
 data ValPat
  = VPVar
- | VPCon UserName [ValPat]
+ | VPCon QualName [ValPat]
  | VPNum NumPat
  deriving Show
 
