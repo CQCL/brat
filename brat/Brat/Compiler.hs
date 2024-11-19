@@ -13,7 +13,7 @@ import Brat.Elaborator
 import Brat.Error
 import Brat.Load
 import Brat.Naming (root, split)
-import Brat.Syntax.Common (NameMap)
+import Brat.Syntax.Common (UserNameMap)
 import Brat.Syntax.Value (ShowWithMetas(..))
 
 import Control.Exception (evaluate)
@@ -30,7 +30,7 @@ printDeclsHoles libDirs file = do
   print decls
   putStrLn ""
   putStrLn "Holes:"
-  mapM_ (putStrLn . showWithMetas (nameMap store)) holes
+  mapM_ (putStrLn . showWithMetas (userNames store)) holes
 
 -- Print an 80 column banner as the header and footer of some IO action's output
 banner :: String -> IO a -> IO a
@@ -66,7 +66,7 @@ writeDot libDirs file out = do
   isMain _ = False
 -}
 
-data CompilingHoles = CompilingHoles NameMap [TypedHole]
+data CompilingHoles = CompilingHoles UserNameMap [TypedHole]
 
 instance Show CompilingHoles where
   show (CompilingHoles nm hs) = unlines $
@@ -80,7 +80,7 @@ compileFile libDirs file = do
   case holes of
     [] -> Right <$> evaluate -- turns 'error' into IO 'die'
                     (compile defs newRoot outerGraph venv)
-    hs -> pure $ Left (CompilingHoles (nameMap defs) hs)
+    hs -> pure $ Left (CompilingHoles (userNames defs) hs)
 
 compileAndPrintFile :: [FilePath] -> String -> IO ()
 compileAndPrintFile libDirs file = compileFile libDirs file >>= \case

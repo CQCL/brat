@@ -37,7 +37,7 @@ module Brat.Syntax.Common (PortName,
                            pattern Star,
                            Precedence(..),
                            showSig,
-                           NameMap
+                           UserNameMap
                           ) where
 
 import Brat.FC
@@ -171,7 +171,7 @@ deriving instance Eq io => Eq (CType' io)
 instance Semigroup (CType' (PortName, ty)) where
   (ss :-> ts) <> (us :-> vs) = (ss <> us) :-> (ts <> vs)
 
-type NameMap = M.Map End String
+type UserNameMap = M.Map End String
 
 data Import
   = Import { importName :: WC QualName
