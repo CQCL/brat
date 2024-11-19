@@ -17,7 +17,7 @@ import Test.Tasty.QuickCheck hiding ((^))
 var = VPar (ExEnd (Ex (MkName []) 0))
 
 instance Arbitrary (NumVal (VVar Z)) where
-  arbitrary = NumValue <$> (abs <$> arbitrary) <*> arbitrary
+  arbitrary = NumValue . abs <$> arbitrary <*> arbitrary
 
 instance Arbitrary (Fun00 (VVar Z)) where
   arbitrary = sized aux
@@ -26,7 +26,7 @@ instance Arbitrary (Fun00 (VVar Z)) where
     aux n = oneof [pure Constant0, StrictMonoFun <$> resize (n `div` 2) arbitrary]
 
 instance Arbitrary (StrictMono (VVar Z)) where
-  arbitrary = StrictMono <$> (abs <$> arbitrary) <*> arbitrary
+  arbitrary = StrictMono . abs <$> arbitrary <*> arbitrary
 
 instance Arbitrary (Monotone (VVar Z)) where
   arbitrary = sized aux

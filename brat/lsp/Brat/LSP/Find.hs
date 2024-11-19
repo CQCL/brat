@@ -3,7 +3,7 @@
 module Brat.LSP.Find (Context(..), getInfo) where
 
 import Data.List.NonEmpty (NonEmpty(..), toList)
-import Data.Maybe (catMaybes)
+import Data.Maybe (mapMaybe)
 
 import Brat.FC
 import Brat.LSP.State
@@ -54,7 +54,7 @@ getInfo ps pos
 
   getThing :: Pos -> WC Flat -> Maybe Flat
   getThing pos (WC fc x)
-    | pos `inside` fc = case catMaybes (getThing pos <$> subTerms x) of
+    | pos `inside` fc = case mapMaybe (getThing pos) (subTerms x) of
                           [] -> Just x
                           -- xs should be the empty list, but I don't think it's
                           -- worth crashing the server over

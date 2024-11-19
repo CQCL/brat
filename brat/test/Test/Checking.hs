@@ -28,4 +28,4 @@ parseAndCheck libDirs file = testCase (show file) $ do
   case env of
     Left err -> assertFailure (show err)
     Right (venv, nouns, holes, _, _) ->
-      ((length venv) + (length nouns) + (length holes) > 0) @? "Should produce something"
+      (length venv + length nouns + length holes > 0) @? "Should produce something"

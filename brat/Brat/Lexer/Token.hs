@@ -102,7 +102,7 @@ instance Eq Token where
   (Token fc t) == (Token fc' t') = t == t' && fc == fc'
 
 instance Show Token where
-  show (Token _ t) = (show t) ++ " "
+  show (Token _ t) = show t ++ " "
 instance Ord Token where
   compare (Token (FC st nd) _) (Token (FC st' nd') _) = if st == st'
                                                         then compare nd nd'
@@ -129,5 +129,5 @@ tokLen :: Tok -> Int
 tokLen = length . show
 
 instance VisualStream [Token] where
-  showTokens _ ts = concatMap show ts
   tokensLength _ = sum . fmap (\(Token _ t) -> tokLen t)
+  showTokens _ = concatMap show

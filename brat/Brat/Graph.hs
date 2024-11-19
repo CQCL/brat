@@ -115,7 +115,7 @@ toGraph (ns, ws) = G.graphFromEdges adj
 wiresFrom :: Name -> Graph -> [Wire]
 wiresFrom src (_, ws) = [ w | w@(Ex a _, _, _) <- ws, a == src ]
 
-lookupNode :: Name -> Graph -> Maybe (Node)
+lookupNode :: Name -> Graph -> Maybe Node
 lookupNode name (ns, _) = M.lookup name ns
 
 wireStart :: Wire -> Name

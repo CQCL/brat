@@ -76,8 +76,8 @@ compileFile libDirs file = do
   env <- runExceptT $ loadFilename checkRoot libDirs file
   (venv, _, holes, defs, outerGraph) <- eitherIO env
   case holes of
-    [] -> Right <$> (evaluate -- turns 'error' into IO 'die'
-            $ compile defs newRoot outerGraph venv)
+    [] -> Right <$> evaluate -- turns 'error' into IO 'die'
+                    (compile defs newRoot outerGraph venv)
     hs -> pure $ Left (CompilingHoles hs)
 
 compileAndPrintFile :: [FilePath] -> String -> IO ()

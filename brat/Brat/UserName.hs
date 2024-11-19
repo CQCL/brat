@@ -12,4 +12,4 @@ instance Show UserName where
   show (PrefixName ps file) = intercalate "." (ps ++ [file])
 
 plain :: String -> UserName
-plain n = PrefixName [] n
+plain = PrefixName []

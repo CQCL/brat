@@ -12,7 +12,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.ExpectedFailure
 
-runEmpty m = run emptyEnv initStore root m
+runEmpty = run emptyEnv initStore root
 
 assertChecking :: Checking a -> Assertion
 assertChecking m = case runEmpty $ localFC (FC (Pos 0 0) (Pos 0 0)) m of
