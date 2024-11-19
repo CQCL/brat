@@ -6,7 +6,7 @@ use hugr::{
     extension::{
         prelude::USIZE_T,
         simple_op::{MakeOpDef, OpLoadError},
-        OpDef, SignatureError, SignatureFromArgs, SignatureFunc,
+        ExtensionId, OpDef, SignatureError, SignatureFromArgs, SignatureFunc,
     },
     ops::NamedOp,
     std_extensions::collections::list_type,
@@ -68,7 +68,7 @@ impl FromStr for BratOpDef {
 
 impl MakeOpDef for BratOpDef {
     fn from_def(op_def: &OpDef) -> Result<Self, OpLoadError> {
-        hugr::extension::simple_op::try_from_name(op_def.name())
+        hugr::extension::simple_op::try_from_name(op_def.name(), &super::EXTENSION_ID)
     }
 
     fn signature(&self) -> SignatureFunc {
@@ -97,6 +97,10 @@ impl MakeOpDef for BratOpDef {
             )
             .into(),
         }
+    }
+
+    fn extension(&self) -> ExtensionId {
+        super::EXTENSION_ID.clone()
     }
 }
 
