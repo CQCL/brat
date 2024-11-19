@@ -95,9 +95,9 @@ instance Show EndType where
   show (EndType Braty (Right ty)) = show ty
 
 data Store = Store
-  { typeMap  :: M.Map End EndType
-  , valueMap :: M.Map End (Val Z)
-  , nameMap  :: M.Map End String
+  { typeMap    :: M.Map End EndType
+  , valueMap   :: M.Map End (Val Z)
+  , userNames  :: M.Map End String
   }
 
 instance Show Store where

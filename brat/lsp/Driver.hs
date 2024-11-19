@@ -25,7 +25,7 @@ import Brat.LSP.Find
 import Brat.LSP.Holes
 import Brat.LSP.State
 import qualified Brat.Naming as Name
-import Brat.Syntax.Common (NameMap)
+import Brat.Syntax.Common (UserNameMap)
 
 main :: IO Int
 main = do
@@ -81,7 +81,7 @@ convPos (Pos l c) = Position (fromIntegral (max 0 (l - 1))) (fromIntegral (max 0
 allGood :: NormalizedUri -> LspM () ()
 allGood fileUri = publishDiagnostics 0 fileUri Nothing (partitionBySource [])
 
-logHoles :: NameMap -> [TypedHole] -> NormalizedUri -> LspM () ()
+logHoles :: UserNameMap -> [TypedHole] -> NormalizedUri -> LspM () ()
 logHoles nm hs fileUri = publishDiagnostics (length hs) fileUri Nothing (partitionBySource (logHole <$> hs))
  where
   logHole :: TypedHole -> Diagnostic
@@ -120,7 +120,7 @@ loadVFile state _ msg = do
           old <- liftIO $ takeMVar state
           liftIO $ putMVar state (updateState (snd <$> newDecls, holes) old)
           allGood fileName
-          logHoles (nameMap store) holes fileName
+          logHoles (userNames store) holes fileName
         Left (SrcErr _ err) -> allGood fileName *> sendError fileName err
     Nothing -> do
       liftIO $ debugM "loadVFile" $ "Couldn't find " ++ show fileName ++ " in VFS"

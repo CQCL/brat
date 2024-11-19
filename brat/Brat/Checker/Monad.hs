@@ -269,12 +269,12 @@ handler (Req s k) ctx g
                 M.lookup tycon tbl
         handler (k args) ctx g
 
-      NameMeta end name -> let names = nameMap (store ctx) in
+      NameMeta end name -> let names = userNames (store ctx) in
                              case M.lookup end names of
                                Just oldName -> error $ "Trying to name end (" ++ show end ++ ")\nas " ++ show name ++ " but it's already called " ++ oldName
                                Nothing -> let st = store ctx in
-                                            handler (k ()) (ctx { store = st { nameMap = M.insert end name (nameMap st) } }) g
-      AskNames -> handler (k (nameMap (store ctx))) ctx g
+                                            handler (k ()) (ctx { store = st { userNames = M.insert end name (userNames st) } }) g
+      AskNames -> handler (k (userNames (store ctx))) ctx g
 
 type Checking = Free CheckingSig
 
