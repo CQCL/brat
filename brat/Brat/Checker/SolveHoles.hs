@@ -184,6 +184,7 @@ buildNatVal nv@(NumValue n gro) = case n of
   buildGro (StrictMonoFun sm) = buildSM sm
 
   buildSM :: StrictMono (VVar Z) -> Checking Src
+  buildSM (StrictMono 0 mono) = buildMono mono
   buildSM (StrictMono k mono) = do
     -- Calculate 2^k as `factor`
     two <- buildNum 2
