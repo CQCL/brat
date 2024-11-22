@@ -48,6 +48,7 @@ data Term :: Dir -> Kind -> Type where
   Forget   :: WC (Term d KVerb) -> Term d UVerb
   Pull     :: [PortName] -> WC (Term Chk k) -> Term Chk k
   Var      :: UserName -> Term Syn Noun  -- Look up in noun (value) env
+  Hope     :: Term Chk Noun
   Identity :: Term Syn UVerb
   Arith    :: ArithOp -> WC (Term Chk Noun) -> WC (Term Chk Noun) -> Term Chk Noun
   Of       :: WC (Term Chk Noun) -> WC (Term d Noun) -> Term d Noun
@@ -114,6 +115,7 @@ instance Show (Term d k) where
                           ,bracket POf e
                           ]
   show (Var x) = show x
+  show Hope = "!"
   show Identity = "|"
   -- Nested applications should be bracketed too, hence 4 instead of 3
   show (fun :$: arg) = bracket PApp fun ++ ('(' : show arg ++ ")")

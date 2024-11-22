@@ -2,6 +2,7 @@ module Brat.Checker.SolvePatterns (argProblems, argProblemsWithLeftovers, solve)
 
 import Brat.Checker.Monad
 import Brat.Checker.Helpers
+import Brat.Checker.SolveHoles (buildNatVal, invertNatVal)
 import Brat.Checker.Types (EndType(..))
 import Brat.Constructors
 import Brat.Constructors.Patterns
@@ -19,7 +20,7 @@ import Hasochism
 
 import Control.Monad (unless)
 import Data.Bifunctor (first)
-import Data.Foldable (for_, traverse_)
+import Data.Functor ((<&>))
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import Data.Type.Equality ((:~:)(..), testEquality)
@@ -80,7 +81,7 @@ solve my ((src, Lit tm):p) = do
           unless (n >= 0) $ typeErr "Negative Nat kind"
           unifyNum (nConstant (fromIntegral n)) (nVar (VPar (ExEnd (end src))))
     (Braty, Right ty) -> do
-      throwLeft (simpleCheck Braty ty tm)
+      simpleCheck Braty ty tm
     _ -> typeErr $ "Literal " ++ show tm ++ " isn't valid at this type"
   (tests, sol) <- solve my p
   pure ((src, PrimLitTest tm):tests, sol)
@@ -102,6 +103,7 @@ solve my ((src, PCon c abs):p) = do
         (tests, sol) <- solve my p
         pure ((src, PrimLitTest (Num 0)):tests, sol)
       _ -> case M.lookup c natConstructors of
+        -- This `relationToInner` is very sus - it doesn't do any wiring!
         Just (Just _, relationToInner) -> do
           (node, [], kids@[(dangling, _)], _) <- next "unpacked_nat" Hypo (S0, Some (Zy :* S0))
             R0 -- we don't need to wire the src in; we just need the inner stuff
@@ -118,7 +120,7 @@ solve my ((src, PCon c abs):p) = do
 
 
 typeOfEnd :: Modey m -> End -> Checking (BinderType m)
-typeOfEnd my e = req (TypeOf e) >>= \case
+typeOfEnd my e = (req (TypeOf e) <&> fst) >>= \case
   EndType my' ty
     | Just Refl <- testEquality my my' -> case my' of
         Braty -> case ty of
@@ -139,6 +141,9 @@ solveConstructor :: EvMode m
                              )
 solveConstructor my src (c, abs) ty p = do
   (CArgs pats _ patRo argRo, (tycon, tyargs)) <- lookupConstructor my c ty
+  -- Create a row of hypothetical kinds which contextualise the arguments to the
+  -- constructor.
+  -- These need to be Tgts because we don't know how to compute them dynamically/
   (_, _, _, stuff) <- next "type_args" Hypo (S0, Some (Zy :* S0)) patRo R0
   (node, _, patArgWires, _) <- let ?my = my in anext "val_args" Hypo stuff R0 argRo
   trackM ("Constructor " ++ show c ++ "; type " ++ show ty)
@@ -146,6 +151,8 @@ solveConstructor my src (c, abs) ty p = do
     Some (_ :* patEnds) -> do
       trackM (show pats)
       trackM (show patEnds)
+      -- Match the patterns for `c` against the ends of the Hypo node, to
+      -- produce the terms that we're interested in
       let (lhss, leftovers) = patVals pats (stkList patEnds)
       unless (null leftovers) $ error "There's a bug in the constructor table"
       tyArgKinds <- tlup (Brat, tycon)
@@ -186,45 +193,54 @@ unify l k r = do
       --       the whole `Problem`.
       (l, r, _) -> err . UnificationError $ "Can't unify " ++ show l ++ " with " ++ show r
 
+-- Solve a metavariable statically - don't do anything dynamic
+-- Once a metavariable is solved, we expect to not see it again in a normal form.
 instantiateMeta :: End -> Val Z -> Checking ()
 instantiateMeta e val = do
   throwLeft (doesntOccur e val)
-  req (Define e val)
+  defineEnd e val
 
+-- Solve a Nat kinded metavariable. Unlike `instantiateMeta`, this function also
+-- makes the dynamic wiring for a metavariable. This only needs to happen for
+-- numbers because they have nontrivial runtime behaviour.
+--
+-- We assume that the caller has done the occurs check and rules out trivial equations.
+solveNumMeta :: End -> NumVal (VVar Z) -> Checking ()
+solveNumMeta e nv = case (e, vars nv) of
+ -- Compute the thing that the rhs should be based on the src, and instantiate src to that
+ (ExEnd src,  [VPar (InEnd _)]) -> do
+   -- Compute the value of the `tgt` variable from the known `src` value by inverting nv
+   tgtSrc <- invertNatVal nv
+   defineSrc (NamedPort src "") (VNum (nVar (VPar (toEnd tgtSrc))))
+   wire (NamedPort src "", TNat, tgtSrc)
 
--- Be conservative, fail if in doubt. Not dangerous like being wrong while succeeding
--- We can have bogus failures here because we're not normalising under lambdas
--- N.B. the value argument is normalised.
-doesntOccur :: End -> Val n -> Either ErrorMsg ()
-doesntOccur e (VNum nv) = for_ (getNumVar nv) (collision e)
+ (ExEnd src, _) -> defineSrc (NamedPort src "") (VNum nv)
+
+ -- Both targets, we need to create the thing that they both derive from
+ (InEnd bigTgt, [VPar (InEnd weeTgt)]) -> do
+   (_, [(idTgt, _)], [(idSrc, _)], _) <- anext "numval id" Id (S0, Some (Zy :* S0))
+                                         (REx ("n", Nat) R0) (REx ("n", Nat) R0)
+   defineSrc idSrc (VNum (nVar (VPar (toEnd idTgt))))
+   defineTgt (NamedPort weeTgt "") (VNum (nVar (VPar (toEnd idSrc))))
+   wire (idSrc, TNat, NamedPort weeTgt "")
+   let nv' = fmap (const (VPar (toEnd idSrc))) nv
+   bigSrc <- buildNatVal nv'
+   defineTgt (NamedPort bigTgt "") (VNum nv')
+   wire (bigSrc, TNat, NamedPort bigTgt "")
+
+ -- RHS is constant or Src, wire it into tgt
+ (InEnd tgt,  _) -> do
+   src <- buildNatVal nv
+   defineTgt (NamedPort tgt "") (VNum nv)
+   wire (src, TNat, NamedPort tgt "")
+
  where
-  getNumVar :: NumVal (VVar n) -> Maybe End
-  getNumVar (NumValue _ (StrictMonoFun (StrictMono _ mono))) = case mono of
-    Linear v -> case v of
-      VPar e -> Just e
-      _ -> Nothing
-    Full sm -> getNumVar (numValue sm)
-  getNumVar _ = Nothing
-doesntOccur e (VApp var args) = case var of
-  VPar e' -> collision e e' *> traverse_ (doesntOccur e) args
-  _ -> pure ()
-doesntOccur e (VCon _ args) = traverse_ (doesntOccur e) args
-doesntOccur e (VLam body) = doesntOccur e body
-doesntOccur e (VFun my (ins :->> outs)) = case my of
-  Braty -> doesntOccurRo my e ins *> doesntOccurRo my e outs
-  Kerny -> doesntOccurRo my e ins *> doesntOccurRo my e outs
-doesntOccur e (VSum my rows) = traverse_ (\(Some ro) -> doesntOccurRo my e ro) rows
+  vars :: NumVal a -> [a]
+  vars = foldMap pure
 
-collision :: End -> End -> Either ErrorMsg ()
-collision e v | e == v = Left . UnificationError $
-                         show e ++ " is cyclic"
-              | otherwise = pure ()
-
-doesntOccurRo :: Modey m -> End -> Ro m i j -> Either ErrorMsg ()
-doesntOccurRo _ _ R0 = pure ()
-doesntOccurRo my e (RPr (_, ty) ro) = doesntOccur e ty *> doesntOccurRo my e ro
-doesntOccurRo Braty e (REx _ ro) = doesntOccurRo Braty e ro
-
+-- Need to keep track of which way we're solving - which side is known/unknown
+-- Things which are dynamically unknown must be Tgts - information flows from Srcs
+-- ...But we don't need to do any wiring here, right?
 unifyNum :: NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
 unifyNum (NumValue lup lgro) (NumValue rup rgro)
   | lup <= rup = lhsFun00 lgro (NumValue (rup - lup) rgro)
@@ -241,11 +257,9 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     lhsStrictMono (StrictMono (n - 1) mono) num
 
   lhsMono :: Monotone (VVar Z) -> NumVal (VVar Z) -> Checking ()
-  lhsMono (Linear v) num = case v of
-    VPar e -> instantiateMeta e (VNum num)
-    _ -> case num of -- our only hope is to instantiate the RHS
-      NumValue 0 (StrictMonoFun (StrictMono 0 (Linear (VPar (ExEnd e))))) -> instantiateMeta (toEnd e) (VNum (nVar v))
-      _ -> err . UnificationError $ "Couldn't instantiate variable " ++ show v
+  lhsMono (Linear v) (NumValue 0 (StrictMonoFun (StrictMono 0 (Linear v')))) | v == v' = pure ()
+  lhsMono (Linear (VPar e)) num = throwLeft (doesntOccur e (VNum num)) *>
+                                  solveNumMeta e num
   lhsMono (Full sm) (NumValue 0 (StrictMonoFun (StrictMono 0 (Full sm'))))
     = lhsStrictMono sm (NumValue 0 (StrictMonoFun sm'))
   lhsMono m@(Full _) (NumValue 0 gro) = lhsFun00 gro (NumValue 0 (StrictMonoFun (StrictMono 0 m)))
@@ -256,7 +270,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   demand0 :: NumVal (VVar Z) -> Checking ()
   demand0 (NumValue 0 Constant0) = pure ()
   demand0 n@(NumValue 0 (StrictMonoFun (StrictMono _ mono))) = case mono of
-    Linear (VPar e) -> instantiateMeta e (VNum (nConstant 0))
+    Linear (VPar e) -> solveNumMeta e (nConstant 0)
     Full sm -> demand0 (NumValue 0 (StrictMonoFun sm))
     _ -> err . UnificationError $ "Couldn't force " ++ show n ++ " to be 0"
   demand0 n = err . UnificationError $ "Couldn't force " ++ show n ++ " to be 0"
@@ -266,9 +280,19 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   --   2^k * x
   -- = 2^k * (y + 1)
   -- = 2^k + 2^k * y
-  demandSucc (StrictMono k (Linear (VPar (ExEnd out)))) = do
-    y <- mkPred out
+  demandSucc (StrictMono _ (Linear (VPar (ExEnd _)))) = error "Todo..." {-do
+    -- This is sus because we don't have any tgt?
+    ySrc <- invertNatVal (NamedPort x "") (NumValue 1 (StrictMonoFun sm))
+    let y = nVar (VPar (toEnd ySrc))
+    solveNumMeta (ExEnd x) (nPlus 1 y)
     pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k y
+  -}
+
+  demandSucc sm@(StrictMono k (Linear (VPar (InEnd weeEnd)))) = do
+    bigEnd <- invertNatVal (NumValue 1 (StrictMonoFun sm))
+    solveNumMeta (toEnd bigEnd) (NumValue 0 (StrictMonoFun sm))
+    pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k (nVar (VPar (InEnd weeEnd)))
+
   --   2^k * full(n + 1)
   -- = 2^k * (1 + 2 * full(n))
   -- = 2^k + 2^(k + 1) * full(n)
@@ -287,53 +311,39 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     evenGro Constant0 = pure Constant0
     evenGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
       Linear (VPar (ExEnd out)) -> do
-        half <- mkHalf out
+        half <- invertNatVal (NumValue 0 (StrictMonoFun (StrictMono 1 mono)))
+        solveNumMeta (ExEnd out) (n2PowTimes 1 (nVar (VPar (toEnd half))))
         pure (StrictMonoFun (StrictMono 0 (Linear (VPar (toEnd half)))))
-      Linear _ -> err . UnificationError $ "Can't force " ++ show n ++ " to be even"
+      Linear (VPar (InEnd tgt)) -> do
+        halfTgt <- buildNatVal (NumValue 0 (StrictMonoFun (StrictMono 1 (Linear (VPar (toEnd tgt))))))
+        let half = nVar (VPar (toEnd halfTgt))
+        solveNumMeta (InEnd tgt) (n2PowTimes 1 half)
+        pure (StrictMonoFun (StrictMono 0 (Linear (VPar (toEnd halfTgt)))))
       Full sm -> StrictMonoFun sm <$ demand0 (NumValue 0 (StrictMonoFun sm))
     evenGro (StrictMonoFun (StrictMono n mono)) = pure (StrictMonoFun (StrictMono (n - 1) mono))
 
     -- Check a numval is odd, and return its rounded down half
     oddGro :: Fun00 (VVar Z) -> Checking (NumVal (VVar Z))
     oddGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
-      Linear (VPar (ExEnd out)) -> mkPred out >>= demandEven
-      Linear _ -> err . UnificationError $ "Can't force " ++ show n ++ " to be even"
+      Linear (VPar (ExEnd _)) -> do
+        -- compute (/2) . (-1)
+        doubTgt <- invertNatVal (NumValue 1 (StrictMonoFun (StrictMono 1 mono)))
+        let [VPar (InEnd halfTgt)] = foldMap pure mono
+        solveNumMeta (toEnd doubTgt) (nPlus 1 (n2PowTimes 1 (nVar (VPar (toEnd halfTgt)))))
+        pure (nVar (VPar (toEnd halfTgt)))
+      Linear (VPar (InEnd weeTgt)) -> do
+        -- compute (/2) . (-1)
+        bigTgt <- invertNatVal (NumValue 1 (StrictMonoFun (StrictMono 1 (Linear (VPar (toEnd weeTgt))))))
+        let flooredHalf = nVar (VPar (toEnd weeTgt))
+        solveNumMeta (toEnd bigTgt) (nPlus 1 (n2PowTimes 1 flooredHalf))
+        pure flooredHalf
+
       -- full(n + 1) = 1 + 2 * full(n)
       -- hence, full(n) is the rounded down half
       Full sm -> nFull <$> demandSucc sm
     oddGro _ = err . UnificationError $ "Can't force " ++ show n ++ " to be even"
 
-  -- Add dynamic logic to compute half of a variable.
-  mkHalf :: OutPort -> Checking Src
-  mkHalf out = do
-    (_, [], [(const2,_)], _) <- next "const2" (Const (Num 2)) (S0, Some (Zy :* S0))
-                                R0
-                                (RPr ("value", TNat) R0)
-    (_, [(lhs,_),(rhs,_)], [(half,_)], _) <- next "div2" (ArithNode Div) (S0, Some (Zy :* S0))
-                                             (RPr ("left", TNat) (RPr ("right", TNat) R0))
-                                             (RPr ("out", TNat) R0)
-    wire (NamedPort out "numerator", TNat, lhs)
-    wire (const2, TNat, rhs)
-    req $ Define (toEnd out) (VNum (n2PowTimes 1 (nVar (VPar (toEnd half)))))
-    pure half
-
-
-  -- Add dynamic logic to compute the predecessor of a variable, and return that
-  -- predecessor.
-  -- The variable must be a non-zero nat!!
-  mkPred :: OutPort -> Checking (NumVal (VVar Z))
-  mkPred out = do
-    (_, [], [(const1,_)], _) <- next "const1" (Const (Num 1)) (S0, Some (Zy :* S0))
-                                R0
-                                (RPr ("value", TNat) R0)
-    (_, [(lhs,_),(rhs,_)], [(pred,_)], _) <- next "minus1" (ArithNode Sub) (S0, Some (Zy :* S0))
-                                             (RPr ("left", TNat) (RPr ("right", TNat) R0))
-                                             (RPr ("out", TNat) R0)
-    wire (NamedPort out "", TNat, lhs)
-    wire (const1, TNat, rhs)
-    req $ Define (ExEnd out) (VNum (nPlus 1 (nVar (VPar (toEnd pred)))))
-    pure (nVar (VPar (toEnd pred)))
-
+-- The variable must be a non-zero nat!!
 patVal :: ValPat -> [End] -> (Val Z, [End])
 -- Nat variables will only be found in a `NumPat`, not a `ValPat`
 patVal VPVar (e:es) = (VApp (VPar e) B0, es)

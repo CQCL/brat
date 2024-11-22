@@ -78,6 +78,7 @@ data ErrorMsg
  | UnreachableBranch
  | UnrecognisedTypeCon String
  | WrongModeForType String
+ | RemainingNatHopes [String]
  -- For thunks which don't address enough inputs, or produce enough outputs.
  -- The argument is the row of unused connectors
  | ThunkLeftOvers String
@@ -163,9 +164,11 @@ instance Show ErrorMsg where
   -- TODO: Make all of these use existing errors
   show (UnificationError str) = "Unification error: " ++ str
   show UnreachableBranch = "Branch cannot be reached"
+  show (RemainingNatHopes hs) = unlines ("Expected to work out values for these holes:":indent (indent hs))
   show (ThunkLeftOvers overs) = "Expected function to address all inputs, but " ++ overs ++ " wasn't used"
   show (ThunkLeftUnders unders) = "Expected function to return additional values of type: " ++ unders
 
+indent = fmap ("  " ++)
 
 data Error = Err { fc  :: Maybe FC
                  , msg :: ErrorMsg
