@@ -710,16 +710,15 @@ checkBody :: (CheckConstraints m UVerb, EvMode m, ?my :: Modey m)
           -> CTy m Z -- Function type
           -> Checking Src
 checkBody fnName body cty = do
-  (tm, checkFn) <- case body of
-    NoLhs tm -> pure (tm, checkConnectorsUsed (fcOf tm, fcOf tm) (show tm))
+  (tm, fcs) <- case body of
+    NoLhs tm -> pure (tm, (fcOf tm, fcOf tm))
     Clauses (c :| cs) -> do
       fc <- req AskFC
-      let tm = Lambda c cs
-      pure $ (WC fc tm, checkConnectorsUsed (bimap fcOf fcOf c) (show tm))
+      pure $ (WC fc (Lambda c cs), (bimap fcOf fcOf c))
     Undefined -> err (InternalError "Checking undefined clause")
   ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
     (((), ()), leftovers) <- check tm conns
-    checkFn conns leftovers
+    checkConnectorsUsed fcs (show tm) conns leftovers
   pure src
  where
   checkConnectorsUsed _ _ _ ([], []) = pure ()
