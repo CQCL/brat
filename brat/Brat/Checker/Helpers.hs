@@ -291,8 +291,7 @@ vecLayers :: Val Z -> Checking ([(Src, NumVal (VVar Z))] -- The sizes of the vec
                                )
 vecLayers (TVec ty (VNum n)) = do
   src <- mkStaticNum n
-  (layers, fun) <- vecLayers ty
-  pure ((src, n):layers, fun)
+  first ((src, n):) <$> vecLayers ty
 vecLayers (VFun my cty) = pure ([], Some (my :* Flip cty))
 vecLayers ty = typeErr $ "Expected a function or vector of functions, got " ++ show ty
 
