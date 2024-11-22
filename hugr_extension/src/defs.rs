@@ -4,11 +4,13 @@ use crate::ctor::BratCtor;
 use enum_iterator::Sequence;
 use hugr::{
     extension::{
+        prelude::USIZE_T,
         simple_op::{MakeOpDef, OpLoadError},
         OpDef, SignatureError, SignatureFromArgs, SignatureFunc,
     },
-    ops::OpName,
+    ops::NamedOp,
     std_extensions::arithmetic::int_types::INT_TYPES,
+    std_extensions::collections::list_type,
     types::{type_param::TypeParam, FunctionType, PolyFuncType, Type, TypeArg, TypeBound},
 };
 
@@ -24,7 +26,7 @@ lazy_static! {
 }
 
 /// Brat extension operation definitions.
-#[derive(Clone, Copy, Debug, Hash, Sequence, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Sequence)]
 #[allow(missing_docs)]
 pub enum BratOpDef {
     Hole,
@@ -34,9 +36,10 @@ pub enum BratOpDef {
     Ctor(BratCtor),
     PrimCtorTest(BratCtor),
     Lluf,
+    Replicate,
 }
 
-impl OpName for BratOpDef {
+impl NamedOp for BratOpDef {
     fn name(&self) -> SmolStr {
         use BratOpDef::*;
         match self {
@@ -47,6 +50,7 @@ impl OpName for BratOpDef {
             Ctor(ctor) => format_smolstr!("Ctor::{}", ctor.name()),
             PrimCtorTest(ctor) => format_smolstr!("PrimCtorTest::{}", ctor.name()),
             Lluf => "Lluf".into()
+            Replicate => "Replicate".into(),
         }
     }
 }
@@ -64,6 +68,7 @@ impl FromStr for BratOpDef {
             ["Ctor", ctor] => Ok(BratOpDef::Ctor(BratCtor::from_str(ctor)?)),
             ["PrimCtorTest", ctor] => Ok(BratOpDef::PrimCtorTest(BratCtor::from_str(ctor)?)),
             ["Lluf"] => Ok(BratOpDef::Lluf),
+            ["Replicate"] => Ok(BratOpDef::Replicate),
             _ => Err(ParseError::VariantNotFound),
         }
     }
@@ -85,11 +90,21 @@ impl MakeOpDef for BratOpDef {
             PrimCtorTest(ctor) => {
                 let sig = ctor.signature();
                 let input = sig.body().output(); // Ctor output is input for the test
-                let output = Type::new_tuple_sum(vec![input.clone(), sig.body().input().clone()]);
+                let output = Type::new_sum(vec![input.clone(), sig.body().input().clone()]);
                 PolyFuncType::new(sig.params(), FunctionType::new(input.clone(), vec![output]))
                     .into()
             },
-            Lluf => FunctionType::new(vec![U64.clone()], vec![U64.clone()]).into()
+            Lluf => FunctionType::new(vec![U64.clone()], vec![U64.clone()]).into(),
+            Replicate => PolyFuncType::new(
+                [TypeParam::Type {
+                    b: TypeBound::Copyable,
+                }],
+                FunctionType::new(
+                    vec![USIZE_T, Type::new_var_use(0, TypeBound::Copyable)],
+                    vec![list_type(Type::new_var_use(0, TypeBound::Copyable))],
+                ),
+            )
+            .into(),
         }
     }
 }

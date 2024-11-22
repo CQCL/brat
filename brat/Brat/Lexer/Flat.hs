@@ -25,6 +25,7 @@ keyword
      <|> string "import" $> KImport
      <|> string "let" $> KLet
      <|> string "in" $> KIn
+     <|> string "of" $> KOf
     ) <* notFollowedBy identChar
 
 identChar :: Lexer Char
@@ -40,11 +41,10 @@ qualified :: Lexer Tok
 qualified = (<?> "qualified name") $ do
   first <- ident <* string "."
   rest  <- many (try $ ident <* string ".")
-  last  <- ident
-  pure (QualifiedId (first :| rest) last)
+  QualifiedId (first :| rest) <$> ident
 
 space :: Lexer ()
-space = (many $ (satisfy isSpace >> return ()) <|> comment) >> return ()
+space = many ((satisfy isSpace >> return ()) <|> comment) >> return ()
  where
   comment :: Lexer ()
   comment = string "--" *> ((printChar `manyTill` lookAhead (void newline <|> void eof)) >> return ())
@@ -118,4 +118,4 @@ convPos :: SourcePos -> Pos
 convPos (SourcePos _ l c) = Pos (unPos l) (unPos c)
 
 lexFlat :: Lexer [Token]
-lexFlat = token `manyTill` (try $ space >> eof)
+lexFlat = token `manyTill` try (space >> eof)

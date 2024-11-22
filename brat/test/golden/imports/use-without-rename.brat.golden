@@ -1,4 +1,4 @@
-Error in test/golden/imports/use-without-rename.brat@FC {start = Pos {line = 4, col = 8}, end = Pos {line = 4, col = 13}}:
+Error in test/golden/imports/use-without-rename.brat on line 4:
 main = lib.x
        ^^^^^
 

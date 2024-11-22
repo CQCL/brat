@@ -2,13 +2,11 @@
 module Test.TypeArith where
 
 import Brat.Checker.Helpers (runArith)
-import Brat.FC
 import Brat.Naming (Name(..))
-import Brat.Syntax.Common (ArithOp(..), TypeKind(Nat))
+import Brat.Syntax.Common (ArithOp(..))
 import Brat.Syntax.Port
-import Brat.Syntax.Simple (SimpleTerm(..))
 import Brat.Syntax.Value
-import Hasochism (N(..), Ny(..), Some(..), (:*)(..))
+import Hasochism (N(..))
 
 import Data.List (sort)
 import Test.Tasty
@@ -19,7 +17,7 @@ import Test.Tasty.QuickCheck hiding ((^))
 var = VPar (ExEnd (Ex (MkName []) 0))
 
 instance Arbitrary (NumVal (VVar Z)) where
-  arbitrary = NumValue <$> (abs <$> arbitrary) <*> arbitrary
+  arbitrary = NumValue . abs <$> arbitrary <*> arbitrary
 
 instance Arbitrary (Fun00 (VVar Z)) where
   arbitrary = sized aux
@@ -28,7 +26,7 @@ instance Arbitrary (Fun00 (VVar Z)) where
     aux n = oneof [pure Constant0, StrictMonoFun <$> resize (n `div` 2) arbitrary]
 
 instance Arbitrary (StrictMono (VVar Z)) where
-  arbitrary = StrictMono <$> (abs <$> arbitrary) <*> arbitrary
+  arbitrary = StrictMono . abs <$> arbitrary <*> arbitrary
 
 instance Arbitrary (Monotone (VVar Z)) where
   arbitrary = sized aux

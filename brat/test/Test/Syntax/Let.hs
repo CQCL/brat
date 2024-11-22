@@ -5,8 +5,6 @@ module Test.Syntax.Let where
 import Brat.Error (showError)
 import Brat.Checker
 import Brat.FC
-import Brat.Load
-import Brat.Naming
 import Brat.Syntax.Common
 import Brat.Syntax.Core
 import Brat.Syntax.Simple
@@ -15,7 +13,6 @@ import Brat.UserName
 import Test.Util (runEmpty)
 
 import Data.String
-import Test.Tasty
 import Test.Tasty.HUnit
 
 instance IsString UserName where

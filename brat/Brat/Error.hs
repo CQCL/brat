@@ -78,8 +78,6 @@ data ErrorMsg
  | UnreachableBranch
  | UnrecognisedTypeCon String
  | WrongModeForType String
- -- TODO: Add file context here
- | CompilingHoles [String]
  | RemainingNatHopes [String]
  -- For thunks which don't address enough inputs, or produce enough outputs.
  -- The argument is the row of unused connectors
@@ -166,7 +164,6 @@ instance Show ErrorMsg where
   -- TODO: Make all of these use existing errors
   show (UnificationError str) = "Unification error: " ++ str
   show UnreachableBranch = "Branch cannot be reached"
-  show (CompilingHoles hs) = unlines ("Can't compile file with remaining holes":indent hs)
   show (RemainingNatHopes hs) = unlines ("Expected to work out values for these holes:":indent (indent hs))
   show (ThunkLeftOvers overs) = "Expected function to address all inputs, but " ++ overs ++ " wasn't used"
   show (ThunkLeftUnders unders) = "Expected function to return additional values of type: " ++ unders
@@ -197,8 +194,16 @@ addSrcContext _ _ (Right r) = Right r
 addSrcContext fname cts (Left err@Err{fc=fc}) = Left (SrcErr msg err)
  where
   msg = case fc of
-    Just fc -> unlines (errHeader (fname ++ '@':show fc):showFileContext cts fc)
+    Just fc -> unlines (errHeader (fname ++ prettyFC fc)
+                       :showFileContext cts fc
+                       )
     Nothing -> errHeader fname
+
+  prettyFC fc = let Pos startLine _ = start fc
+                    Pos endLine _ = end fc
+                in  if startLine == endLine
+                    then " on line " ++ show startLine
+                    else " on lines " ++ show startLine ++ "-" ++ show endLine
 
 showFileContext :: String -> FC -> [String]
 showFileContext contents fc = let

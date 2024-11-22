@@ -23,8 +23,7 @@ import Brat.Syntax.Value
 import Brat.UserName
 import Bwd
 import Control.Monad.Freer
-import Data.Hugr.Ops
-import Data.Hugr.Types
+import Data.Hugr
 import Hasochism
 
 import Control.Exception (assert)
@@ -136,7 +135,7 @@ runCheckingInCompile (Ret t) = pure t
 runCheckingInCompile (Req (ELup e) k) = do
   emap <- gets (valueMap . store)
   runCheckingInCompile (k (M.lookup e emap))
-runCheckingInCompile (Req _ _) = error $ "Compile monad found a command it can't handle"
+runCheckingInCompile (Req _ _) = error "Compile monad found a command it can't handle"
 
 -- To be called on top-level signatures which are already Inx-closed, but not
 -- necessarily normalised.
@@ -149,8 +148,8 @@ compileCTy (ss :->> ts )= PolyFuncType [] (FunctionType (compileRo ss) (compileR
 compileRo :: Ro m i j -- The Ro that we're processing
           -> [HugrType]       -- The hugr type of the row
 compileRo R0 = []
-compileRo (RPr (_, ty) ro) = (compileType ty):(compileRo ro)
-compileRo (REx (_, k) ro) = (compileType (kindType k)):(compileRo ro)
+compileRo (RPr (_, ty) ro) = compileType ty:compileRo ro
+compileRo (REx (_, k) ro) = compileType (kindType k):compileRo ro
 
 -- Val Z should already be eval'd at this point
 compileType :: Val n -> HugrType
@@ -161,20 +160,20 @@ compileType TBool = HTSum (SU (UnitSum 2))
 compileType TInt = hugrInt
 compileType TNat = hugrInt
 compileType TFloat = hugrFloat
-compileType ty@(TCons _ _) = HTTuple (tuple ty)
+compileType ty@(TCons _ _) = htTuple (tuple ty)
  where
   tuple :: Val n -> [HugrType]
-  tuple (TCons hd rest) = (compileType hd):(tuple rest)
+  tuple (TCons hd rest) = compileType hd:tuple rest
   tuple TNil = []
   tuple ty = error $ "Found " ++ show ty  ++ " in supposed tuple type"
-compileType TNil = HTTuple []
+compileType TNil = htTuple []
 compileType (VSum my ros) = case my of
   Braty -> error "Todo: compileTypeWorker for BRAT"
-  Kerny -> HTSum (SG (GeneralSum $ map (\(Some ro) -> HTTuple (compileRo ro)) ros))
+  Kerny -> HTSum (SG (GeneralSum $ map (\(Some ro) -> compileRo ro) ros))
 compileType (TVec el _) = hugrList (compileType el)
 compileType (TList el)  = hugrList (compileType el)
 -- All variables are of kind `TypeFor m xs`, we already checked in `kindCheckRow`
-compileType (VApp _ _) = HTTuple []
+compileType (VApp _ _) = htTuple []
 -- VFun is already evaluated here, so we don't need to call `compileSig`
 compileType (VFun _ cty) = HTFunc $ compileCTy cty
 compileType ty = error $ "todo: compile type " ++ show ty
@@ -184,7 +183,7 @@ compileGraphTypes = traverse ((<&> compileType) . runCheckingInCompile . eval S0
 
 -- Compile a list of types from the inputs or outputs of a node in the BRAT graph
 compilePorts :: [(a, Val Z)] -> Compile [HugrType]
-compilePorts = compileGraphTypes . (map snd)
+compilePorts = compileGraphTypes . map snd
 
 addOp :: HugrOp NodeId -> NodeId -> Compile ()
 addOp op name | track ("addOp " ++ show op ++ show name) False = undefined
@@ -201,8 +200,12 @@ registerCompiled from to = do
 
 compileConst :: NodeId -> SimpleTerm -> HugrType -> Compile NodeId
 compileConst parent tm ty = do
-  constId <- addNode "Const" (OpConst (ConstOp parent (constFromSimple tm) ty))
-  loadId <- addNode "LoadConst" (OpLoadConstant (LoadConstantOp parent ty))
+  constId <- addNode "Const" (OpConst (ConstOp parent (valFromSimple tm)))
+  loadId <- case ty of
+    HTFunc poly@(PolyFuncType [] _) ->
+      addNode "LoadFunction" (OpLoadFunction (LoadFunctionOp parent poly [] (FunctionType [] [HTFunc poly])))
+    HTFunc (PolyFuncType _ _) -> error "Trying to compile function with type args"
+    _ -> addNode "LoadConst" (OpLoadConstant (LoadConstantOp parent ty))
   addEdge (Port constId 0, Port loadId 0)
   pure loadId
 
@@ -248,7 +251,7 @@ renameAndSortHugr nodes edges = fmap update (Hugr (fst <$> sorted_nodes) (edges 
             parentOf n1 /= parentOf n2 ,
             requiresOrderEdge (nodes M.! n1),
             requiresOrderEdge (nodes M.! n2) ] in
-    [(Port src orderEdgeOffset, Port tgt orderEdgeOffset) | (src, tgt) <- (walkUp <$> interEdges)]
+    [(Port src orderEdgeOffset, Port tgt orderEdgeOffset) | (src, tgt) <- walkUp <$> interEdges]
 
   requiresOrderEdge :: HugrOp NodeId -> Bool
   requiresOrderEdge (OpMod _) = False
@@ -274,7 +277,7 @@ compileClauses parent ins ((matchData, rhs) :| clauses) = do
   (ns, _) <- gets bratGraph
   -- RHS has to be a box, so it must have a function type
   outTys <- case nodeOuts (ns M.! rhs) of
-    [(_, VFun my cty)] -> (body <$> compileSig my cty) >>= \(FunctionType _ outs) -> pure outs
+    [(_, VFun my cty)] -> compileSig my cty >>= (\(FunctionType _ outs) -> pure outs) . body
     _ -> error "Expected 1 kernel function type from rhs"
 
   -- Compile the match: testResult is the port holding the dynamic match result
@@ -302,7 +305,7 @@ compileClauses parent ins ((matchData, rhs) :| clauses) = do
     BratNode (Box src tgt) _ _ -> do
       dfgId <- addNode "DidMatch_DFG" (OpDFG (DFG parent (FunctionType (snd <$> ins) outTys)))
       compileBox (src, tgt) dfgId
-      for (zip (fst <$> ins) (Port dfgId <$> [0..])) addEdge
+      for_ (zip (fst <$> ins) (Port dfgId <$> [0..])) addEdge
       pure $ zip (Port dfgId <$> [0..]) outTys
     _ -> error "RHS should be a box node"
 
@@ -311,17 +314,17 @@ compileBox :: (Name, Name) -> NodeId -> Compile ()
 compileBox (src, tgt) parent = for_ [src, tgt] (compileWithInputs parent)
 
 compileWithInputs :: NodeId -> Name -> Compile (Maybe NodeId)
-compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
+compileWithInputs parent name = gets compiled >>= (\case
   Just nid -> pure (Just nid)
   Nothing -> do
     (_, es) <- gets bratGraph
-    let in_edges = [((src, ty), portNum) | (src, ty, (In edgTgt portNum)) <- es, edgTgt == name]
+    let in_edges = [((src, ty), portNum) | (src, ty, In edgTgt portNum) <- es, edgTgt == name]
     compileNode in_edges >>= \case
       Nothing -> pure Nothing
       Just (tgtNodeId, edges) -> do
         registerCompiled name tgtNodeId
-        for edges (\(src, tgtPort) -> addEdge (src, Port tgtNodeId tgtPort))
-        pure $ Just tgtNodeId
+        for_ edges (\(src, tgtPort) -> addEdge (src, Port tgtNodeId tgtPort))
+        pure $ Just tgtNodeId) . M.lookup name
  where
   -- If we only care about the node for typechecking, then drop it and return `Nothing`.
   -- Otherwise, NodeId of compiled node, and list of Hugr in-edges (source and target-port)
@@ -334,13 +337,20 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
 
     decls <- gets decls
     let (funcDef, extra_call) = decls M.! name
-    nod <- case extra_call of
-      True -> addNode ("direct_call(" ++ show funcDef ++ ")")
-                  (OpCall (CallOp parent (FunctionType [] hTys)))
-      -- We are loading idNode as a value (not an Eval'd thing), and it is a FuncDef directly
-      -- corresponding to a Brat TLD (not that produces said TLD when eval'd)
-      False -> addNode ("load_thunk(" ++ show funcDef ++ ")")
-                  (OpLoadConstant (LoadConstantOp parent (let [ty] = hTys in ty)))
+    nod <- if extra_call
+           then addNode ("direct_call(" ++ show funcDef ++ ")")
+                        (OpCall (CallOp parent (FunctionType [] hTys)))
+           -- We are loading idNode as a value (not an Eval'd thing), and it is a FuncDef directly
+           -- corresponding to a Brat TLD (not that produces said TLD when eval'd)
+           else case hTys of
+             [HTFunc poly@(PolyFuncType [] _)] ->
+               addNode ("load_thunk(" ++ show funcDef ++ ")")
+               (OpLoadFunction (LoadFunctionOp parent poly [] (FunctionType [] [HTFunc poly])))
+             [HTFunc (PolyFuncType args _)] -> error $ unwords ["Unexpected type args to"
+                                                               ,show funcDef ++ ":"
+                                                               ,show args
+                                                               ]
+             _ -> error $ "Expected a function argument when loading thunk, got: " ++ show hTys
     -- the only input
     pure $ Just (nod, [(Port funcDef 0, 0)])
   compileNode in_edges = do
@@ -381,7 +391,7 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
         Nothing -> do
           hole <- do
             st <- get
-            let h = (holes st)
+            let h = holes st
             put (st { holes = h :< name})
             pure (length h)
           addNode ("hole " ++ show hole) (OpCustom (holeOp parent hole sig))
@@ -467,23 +477,27 @@ compileWithInputs parent name = gets compiled <&> M.lookup name >>= \case
       ins <- compilePorts ins
       outs <- compilePorts outs
       dfgId <- addNode "DidMatch_DFG" (OpDFG (DFG parent (FunctionType ins outs)))
-      inputNode <- addNode ("PatternMatch.Input") (OpIn (InputNode dfgId ins))
+      inputNode <- addNode "PatternMatch.Input" (OpIn (InputNode dfgId ins))
       ccOuts <- compileClauses dfgId (zip (Port inputNode <$> [0..]) ins) cs
       addNodeWithInputs "PatternMatch.Output" (OpOut (OutputNode dfgId (snd <$> ccOuts))) ccOuts []
       pure dfgId
     ArithNode op -> default_edges <$> compileArithNode parent op (snd $ head ins)
     Selector _c -> error "Todo: selector"
+    Replicate -> default_edges <$> do
+      ins <- compilePorts ins
+      let [_, elemTy] = ins
+      outs <- compilePorts outs
+      let sig = FunctionType ins outs
+      addNode "Replicate" (OpCustom (CustomOp parent "BRAT" "Replicate" sig [TAType elemTy]))
     x -> error $ show x ++ " should have been compiled outside of compileNode"
 
 compileConstructor :: NodeId -> UserName -> UserName -> FunctionType -> Compile NodeId
 compileConstructor parent tycon con sig
   | Just b <- isBool con = do
-      -- A boolean value is a tuple and a tag
-      -- This is the same thing that happens in Brat.Checker.Clauses (makeDiscriminator)
-      makeTuple <- addNode "bool.MakeTuple" (OpMakeTuple (MakeTupleOp parent []))
-      tag <- addNode "bool.tag" (OpTag (TagOp parent (if b then 1 else 0) [HTTuple [], HTTuple []]))
-      addEdge (Port makeTuple 0, Port tag 0)
-      pure tag
+      -- A boolean value is a tag which takes no inputs and produces an empty tuple
+      -- This is the same thing that happens in Brat.Checker.Clauses to make the
+      -- discriminator (makeRowTag)
+      addNode "bool.tag" (OpTag (TagOp parent (if b then 1 else 0) [[], []]))
   | otherwise = let name = "Constructor " ++ show tycon ++ "::" ++ show con in
                   addNode name (constructorOp parent tycon con sig)
  where
@@ -501,7 +515,7 @@ getOutPort parent p@(Ex srcNode srcPort) = do
     trackM $ show lifted
     case M.lookup p lifted of
       Just intercept -> pure $ Just intercept
-      Nothing -> compileWithInputs parent srcNode <&> (\maybe -> maybe <&> (flip Port srcPort))
+      Nothing -> compileWithInputs parent srcNode <&> (\maybe -> maybe <&> flip Port srcPort)
 
 -- Execute a compilation (which takes a DFG parent) in a nested monad;
 -- produce a Const node containing the resulting Hugr, and a LoadConstant,
@@ -523,7 +537,7 @@ compileConstDfg parent desc box_sig contents = do
   let nestedHugr = renameAndSortHugr (nodes cs) (edges cs)
   let ht = HTFunc $ PolyFuncType [] box_sig
 
-  constNode <- addNode ("ConstTemplate_" ++ desc) (OpConst (ConstOp parent (HCFunction nestedHugr) ht))
+  constNode <- addNode ("ConstTemplate_" ++ desc) (OpConst (ConstOp parent (HVFunction nestedHugr)))
   lcPort <- head <$> addNodeWithInputs ("LoadTemplate_" ++ desc) (OpLoadConstant (LoadConstantOp parent ht))
             [(Port constNode 0, ht)] [ht]
   pure (lcPort, res)
@@ -548,16 +562,16 @@ compileBratBox parent name (venv, src, tgt) cty = do
     src_id <- addNode ("LiftedCapturesInputs" ++ show name) (OpIn (InputNode dfg_id allInputTys))
     -- Now map ports in the BRAT Graph to their Hugr equivalents.
           -- Each captured value is read from an element of src_id, starting from 0
-    let lifted = ([(src, Port src_id i) | ((src, _ty), i) <- zip params [0..]]
+    let lifted = [(src, Port src_id i) | ((src, _ty), i) <- zip params [0..]]
           -- and the original BRAT-Graph Src outports become the Hugr Input node ports *after* the captured values
-          ++ [(Ex src i, Port src_id (i + length params)) | i <- [0..length inputTys]])
+          ++ [(Ex src i, Port src_id (i + length params)) | i <- [0..length inputTys]]
     st <- get
     put $ st {liftedOutPorts = M.fromList lifted}
     -- no need to return any holes
     compileWithInputs dfg_id tgt
 
   -- Finally, we add a `Partial` node to supply the captured params.
-  partialNode <- addNode "Partial" (OpCustom $ partialOp parent (box_sig) (length params))
+  partialNode <- addNode "Partial" (OpCustom $ partialOp parent box_sig (length params))
   addEdge (fst templatePort, Port partialNode 0)
   edge_srcs <- for (map fst params) $ getOutPort parent
   pure (partialNode, zip (map fromJust edge_srcs) [1..])
@@ -663,7 +677,7 @@ compileMatchSequence parent portTable (MatchSequence {..}) = do
       undoPort <- undoPrimTest parent refined oldTy prevTest
       -- Put it back in the right place
       let (as, bs) = splitAt ix other
-      let ins = (as ++ undoPort : bs)
+      let ins = as ++ undoPort : bs
       makeRowTag "Fail_Undo" parent 0 sumTy ins
 
     allMatched :: NodeId -> [TypedPort] -> Compile [TypedPort]
@@ -683,28 +697,23 @@ compileMatchSequence parent portTable (MatchSequence {..}) = do
     makeRowTag "DidNotMatch" parent 0 sumTy ins
 
 makeRowTag :: String -> NodeId -> Int -> SumOfRows -> [TypedPort] -> Compile [TypedPort]
-makeRowTag hint parent tag sor@(SoR sumRows) ins = assert (sumRows !! tag == (snd <$> ins)) $ do
-  tuple <- addNodeWithInputs (hint ++ "_MakeTuple") (OpMakeTuple (MakeTupleOp parent (snd <$> ins))) ins [HTTuple (snd <$> ins)]
-  addNodeWithInputs (hint ++ "_Tag") (OpTag (TagOp parent tag (HTTuple <$> sumRows))) tuple [compileSumOfRows sor]
+makeRowTag hint parent tag sor@(SoR sumRows) ins = assert (sumRows !! tag == (snd <$> ins)) $
+  addNodeWithInputs (hint ++ "_Tag") (OpTag (TagOp parent tag sumRows)) ins [compileSumOfRows sor]
 
 getSumVariants :: HugrType -> [[HugrType]]
 getSumVariants (HTSum (SU (UnitSum n))) = replicate n []
-getSumVariants (HTSum (SG (GeneralSum rows))) = fromTuple <$> rows
- where
-  fromTuple :: HugrType -> [HugrType]
-  fromTuple (HTTuple row) = row
-  fromTuple _ = error "Expected row of tuples in getSumVariants"
+getSumVariants (HTSum (SG (GeneralSum rows))) = rows
 getSumVariants ty = error $ "Expected a sum type, got " ++ show ty
 
 
 -- This should only be called by the logic which creates conditionals, because
 -- wires that exist in the brat graph are already going to be added at the end.
-addNodeWithInputs :: String -> (HugrOp NodeId) -> [TypedPort]
+addNodeWithInputs :: String -> HugrOp NodeId -> [TypedPort]
                    -> [HugrType] -- The types of the outputs
                    -> Compile [TypedPort] -- The output wires
 addNodeWithInputs name op inWires outTys = do
   nodeId <- addNode name op
-  for (zip (fst <$> inWires) (Port nodeId <$> [0..])) addEdge
+  for_ (zip (fst <$> inWires) (Port nodeId <$> [0..])) addEdge
   pure $ zip (Port nodeId <$> [0..]) outTys
 
 makeConditional :: NodeId    -- Parent node id
@@ -719,7 +728,7 @@ makeConditional parent discrim otherInputs cases = do
   unless
     (allRowsEqual outTyss)
     (error "Conditional output types didn't match")
-  let condOp = (OpConditional (Conditional parent rows (snd <$> otherInputs) (head outTyss)))
+  let condOp = OpConditional (Conditional parent rows (snd <$> otherInputs) (head outTyss))
   addOp condOp condId
   addEdge (fst discrim, Port condId 0)
   traverse_ addEdge (zip (fst <$> otherInputs) (Port condId <$> [1..]))
@@ -733,7 +742,7 @@ makeConditional parent discrim otherInputs cases = do
     let outTys = snd <$> outs
 
     outId <- addNode ("Output" ++ name) (OpOut (OutputNode caseId outTys))
-    for (zip (fst <$> outs) (Port outId <$> [0..])) addEdge
+    for_ (zip (fst <$> outs) (Port outId <$> [0..])) addEdge
 
     addOp (OpCase (ix, Case parent (FunctionType tys outTys))) caseId
     pure outTys
@@ -748,7 +757,7 @@ compilePrimTest :: NodeId
                 -> PrimTest HugrType -- The test to run
                 -> Compile TypedPort
 compilePrimTest parent (port, ty) (PrimCtorTest c tycon unpackingNode outputs) = do
-  let sumOut = (HTSum (SG (GeneralSum [HTTuple [ty], HTTuple (snd <$> outputs)])))
+  let sumOut = HTSum (SG (GeneralSum [[ty], snd <$> outputs]))
   let sig = FunctionType [ty] [sumOut]
   testId <- addNode ("PrimCtorTest " ++ show c)
             (OpCustom (CustomOp
@@ -762,11 +771,11 @@ compilePrimTest parent (port, ty) (PrimCtorTest c tycon unpackingNode outputs) =
   pure (Port testId 0, sumOut)
 compilePrimTest parent port@(_, ty) (PrimLitTest tm) = do
   -- Make a Const node that holds the value we test against
-  constId <- addNode "LitConst" (OpConst (ConstOp parent (constFromSimple tm) ty))
+  constId <- addNode "LitConst" (OpConst (ConstOp parent (valFromSimple tm)))
   loadPort <- head <$> addNodeWithInputs "LitLoad" (OpLoadConstant (LoadConstantOp parent ty))
                        [(Port constId 0, ty)] [ty]
   -- Connect to a test node
-  let sumOut = HTSum (SG (GeneralSum [HTTuple [ty], HTTuple []]))
+  let sumOut = HTSum (SG (GeneralSum [[ty], []]))
   let sig = FunctionType [ty, ty] [sumOut]
   head <$> addNodeWithInputs ("PrimLitTest " ++ show tm)
            (OpCustom (CustomOp parent "BRAT" ("PrimLitTest::" ++ show ty) sig []))
@@ -790,7 +799,7 @@ undoPrimTest parent inPorts outTy (PrimCtorTest c tycon _ _) = do
            [outTy]
 undoPrimTest parent inPorts outTy (PrimLitTest tm) = do
   unless (null inPorts) $ error "Unexpected inPorts"
-  constId <- addNode "LitConst" (OpConst (ConstOp parent (constFromSimple tm) outTy))
+  constId <- addNode "LitConst" (OpConst (ConstOp parent (valFromSimple tm)))
   head <$> addNodeWithInputs "LitLoad" (OpLoadConstant (LoadConstantOp parent outTy))
            [(Port constId 0, outTy)] [outTy]
 
@@ -820,7 +829,7 @@ compileModule venv = do
   -- return the type of the Hugr FuncDefn, whether said FuncDefn requires an extra Call,
   -- and the procedure for compiling the contents of the FuncDefn for execution later,
   -- *after* all such FuncDefns have been registered
-  analyseDecl :: Name -> Compile (PolyFuncType, Bool, (NodeId -> Compile ()))
+  analyseDecl :: Name -> Compile (PolyFuncType, Bool, NodeId -> Compile ())
   analyseDecl idNode = do
     (ns, es) <- gets bratGraph
     let srcPortTys = [(srcPort, ty) | (srcPort, ty, In tgt _) <- es, tgt == idNode ]
@@ -830,7 +839,7 @@ compileModule venv = do
         case outs of
           [(_, VFun Braty cty)] -> do
             sig <- compileSig Braty cty
-            pure $ (sig, False, compileBox (src, tgt))
+            pure (sig, False, compileBox (src, tgt))
           [(_, VFun Kerny cty)] -> do
             -- We're compiling, e.g.
             --   f :: { Qubit -o Qubit }
@@ -839,7 +848,7 @@ compileModule venv = do
             -- computation that produces this constant. We do so by making a FuncDefn
             -- that takes no arguments and produces the constant kernel graph value.
             thunkTy <- HTFunc <$> compileSig Kerny cty
-            pure $ (funcReturning [thunkTy], True, \parent ->
+            pure (funcReturning [thunkTy], True, \parent ->
               withIO parent thunkTy $ compileKernBox parent input (compileBox (src, tgt)) cty)
           _ -> error "Box should have exactly one output of Thunk type"
       _ -> do -- a computation, or several values
@@ -856,7 +865,7 @@ compileModule venv = do
   -- top-level decls that are not Prims. RHS is the brat idNode
   decls :: [(UserName, Name)]
   decls = do -- in list monad, no Compile here
-            (fnName, wires) <- (M.toList venv)
+            (fnName, wires) <- M.toList venv
             let (Ex idNode _) = end (fst $ head wires) -- would be better to check same for all rather than just head
             case hasPrefix ["checking","globals","decl"] idNode of
               Just _ -> pure (fnName, idNode) -- assume all ports are 0,1,2...

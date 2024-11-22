@@ -1,13 +1,212 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Data.Hugr.Ops where
+module Data.Hugr where
+
+-- Definitions of data structures which make up a hugr, along with serialisation
+-- to JSON. There's a lot of mutual dependency, so this contains Ops, Types and
+-- Values.
 
 import Data.Aeson
+import qualified Data.Aeson.KeyMap as KeyMap
 import Data.Text (Text, pack)
 
-import Data.Hugr.Types
 import Brat.Syntax.Simple
+
+------------------------------------- TYPES ------------------------------------
+-------------------------  (Depends on HugrValue and Hugr)  --------------------
+
+data UnitSum = UnitSum { size :: Int }
+ deriving (Eq, Show)
+data GeneralSum = GeneralSum { row :: [[HugrType]] }
+ deriving (Eq, Show)
+
+data SumType = SU UnitSum | SG GeneralSum
+ deriving (Eq, Show)
+
+newtype SumOfRows = SoR [[HugrType]] deriving Show
+
+-- Convert from a hugr sum of tuples to a SumOfRows
+sumOfRows :: HugrType -> SumOfRows
+sumOfRows (HTSum (SG (GeneralSum rows))) = SoR rows
+sumOfRows ty = error $ show ty ++ " isn't a sum of row tuples"
+
+compileSumOfRows :: SumOfRows -> HugrType
+compileSumOfRows (SoR rows) = HTSum (SG (GeneralSum rows))
+
+-- Depends on HugrValue (via TypeArg in HTOpaque)
+data HugrType
+  = HTQubit
+  | HTUSize
+  | HTArray
+  | HTSum SumType
+  | HTOpaque {-extension :: -}String {-type id :: -}String [TypeArg] TypeBound
+  | HTFunc PolyFuncType
+ deriving (Eq, Show)
+
+instance ToJSON HugrType where
+  toJSON HTQubit = object ["t" .= ("Q" :: Text)]
+  toJSON (HTSum (SU (UnitSum size))) = object ["t" .= ("Sum" :: Text)
+                                              ,"s" .= ("Unit" :: Text)
+                                              ,"size" .= size
+                                              ]
+  toJSON (HTSum (SG (GeneralSum rows))) = object ["t" .= ("Sum" :: Text)
+                                                 ,"s" .= ("General" :: Text)
+                                                 ,"rows" .= rows
+                                                 ]
+  toJSON HTUSize = object ["t" .= ("I" :: Text)]
+  toJSON (HTOpaque ext id args bound) = object ["t" .= ("Opaque" :: Text)
+                                               ,"extension" .= pack ext
+                                               ,"id" .= pack id
+                                               ,"args" .= args
+                                               ,"bound" .= bound
+                                               ]
+  toJSON (HTFunc sig) = object ["t" .= ("G" :: Text)
+                               ,"input" .= input (body sig)
+                               ,"output" .= output (body sig)
+                               ,"extension_reqs" .= ([] :: [Text])
+                               ]
+  toJSON ty = error $ "todo: json of " ++ show ty
+
+htTuple :: [HugrType] -> HugrType
+htTuple row = HTSum (SG (GeneralSum [row]))
+
+data PolyFuncType = PolyFuncType
+ { params :: [TypeParam]
+ , body   :: FunctionType
+ } deriving (Eq, Show)
+
+instance ToJSON PolyFuncType where
+  toJSON (PolyFuncType params body) = object ["t" .= ("G" :: Text)
+                                             ,"params" .= params
+                                             ,"body" .= body
+                                             ]
+
+data CustomTypeArg = CustomTypeArg
+ { typ :: CustomType
+ , value :: HugrValue
+ } deriving (Eq, Show)
+
+data CustomType deriving (Eq, Show)
+data ExtensionId deriving (Eq, Show)
+instance ToJSON ExtensionId where
+  toJSON = undefined
+
+data TypeBound = TBEq | TBCopy | TBAny deriving (Eq, Ord, Show)
+
+instance ToJSON TypeBound where
+  toJSON TBEq = "E"
+  toJSON TBCopy = "C"
+  toJSON TBAny = "A"
+
+data TypeArgVariable = TypeArgVariable
+ { idx :: Int
+ , cached_decl :: TypeParam
+ }
+ deriving (Eq, Show)
+
+data TypeArg
+ = TAType HugrType
+ | TANat Int
+ | TAOpaque CustomTypeArg
+ | TASequence [TypeArg]
+ | TAVariable TypeArgVariable
+ deriving (Eq, Show)
+
+instance ToJSON TypeArg where
+  toJSON (TAType ty) = object ["tya" .= ("Type" :: Text)
+                              ,"ty" .= ty
+                              ]
+  toJSON (TANat n) = object ["tya" .= ("BoundedNat" :: Text)
+                            ,"n" .= n
+                            ]
+  toJSON (TASequence args) = object ["tya" .= ("Sequence" :: Text)
+                                    ,"elems" .= args
+                                    ]
+
+data TypeParam = TypeParam deriving (Eq, Show)
+instance ToJSON TypeParam where
+  toJSON = undefined
+
+data FunctionType = FunctionType
+ { input :: [HugrType]
+ , output :: [HugrType]
+ } deriving (Eq, Show)
+
+instance ToJSON FunctionType where
+  toJSON (FunctionType ins outs) = object ["input" .= ins
+                                          ,"output" .= outs
+                                          ,"extension_reqs" .= ([] :: [Text])
+                                          ]
+
+data Array = Array
+ { ty :: HugrType
+ , len :: Int
+ } deriving Show
+
+boundOf :: HugrType -> TypeBound
+boundOf HTQubit = TBAny
+boundOf (HTOpaque _ _ _ b) = b
+boundOf HTUSize = TBEq
+boundOf (HTSum (SU _)) = TBEq
+boundOf (HTSum (SG (GeneralSum rows))) = maximum (TBEq:(boundOfList <$> rows))
+ where
+  boundOfList :: [HugrType] -> TypeBound
+  boundOfList [] = TBEq
+  boundOfList xs = maximum (boundOf <$> xs)
+boundOf (HTFunc _) = TBCopy
+boundOf _ = error "unimplemented bound"
+
+hugrList :: HugrType -> HugrType
+hugrList ty = HTOpaque "Collections" "List" [TAType ty] (boundOf ty)
+
+intWidth :: Int
+intWidth = 6  -- 2^6 = 64 bits
+
+hugrInt :: HugrType
+hugrInt = HTOpaque "arithmetic.int.types" "int" [TANat intWidth] TBEq
+
+hugrFloat :: HugrType
+hugrFloat = HTOpaque "arithmetic.float.types" "float64" [] TBCopy
+
+
+------------------------------------ VALUES ------------------------------------
+-----------------------  (Depends on Hugr and HugrType)  -----------------------
+
+-- Depends on `Hugr` and on `HugrType` (for `HVExtension`)
+data HugrValue
+ = HVFunction (Hugr Int)
+ | HVTuple [HugrValue]
+ | HVExtension [ExtensionName] HugrType CustomConst
+ deriving (Eq, Show)
+
+instance ToJSON HugrValue where
+  toJSON (HVFunction h) = object ["v" .= ("Function" :: Text)
+                                 ,"hugr" .= h
+                                 ]
+  toJSON (HVTuple vs) = object ["v" .= ("Tuple" :: Text)
+                                  ,"vs" .= vs
+                                  ]
+  toJSON (HVExtension exts ty val) = object ["v" .= ("Extension" :: Text)
+                                            ,"typ" .= ty
+                                            ,"value" .= val
+                                            ,"extensions" .= exts
+                                            ]
+
+hvUnit = HVTuple []
+hvFloat x = HVExtension ["arithmetic.float_types"] hugrFloat
+            (CC "ConstF64" (KeyMap.singleton "value" x))
+hvInt x = HVExtension ["arithmetic.int_types"] hugrInt
+          (CC "ConstInt" (KeyMap.insert "log_width" 6 (KeyMap.singleton "value" x)))
+
+valFromSimple :: SimpleTerm -> HugrValue
+valFromSimple (Num x) = hvInt x
+valFromSimple (Float x) = hvFloat x
+valFromSimple (Text _) = error "todo"
+valFromSimple Unit = hvUnit
+
+-------------------------------------- OPS -------------------------------------
+---------------------  (Depends on HugrValue and HugrType) ---------------------
 
 data ModuleOp node = ModuleOp { parent :: node } deriving (Eq, Functor, Show)
 
@@ -35,44 +234,25 @@ instance ToJSON node => ToJSON (FuncDefn node) where
                                     ,"signature" .= signature_
                                     ]
 
-data HugrConst
-  = HCInt Int
-  | HCFloat Double
-  | HCUnit
-  | HCFunction (Hugr Int)
- deriving (Eq, Show)
+data CustomConst where
+  CC :: forall a. (Eq a, Show a, ToJSON a) => String -> a -> CustomConst
 
-instance ToJSON HugrConst where
-  toJSON (HCInt x) = object ["v" .= ("Extension" :: Text)
-                            ,"c" .= [object ["c" .= ("ConstIntS" :: Text)
-                                            ,"log_width" .= (intWidth :: Int)
-                                            ,"value" .= x
-                                            ]
-                                    ]
-                            ]
-  toJSON (HCFloat x) = object ["v" .= ("Extension" :: Text)
-                              ,"c" .= [object ["c" .= ("ConstF64" :: Text)
-                                              ,"value" .= x
-                                              ]
-                                      ]
-                              ]
-  toJSON HCUnit = object ["v" .= ("Tuple" :: Text)
-                         ,"vs" .= ([] :: [()])
-                         ]
-  toJSON (HCFunction hugr) = object ["v" .= ("Function" :: Text)
-                                    ,"hugr" .= hugr
-                                    ]
+instance Eq CustomConst where
+  (CC tag cts) == (CC tag' cts') = tag == tag' && (toJSON cts == toJSON cts')
 
-constFromSimple :: SimpleTerm -> HugrConst
-constFromSimple (Num x) = HCInt x
-constFromSimple (Float x) = HCFloat x
-constFromSimple (Text _) = error "todo"
-constFromSimple Unit = HCUnit
+instance Show CustomConst where
+  show (CC tag cts) = "Const(" ++ tag ++ ")(" ++ show cts ++ ")"
+
+instance ToJSON CustomConst where
+  toJSON (CC tag cts) = object ["c" .= pack tag
+                               ,"v" .= cts
+                               ]
+
+type ExtensionName = String
 
 data ConstOp node = ConstOp
  { parent :: node
- , const :: HugrConst
- , typ :: HugrType
+ , const :: HugrValue
  } deriving (Eq, Functor, Show)
 
 instance Eq a => Ord (ConstOp a) where
@@ -81,8 +261,7 @@ instance Eq a => Ord (ConstOp a) where
 instance ToJSON node => ToJSON (ConstOp node) where
   toJSON (ConstOp {..}) = object ["parent" .= parent
                                  ,"op" .= ("Const" :: Text)
-                                 ,"value" .= const
-                                 ,"typ" .= typ
+                                 ,"v" .= const
                                  ]
 
 
@@ -117,7 +296,7 @@ instance ToJSON node => ToJSON (OutputNode node) where
 
 data Conditional node = Conditional
  { parent :: node
- , tuple_sum_rows :: [[HugrType]]
+ , sum_rows :: [[HugrType]]
  , other_inputs :: [HugrType]
  , outputs :: [HugrType]
  } deriving (Eq, Functor, Show)
@@ -129,7 +308,7 @@ instance ToJSON node => ToJSON (Conditional node) where
   toJSON (Conditional { .. })
    = object ["op" .= ("Conditional" :: Text)
             ,"parent" .= parent
-            ,"tuple_sum_rows" .= tuple_sum_rows
+            ,"sum_rows" .= sum_rows
             ,"other_inputs" .= other_inputs
             ,"outputs" .= outputs
             ,"extension_delta" .= ([] :: [Text])
@@ -174,7 +353,7 @@ instance ToJSON node => ToJSON (DFG node) where
 data TagOp node = TagOp
  { parent :: node
  , tag :: Int
- , variants :: [HugrType]
+ , variants :: [[HugrType]]
  } deriving (Eq, Functor, Show)
 
 instance Eq node => Ord (TagOp node) where
@@ -183,8 +362,7 @@ instance Eq node => Ord (TagOp node) where
 instance ToJSON node => ToJSON (TagOp node) where
   toJSON (TagOp parent tag variants)
    = object ["parent" .= parent
-            ,"op" .= ("LeafOp" :: Text)
-            ,"lop" .= ("Tag" :: Text)
+            ,"op" .= ("Tag" :: Text)
             ,"tag" .= tag
             ,"variants" .= variants
             ]
@@ -200,8 +378,7 @@ instance Eq node => Ord (MakeTupleOp node) where
 instance ToJSON node => ToJSON (MakeTupleOp node) where
   toJSON (MakeTupleOp parent tys)
    = object ["parent" .= parent
-            ,"op" .= ("LeafOp" :: Text)
-            ,"lop" .= ("MakeTuple" :: Text)
+            ,"op" .= ("MakeTuple" :: Text)
             ,"tys" .= tys
             ]
 
@@ -218,8 +395,7 @@ instance Eq node => Ord (CustomOp node) where
 
 instance ToJSON node => ToJSON (CustomOp node) where
   toJSON (CustomOp { .. }) = object ["parent" .= parent
-                                    ,"op" .= ("LeafOp" :: Text)
-                                    ,"lop" .= ("CustomOp" :: Text)
+                                    ,"op" .= ("CustomOp" :: Text)
                                     ,"description" .= ("" :: Text)
                                     ,"extension" .= pack extension
                                     ,"args" .= args
@@ -227,6 +403,14 @@ instance ToJSON node => ToJSON (CustomOp node) where
                                     ,"signature" .= signature_
                                     ]
 
+-- In BRAT, we're not using the type parameter machinery of hugr for
+-- polymorphism, so calls can just take simple signatures.
+--
+-- Type args are only given to our custom ops, and this is done at the time of
+-- adding the op, rather than when it is called.
+--
+-- TODO: Instead of using hugr type args, we should be using coercions for
+-- polymorphic function arguments.
 data CallOp node = CallOp
   { parent :: node
   , signature_ :: FunctionType
@@ -236,10 +420,13 @@ instance Eq node => Ord (CallOp node) where
   compare _ _ = EQ
 
 instance ToJSON node => ToJSON (CallOp node) where
-  toJSON (CallOp parent signature_) = object ["parent" .= parent
-                                             ,"signature" .= signature_
-                                             ,"op" .= ("Call" :: Text)
-                                             ]
+  toJSON (CallOp parent signature_) =
+    object ["parent" .= parent
+           ,"op" .= ("Call" :: Text)
+           ,"func_sig" .= PolyFuncType [] signature_
+           ,"type_args" .= ([] :: [TypeArg])
+           ,"instantiation" .= signature_
+           ]
 
 intOp :: node -> String -> FunctionType -> [TypeArg] -> CustomOp node
 intOp parent = CustomOp parent "arithmetic.int"
@@ -323,7 +510,24 @@ instance ToJSON node => ToJSON (LoadConstantOp node) where
   toJSON (LoadConstantOp {..}) = object ["parent" .= parent
                                         ,"op" .= ("LoadConstant" :: Text)
                                         ,"datatype" .= datatype
-                                        ,"op" .= ("LoadConstant" :: Text)
+                                        ]
+
+data LoadFunctionOp node = LoadFunctionOp
+  { parent :: node
+  , func_sig :: PolyFuncType
+  , type_args :: [TypeArg]
+  , signature :: FunctionType
+  } deriving (Eq, Functor, Show)
+
+instance Eq node => Ord (LoadFunctionOp node) where
+  compare _ _ = EQ
+
+instance ToJSON node => ToJSON (LoadFunctionOp node) where
+  toJSON (LoadFunctionOp {..}) = object ["parent" .= parent
+                                        ,"op" .= ("LoadFunction" :: Text)
+                                        ,"func_sig" .= func_sig
+                                        ,"type_args" .= type_args
+                                        ,"signature" .= signature
                                         ]
 
 data NoopOp node = NoopOp
@@ -336,8 +540,7 @@ instance Eq node => Ord (NoopOp node) where
 
 instance ToJSON node => ToJSON (NoopOp node) where
   toJSON (NoopOp {..}) = object ["parent" .= parent
-                                ,"op" .= ("LeafOp" :: Text)
-                                ,"lop" .= ("Noop" :: Text)
+                                ,"op" .= ("Noop" :: Text)
                                 ,"ty" .= ty
                                 ]
 
@@ -360,6 +563,7 @@ data HugrOp node
   | OpCall (CallOp node)
   | OpCallIndirect (CallIndirectOp node)
   | OpLoadConstant (LoadConstantOp node)
+  | OpLoadFunction (LoadFunctionOp node)
   | OpNoop (NoopOp node)
  deriving (Eq, Functor, Ord, Show)
 
@@ -378,6 +582,7 @@ instance ToJSON node => ToJSON (HugrOp node) where
   toJSON (OpCall op) = toJSON op
   toJSON (OpCallIndirect op) = toJSON op
   toJSON (OpLoadConstant op) = toJSON op
+  toJSON (OpLoadFunction op) = toJSON op
   toJSON (OpNoop op) = toJSON op
 
 getParent :: HugrOp node -> node
@@ -386,7 +591,7 @@ getParent (OpDefn (FuncDefn { parent = parent })) = parent
 getParent (OpConst (ConstOp { parent = parent })) = parent
 getParent (OpDFG (DFG { parent = parent })) = parent
 getParent (OpConditional (Conditional { parent = parent })) = parent
-getParent (OpCase (_, (Case { parent = parent }))) = parent
+getParent (OpCase (_, Case { parent = parent })) = parent
 getParent (OpIn (InputNode { parent = parent })) = parent
 getParent (OpOut (OutputNode { parent = parent })) = parent
 getParent (OpTag (TagOp { parent = parent })) = parent
@@ -395,15 +600,17 @@ getParent (OpCustom (CustomOp { parent = parent })) = parent
 getParent (OpCall (CallOp { parent = parent })) = parent
 getParent (OpCallIndirect (CallIndirectOp { parent = parent })) = parent
 getParent (OpLoadConstant (LoadConstantOp { parent = parent })) = parent
+getParent (OpLoadFunction (LoadFunctionOp { parent = parent })) = parent
 getParent (OpNoop (NoopOp { parent = parent })) = parent
 
 data Hugr node = Hugr [HugrOp node] [(PortId node, PortId node)]
   deriving (Eq, Functor, Show)
 
 instance ToJSON node => ToJSON (Hugr node) where
-  toJSON (Hugr ns es) = object ["version" .= ("v0" :: Text)
+  toJSON (Hugr ns es) = object ["version" .= ("v1" :: Text)
                                ,"nodes" .= ns
                                ,"edges" .= es
+                               ,"encoder" .= ("BRAT" :: Text)
                                ]
 
 orderEdgeOffset :: Int

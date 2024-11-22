@@ -51,6 +51,8 @@ data Term :: Dir -> Kind -> Type where
   Hope     :: Term Chk Noun
   Identity :: Term Syn UVerb
   Arith    :: ArithOp -> WC (Term Chk Noun) -> WC (Term Chk Noun) -> Term Chk Noun
+  Of       :: WC (Term Chk Noun) -> WC (Term d Noun) -> Term d Noun
+
   -- Type annotations (annotating a term with its outputs)
   (:::)    :: WC (Term Chk Noun) -> [Output] -> Term Syn Noun
   -- Composition: values fed from source (first) into dest (second),
@@ -108,7 +110,10 @@ instance Show (Term d k) where
    where
     showList [] = "[]:"
     showList ps = concatMap (++":") ps
-
+  show (Of n e) = unwords [bracket POf n
+                          ,"of"
+                          ,bracket POf e
+                          ]
   show (Var x) = show x
   show Hope = "!"
   show Identity = "|"
@@ -116,7 +121,7 @@ instance Show (Term d k) where
   show (fun :$: arg) = bracket PApp fun ++ ('(' : show arg ++ ")")
   show (tm ::: ty) = bracket PAnn tm ++ " :: " ++ show ty
   show (a :-: b) = bracket PComp a ++ "; " ++ bracket PComp b
-  show (Lambda c cs) = unlines $ (showClause c : (("| "++) . showClause <$> cs))
+  show (Lambda c cs) = unlines (showClause c : (("| "++) . showClause <$> cs))
    where
     showClause (xs, bod) = show xs ++ " => " ++ bracket PLambda bod
   show p@(Con c arg) = case prettyPat p of
@@ -127,7 +132,7 @@ instance Show (Term d k) where
    where
     prettyPat :: Term Chk Noun -> Maybe [Term Chk Noun]
     prettyPat (Con (PrefixName [] "nil") (WC _ Empty)) = Just []
-    prettyPat (Con (PrefixName [] "cons") (WC _ (x :|: xs))) = ((unWC x) :) <$> prettyPat (unWC xs)
+    prettyPat (Con (PrefixName [] "cons") (WC _ (x :|: xs))) = (unWC x :) <$> prettyPat (unWC xs)
     prettyPat _ = Nothing
 
   show (C f) = "{" ++ show f ++ "}"
@@ -144,7 +149,7 @@ bracket n (WC _ tm) = case precedence tm of
 
 -- Report tightness of binding, or `Nothing` if not a binary op
 precedence :: Term d k -> Maybe Precedence
-precedence (Let _ _ _)  = Just PLetIn
+precedence (Let {})  = Just PLetIn
 precedence (Lambda _ _) = Just PLambda
 precedence (_ :-: _)    = Just PComp
 precedence (Pull _ _)   = Just PJuxtPull
@@ -153,6 +158,7 @@ precedence (Con c _)
   | c `elem` [CCons,CSnoc,CConcatEqEven,CConcatEqOdd,CRiffle] = Just PVecPat
 precedence (_ :$: _)    = Just PApp
 precedence (_ ::: _)    = Just PAnn
+precedence (Of _ _)     = Just POf
 precedence (Arith op _ _) = Just $ case op of
   Add -> PAddSub
   Sub -> PAddSub

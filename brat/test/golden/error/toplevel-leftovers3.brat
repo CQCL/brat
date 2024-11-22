@@ -1,0 +1,2 @@
+f(Nat, Bool) -> Nat
+f(x) = x

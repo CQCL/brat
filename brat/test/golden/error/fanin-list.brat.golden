@@ -1,4 +1,4 @@
-Error in test/golden/error/fanin-list.brat@FC {start = Pos {line = 2, col = 5}, end = Pos {line = 2, col = 13}}:
+Error in test/golden/error/fanin-list.brat on line 2:
 f = { [\/] }
     ^^^^^^^^
 

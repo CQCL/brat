@@ -1,9 +1,9 @@
 module Util where
 
-zip_same_length :: [a] -> [b] -> Maybe [(a,b)]
-zip_same_length (x:xs) (y:ys) = ((x,y):) <$> zip_same_length xs ys
-zip_same_length [] [] = Just []
-zip_same_length _ _ = Nothing
+zipSameLength :: [a] -> [b] -> Maybe [(a,b)]
+zipSameLength (x:xs) (y:ys) = ((x,y):) <$> zipSameLength xs ys
+zipSameLength [] [] = Just []
+zipSameLength _ _ = Nothing
 
 lookupBy :: (a -> Bool) -> (a -> b) -> [a] -> Maybe b
 lookupBy _ _ [] = Nothing
@@ -18,7 +18,7 @@ duplicatesWith :: Eq b => (a -> b) -> [a] -> [a]
 duplicatesWith f xs = let (_, dups, _) = aux ([], [], xs) in dups
  where
   aux (visited, dups, []) = (visited, dups, [])
-  aux (visited, dups, (x:xs)) | f x `elem` visited = aux (visited, x:dups, xs)
+  aux (visited, dups, x:xs) | f x `elem` visited = aux (visited, x:dups, xs)
                               | otherwise = aux (f x:visited, dups, xs)
 
 duplicates :: Eq a => [a] -> [a]

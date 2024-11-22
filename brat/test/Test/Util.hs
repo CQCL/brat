@@ -5,19 +5,15 @@ import Brat.Checker.Monad
 import Brat.Checker.Types (initStore, emptyEnv)
 import Brat.Error
 import Brat.FC
-import Brat.Load
 import Brat.Naming
-import Brat.Syntax.Common (CType'(..), TypeKind)
-import Brat.Syntax.Port
-import Brat.Syntax.Value
-import Bwd
 
-import Control.Monad.Except
+import qualified Data.Set as S
 import Test.Tasty
 import Test.Tasty.HUnit
 import Data.List (isInfixOf)
+import Test.Tasty.ExpectedFailure
 
-runEmpty m = run emptyEnv initStore root m
+runEmpty = run emptyEnv initStore root
 
 assertChecking :: Checking a -> Assertion
 assertChecking m = case runEmpty $ localFC (FC (Pos 0 0) (Pos 0 0)) m of
@@ -30,10 +26,11 @@ assertCheckingFail needle m = case runEmpty $ localFC (FC (Pos 0 0) (Pos 0 0)) m
   Left err -> let shown = showError err in
     if isInfixOf needle shown then pure () else assertFailure ("Unexpected error " ++ shown)
 
-parseAndCheck :: [FilePath] -> FilePath -> TestTree
-parseAndCheck libDirs file = testCase (show file) $ do
-  env <- runExceptT $ loadFilename root libDirs file
-  case env of
-    Left err -> assertFailure (show err)
-    Right (venv, nouns, holes, _, _, _) ->
-      ((length venv) + (length nouns) + (length holes) > 0) @? "Should produce something"
+expectFailForPaths :: [FilePath] -> (FilePath -> TestTree) -> [FilePath] -> [TestTree]
+expectFailForPaths xf makeTest paths = if S.null not_found then tests else
+                                    error $ "Tried to XFAIL non-existent tests " ++ show not_found
+ where
+  f :: FilePath -> ([TestTree], S.Set FilePath) -> ([TestTree], S.Set FilePath)
+  f path (ts, remaining_xfs) = let newTest = (if S.member path remaining_xfs then expectFail else id) $ makeTest path
+                               in (newTest:ts, S.delete path remaining_xfs)
+  (tests, not_found) = foldr f ([], S.fromList xf) paths

@@ -65,9 +65,7 @@ solve my ((src, DontCare):p) = do
   () <- case my of
     Kerny -> do
       ty <- typeOfSrc Kerny src
-      if not (fromJust (copyable ty))
-      then (typeErr $ "Ignoring linear variable of type " ++ show ty)
-      else pure ()
+      unless (fromJust (copyable ty)) $ typeErr $ "Ignoring linear variable of type " ++ show ty
     Braty -> pure ()
   solve my p
 solve my ((src, Bind x):p) = do
@@ -149,7 +147,7 @@ solveConstructor my src (c, abs) ty p = do
   (_, _, _, stuff) <- next "type_args" Hypo (S0, Some (Zy :* S0)) patRo R0
   (node, _, patArgWires, _) <- let ?my = my in anext "val_args" Hypo stuff R0 argRo
   trackM ("Constructor " ++ show c ++ "; type " ++ show ty)
-  case (snd stuff) of
+  case snd stuff of
     Some (_ :* patEnds) -> do
       trackM (show pats)
       trackM (show patEnds)

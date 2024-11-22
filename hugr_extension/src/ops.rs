@@ -3,7 +3,7 @@ use hugr::{
         simple_op::{MakeExtensionOp, MakeOpDef, OpLoadError},
         SignatureError,
     },
-    ops::{custom::ExtensionOp, OpName, OpTrait},
+    ops::{custom::ExtensionOp, NamedOp, OpTrait},
     types::{FunctionType, TypeArg, TypeEnum, TypeRow},
 };
 use smol_str::{format_smolstr, SmolStr};
@@ -39,9 +39,10 @@ pub enum BratOp {
     },
     // The inverse operation of "full" on Nats
     Lluf,
+    Replicate(TypeArg),
 }
 
-impl OpName for BratOp {
+impl NamedOp for BratOp {
     fn name(&self) -> SmolStr {
         use BratOp::*;
         match self {
@@ -52,6 +53,7 @@ impl OpName for BratOp {
             Ctor { ctor, .. } => format_smolstr!("Ctor::{}", ctor.name()),
             PrimCtorTest { ctor, .. } => format_smolstr!("PrimCtorTest::{}", ctor.name()),
             Lluf => "Lluf".into(),
+            Replicate(_) => "Replicate".into(),
         }
     }
 }
@@ -75,12 +77,12 @@ impl MakeExtensionOp for BratOp {
                     let hole_sigs: Result<Vec<_>, OpLoadError> = hole_sigs
                         .iter()
                         .map(|ty| match ty.as_type_enum() {
-                            TypeEnum::Function(f) => Ok(f.body().clone()),
+                            TypeEnum::Function(f) => Ok(*f.clone()),
                             _ => Err(SignatureError::InvalidTypeArgs.into()),
                         })
                         .collect();
                     Ok(BratOp::Substitute {
-                        func_sig: func_sig.body().clone(),
+                        func_sig: *func_sig.clone(),
                         hole_sigs: hole_sigs?,
                     })
                 }
@@ -93,7 +95,7 @@ impl MakeExtensionOp for BratOp {
                     };
                     Ok(BratOp::Partial {
                         inputs: partial_inputs.to_vec().into(),
-                        output_sig: output_sig.body().clone(),
+                        output_sig: *output_sig.clone(),
                     })
                 }
                 _ => Err(OpLoadError::InvalidArgs(SignatureError::InvalidTypeArgs)),
@@ -108,6 +110,7 @@ impl MakeExtensionOp for BratOp {
                 args: ext_op.args().to_vec(),
             }),
             BratOpDef::Lluf => Ok(BratOp::Lluf),
+            BratOpDef::Replicate => Ok(BratOp::Replicate(ext_op.args()[0].clone())),
         }
     }
 
@@ -146,6 +149,7 @@ impl MakeExtensionOp for BratOp {
             BratOp::Ctor { args, .. } => args.clone(),
             BratOp::PrimCtorTest { args, .. } => args.clone(),
             BratOp::Lluf => vec![],
+            BratOp::Replicate(arg) => vec![arg.clone()],
         }
     }
 }

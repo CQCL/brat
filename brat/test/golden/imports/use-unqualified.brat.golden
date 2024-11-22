@@ -1,4 +1,4 @@
-Error in test/golden/imports/use-unqualified.brat@FC {start = Pos {line = 4, col = 8}, end = Pos {line = 4, col = 9}}:
+Error in test/golden/imports/use-unqualified.brat on line 4:
 main = x
        ^
 

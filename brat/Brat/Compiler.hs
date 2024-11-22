@@ -3,8 +3,10 @@ module Brat.Compiler (printAST
                      ,writeDot
                      ,compileFile
                      ,compileAndPrintFile
+                     ,CompilingHoles(..)
                      ) where
 
+import Brat.Checker.Types (TypedHole)
 import Brat.Compile.Hugr
 import Brat.Dot (toDotString)
 import Brat.Elaborator
@@ -12,6 +14,7 @@ import Brat.Error
 import Brat.Load
 import Brat.Naming (root, split)
 
+import Control.Exception (evaluate)
 import Control.Monad (when)
 import Control.Monad.Except
 import qualified Data.ByteString.Lazy as BS
@@ -62,16 +65,23 @@ writeDot libDirs file out = do
   isMain _ = False
 -}
 
-compileFile :: [FilePath] -> String -> IO (Either String BS.ByteString)
+newtype CompilingHoles = CompilingHoles [TypedHole]
+
+instance Show CompilingHoles where
+  show (CompilingHoles hs) = unlines $
+    "Can't compile file with remaining holes": fmap (("  " ++) . show) hs
+
+compileFile :: [FilePath] -> String -> IO (Either CompilingHoles BS.ByteString)
 compileFile libDirs file = do
   let (checkRoot, newRoot) = split "checking" root
   env <- runExceptT $ loadFilename checkRoot libDirs file
   (venv, _, holes, defs, outerGraph, capSets) <- eitherIO env
-  pure $ case holes of
-    [] -> Right $ compile defs newRoot outerGraph capSets venv
-    xs -> Left (show (CompilingHoles (show <$> xs)))
+  case holes of
+    [] -> Right <$> evaluate -- turns 'error' into IO 'die'
+                    (compile defs newRoot outerGraph capSets venv)
+    hs -> pure $ Left (CompilingHoles hs)
 
 compileAndPrintFile :: [FilePath] -> String -> IO ()
 compileAndPrintFile libDirs file = compileFile libDirs file >>= \case
   Right bs -> BS.putStr bs
-  Left err -> die err
+  Left err -> die (show err)

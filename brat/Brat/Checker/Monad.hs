@@ -130,7 +130,7 @@ localAlias (name, alias) = wrapper2 (\case
 localFC :: FC -> Checking v -> Checking v
 localFC f = wrapper (\case
   AskFC -> pure $ Just f
-  (Throw (e@Err{fc=Nothing})) -> req (Throw (e{fc=Just f})) >> error "Throw returned"
+  (Throw e@Err{fc=Nothing}) -> req (Throw (e{fc=Just f})) >> error "Throw returned"
   _ -> pure $ Nothing)
 
 localEnv :: (?my :: Modey m) => Env (EnvData m) -> Checking v -> Checking v
@@ -203,7 +203,7 @@ lookupAndUse :: UserName -> KEnv
              -> Either Error (Maybe ((Src, BinderType Kernel), KEnv))
 lookupAndUse x kenv = case M.lookup x kenv of
    Nothing -> Right Nothing
-   Just (None, _) -> Left $ dumbErr $ TypeErr $ (show x) ++ " has already been used"
+   Just (None, _) -> Left $ dumbErr $ TypeErr $ show x ++ " has already been used"
    Just (One, rest)  -> Right $ Just (rest, M.insert x (None, rest) kenv)
    Just (Tons, rest) -> Right $ Just (rest, M.insert x (Tons, rest) kenv)
 
@@ -264,7 +264,7 @@ handler (Req s k) ctx g
       -- Receiving KDone may become possible when merging the two check functions
       KDone -> error "KDone in handler - this shouldn't happen"
       AskVEnv -> handler (k (CtxEnv { globals = globalVEnv ctx, locals = M.empty })) ctx g
-      ELup end -> handler (k ((M.lookup end) . valueMap . store $ ctx)) ctx g
+      ELup end -> handler (k (M.lookup end . valueMap . store $ ctx)) ctx g
       TypeOf end -> case M.lookup end . typeMap . store $ ctx of
         Just et -> handler (k et) ctx g
         Nothing -> Left (dumbErr . InternalError $ "End " ++ show end ++ " isn't Declared")

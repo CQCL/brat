@@ -8,7 +8,6 @@ import Test.Tasty.QuickCheck
 
 import Brat.Syntax.Abstractor
 import Brat.Syntax.Simple
-import Brat.UserName
 import Util
 
 abstractor :: Int -> Gen Abstractor
@@ -20,7 +19,7 @@ abstractor n = oneof
   ,chooseInt (0,n) >>= \m -> (:||:) <$> abstractor m <*> abstractor (n - m)
   ]
  where
-  portname = arbitrary <&> \n -> names !! (abs n)
+  portname = arbitrary <&> \n -> names !! abs n
 
 instance Arbitrary Abstractor where
   arbitrary = sized abstractor
@@ -50,10 +49,10 @@ instance Arbitrary Pattern where
                   ]
     con n = oneof [pure PNone
                   ,pure PNil
-                  ,PSome <$> (pat (n - 1))
-                  ,POnePlus <$> (pat (n - 1))
-                  ,PTwoTimes <$> (pat (n - 1))
-                  ,PCons <$> (pat (n `div` 2)) <*> (pat (n `div` 2))
+                  ,PSome <$> pat (n - 1)
+                  ,POnePlus <$> pat (n - 1)
+                  ,PTwoTimes <$> pat (n - 1)
+                  ,PCons <$> pat (n `div` 2) <*> pat (n `div` 2)
                   ]
 
 idempotency :: Abstractor -> Bool

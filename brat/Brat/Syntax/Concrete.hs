@@ -47,4 +47,5 @@ data Flat
  | FFanOut
  | FFanIn
  | FIdentity
+ | FOf ({- number :: -}WC Flat) {- of -} ({- expr -}WC Flat)
  deriving Show

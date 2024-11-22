@@ -12,7 +12,7 @@ import Brat.Syntax.Value
 import Control.Monad.Freer
 import Bwd
 import Hasochism
-import Util (zip_same_length)
+import Util (zipSameLength)
 
 import Control.Monad (filterM, unless, (>=>))
 import Data.Foldable (traverse_)
@@ -153,7 +153,7 @@ typeEqRigid tm lvkz (Star []) (VFun m0 (ins0 :->> outs0)) (VFun m1 (ins1 :->> ou
         (Some (lvkz :* (Refl :* Refl)), ps1) -> typeEqRow m0 tm lvkz outs0 outs1 <&> (ps1++) . snd
   traverse_ id probs -- uses Applicative (unlike sequence_ which uses Monad), hence parallelized
 typeEqRigid tm lvkz (TypeFor _ []) (VSum m0 rs0) (VSum m1 rs1)
-  | Just Refl <- testEquality m0 m1 = case zip_same_length rs0 rs1 of
+  | Just Refl <- testEquality m0 m1 = case zipSameLength rs0 rs1 of
       Nothing -> typeErr "Mismatched sum lengths"
       Just rs -> traverse eqVariant rs >>= (traverse_ id . concat)
  where

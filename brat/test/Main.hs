@@ -17,7 +17,6 @@ import Test.TypeArith
 
 import Brat.Checker.Monad
 import Brat.Syntax.Common
-import Brat.Syntax.Port
 import Brat.Syntax.Value
 import Brat.UserName
 import Brat.Error

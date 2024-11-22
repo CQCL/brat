@@ -1,5 +1,9 @@
 module Test.Substitution where
 
+import Test.Tasty
+
+{-
+-- TODO: update to value scopes syntax
 import Brat.Checker.Monad
 import Brat.Checker.SolveHoles
 import Brat.Checker.Types
@@ -15,11 +19,7 @@ import Hasochism
 import Test.Util (runEmpty)
 
 import Data.Bifunctor
-import Test.Tasty
 import Test.Tasty.HUnit
-
-{-
--- TODO: update to value scopes syntax
 
 node = fst (fresh "" root)
 

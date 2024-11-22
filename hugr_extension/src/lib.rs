@@ -25,6 +25,7 @@ lazy_static! {
         let reqs = ExtensionSet::from_iter([int_types::EXTENSION_ID, collections::EXTENSION_NAME]);
 
         let mut extension = Extension::new_with_reqs(EXTENSION_ID, reqs);
+
         for op in all::<BratOpDef>() {
             op.add_to_extension(&mut extension).unwrap();
         }
@@ -55,7 +56,7 @@ impl MakeRegisteredOp for BratOpDef {
 mod test {
     use hugr::{
         extension::simple_op::MakeExtensionOp,
-        ops::{custom::ExtensionOp, OpName},
+        ops::{custom::ExtensionOp, NamedOp},
         types::{type_param::TypeParam, FunctionType, Type, TypeArg},
     };
 

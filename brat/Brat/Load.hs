@@ -28,6 +28,7 @@ import Control.Exception (assert)
 import Control.Monad (filterM, foldM, forM, forM_, unless)
 import Control.Monad.Except
 import Control.Monad.Trans.Class (lift)
+import Data.Functor ( (<&>), ($>) )
 import Data.List (sort)
 import Data.List.HT (viewR)
 import Data.List.NonEmpty (NonEmpty(..))
@@ -38,7 +39,6 @@ import System.Directory (doesFileExist)
 import System.FilePath
 
 import Prelude hiding (last)
-import Data.Functor (($>))
 
 -- A Module is a node in the dependency graph
 type FlatMod = ((FEnv, String) -- data at the node: declarations, and file contents
@@ -69,8 +69,14 @@ checkDecl pre (VDecl FuncDecl{..}) to_define = (fnName -!) $ localFC fnLoc $ do
     -- We must have a row of nouns as the definition
     Nothing -> case fnBody of
       NoLhs body -> do
-        (((), ()), ((), [])) <- let ?my = Braty in check body ((), to_define)
-        pure ()
+        (((), ()), ((), rightUnders)) <- let ?my = Braty in check body ((), to_define)
+        case rightUnders of
+          [] -> pure ()
+          _ -> localFC (fcOf body) $
+               err $
+               TypeMismatch fnName
+               (showRow to_define)
+               (showRow $ filter ((`notElem` (fst <$> rightUnders)) . fst) to_define)
       Undefined -> error "No body in `checkDecl`"
       ThunkOf _ -> case fnSig of
         Some ro -> err $ ExpectedThunk (showMode Braty) (show ro)
@@ -104,7 +110,7 @@ checkDecl pre (VDecl FuncDecl{..}) to_define = (fnName -!) $ localFC fnLoc $ do
   getFunTy :: Some (Ro m Z) -> Checking (Maybe (Some (Modey :* Flip CTy Z)))
   getFunTy (Some (RPr (_, VFun my cty) R0)) = pure $ Just (Some (my :* Flip cty))
   getFunTy (Some R0) = err $ EmptyRow name
-  getFunTy _ = pure $ Nothing
+  getFunTy _ = pure Nothing
 
   uname = PrefixName pre fnName
   name = show uname
@@ -112,7 +118,7 @@ checkDecl pre (VDecl FuncDecl{..}) to_define = (fnName -!) $ localFC fnLoc $ do
 loadAlias :: TypeAlias -> Checking (UserName, Alias)
 loadAlias (TypeAlias fc name args body) = localFC fc $ do
   (_, [(hhungry, Left k)], _, _) <- next "" Hypo (S0,Some (Zy :* S0)) (REx ("type", Star args) R0) R0
-  let abs = WC fc $ foldr (:||:) AEmpty (APat . Bind . fst <$> args)
+  let abs = WC fc $ foldr ((:||:) . APat . Bind . fst) AEmpty args
   ([v], unders) <- kindCheck [(hhungry, k)] $ Th (WC fc (Lambda (abs, WC fc body) []))
   ensureEmpty "loadAlias unders" unders
   pure (name, (args, v))
@@ -137,7 +143,7 @@ loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addS
   (entries, (holes, kcStore, kcGraph, capSets)) <- run venv initStore globalNS $
     withAliases aliases $ forM decls $ \d -> localFC (fnLoc d) $ do
       let name = PrefixName pre (fnName d)
-      (thing, ins :->> outs, sig, prefix) <- case (fnLocality d) of
+      (thing, ins :->> outs, sig, prefix) <- case fnLocality d of
                         Local -> do
                           -- kindCheckAnnotation gives the signature of an Id node,
                           -- hence ins == outs (modulo haskell's knowledge about their scopes)
@@ -196,14 +202,14 @@ loadFiles ns (cwd :| extraDirs) fname contents = do
   -- Validate imports
   liftEither . addSrcContext fname contents $ forM_ files (validateImports . f)
 
-  let allStmts = (getStmts . f) <$> files
+  let allStmts = getStmts . f <$> files
   -- remove the prefix for the starting file
   allStmts' <- case viewR allStmts of
     -- the original file should be at the end of the allStmts list
     Just (rest, (_, mainPrf, mainStmts, mainCts)) -> do
       unless (mainPrf == [fname]) $
         throwError (SrcErr "" $ dumbErr (InternalError "Top of dependency graph wasn't main file"))
-      deps <- for rest $ \(uname,b,c,d) -> findFile uname >>= pure . (,b,c,d)
+      deps <- for rest $ \(uname,b,c,d) -> findFile uname <&> (,b,c,d)
       let main = (cwd </> fname ++ ".brat", [], mainStmts, mainCts)
       pure (deps ++ [main])
     Nothing -> throwError (SrcErr "" $ dumbErr (InternalError "Empty dependency graph"))
@@ -214,7 +220,7 @@ loadFiles ns (cwd :| extraDirs) fname contents = do
     allStmts'
   where
     -- builds a map from Import to (index in which discovered, module)
-    depGraph :: (M.Map Import (Int, FlatMod)) -- input map to which to add
+    depGraph :: M.Map Import (Int, FlatMod) -- input map to which to add
              -> Import -> String
              -> ExceptT SrcErr IO (M.Map Import (Int, FlatMod))
     depGraph visited imp cts = let name = unWC (importName imp) in
@@ -263,7 +269,7 @@ loadFiles ns (cwd :| extraDirs) fname contents = do
       (x:_) -> pure x
 
     nameToFile :: FilePath -> UserName -> String
-    nameToFile dir (PrefixName ps file) = dir </> (foldr (</>) file ps) ++ ".brat"
+    nameToFile dir (PrefixName ps file) = dir </> foldr (</>) file ps ++ ".brat"
 
 checkNoCycles :: [(Int, FlatMod)] -> Either SrcErr ()
 checkNoCycles mods =

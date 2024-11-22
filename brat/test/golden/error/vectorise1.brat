@@ -1,0 +1,2 @@
+bad1(n :: #) -> Vec(Nat, n), Vec(Float, n)
+bad1(n) = (n of (1, 2.0)), (n of 3)

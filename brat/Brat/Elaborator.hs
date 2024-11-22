@@ -1,7 +1,7 @@
 module Brat.Elaborator where
 
-import Control.Arrow ((***))
 import Control.Monad (forM, (>=>))
+import Data.Bifunctor (second)
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map (empty)
 
@@ -26,8 +26,9 @@ assertChk s@(WC _ r) = case dir r of
   deepEmb :: WC (Raw Syn k) -> WC (Raw Chk k)
   deepEmb (WC fc (a ::|:: b)) = WC fc (deepEmb a ::|:: deepEmb b)
   deepEmb (WC fc (a ::-:: b)) = WC fc (a ::-:: deepEmb b)
-  deepEmb (WC fc (RLambda c cs)) = WC fc (RLambda ((id *** deepEmb) c) cs)
+  deepEmb (WC fc (RLambda c cs)) = WC fc (RLambda (second deepEmb c) cs)
   deepEmb (WC fc (RLet abs a b)) = WC fc (RLet abs a (deepEmb b))
+  deepEmb (WC fc (ROf num exp)) = WC fc (ROf num (deepEmb exp))
   -- We like to avoid RTypedTh because the body doesn't know whether it's Brat or Kernel
   deepEmb (WC fc (RTypedTh bdy)) = WC fc (RTh (WC fc $ RForget $ deepEmb bdy))
   deepEmb (WC fc a) = WC fc (REmb (WC fc a))
@@ -180,6 +181,12 @@ elaborate' (FAnnotation a ts) = do
   a <- assertNoun a
   pure $ SomeRaw' (a ::::: ts)
 elaborate' (FInto a b) = elaborate' (FApp b a)
+elaborate' (FOf n e) = do
+  SomeRaw n <- elaborate n
+  n <- assertNoun =<< assertChk n
+  SomeRaw e <- elaborate e
+  e <- assertNoun e
+  pure $ SomeRaw' (ROf n e)
 elaborate' (FFn cty) = pure $ SomeRaw' (RFn cty)
 elaborate' (FKernel sty) = pure $ SomeRaw' (RKernel sty)
 elaborate' FIdentity = pure $ SomeRaw' RIdentity
@@ -204,7 +211,7 @@ elabBody (FNoLhs e) _ = do
     e <- assertChk e
     case kind (unWC e) of
       Nouny -> pure $ NoLhs e
-      _ -> (assertUVerb e) >>= \e -> pure $ ThunkOf (WC (fcOf e) (NoLhs e))
+      _ -> assertUVerb e >>= \e -> pure $ ThunkOf (WC (fcOf e) (NoLhs e))
 elabBody FUndefined _ = pure Undefined
 
 elabFunDecl :: FDecl -> Either Error RawFuncDecl

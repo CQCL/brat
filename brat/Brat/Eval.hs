@@ -29,19 +29,19 @@ import Brat.UserName (plain)
 import Control.Monad.Freer
 import Bwd
 import Hasochism
-import Util (zip_same_length)
+import Util (zipSameLength)
 
 import Data.Bifunctor (second)
 import Data.Functor
 import Data.Kind (Type)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
-import Data.Foldable (traverse_)
+import Data.Foldable (for_, traverse_)
 
 kindType :: TypeKind -> Val Z
 kindType Nat = TNat
 kindType (TypeFor _ []) = VCon (plain "nil") []
 kindType (TypeFor m ks)
-  = VFun Braty $ helper ks :->> (RPr ("type", kindType (TypeFor m [])) R0)
+  = VFun Braty $ helper ks :->> RPr ("type", kindType (TypeFor m [])) R0
  where
   helper :: [(PortName, TypeKind)] -> Ro Brat Z Z
   helper [] = R0
@@ -75,7 +75,7 @@ evalCTy :: Stack Z Sem n
         -> Modey m
         -> CTy m n
         -> Checking (CTy m Z)
-evalCTy stk my cty = quoteCTy Zy my stk cty
+evalCTy stk my = quoteCTy Zy my stk
 
 sem :: Stack Z Sem n -- An environment for looking up VInxs
     -> Val n         -- The thing we're evaluating
@@ -130,16 +130,16 @@ quote lvy (SSum my ga ts) = VSum my <$> traverse quoteVariant ts
   quoteVariant (Some ro) = quoteRo my ga ro lvy >>= \case
     (_, Some (ro :* _)) -> pure (Some ro)
 
-quoteCTy :: Ny lv -> Modey m -> Stack Z Sem n -> (CTy m n) -> Checking (CTy m lv)
+quoteCTy :: Ny lv -> Modey m -> Stack Z Sem n -> CTy m n -> Checking (CTy m lv)
 quoteCTy lvy my ga (ins :->> outs) = quoteRo my ga ins lvy >>= \case
   (ga', Some (ins' :* lvy')) -> quoteRo my ga' outs lvy' >>= \case
-    (_, Some (outs' :* _)) -> pure $ (ins' :->> outs')
+    (_, Some (outs' :* _)) -> pure (ins' :->> outs')
 
 -- first number is next Lvl to use in Value
 --         require every Lvl in Sem is < n (converted by n - 1 - lvl), else must fail at runtime
 quoteVar :: Ny n -> SVar -> VVar n
 quoteVar _ (SPar end) = VPar end -- no need to chase, done in semVar
-quoteVar ny (SLvl lvl) = VInx $ helper ny $ (ny2int ny) - 1 - lvl
+quoteVar ny (SLvl lvl) = VInx $ helper ny $ ny2int ny - 1 - lvl
  where
   helper :: Ny n -> Int -> Inx n
   helper Zy _ = error "Level out of bounds"
@@ -216,7 +216,7 @@ getNum (SNum num) = num
 getNum _ = error "Should have checked kind == Num already"
 
 dropRight :: Either e r -> Either e ()
-dropRight = second (\_ -> ())
+dropRight = second (const ())
 
 eqWorker :: String              -- for error message
          -> (Ny :* Stack Z TypeKind) lv -- next Level & kinds for existing Levels
@@ -252,7 +252,7 @@ eqWorker tm lvkz (Star []) (SFun m0 stk0 (ins0 :->> outs0)) (SFun m1 stk1 (ins1 
     Left msg -> pure (Left msg)
     Right (Some lvkz, stk0, stk1) -> eqRowTest m0 tm lvkz (stk0, outs0) (stk1, outs1) <&> dropRight
 eqWorker tm lvkz (TypeFor _ []) (SSum m0 stk0 rs0) (SSum m1 stk1 rs1)
-  | Just Refl <- testEquality m0 m1 = case zip_same_length rs0 rs1 of
+  | Just Refl <- testEquality m0 m1 = case zipSameLength rs0 rs1 of
       Nothing -> pure (Left (TypeErr "Mismatched sum lengths"))
       Just rs -> traverse eqVariant rs <&> sequence_
  where
@@ -291,7 +291,7 @@ eqRowTest m tm (lvy :* kz) (stk0, REx (_, k0) r0) (stk1, REx (_, k1) r1) =
 eqRowTest m tm _ exp act = modily m $ pure . Left $ TypeMismatch tm (show exp) (show act)
 
 eqTests :: String -> (Ny :* Stack Z TypeKind) n -> [TypeKind] -> [Sem] -> [Sem] -> Checking (Either ErrorMsg ())
-  -- note alternative - traverse zip3/zip_same_len*2 + currying
+  -- note alternative - traverse zip3/zipSameLen*2 + currying
   -- to get [Either ErrorMsg ()], then sequenceA -> Either ErrorMsg [()]
 eqTests tm lvkz = go
  where
@@ -314,9 +314,7 @@ getNumVar _ = Nothing
 -- We can have bogus failures here because we're not normalising under lambdas
 -- N.B. the value argument is normalised.
 doesntOccur :: End -> Val n -> Either ErrorMsg ()
-doesntOccur e (VNum nv) = case getNumVar nv of
-  Just e' -> collision e e'
-  _ -> pure ()
+doesntOccur e (VNum nv) = for_ (getNumVar nv) (collision e)
 doesntOccur e (VApp var args) = case var of
   VPar e' -> collision e e' *> traverse_ (doesntOccur e) args
   _ -> pure ()

@@ -9,10 +9,8 @@ import Brat.Syntax.Raw (kind, dir)
 import Brat.Syntax.Simple (SimpleTerm(..))
 import Brat.FC
 
-import Data.Functor ((<&>))
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.PartialOrd as PO
-import qualified Data.Set as S
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -65,18 +63,17 @@ instance PO.PartialOrd DirAndKind where
 
 allDKs = [Noun, KVerb, UVerb] >>= \k -> [DK Syn k, DK Chk k]
 
-juxt_tests :: FlatTest -> TestTree
-juxt_tests (FT dk1 f1) = let s1 = show dk1 in testCase ("juxt w/" ++ s1) $ sequence_ $ flats <&>
-  \(FT dk2 f2) -> let
-      s = s1 ++ "-" ++ (show dk2)
-      f = (FJuxt (dummyFC f1) (dummyFC f2))
-      dks = [dk | dk <- allDKs, dk1 PO.<= dk, dk2 PO.<= dk]
-    in case PO.minima dks of
-      [] -> elabFails s f
-      [dk] -> elabTest s dk f
+juxtTests :: FlatTest -> TestTree
+juxtTests (FT dk1 f1) = let s1 = show dk1 in
+  testCase ("juxt w/" ++ s1) $
+  mapM_ (\(FT dk2 f2) -> let s = s1 ++ "-" ++ show dk2
+                             f = FJuxt (dummyFC f1) (dummyFC f2)
+                             dks = [dk | dk <- allDKs, dk1 PO.<= dk, dk2 PO.<= dk]
+                         in  case PO.minima dks of
+                               [] -> elabFails s f
+                               [dk] -> elabTest s dk f) flats
 
 elaborationTests :: TestTree
 elaborationTests = testGroup "elaboration" (
-    [testCase "base cases" $ sequence_ (map (\(FT dk f) -> elabTest (show dk) dk f) flats)]
-    ++ (map juxt_tests flats)
+    testCase "base cases" (mapM_ (\(FT dk f) -> elabTest (show dk) dk f) flats) : map juxtTests flats
   )
