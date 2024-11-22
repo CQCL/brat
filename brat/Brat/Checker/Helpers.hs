@@ -39,6 +39,7 @@ import Util (log2)
 
 import Control.Monad.Freer (req, Free(Ret))
 import Data.Bifunctor
+import Data.Foldable (foldrM)
 import Data.List (intercalate)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
@@ -344,14 +345,12 @@ mkStaticNum n@(NumValue c gro) = do
 vectorise :: (Src, Val Z) -> Checking (Src, Val Z)
 vectorise (src, ty) = do
   (layers, Some (my :* Flip cty)) <- vecLayers ty
-  modily my $ mkMapFuns (src, VFun my cty) layers
+  modily my $ foldrM mkMapFun (src, VFun my cty) layers
  where
-  mkMapFuns :: (Src, Val Z) -- The input to the mapfun
-            -> [(Src, NumVal (VVar Z))] -- Remaining layers
+  mkMapFun :: (Src, NumVal (VVar Z)) -- Layer to apply
+            -> (Src, Val Z) -- The input to this level of mapfun
             -> Checking (Src, Val Z)
-  mkMapFuns over [] = pure over
-  mkMapFuns (valSrc, ty) ((lenSrc, len):layers) = do
-    (valSrc, ty@(VFun my cty)) <- mkMapFuns (valSrc, ty) layers
+  mkMapFun (lenSrc, len) (valSrc, ty@(VFun my cty)) = do
     let weak1 = changeVar (Thinning (ThDrop ThNull))
     vecFun <- vectorisedFun len my cty
     (_, [(lenTgt,_), (valTgt, _)], [(vectorSrc, Right vecTy)], _) <-
