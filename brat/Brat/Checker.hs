@@ -709,20 +709,18 @@ checkBody :: (CheckConstraints m UVerb, EvMode m, ?my :: Modey m)
           -> FunBody Term UVerb
           -> CTy m Z -- Function type
           -> Checking Src
-checkBody fnName body cty = case body of
-  NoLhs tm -> do
-    ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
-      (((), ()), leftovers) <- check tm conns
-      checkConnectorsUsed (fcOf tm, fcOf tm) (show tm) conns leftovers
-    pure src
-  Clauses (c :| cs) -> do
-    fc <- req AskFC
-    ((box, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
+checkBody fnName body cty = do
+  (tm, checkFn) <- case body of
+    NoLhs tm -> pure (tm, checkConnectorsUsed (fcOf tm, fcOf tm) (show tm))
+    Clauses (c :| cs) -> do
+      fc <- req AskFC
       let tm = Lambda c cs
-      (((), ()), leftovers) <- check (WC fc tm) conns
-      checkConnectorsUsed (bimap fcOf fcOf c) (show tm) conns leftovers
-    pure box
-  Undefined -> err (InternalError "Checking undefined clause")
+      pure $ (WC fc tm, checkConnectorsUsed (bimap fcOf fcOf c) (show tm))
+    Undefined -> err (InternalError "Checking undefined clause")
+  ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
+    (((), ()), leftovers) <- check tm conns
+    checkFn conns leftovers
+  pure src
  where
   checkConnectorsUsed _ _ _ ([], []) = pure ()
   checkConnectorsUsed (_, tmFC) tm (_, unders) ([], rightUnders) = localFC tmFC $
