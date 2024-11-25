@@ -84,13 +84,15 @@ simpleName = token0 $ \case
   Ident str -> Just str
   _ -> Nothing
 
-qualifiedName :: Parser QualName
-qualifiedName = (<?> "qualified name") . token0 $ \case
-  QualifiedId prefix str -> Just (PrefixName (toList prefix) str)
-  _ -> Nothing
+qualName :: Parser QualName
+qualName = (<?> "name") $ try qualifiedName <|> (PrefixName [] <$> simpleName)
+ where
+  qualifiedName :: Parser QualName
+  qualifiedName = (<?> "qualified name") . token0 $ \case
+    QualifiedId prefix str -> Just (PrefixName (toList prefix) str)
+    _ -> Nothing
 
-userName :: Parser QualName
-userName = (<?> "name") $ try qualifiedName <|> (PrefixName [] <$> simpleName)
+
 
 round :: Parser a -> Parser a
 round p = label "(...)" $ match LParen *> p <* match RParen
@@ -125,7 +127,7 @@ string = token0 $ \case
   _ -> Nothing
 
 var :: Parser Flat
-var = FVar <$> userName
+var = FVar <$> qualName
 
 port = simpleName
 
@@ -609,7 +611,7 @@ pimport :: Parser Import
 pimport = do
   o <- open
   kmatch KImport
-  x <- withFC userName
+  x <- withFC qualName
   a <- alias
   Import x (not o) a <$> selection
  where
@@ -646,7 +648,7 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
   aliasContents :: Parser (QualName, [(String, TypeKind)], RawVType)
   aliasContents = do
     match (K KType)
-    alias <- userName
+    alias <- qualName
     args <- option [] $ round (simpleName `sepBy` match Comma)
 {- future stuff
     args <- option [] $ round $ (`sepBy` (match Comma)) $ do
