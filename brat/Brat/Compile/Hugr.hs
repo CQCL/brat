@@ -16,11 +16,11 @@ import Brat.Checker.Types (Store(..), VEnv)
 import Brat.Eval (eval, evalCTy, kindType)
 import Brat.Graph hiding (lookupNode)
 import Brat.Naming
+import Brat.QualName
 import Brat.Syntax.Port
 import Brat.Syntax.Common
 import Brat.Syntax.Simple (SimpleTerm)
 import Brat.Syntax.Value
-import Brat.UserName
 import Bwd
 import Control.Monad.Freer
 import Data.Hugr
@@ -487,7 +487,7 @@ compileWithInputs parent name = gets compiled >>= (\case
       addNode "Replicate" (OpCustom (CustomOp parent "BRAT" "Replicate" sig [TAType elemTy]))
     x -> error $ show x ++ " should have been compiled outside of compileNode"
 
-compileConstructor :: NodeId -> UserName -> UserName -> FunctionType -> Compile NodeId
+compileConstructor :: NodeId -> QualName -> QualName -> FunctionType -> Compile NodeId
 compileConstructor parent tycon con sig
   | Just b <- isBool con = do
       -- A boolean value is a tag which takes no inputs and produces an empty tuple
@@ -497,7 +497,7 @@ compileConstructor parent tycon con sig
   | otherwise = let name = "Constructor " ++ show tycon ++ "::" ++ show con in
                   addNode name (constructorOp parent tycon con sig)
  where
-  isBool :: UserName -> Maybe Bool
+  isBool :: QualName -> Maybe Bool
   isBool CFalse = Just False
   isBool CTrue = Just True
   isBool _ = Nothing
@@ -777,7 +777,7 @@ compilePrimTest parent port@(_, ty) (PrimLitTest tm) = do
            [port, loadPort]
            [sumOut]
 
-constructorOp :: NodeId -> UserName -> UserName -> FunctionType -> HugrOp NodeId
+constructorOp :: NodeId -> QualName -> QualName -> FunctionType -> HugrOp NodeId
 constructorOp parent tycon c sig = OpCustom (CustomOp parent "BRAT" ("Ctor::" ++ show tycon ++ "::" ++ show c) sig [])
 
 undoPrimTest :: NodeId
@@ -858,7 +858,7 @@ compileModule venv = do
     addEdge (fst wire, Port output 0)
 
   -- top-level decls that are not Prims. RHS is the brat idNode
-  decls :: [(UserName, Name)]
+  decls :: [(QualName, Name)]
   decls = do -- in list monad, no Compile here
             (fnName, wires) <- M.toList venv
             let (Ex idNode _) = end (fst $ head wires) -- would be better to check same for all rather than just head

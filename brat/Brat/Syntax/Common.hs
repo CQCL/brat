@@ -42,9 +42,9 @@ module Brat.Syntax.Common (PortName,
                           ) where
 
 import Brat.FC
+import Brat.QualName
 import Brat.Syntax.Abstractor
 import Brat.Syntax.Port
-import Brat.UserName
 
 import Data.Bifunctor (first)
 import Data.List (intercalate)
@@ -165,7 +165,7 @@ instance Semigroup (CType' (PortName, ty)) where
   (ss :-> ts) <> (us :-> vs) = (ss <> us) :-> (ts <> vs)
 
 data Import
-  = Import { importName :: WC UserName
+  = Import { importName :: WC QualName
            , importQualified :: Bool
            , importAlias :: Maybe (WC String)
            , importSelection :: ImportSelection
