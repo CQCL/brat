@@ -719,27 +719,23 @@ checkBody :: (CheckConstraints m UVerb, EvMode m, ?my :: Modey m)
           -> FunBody Term UVerb
           -> CTy m Z -- Function type
           -> Checking Src
-checkBody fnName body cty = case body of
-  NoLhs tm -> do
-    ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
-      (((), ()), leftovers) <- check tm conns
-      checkConnectorsUsed (fcOf tm, fcOf tm) (show tm) conns leftovers
-    pure src
-  Clauses (c :| cs) -> do
-    fc <- req AskFC
-    ((box, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
-      let tm = Lambda c cs
-      (((), ()), leftovers) <- check (WC fc tm) conns
-      checkConnectorsUsed (bimap fcOf fcOf c) (show tm) conns leftovers
-    pure box
-  Undefined -> err (InternalError "Checking undefined clause")
- where
-  checkConnectorsUsed _ _ _ ([], []) = pure ()
-  checkConnectorsUsed (_, tmFC) tm (_, unders) ([], rightUnders) = localFC tmFC $
-    let numUsed = length unders - length rightUnders in
-     err (TypeMismatch tm (showRow unders) (showRow (take numUsed unders)))
-  checkConnectorsUsed (absFC, _) _ _ (rightOvers, _) = localFC absFC $
-    typeErr ("Inputs " ++ showRow rightOvers ++ " weren't used")
+checkBody fnName body cty = do
+  (tm, (absFC, tmFC)) <- case body of
+    NoLhs tm -> pure (tm, (fcOf tm, fcOf tm))
+    Clauses (c :| cs) -> do
+      fc <- req AskFC
+      pure $ (WC fc (Lambda c cs), (bimap fcOf fcOf c))
+    Undefined -> err (InternalError "Checking undefined clause")
+  ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \conns@(_, unders) -> do
+    (((), ()), leftovers) <- check tm conns
+    case leftovers of
+      ([], []) -> pure ()
+      ([], rightUnders) -> localFC tmFC $
+        let numUsed = length unders - length rightUnders
+        in err (TypeMismatch (show tm) (showRow unders) (showRow (take numUsed unders)))
+      (rightOvers, _) -> localFC absFC $
+        typeErr ("Inputs " ++ showRow rightOvers ++ " weren't used")
+  pure src
 
 -- Constructs row from a list of ends and types. Uses standardize to ensure that dependency is
 -- detected. Fills in the first bot ends from a stack. The stack grows every time we go under
