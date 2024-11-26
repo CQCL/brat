@@ -219,16 +219,16 @@ solveNumMeta e nv = case (e, vars nv) of
  (ExEnd src, _) -> defineSrc (NamedPort src "") (VNum nv)
 
  -- Both targets, we need to create the thing that they both derive from
- (InEnd tgt1, [VPar (InEnd tgt2)]) -> do
+ (InEnd bigTgt, [VPar (InEnd weeTgt)]) -> do
    (_, [(idTgt, _)], [(idSrc, _)], _) <- anext "numval id" Id (S0, Some (Zy :* S0))
                                          (REx ("n", Nat) R0) (REx ("n", Nat) R0)
    defineSrc idSrc (VNum (nVar (VPar (toEnd idTgt))))
-   defineTgt (NamedPort tgt2 "") (VNum (nVar (VPar (toEnd idSrc))))
-   wire (idSrc, TNat, NamedPort tgt2 "")
+   defineTgt (NamedPort weeTgt "") (VNum (nVar (VPar (toEnd idSrc))))
+   wire (idSrc, TNat, NamedPort weeTgt "")
    let nv' = fmap (const (VPar (toEnd idSrc))) nv
-   src1 <- buildNatVal nv'
-   defineTgt (NamedPort tgt1 "") (VNum nv')
-   wire (src1, TNat, NamedPort tgt1 "")
+   bigSrc <- buildNatVal nv'
+   defineTgt (NamedPort bigTgt "") (VNum nv')
+   wire (bigSrc, TNat, NamedPort bigTgt "")
 
  -- RHS is constant or Src, wire it into tgt
  (InEnd tgt,  _) -> do
