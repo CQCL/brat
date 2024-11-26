@@ -2,11 +2,12 @@ module Brat.Checker.SolveHoles (typeEq, buildNatVal, buildNum, invertNatVal) whe
 
 import Brat.Checker.Monad
 import Brat.Checker.Types (kindForMode)
-import Brat.Checker.Helpers (buildArithOp, buildConst, next)
+import Brat.Checker.Helpers (buildArithOp, buildConst, defineSrc, defineTgt, next)
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval
 import Brat.Graph (NodeType(..))
 import Brat.Syntax.Common
+import Brat.Syntax.Port (ToEnd(..))
 import Brat.Syntax.Simple (SimpleTerm(..))
 import Brat.Syntax.Value
 import Control.Monad.Freer
@@ -168,6 +169,7 @@ buildNatVal nv@(NumValue n gro) = case n of
     src <- buildGro gro
     wire (nDangling, TNat, lhs)
     wire (src, TNat, rhs)
+    defineSrc out (VNum (nPlus n (nVar (VPar (toEnd src)))))
     pure out
  where
   buildGro :: Fun00 (VVar Z) -> Checking Src
@@ -187,6 +189,7 @@ buildNatVal nv@(NumValue n gro) = case n of
     monoDangling <- buildMono mono
     wire (factor, TNat, lhs)
     wire (monoDangling, TNat, rhs)
+    defineSrc out (VNum (n2PowTimes k (nVar (VPar (toEnd monoDangling)))))
     pure out
 
   buildMono :: Monotone (VVar Z) -> Checking Src
@@ -203,6 +206,7 @@ buildNatVal nv@(NumValue n gro) = case n of
     ((lhs,rhs),out) <- buildArithOp Sub
     wire (outPlus1, TNat, lhs)
     wire (one, TNat, rhs)
+    defineSrc out (VNum (nFull (nVar (VPar (toEnd dangling)))))
     pure out
   buildMono _ = err . InternalError $ "Trying to build a non-closed nat value: " ++ show nv
 
@@ -215,6 +219,7 @@ invertNatVal (NumValue up gro) = case up of
     wire (upSrc, TNat, rhs)
     tgt <- invertGro gro
     wire (out, TNat, tgt)
+    defineTgt lhs (VNum (nPlus up (nVar (VPar (toEnd out)))))
     pure lhs
  where
   invertGro Constant0 = error "Invariant violated: the numval arg to invertNatVal should contain a variable"
@@ -228,6 +233,7 @@ invertNatVal (NumValue up gro) = case up of
       tgt <- invertMono mono
       wire (out, TNat, tgt)
       wire (divisor, TNat, rhs)
+      defineTgt lhs (VNum (n2PowTimes k (nVar (VPar (toEnd out)))))
       pure lhs
 
   invertMono (Linear (VPar (InEnd e))) = pure (NamedPort e "numval")
@@ -235,4 +241,5 @@ invertNatVal (NumValue up gro) = case up of
     (_, [(llufTgt,_)], [(llufSrc,_)], _) <- next "luff" (Prim ("BRAT","lluf")) (S0, Some (Zy :* S0)) (REx ("n", Nat) R0) (REx ("n", Nat) R0)
     tgt <- invertSM sm
     wire (llufSrc, TNat, tgt)
+    defineTgt llufTgt (VNum (nFull (nVar (VPar (toEnd llufSrc)))))
     pure llufTgt
