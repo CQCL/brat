@@ -289,11 +289,15 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     solveNumMeta (ExEnd x) (nPlus 1 y)
     pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k y
   -}
-
-  demandSucc sm@(StrictMono k (Linear (VPar (InEnd weeEnd)))) = do
-    bigEnd <- invertNatVal (NumValue 1 (StrictMonoFun sm))
-    solveNumMeta (toEnd bigEnd) (NumValue 0 (StrictMonoFun sm))
-    pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k (nVar (VPar (InEnd weeEnd)))
+  --   2^k * x
+  -- = 2^k * (y + 1)
+  -- = 2^k + 2^k * y
+  -- Hence, the predecessor is (2^k - 1) + (2^k * y)
+  demandSucc _sm@(StrictMono k (Linear (VPar (InEnd x)))) = do
+    (_, [(y,_)], _, _) <- anext "y" Hypo (S0, Some (Zy :* S0)) (REx ("", Nat) R0) R0
+    yPlus1 <- invertNatVal (nPlus 1 (nVar (VPar (InEnd (end y)))))
+    solveNumMeta (InEnd x) (nVar (VPar (InEnd (end yPlus1))))
+    pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k (nVar (VPar (InEnd (end y))))
 
   --   2^k * full(n + 1)
   -- = 2^k * (1 + 2 * full(n))
