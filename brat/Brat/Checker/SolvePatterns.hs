@@ -213,27 +213,27 @@ solveNumMeta e nv = case (e, vars nv) of
  (ExEnd src,  [VPar (InEnd _tgt)]) -> do
    -- Compute the value of the `tgt` variable from the known `src` value by inverting nv
    tgtSrc <- invertNatVal nv
-   defineSrc (NamedPort src "") (VNum (nVar (VPar (toEnd tgtSrc))))
+   instantiateMeta (ExEnd src) (VNum (nVar (VPar (toEnd tgtSrc))))
    wire (NamedPort src "", TNat, tgtSrc)
 
- (ExEnd src, _) -> defineSrc (NamedPort src "") (VNum nv)
+ (ExEnd src, _) -> instantiateMeta (ExEnd src) (VNum nv)
 
  -- Both targets, we need to create the thing that they both derive from
  (InEnd bigTgt, [VPar (InEnd weeTgt)]) -> do
    (_, [(idTgt, _)], [(idSrc, _)], _) <- anext "numval id" Id (S0, Some (Zy :* S0))
                                          (REx ("n", Nat) R0) (REx ("n", Nat) R0)
    defineSrc idSrc (VNum (nVar (VPar (toEnd idTgt))))
-   defineTgt (NamedPort weeTgt "") (VNum (nVar (VPar (toEnd idSrc))))
+   instantiateMeta (InEnd weeTgt) (VNum (nVar (VPar (toEnd idSrc))))
    wire (idSrc, TNat, NamedPort weeTgt "")
    let nv' = fmap (const (VPar (toEnd idSrc))) nv
    bigSrc <- buildNatVal nv'
-   defineTgt (NamedPort bigTgt "") (VNum nv')
+   instantiateMeta (InEnd bigTgt) (VNum nv')
    wire (bigSrc, TNat, NamedPort bigTgt "")
 
  -- RHS is constant or Src, wire it into tgt
  (InEnd tgt,  _) -> do
    src <- buildNatVal nv
-   defineTgt (NamedPort tgt "") (VNum nv)
+   instantiateMeta (InEnd tgt) (VNum nv)
    wire (src, TNat, NamedPort tgt "")
 
  where
