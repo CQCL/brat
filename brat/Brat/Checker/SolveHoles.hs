@@ -77,22 +77,23 @@ typeEqEta tm stuff@(ny :* _ks :* _sems) hopeSet k exp act = do
 -- The Sem is closed, for now.
 -- TODO: This needs to update the BRAT graph with the solution.
 solveHope :: TypeKind -> End -> Sem -> Checking ()
-solveHope k e v = quote Zy v >>= \v -> case doesntOccur e v of
+solveHope k hope@(InEnd i) v = quote Zy v >>= \v -> case doesntOccur hope v of
   Right () -> do
-    defineEnd e v
+    defineEnd hope v
     dangling <- case (k, v) of
       (Nat, VNum v) -> buildNatVal v
       (Nat, _) -> err $ InternalError "Head of Nat wasn't a VNum"
       _ -> buildConst Unit TUnit
-    let InEnd i = e
-    req $ Wire (end dangling, kindType k, i)
-    pure ()
+    req (Wire (end dangling, kindType k, i))
+    req (RemoveHope hope)
   Left msg -> case v of
-    VApp (VPar e') B0 | e == e' -> pure ()
+    VApp (VPar end) B0 | hope == end -> pure ()
     -- TODO: Not all occurrences are toxic. The end could be in an argument
     -- to a hoping variable which isn't used.
     -- E.g. h1 = h2 h1 - this is valid if h2 is the identity, or ignores h1.
     _ -> err msg
+solveHope _ hope@(ExEnd _) _ = err . InternalError $
+                               "solveHope: Hope was a src: " ++ show hope
 
 typeEqs :: String -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n -> [TypeKind] -> [Val n] -> [Val n] -> Checking ()
 typeEqs _ _ [] [] [] = pure ()

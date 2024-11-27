@@ -96,6 +96,7 @@ data CheckingSig ty where
   Define  :: End -> Val Z -> CheckingSig ()
   ANewHope :: (End, FC) -> CheckingSig ()
   AskHopeSet :: CheckingSig HopeSet
+  RemoveHope :: End -> CheckingSig ()
 
 localAlias :: (UserName, Alias) -> Checking v -> Checking v
 localAlias _ (Ret v) = Ret v
@@ -277,6 +278,11 @@ handler (Req s k) ctx g
       ANewHope (e, fc) -> handler (k ()) (ctx { hopeSet = M.insert e fc (hopeSet ctx) }) g
 
       AskHopeSet -> handler (k (hopeSet ctx)) ctx g
+
+      RemoveHope e -> let hset = hopeSet ctx in
+                        if M.member e hset
+                        then handler (k ()) (ctx { hopeSet = M.delete e hset }) g
+                        else (Left (dumbErr (InternalError ("Trying to remove hole not in set: " ++ show e))))
 
 howStuck :: Val n -> Stuck
 howStuck (VApp (VPar e) _) = AwaitingAny (S.singleton e)
