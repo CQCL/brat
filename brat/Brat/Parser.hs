@@ -6,6 +6,7 @@ import Brat.FC
 import Brat.Lexer (lex)
 import Brat.Lexer.Token (Keyword(..), Token(..), Tok(..))
 import qualified Brat.Lexer.Token as Lexer
+import Brat.QualName ( plain, QualName(..) )
 import Brat.Syntax.Abstractor
 import Brat.Syntax.Common hiding (end)
 import qualified Brat.Syntax.Common as Syntax
@@ -13,7 +14,6 @@ import Brat.Syntax.FuncDecl (FuncDecl(..), Locality(..))
 import Brat.Syntax.Concrete
 import Brat.Syntax.Raw
 import Brat.Syntax.Simple
-import Brat.UserName ( plain, UserName(..) )
 import Brat.Elaborator
 import Util ((**^))
 
@@ -84,13 +84,15 @@ simpleName = token0 $ \case
   Ident str -> Just str
   _ -> Nothing
 
-qualifiedName :: Parser UserName
-qualifiedName = (<?> "qualified name") . token0 $ \case
-  QualifiedId prefix str -> Just (PrefixName (toList prefix) str)
-  _ -> Nothing
+qualName :: Parser QualName
+qualName = (<?> "name") $ try qualifiedName <|> (PrefixName [] <$> simpleName)
+ where
+  qualifiedName :: Parser QualName
+  qualifiedName = (<?> "qualified name") . token0 $ \case
+    QualifiedId prefix str -> Just (PrefixName (toList prefix) str)
+    _ -> Nothing
 
-userName :: Parser UserName
-userName = (<?> "name") $ try qualifiedName <|> (PrefixName [] <$> simpleName)
+
 
 round :: Parser a -> Parser a
 round p = label "(...)" $ match LParen *> p <* match RParen
@@ -125,7 +127,7 @@ string = token0 $ \case
   _ -> Nothing
 
 var :: Parser Flat
-var = FVar <$> userName
+var = FVar <$> qualName
 
 port = simpleName
 
@@ -609,7 +611,7 @@ pimport :: Parser Import
 pimport = do
   o <- open
   kmatch KImport
-  x <- withFC userName
+  x <- withFC qualName
   a <- alias
   Import x (not o) a <$> selection
  where
@@ -643,10 +645,10 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
   alias = withFC aliasContents <&>
           \(WC fc (name, args, ty)) -> TypeAlias fc name args ty
 
-  aliasContents :: Parser (UserName, [(String, TypeKind)], RawVType)
+  aliasContents :: Parser (QualName, [(String, TypeKind)], RawVType)
   aliasContents = do
     match (K KType)
-    alias <- userName
+    alias <- qualName
     args <- option [] $ round (simpleName `sepBy` match Comma)
 {- future stuff
     args <- option [] $ round $ (`sepBy` (match Comma)) $ do

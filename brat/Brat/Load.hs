@@ -20,7 +20,7 @@ import Brat.Syntax.Core
 import Brat.Syntax.FuncDecl (FunBody(..), FuncDecl(..), Locality(..))
 import Brat.Syntax.Raw
 import Brat.Syntax.Value
-import Brat.UserName
+import Brat.QualName
 import Util (duplicates,duplicatesWith)
 import Hasochism
 
@@ -47,7 +47,7 @@ type FlatMod = ((FEnv, String) -- data at the node: declarations, and file conte
 
 -- Result of checking/compiling a module
 type VMod = (VEnv
-            ,[(UserName, VDecl)] -- all symbols from all modules
+            ,[(QualName, VDecl)] -- all symbols from all modules
             ,[TypedHole]          -- for just the last module
             ,Store  -- Ends declared & defined in the module
             ,Graph) -- per function, first elem is name
@@ -113,7 +113,7 @@ checkDecl pre (VDecl FuncDecl{..}) to_define = (fnName -!) $ localFC fnLoc $ do
   uname = PrefixName pre fnName
   name = show uname
 
-loadAlias :: TypeAlias -> Checking (UserName, Alias)
+loadAlias :: TypeAlias -> Checking (QualName, Alias)
 loadAlias (TypeAlias fc name args body) = localFC fc $ do
   (_, [(hhungry, Left k)], _, _) <- next "" Hypo (S0,Some (Zy :* S0)) (REx ("type", Star args) R0) R0
   let abs = WC fc $ foldr ((:||:) . APat . Bind . fst) AEmpty args
@@ -125,7 +125,7 @@ withAliases :: [TypeAlias] -> Checking a -> Checking a
 withAliases [] m = m
 withAliases (a:as) m = loadAlias a >>= \a -> localAlias a $ withAliases as m
 
-loadStmtsWithEnv :: Namespace -> (VEnv, [(UserName, VDecl)], Store) -> (FilePath, Prefix, FEnv, String) -> Either SrcErr VMod
+loadStmtsWithEnv :: Namespace -> (VEnv, [(QualName, VDecl)], Store) -> (FilePath, Prefix, FEnv, String) -> Either SrcErr VMod
 loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addSrcContext fname cts $ do
   -- hacky mess - cleanup!
   (decls, aliases) <- desugarEnv =<< elabEnv stmts
@@ -165,9 +165,9 @@ loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addS
     pure $ assert (M.null remaining) () -- all to_defines were defined
   pure (venv, oldDecls <> vdecls, holes, oldEndData <> newEndData, kcGraph <> graph)
  where
-  checkDecl' :: M.Map UserName [(Tgt, BinderType Brat)]
-             -> (UserName, VDecl)
-             -> Checking (M.Map UserName [(Tgt, BinderType Brat)])
+  checkDecl' :: M.Map QualName [(Tgt, BinderType Brat)]
+             -> (QualName, VDecl)
+             -> Checking (M.Map QualName [(Tgt, BinderType Brat)])
   checkDecl' to_define (name, decl) =
     -- Get the decl out of the map, and delete it from things to define
     case M.updateLookupWithKey (\_ _ -> Nothing) name to_define of
@@ -234,7 +234,7 @@ loadFiles ns (cwd :| extraDirs) fname contents = do
         cts <- lift $ readFile file
         depGraph visited' imp' cts
 
-    getStmts :: ((FEnv, String), Import, [Import]) -> (UserName, Prefix, FEnv, String)
+    getStmts :: ((FEnv, String), Import, [Import]) -> (QualName, Prefix, FEnv, String)
     getStmts (((decls, ts), cts), Import (WC _ pn@(PrefixName ps name)) qual alias sel, _) =
       let prefix = case (qual, alias) of (True, Nothing) -> ps ++ [name]
                                          (False, Nothing) -> []
@@ -259,13 +259,13 @@ loadFiles ns (cwd :| extraDirs) fname contents = do
         (WC fc dupl:_) -> throwError $ Err (Just fc) (NameClash ("Alias not unique: " ++ show dupl))
         [] -> pure ()
 
-    findFile :: UserName -> ExceptT SrcErr IO String
+    findFile :: QualName -> ExceptT SrcErr IO String
     findFile uname = let possibleLocations = [nameToFile dir uname | dir <- cwd:extraDirs] in
                        filterM (lift . doesFileExist) possibleLocations >>= \case
       [] -> throwError $ addSrcName (show uname) $ dumbErr (FileNotFound (show uname) possibleLocations)
       (x:_) -> pure x
 
-    nameToFile :: FilePath -> UserName -> String
+    nameToFile :: FilePath -> QualName -> String
     nameToFile dir (PrefixName ps file) = dir </> foldr (</>) file ps ++ ".brat"
 
 checkNoCycles :: [(Int, FlatMod)] -> Either SrcErr ()

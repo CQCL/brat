@@ -13,11 +13,12 @@ import Control.Monad.Freer
 import Data.Bifunctor
 import Data.Foldable (for_)
 import Data.Functor (($>), (<&>))
-import Data.List ((\\))
+import Data.List ((\\), intercalate)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
+import qualified Data.Set as S
 import Data.Type.Equality ((:~:)(..))
 import Prelude hiding (filter)
 
@@ -33,6 +34,7 @@ import Brat.FC hiding (end)
 import qualified Brat.FC as FC
 import Brat.Graph
 import Brat.Naming
+import Brat.QualName
 -- import Brat.Search
 import Brat.Syntax.Abstractor (NormalisedAbstractor(..), normaliseAbstractor)
 import Brat.Syntax.Common
@@ -41,7 +43,6 @@ import Brat.Syntax.FuncDecl (FunBody(..))
 import Brat.Syntax.Port (ToEnd, toEnd)
 import Brat.Syntax.Simple
 import Brat.Syntax.Value
-import Brat.UserName
 import Bwd
 import Hasochism
 import Util (zipSameLength)
@@ -55,6 +56,15 @@ standardise k val = eval S0 val >>= (\case
 
 mergeEnvs :: [Env a] -> Checking (Env a)
 mergeEnvs = foldM combineDisjointEnvs M.empty
+ where
+  combineDisjointEnvs :: M.Map QualName v -> M.Map QualName v -> Checking (M.Map QualName v)
+  combineDisjointEnvs l r =
+    let commonKeys = S.intersection (M.keysSet l) (M.keysSet r)
+    in if S.null commonKeys
+       then pure $ M.union l r
+       else typeErr ("Variable(s) defined twice: " ++
+    intercalate "," (map show $ S.toList commonKeys))
+
 
 singletonEnv :: (?my :: Modey m) => String -> (Src, BinderType m) -> Checking (Env (EnvData m))
 singletonEnv x input@(p, ty) = case ?my of
@@ -247,7 +257,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
   -- N.B.: Here we update the port names to be the user variable names for nicer
   -- error messages. This mirrors previous behaviour using `abstract`, but is a
   --  bit of a hack. See issue #23.
-  solToEnv :: [(String, (Src, BinderType m))] -> Checking (M.Map UserName (EnvData m))
+  solToEnv :: [(String, (Src, BinderType m))] -> Checking (M.Map QualName (EnvData m))
   solToEnv xs = traverse (uncurry singletonEnv) (portNamesToBoundNames xs) >>= mergeEnvs
 
   portNamesToBoundNames :: [(String, (Src, BinderType m))] -> [(String, (Src, BinderType m))]
@@ -411,7 +421,7 @@ check' (NHole (mnemonic, name)) connectors = do
       let ss = intercalate ", " . fmap show <$> sugg
       pure $ take 5 (ms ++ ss)
 
-    findMatchingNouns :: Checking [[UserName]]
+    findMatchingNouns :: Checking [[QualName]]
     findMatchingNouns = do
       -- TODO
       pure []
@@ -443,7 +453,7 @@ check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = case (?my, ty) of
   (Braty, Right ty) -> aux Braty clup ty $> (((), ()), ((), unders))
   (Kerny, _) -> aux Kerny kclup ty $> (((), ()), ((), unders))
  where
-  aux :: Modey m -> (UserName -> UserName -> Checking (CtorArgs m)) -> Val Z -> Checking ()
+  aux :: Modey m -> (QualName -> QualName -> Checking (CtorArgs m)) -> Val Z -> Checking ()
   aux my lup ty = do
     VCon tycon tyargs <- eval S0 ty
     (CArgs pats nFree _ argTypeRo) <- lup vcon tycon
@@ -962,8 +972,8 @@ kindCheckRow' my ez@(ny :* s) env (name, i) ((p, bty):rest) = case (my, bty) of
 
 -- Look for vectors to produce better error messages for mismatched lengths
 -- in terms or patterns.
-detectVecErrors :: UserName  -- Term constructor name
-                -> UserName  -- Type constructor name
+detectVecErrors :: QualName  -- Term constructor name
+                -> QualName  -- Type constructor name
                 -> [Val Z]   -- Type arguments
                 -> [ValPat]  -- Patterns the type arguments are checked against
                 -> Val Z     -- Type
@@ -1070,13 +1080,13 @@ abstractPattern my (dangling, bty) pat@(PCon pcon abst) = case (my, bty) of
   helper :: Modey m
          -> Val Z
          -> TypeKind
-         -> (UserName -> UserName -> Checking (CtorArgs m))
+         -> (QualName -> QualName -> Checking (CtorArgs m))
          -> Checking (Env (EnvData m))
   helper my v k lup = standardise k v >>=
                       throwLeft . unpackTypeConstructor >>=
                       abstractCon my lup
 
-  unpackTypeConstructor :: Val Z -> Either ErrorMsg (UserName, [Val Z])
+  unpackTypeConstructor :: Val Z -> Either ErrorMsg (QualName, [Val Z])
   unpackTypeConstructor (VCon tycon tyargs) = pure (tycon, tyargs)
   unpackTypeConstructor ty = Left (PattErr $ unwords ["Couldn't resolve pattern"
                                                      ,show pat
@@ -1084,8 +1094,8 @@ abstractPattern my (dangling, bty) pat@(PCon pcon abst) = case (my, bty) of
                                                      ,show ty])
 
   abstractCon :: Modey m
-              -> (UserName -> UserName -> Checking (CtorArgs m))
-              -> (UserName, [Val Z])
+              -> (QualName -> QualName -> Checking (CtorArgs m))
+              -> (QualName, [Val Z])
               -> Checking (Env (EnvData m))
   abstractCon my lup (tycon, tyargs) = do
     let ty = VCon tycon tyargs

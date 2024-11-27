@@ -32,18 +32,15 @@ import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Simple
 import Brat.Syntax.Port (ToEnd(..))
 import Brat.Syntax.Value
-import Brat.UserName
 import Bwd
 import Hasochism
 import Util (log2)
 
-import Control.Monad.Freer (req, Free(Ret))
+import Control.Monad.Freer (req)
 import Data.Bifunctor
 import Data.Foldable (foldrM)
-import Data.List (intercalate)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
-import qualified Data.Set as S
 import Prelude hiding (last)
 
 simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Either ErrorMsg ()
@@ -131,14 +128,6 @@ pullPorts toPort showFn (p:ports) types = do
      then err (AmbiguousPortPull p (showFn (x:xs)))
      else pure (x, xs)
    | otherwise = second (x:) <$> pull1Port p xs
-
-combineDisjointEnvs :: M.Map UserName v -> M.Map UserName v -> Checking (M.Map UserName v)
-combineDisjointEnvs l r =
-  let commonKeys = S.intersection (M.keysSet l) (M.keysSet r)
-  in if S.null commonKeys
-    then Ret $ M.union l r
-    else typeErr ("Variable(s) defined twice: " ++
-      intercalate "," (map show $ S.toList commonKeys))
 
 ensureEmpty :: Show ty => String -> [(NamedPort e, ty)] -> Checking ()
 ensureEmpty _ [] = pure ()
