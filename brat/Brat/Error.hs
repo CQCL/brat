@@ -82,7 +82,6 @@ data ErrorMsg
  -- The argument is the row of unused connectors
  | ThunkLeftOvers String
  | ThunkLeftUnders String
- -- TODO: Add file context here
  | RemainingNatHopes [String]
 
 instance Show ErrorMsg where
@@ -167,9 +166,7 @@ instance Show ErrorMsg where
   show UnreachableBranch = "Branch cannot be reached"
   show (ThunkLeftOvers overs) = "Expected function to address all inputs, but " ++ overs ++ " wasn't used"
   show (ThunkLeftUnders unders) = "Expected function to return additional values of type: " ++ unders
-  show (RemainingNatHopes hs) = unlines ("Expected to work out values for these holes:":indent (indent hs))
-
-indent = fmap ("  " ++)
+  show (RemainingNatHopes hs) = unlines ("Expected to work out values for these holes:":(("    " ++) <$> hs))
 
 data Error = Err { fc  :: Maybe FC
                  , msg :: ErrorMsg
