@@ -219,7 +219,7 @@ invertNatVal (NumValue up gro) = case up of
     wire (upSrc, TNat, rhs)
     tgt <- invertGro gro
     wire (out, TNat, tgt)
-    defineTgt lhs (VNum (nPlus up (nVar (VPar (toEnd out)))))
+    defineTgt lhs (VNum (nPlus up (nVar (VPar (toEnd tgt)))))
     pure lhs
  where
   invertGro Constant0 = error "Invariant violated: the numval arg to invertNatVal should contain a variable"
@@ -233,7 +233,7 @@ invertNatVal (NumValue up gro) = case up of
       tgt <- invertMono mono
       wire (out, TNat, tgt)
       wire (divisor, TNat, rhs)
-      defineTgt lhs (VNum (n2PowTimes k (nVar (VPar (toEnd out)))))
+      defineTgt lhs (VNum (n2PowTimes k (nVar (VPar (toEnd tgt)))))
       pure lhs
 
   invertMono (Linear (VPar (InEnd e))) = pure (NamedPort e "numval")
@@ -241,5 +241,5 @@ invertNatVal (NumValue up gro) = case up of
     (_, [(llufTgt,_)], [(llufSrc,_)], _) <- next "luff" (Prim ("BRAT","lluf")) (S0, Some (Zy :* S0)) (REx ("n", Nat) R0) (REx ("n", Nat) R0)
     tgt <- invertSM sm
     wire (llufSrc, TNat, tgt)
-    defineTgt llufTgt (VNum (nFull (nVar (VPar (toEnd llufSrc)))))
+    defineTgt llufTgt (VNum (nFull (nVar (VPar (toEnd tgt)))))
     pure llufTgt
