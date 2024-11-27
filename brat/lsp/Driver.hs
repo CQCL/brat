@@ -104,7 +104,7 @@ loadVFile state _ msg = do
                 . uri
   let fileName = toNormalizedUri fileUri
   file <- getVirtualFile fileName
-  let cwd = fromMaybe "" $ dropFileName <$> (uriToFilePath fileUri)
+  let cwd = maybe "" dropFileName (uriToFilePath fileUri)
   case file of
     Just (VirtualFile _version str rope) -> do
       let file = unpack $ toText rope

@@ -7,9 +7,9 @@ import Brat.Error (Error(..), ErrorMsg(..), dumbErr)
 import Brat.FC (FC)
 import Brat.Graph
 import Brat.Naming (fresh, split, Name, Namespace, FreshMonad(..))
+import Brat.QualName (QualName)
 import Brat.Syntax.Common
 import Brat.Syntax.Value
-import Brat.UserName (UserName)
 import Hasochism
 import Util
 
@@ -57,8 +57,8 @@ data Context = Ctx { globalVEnv :: VEnv
                    , store :: Store
                    , constructors :: ConstructorMap Brat
                    , kconstructors :: ConstructorMap Kernel
-                   , typeConstructors :: M.Map (Mode, UserName) [(PortName, TypeKind)]
-                   , aliasTable :: M.Map UserName Alias
+                   , typeConstructors :: M.Map (Mode, QualName) [(PortName, TypeKind)]
+                   , aliasTable :: M.Map QualName Alias
                    -- All the ends here should be targets
                    , hopeSet :: HopeSet
                    }
@@ -69,24 +69,24 @@ data CheckingSig ty where
   Throw   :: Error  -> CheckingSig a
   LogHole :: TypedHole -> CheckingSig ()
   AskFC   :: CheckingSig FC
-  VLup    :: UserName -> CheckingSig (Maybe [(Src, BinderType Brat)])
-  KLup    :: UserName -> CheckingSig (Maybe (Src, BinderType Kernel))
+  VLup    :: QualName -> CheckingSig (Maybe [(Src, BinderType Brat)])
+  KLup    :: QualName -> CheckingSig (Maybe (Src, BinderType Kernel))
   -- Lookup type constructors
-  TLup    :: (Mode, UserName) -> CheckingSig (Maybe [(PortName, TypeKind)])
+  TLup    :: (Mode, QualName) -> CheckingSig (Maybe [(PortName, TypeKind)])
   -- Lookup term constructor - ask whether a constructor builds a certain type
   CLup    :: FC -- File context for error reporting
-          -> UserName -- Value constructor
-          -> UserName  -- Type constructor
+          -> QualName -- Value constructor
+          -> QualName  -- Type constructor
           -> CheckingSig (CtorArgs Brat)
   -- Lookup kernel constructors
   KCLup   :: FC -- File context for error reporting
-          -> UserName -- Value constructor
-          -> UserName  -- Type constructor
+          -> QualName -- Value constructor
+          -> QualName  -- Type constructor
           -> CheckingSig (CtorArgs Kernel)
   -- Lookup an end in the Store
   ELup    :: End -> CheckingSig (Maybe (Val Z))
   -- Lookup an alias in the table
-  ALup    :: UserName -> CheckingSig (Maybe Alias)
+  ALup    :: QualName -> CheckingSig (Maybe Alias)
   TypeOf  :: End -> CheckingSig EndType
   AddNode :: Name -> Node -> CheckingSig ()
   Wire    :: Wire -> CheckingSig ()
@@ -98,7 +98,7 @@ data CheckingSig ty where
   AskHopeSet :: CheckingSig HopeSet
   RemoveHope :: End -> CheckingSig ()
 
-localAlias :: (UserName, Alias) -> Checking v -> Checking v
+localAlias :: (QualName, Alias) -> Checking v -> Checking v
 localAlias _ (Ret v) = Ret v
 localAlias con@(name, alias) (Req (ALup u) k)
   | u == name = localAlias con $ k (Just alias)
@@ -107,7 +107,7 @@ localAlias con (Req r k) = Req r (localAlias con . k)
 localFC :: FC -> Checking v -> Checking v
 localFC _ (Ret v) = Ret v
 localFC f (Req AskFC k) = localFC f (k f)
-localFC f (Req (Throw (e@Err{fc=Nothing})) k) = localFC f (Req (Throw (e{fc=Just f})) k)
+localFC f (Req (Throw e@Err{fc=Nothing}) k) = localFC f (Req (Throw (e{fc=Just f})) k)
 localFC f (Req r k) = Req r (localFC f . k)
 
 localEnv :: (?my :: Modey m) => Env (EnvData m) -> Checking v -> Checking v
@@ -132,7 +132,7 @@ captureOuterLocals c = do
   helper (outerLocals, M.empty) c
  where
   helper :: (VEnv, VEnv) -> Checking v
-         -> Checking (v, M.Map UserName [(Src, BinderType Brat)])
+         -> Checking (v, M.Map QualName [(Src, BinderType Brat)])
   helper (_, captured) (Ret v) = Ret (v, captured)
   helper (avail, captured) (Req (VLup x) k) | j@(Just new) <- M.lookup x avail =
     helper (avail, M.insert x new captured) (k j)
@@ -147,29 +147,29 @@ throwLeft :: Either ErrorMsg a -> Checking a
 throwLeft (Right x) = pure x
 throwLeft (Left msg) = err msg
 
-vlup :: UserName -> Checking [(Src, BinderType Brat)]
+vlup :: QualName -> Checking [(Src, BinderType Brat)]
 vlup s = do
   req (VLup s) >>= \case
     Just vty -> pure vty
     Nothing -> err $ VarNotFound (show s)
 
-alup :: UserName -> Checking Alias
+alup :: QualName -> Checking Alias
 alup s = do
   req (ALup s) >>= \case
     Just vty -> pure vty
     Nothing -> err $ VarNotFound (show s)
 
-clup :: UserName -- Value constructor
-     -> UserName  -- Type constructor
+clup :: QualName -- Value constructor
+     -> QualName  -- Type constructor
      -> Checking (CtorArgs Brat)
 clup vcon tycon = req AskFC >>= \fc -> req (CLup fc vcon tycon)
 
-kclup :: UserName -- Value constructor
-      -> UserName  -- Type constructor
+kclup :: QualName -- Value constructor
+      -> QualName  -- Type constructor
       -> Checking (CtorArgs Kernel)
 kclup vcon tycon = req AskFC >>= \fc -> req (KCLup fc vcon tycon)
 
-tlup :: (Mode, UserName) -> Checking [(PortName, TypeKind)]
+tlup :: (Mode, QualName) -> Checking [(PortName, TypeKind)]
 tlup (m, c) = req (TLup (m, c)) >>= \case
   Nothing -> req (TLup (otherMode, c)) >>= \case
     Nothing -> err $ UnrecognisedTypeCon (show c)
@@ -180,11 +180,11 @@ tlup (m, c) = req (TLup (m, c)) >>= \case
     Brat -> Kernel
     Kernel -> Brat
 
-lookupAndUse :: UserName -> KEnv
+lookupAndUse :: QualName -> KEnv
              -> Either Error (Maybe ((Src, BinderType Kernel), KEnv))
 lookupAndUse x kenv = case M.lookup x kenv of
    Nothing -> Right Nothing
-   Just (None, _) -> Left $ dumbErr $ TypeErr $ (show x) ++ " has already been used"
+   Just (None, _) -> Left $ dumbErr $ TypeErr $ show x ++ " has already been used"
    Just (One, rest)  -> Right $ Just (rest, M.insert x (None, rest) kenv)
    Just (Tons, rest) -> Right $ Just (rest, M.insert x (Tons, rest) kenv)
 
@@ -231,7 +231,7 @@ handler (Req s k) ctx g
       -- Receiving KDone may become possible when merging the two check functions
       KDone -> error "KDone in handler - this shouldn't happen"
       AskVEnv -> handler (k (CtxEnv { globals = globalVEnv ctx, locals = M.empty })) ctx g
-      ELup end -> handler (k ((M.lookup end) . valueMap . store $ ctx)) ctx g
+      ELup end -> handler (k (M.lookup end . valueMap . store $ ctx)) ctx g
       TypeOf end -> case M.lookup end . typeMap . store $ ctx of
         Just et -> handler (k et) ctx g
         Nothing -> Left (dumbErr . InternalError $ "End " ++ show end ++ " isn't Declared")

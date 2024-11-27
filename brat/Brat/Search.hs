@@ -2,11 +2,11 @@ module Brat.Search (vsearch) where
 
 import Brat.Constructors (CtorArgs(..), defaultConstructors)
 import Brat.FC
+import Brat.QualName
 import Brat.Syntax.Core
 import Brat.Syntax.Common
 import Brat.Syntax.Value
 import Brat.Syntax.Simple
-import Brat.UserName
 import Hasochism
 
 import Control.Monad (guard)

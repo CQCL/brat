@@ -32,17 +32,14 @@ import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Simple
 import Brat.Syntax.Port (ToEnd(..))
 import Brat.Syntax.Value
-import Brat.UserName
 import Bwd
 import Hasochism
 import Util (log2)
 
-import Control.Monad.Freer (req, Free(Ret))
-import Control.Arrow ((***))
-import Data.List (intercalate)
+import Control.Monad.Freer (req)
+import Data.Bifunctor
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
-import qualified Data.Set as S
 import Prelude hiding (last)
 
 simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Either ErrorMsg ()
@@ -126,18 +123,10 @@ pullPorts toPort showFn (p:ports) types = do
   pull1Port p [] = fail $ "Port not found: " ++ p ++ " in " ++ showFn types
   pull1Port p (x@(a,_):xs)
    | p == toPort a
-   = if (p `elem` (toPort . fst <$> xs))
+   = if p `elem` (toPort . fst <$> xs)
      then err (AmbiguousPortPull p (showFn (x:xs)))
      else pure (x, xs)
-   | otherwise = (id *** (x:)) <$> pull1Port p xs
-
-combineDisjointEnvs :: M.Map UserName v -> M.Map UserName v -> Checking (M.Map UserName v)
-combineDisjointEnvs l r =
-  let commonKeys = S.intersection (M.keysSet l) (M.keysSet r)
-  in if S.null commonKeys
-    then Ret $ M.union l r
-    else typeErr ("Variable(s) defined twice: " ++
-      (intercalate "," $ map show $ S.toList commonKeys))
+   | otherwise = second (x:) <$> pull1Port p xs
 
 ensureEmpty :: Show ty => String -> [(NamedPort e, ty)] -> Checking ()
 ensureEmpty _ [] = pure ()
@@ -149,7 +138,7 @@ noUnders m = do
   pure (outs, overs)
 
 rowToSig :: Traversable t => t (NamedPort e, ty) -> t (PortName, ty)
-rowToSig = fmap $ \(p,ty) -> (portName p, ty)
+rowToSig = fmap $ first portName
 
 showMode :: Modey m -> String
 showMode Braty = ""
@@ -258,7 +247,7 @@ getThunks :: Modey m
                       ,Overs m UVerb
                       )
 getThunks _ [] = pure ([], [], [])
-getThunks Braty row@((src, Right ty):rest) = ((src,) <$> eval S0 ty) >>= vectorise >>= \case
+getThunks Braty row@((src, Right ty):rest) = (eval S0 ty >>= vectorise . (src,)) >>= \case
   (src, VFun Braty (ss :->> ts)) -> do
     (node, unders, overs, _) <- let ?my = Braty in
                                   anext "Eval" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
@@ -267,7 +256,7 @@ getThunks Braty row@((src, Right ty):rest) = ((src,) <$> eval S0 ty) >>= vectori
   -- These shouldn't happen
   (_, VFun _ _) -> err $ ExpectedThunk (showMode Braty) (showRow row)
   v -> typeErr $ "Force called on non-thunk: " ++ show v
-getThunks Kerny row@((src, Right ty):rest) = ((src,) <$> eval S0 ty) >>= vectorise >>= \case
+getThunks Kerny row@((src, Right ty):rest) = (eval S0 ty >>= vectorise . (src,)) >>= \case
   (src, VFun Kerny (ss :->> ts)) -> do
     (node, unders, overs, _) <- let ?my = Kerny in anext "Splice" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
     (nodes, unders', overs') <- getThunks Kerny rest
@@ -422,7 +411,7 @@ makeBox name cty@(ss :->> ts) body = do
       bres <- name -! body (overs, unders)
       pure (thunk, bres)
     (Braty, body) -> do
-      (bres, captures) <- name -! (captureOuterLocals $ body (overs, unders))
+      (bres, captures) <- name -! captureOuterLocals (body (overs, unders))
       (_, [], [thunk], _) <- next (name ++ "_thunk") (Box captures src tgt) (S0, Some (Zy :* S0))
                                      R0 (RPr ("thunk", VFun ?my cty) R0)
       pure (thunk, bres)
@@ -438,26 +427,25 @@ natEqOrBust :: Ny i -> Ny j -> Either ErrorMsg (i :~: j)
 natEqOrBust n m | Just q <- testEquality n m = pure q
 natEqOrBust _ _ = Left $ InternalError "We can't count"
 
-rowToRo :: ToEnd t => Modey m -> [(String, t, BinderType m)] -> Stack Z End i -> Checking (Some ((Ro m i) :* Stack Z End))
+rowToRo :: ToEnd t => Modey m -> [(String, t, BinderType m)] -> Stack Z End i -> Checking (Some (Ro m i :* Stack Z End))
 rowToRo _ [] stk = pure $ Some (R0 :* stk)
 rowToRo Kerny ((p, _, ty):row) S0 = do
   ty <- eval S0 ty
   rowToRo Kerny row S0 >>= \case
-    Some (ro :* stk) -> pure . Some $ ((RPr (p, changeVar (ParToInx (AddZ Zy) S0) ty) ro)) :* stk
+    Some (ro :* stk) -> pure . Some $ RPr (p, changeVar (ParToInx (AddZ Zy) S0) ty) ro :* stk
 rowToRo Kerny _ (_ :<< _) = err $ InternalError "rowToRo - no binding allowed in kernels"
 
 rowToRo Braty ((p, _, Right ty):row) endz = do
   ty <- eval S0 ty
   rowToRo Braty row endz >>= \case
-    Some (ro :* stk) -> pure . Some $ (RPr (p, changeVar (ParToInx (AddZ (stackLen endz)) endz) ty) ro) :* stk
+    Some (ro :* stk) -> pure . Some $ RPr (p, changeVar (ParToInx (AddZ (stackLen endz)) endz) ty) ro :* stk
 rowToRo Braty ((p, tgt, Left k):row) endz = rowToRo Braty row (endz :<< toEnd tgt) >>= \case
-  Some (ro :* stk) -> pure . Some $ (REx (p, k) ro) :* stk
+  Some (ro :* stk) -> pure . Some $ REx (p, k) ro :* stk
 
 roToTuple :: Ro m Z Z -> Val Z
 roToTuple R0 = TNil
 roToTuple (RPr (_, ty) ro) = TCons ty (roToTuple ro)
-roToTuple (REx _ ro) = case ro of
-  _ -> error "the impossible happened"
+roToTuple (REx _ _) = error "the impossible happened"
 
 -- Low hanging fruit that we can easily do to our normal forms of numbers
 runArith :: NumVal (VVar Z) -> ArithOp -> NumVal (VVar Z) -> Maybe (NumVal (VVar Z))

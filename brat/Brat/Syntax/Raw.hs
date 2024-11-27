@@ -18,11 +18,11 @@ import Brat.Constructors
 import Brat.Error
 import Brat.FC hiding (end)
 import Brat.Naming
+import Brat.QualName
 import Brat.Syntax.Common
 import Brat.Syntax.Core
 import Brat.Syntax.FuncDecl (FunBody(..), FuncDecl(..))
 import Brat.Syntax.Simple
-import Brat.UserName
 import Util (names, (**^))
 
 type family TypeOf (k :: Kind) :: Type where
@@ -36,11 +36,11 @@ type RawIO = TypeRowElem (KindOr RawVType)
 type RawCType = CType' RawIO
 type RawKType = CType' (TypeRowElem RawVType)
 
-data TypeAliasF tm = TypeAlias FC UserName [(PortName,TypeKind)] tm deriving Show
+data TypeAliasF tm = TypeAlias FC QualName [(PortName,TypeKind)] tm deriving Show
 type RawAlias = TypeAliasF (Raw Chk Noun)
 type TypeAlias = TypeAliasF (Term Chk Noun)
 
-type TypeAliasTable = M.Map UserName TypeAlias
+type TypeAliasTable = M.Map QualName TypeAlias
 
 type RawEnv = ([RawFuncDecl], [RawAlias], TypeAliasTable)
 type RawFuncDecl = FuncDecl [RawIO] (FunBody Raw Noun)
@@ -69,7 +69,7 @@ data Raw :: Dir -> Kind -> Type where
   REmb      :: WC (Raw Syn k) -> Raw Chk k
   RForget   :: WC (Raw d KVerb) -> Raw d UVerb
   RPull     :: [PortName] -> WC (Raw Chk k) -> Raw Chk k
-  RVar      :: UserName -> Raw Syn Noun
+  RVar      :: QualName -> Raw Syn Noun
   RIdentity :: Raw Syn UVerb
   RHope     :: Raw Chk Noun
   RArith    :: ArithOp -> WC (Raw Chk Noun) -> WC (Raw Chk Noun) -> Raw Chk Noun
@@ -78,7 +78,7 @@ data Raw :: Dir -> Kind -> Type where
   (::-::)   :: WC (Raw Syn k) -> WC (Raw d UVerb) -> Raw d k -- vertical juxtaposition (diagrammatic composition)
   (::$::)   :: WC (Raw d KVerb) -> WC (Raw Chk k) -> Raw d k -- Eval with ChkRaw n argument
   RLambda   :: (WC Abstractor, WC (Raw d Noun)) -> [(WC Abstractor, WC (Raw Chk Noun))] -> Raw d UVerb
-  RCon      :: UserName -> WC (Raw Chk Noun) -> Raw Chk Noun
+  RCon      :: QualName -> WC (Raw Chk Noun) -> Raw Chk Noun
   -- Function types
   RFn       :: RawCType -> Raw Chk Noun
   -- Kernel types
@@ -114,14 +114,14 @@ instance Show (Raw d k) where
   show (RForget kv) = "(Forget " ++ show kv ++ ")"
   show (REmb x) = '「' : show x ++ "」"
   show (RPull [] x) = "[]:" ++ show x
-  show (RPull ps x) = concat ((++":") <$> ps) ++ show x
+  show (RPull ps x) = concatMap (++":") ps ++ show x
   show (RVar x) = show x
   show RIdentity = "|"
   show (RArith op a b) = "(" ++ show op ++ " " ++ show a ++ " " ++ show b ++ ")"
   show (fun ::$:: arg) = show fun ++ ('(' : show arg ++ ")")
   show (tm ::::: ty) = show tm ++ " :: " ++ show ty
   show (a ::-:: b) = show a ++ "; " ++ show b
-  show (RLambda c cs) = unlines $ (showClause c : (("| "++) . showClause <$> cs))
+  show (RLambda c cs) = unlines (showClause c : (("| "++) . showClause <$> cs))
    where
     showClause :: forall d k. (WC Abstractor, WC (Raw d k)) -> String
     showClause (abs, bod) = show abs ++ " => " ++ show bod
@@ -132,7 +132,7 @@ instance Show (Raw d k) where
   show RFanIn = "[\\/]"
   show (ROf n e) = "(" ++ show n ++ " of " ++ show e ++ ")"
 
-type Desugar = StateT Namespace (ReaderT (RawEnv, Bwd UserName) (Except Error))
+type Desugar = StateT Namespace (ReaderT (RawEnv, Bwd QualName) (Except Error))
 
 -- instance {-# OVERLAPPING #-} MonadFail Desugar where
 instance {-# OVERLAPPING #-} MonadFail Desugar where
@@ -152,13 +152,13 @@ splitM s = do
   put newRoot
   pure ns'
 
-isConstructor :: UserName -> Desugar Bool
+isConstructor :: QualName -> Desugar Bool
 isConstructor c = pure (c `member` defaultConstructors
                         || (Brat, c) `member` defaultTypeConstructors
                         || (Kernel, c) `member` defaultTypeConstructors
                         || c `member` natConstructors)
 
-isAlias :: UserName -> Desugar Bool
+isAlias :: QualName -> Desugar Bool
 isAlias name = do
   aliases <- asks (thd3 . fst)
   pure $ M.member name aliases
@@ -218,12 +218,12 @@ instance (Kindable k) => Desugarable (Raw d k) where
   table of either known constructors or known type aliases. We must transform
   these into `Con c arg` when desugaring.
   -}
-  desugar' (REmb syn) = case (unWC syn) of
+  desugar' (REmb syn) = case unWC syn of
     (WC _ (RForce (WC _ (RVar c)))) ::$:: a -> do
       isConOrAlias c >>= \case
-        True -> case (kind $ unWC a) of
+        True -> case kind $ unWC a of
           Nouny -> Con c <$> desugar a
-          _ -> throwError $ desugarErr ("Constructor applied to something that isn't a noun")
+          _ -> throwError $ desugarErr "Constructor applied to something that isn't a noun"
         False -> Emb <$> desugar syn
     (RVar c) -> do
       isConOrAlias c >>= \case
@@ -242,7 +242,7 @@ instance (Kindable k) => Desugarable (Raw d k) where
     (tys, ()) <- desugarBind outputs $ pure ()
     pure (tm ::: tys)
   desugar' (syn ::-:: verb) = (:-:) <$> desugar syn <*> desugar verb
-  desugar' (RLambda c cs) = Lambda <$> (id **^ desugar) c <*> (traverse (id **^ desugar) cs)
+  desugar' (RLambda c cs) = Lambda <$> (id **^ desugar) c <*> traverse (id **^ desugar) cs
   desugar' (RLet abs thing body) = Let abs <$> desugar thing <*> desugar body
   desugar' (RCon c arg) = Con c <$> desugar arg
   desugar' (RFn cty) = C <$> desugar' cty
@@ -262,7 +262,7 @@ instance Desugarable (CType' (TypeRowElem RawVType)) where
     ts <- traverse desugar' (addNames ts)
     pure (ss :-> ts)
 
-isConOrAlias :: UserName -> Desugar Bool
+isConOrAlias :: QualName -> Desugar Bool
 isConOrAlias c = do
   con <- isConstructor c
   ali <- isAlias c

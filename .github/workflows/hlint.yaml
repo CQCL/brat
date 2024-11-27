@@ -1,0 +1,20 @@
+name: Brat CI
+on:
+  pull_request: []
+
+jobs:
+  hlint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: 'Setup HLint'
+      uses: haskell-actions/hlint-setup@v2
+
+    - name: 'Run HLint'
+      uses: haskell-actions/hlint-run@v2
+      with:
+        path: brat/
+        # https://github.com/haskell-actions/hlint-run/issues/20#issuecomment-2168787894
+        hlint-bin: hlint --hint=brat/.hlint.yaml
+        fail-on: warning

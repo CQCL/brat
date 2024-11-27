@@ -8,16 +8,17 @@ module Brat.Checker (checkBody
                     ) where
 
 import Control.Exception (assert)
-import Control.Monad (foldM, forM, zipWithM)
+import Control.Monad (foldM, forM, zipWithM_)
 import Control.Monad.Freer
-import Data.Bifunctor (first, second)
+import Data.Bifunctor
+import Data.Foldable (for_)
 import Data.Functor (($>), (<&>))
-import Data.List ((\\))
+import Data.List ((\\), intercalate)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
-import Data.Traversable (for)
+import qualified Data.Set as S
 import Data.Type.Equality ((:~:)(..))
 import Prelude hiding (filter)
 
@@ -34,6 +35,7 @@ import Brat.FC hiding (end)
 import qualified Brat.FC as FC
 import Brat.Graph
 import Brat.Naming
+import Brat.QualName
 -- import Brat.Search
 import Brat.Syntax.Abstractor (NormalisedAbstractor(..), normaliseAbstractor)
 import Brat.Syntax.Common
@@ -42,20 +44,28 @@ import Brat.Syntax.FuncDecl (FunBody(..))
 import Brat.Syntax.Port (ToEnd, toEnd)
 import Brat.Syntax.Simple
 import Brat.Syntax.Value
-import Brat.UserName
 import Bwd
 import Hasochism
-import Util (zip_same_length)
+import Util (zipSameLength)
 
 -- Put things into a standard form in a kind-directed manner, such that it is
 -- meaningful to do case analysis on them
 standardise :: TypeKind -> Val Z -> Checking (Val Z)
-standardise k val = eval S0 val <&> (k,) >>= \case
+standardise k val = eval S0 val >>= (\case
   (Nat, val) -> pure . VNum $ numVal val
-  (_, val) -> pure val
+  (_, val) -> pure val) . (k,)
 
 mergeEnvs :: [Env a] -> Checking (Env a)
 mergeEnvs = foldM combineDisjointEnvs M.empty
+ where
+  combineDisjointEnvs :: M.Map QualName v -> M.Map QualName v -> Checking (M.Map QualName v)
+  combineDisjointEnvs l r =
+    let commonKeys = S.intersection (M.keysSet l) (M.keysSet r)
+    in if S.null commonKeys
+       then pure $ M.union l r
+       else typeErr ("Variable(s) defined twice: " ++
+    intercalate "," (map show $ S.toList commonKeys))
+
 
 singletonEnv :: (?my :: Modey m) => String -> (Src, BinderType m) -> Checking (Env (EnvData m))
 singletonEnv x input@(p, ty) = case ?my of
@@ -213,12 +223,12 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
         (_, [], fakeOvers, fakeAcc) <- anext "lambda_fake_source" Hypo (S0, Some (Zy :* S0)) R0 ins
         -- Hypo `check` calls need an environment, even just to compute leftovers;
         -- we get that env by solving `problem` reformulated in terms of the `fakeOvers`
-        let srcMap = fromJust $ zip_same_length (fst <$> usedOvers) (fst <$> fakeOvers)
+        let srcMap = fromJust $ zipSameLength (fst <$> usedOvers) (fst <$> fakeOvers)
         let fakeProblem = [ (fromJust (lookup src srcMap), pat) | (src, pat) <- problem ]
         fakeEnv <- localFC abstFC $ solve ?my fakeProblem >>= (solToEnv . snd)
         localEnv fakeEnv $ do
           (_, fakeUnders, [], _) <- anext "lambda_fake_target" Hypo fakeAcc outs R0
-          Just tgtMap <- pure $ zip_same_length (fst <$> fakeUnders) unders
+          Just tgtMap <- pure $ zipSameLength (fst <$> fakeUnders) unders
           (((), ()), ((), rightFakeUnders)) <- check body ((), fakeUnders)
           pure (fakeUnders, rightFakeUnders, tgtMap)
 
@@ -248,7 +258,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
   -- N.B.: Here we update the port names to be the user variable names for nicer
   -- error messages. This mirrors previous behaviour using `abstract`, but is a
   --  bit of a hack. See issue #23.
-  solToEnv :: [(String, (Src, BinderType m))] -> Checking (M.Map UserName (EnvData m))
+  solToEnv :: [(String, (Src, BinderType m))] -> Checking (M.Map QualName (EnvData m))
   solToEnv xs = traverse (uncurry singletonEnv) (portNamesToBoundNames xs) >>= mergeEnvs
 
   portNamesToBoundNames :: [(String, (Src, BinderType m))] -> [(String, (Src, BinderType m))]
@@ -261,7 +271,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
 
   retuple (NamedPort e p, ty) = (p, e, ty)
 
-  mkWires overs unders = case zip_same_length overs unders of
+  mkWires overs unders = case zipSameLength overs unders of
     Nothing -> err $ InternalError "Trying to wire up different sized lists of wires"
     Just conns -> traverse (\((src, ty), (tgt, _)) -> wire (src, binderToValue ?my ty, tgt)) conns
 
@@ -412,7 +422,7 @@ check' (NHole (mnemonic, name)) connectors = do
       let ss = intercalate ", " . fmap show <$> sugg
       pure $ take 5 (ms ++ ss)
 
-    findMatchingNouns :: Checking [[UserName]]
+    findMatchingNouns :: Checking [[QualName]]
     findMatchingNouns = do
       -- TODO
       pure []
@@ -436,7 +446,7 @@ check' (VHole (mnemonic, name)) connectors = do
   pure (((), ()), ([], []))
 -- TODO: Better error message
 check' tm@(Con _ _) ((), []) = typeErr $ "No type to check " ++ show tm ++ " against"
-check' tm@(Con vcon vargs) ((), ((hungry, ty):unders)) = case (?my, ty) of
+check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = case (?my, ty) of
   (Braty, Left k) -> do
     (_, leftOvers) <- kindCheck [(hungry, k)] (Con vcon vargs)
     ensureEmpty "kindCheck leftovers" leftOvers
@@ -444,7 +454,7 @@ check' tm@(Con vcon vargs) ((), ((hungry, ty):unders)) = case (?my, ty) of
   (Braty, Right ty) -> aux Braty clup ty $> (((), ()), ((), unders))
   (Kerny, _) -> aux Kerny kclup ty $> (((), ()), ((), unders))
  where
-  aux :: Modey m -> (UserName -> UserName -> Checking (CtorArgs m)) -> Val Z -> Checking ()
+  aux :: Modey m -> (QualName -> QualName -> Checking (CtorArgs m)) -> Val Z -> Checking ()
   aux my lup ty = do
     VCon tycon tyargs <- eval S0 ty
     (CArgs pats nFree _ argTypeRo) <- lup vcon tycon
@@ -465,13 +475,13 @@ check' tm@(Con vcon vargs) ((), ((hungry, ty):unders)) = case (?my, ty) of
     ensureEmpty "con unders" leftUnders
     wire (dangling, ty, hungry)
 
-check' (C cty) ((), ((hungry, ty):unders)) = case (?my, ty) of
+check' (C cty) ((), (hungry, ty):unders) = case (?my, ty) of
   (Braty, Left k) -> do
     (_, leftOvers) <- kindCheck [(hungry, k)] (C cty)
     ensureEmpty "kindCheck leftovers" leftOvers
     pure (((), ()), ((), unders))
   _ -> typeErr $ "Ill-kinded function type: " ++ show cty
-check' (Simple tm) ((), ((hungry, ty):unders)) = do
+check' (Simple tm) ((), (hungry, ty):unders) = do
   ty <- evalBinder ?my ty
   case (?my, ty, tm) of
     -- The only SimpleType that checks against a kind is a Nat
@@ -510,12 +520,12 @@ check' FanOut ((p, ty):overs, ()) = do
   fanoutNodes my n (dangling, ty) elTy = do
     (_, [(hungry, _)], [danglingHead, danglingTail], _) <- anext "fanoutNodes" (Selector (plain "cons")) (S0, Some (Zy :* S0))
       (RPr ("value", binderToValue my ty) R0)
-      ((RPr ("head", elTy) (RPr ("tail", TVec elTy (VNum (nConstant (n - 1)))) R0)) :: Ro m Z Z)
+      (RPr ("head", elTy) (RPr ("tail", TVec elTy (VNum (nConstant (n - 1)))) R0) :: Ro m Z Z)
     -- Wire the input into the selector node
     wire (dangling, binderToValue my ty, hungry)
     (danglingHead:) <$> fanoutNodes my (n - 1) danglingTail elTy
 
-check' FanIn (overs, ((tgt, ty):unders)) = do
+check' FanIn (overs, (tgt, ty):unders) = do
   ty <- eval S0 (binderToValue ?my ty)
   case ty of
     TVec elTy n
@@ -549,14 +559,14 @@ check' FanIn (overs, ((tgt, ty):unders)) = do
     typeEq (show FanIn) (Zy :* S0 :* S0) k elTy (binderToValue my overTy)
     let tailTy = TVec elTy (VNum (nConstant (n - 1)))
     (_, [(hungryHead, _), (hungryTail, tailTy)], [(danglingResult, _)], _) <- anext "faninNodes" (Constructor (plain "cons")) (S0, Some (Zy :* S0))
-      ((RPr ("head", elTy) (RPr ("tail", tailTy) R0)) :: Ro m Z Z)
+      (RPr ("head", elTy) (RPr ("tail", tailTy) R0) :: Ro m Z Z)
       (RPr ("value", binderToValue my ty) R0)
     wire (over, elTy, hungryHead)
     wire (danglingResult, binderToValue ?my ty, hungry)
     faninNodes my (n - 1) (hungryTail, tailTy) elTy overs
-check' Identity ((this:leftovers), ()) = pure (((), [this]), (leftovers, ()))
+check' Identity (this:leftovers, ()) = pure (((), [this]), (leftovers, ()))
 check' (Of n e) ((), unders) = case ?my of
-  Kerny -> typeErr $ "`of` not supported in kernel contexts"
+  Kerny -> typeErr "`of` not supported in kernel contexts"
   Braty -> do
     -- TODO: Our expectations about Id nodes in compilation might need updated?
     (_, [(natUnder,Left k)], [(natOver, _)], _) <- anext "Of_len" Id (S0, Some (Zy :* S0))
@@ -579,7 +589,7 @@ check' (Of n e) ((), unders) = case ?my of
               (repConns, tgtMap) <- mkReplicateNodes n elemUnders
               let (lenIns, repUnders, repOvers) = unzip3 repConns
               -- Wire the length into all the replicate nodes
-              for lenIns $ \(tgt, _) -> do
+              for_ lenIns $ \(tgt, _) -> do
                 wire (natOver, kindType Nat, tgt)
                 defineTgt tgt n
               (((), ()), ((), elemRightUnders)) <- check e ((), repUnders)
@@ -587,13 +597,13 @@ check' (Of n e) ((), unders) = case ?my of
               -- in the call to getVecs, so we should work out which elements of
               -- the original unders weren't used, and make sure they prefix the
               -- unders returned from here.
-              let unusedVecTgts :: [Tgt] = (fromJust . flip lookup tgtMap . fst) <$> elemRightUnders
+              let unusedVecTgts :: [Tgt] = fromJust . flip lookup tgtMap . fst <$> elemRightUnders
               let (usedVecUnders, unusedVecUnders) = splitAt (length vecUnders - length unusedVecTgts) vecUnders
               -- Wire up the outputs of the replicate nodes to the _used_ vec
               -- unders. The remainder of the replicate nodes don't get used.
               -- (their inputs live in `elemRightUnders`)
               assert (length repOvers >= length usedVecUnders) $ do
-                zipWithM (\(dangling, _) (hungry, ty) -> wire (dangling, ty, hungry)) repOvers usedVecUnders
+                zipWithM_ (\(dangling, _) (hungry, ty) -> wire (dangling, ty, hungry)) repOvers usedVecUnders
                 pure (((), ()), ((), (second Right <$> unusedVecUnders) ++ rightUnders))
 
             _ -> localFC (fcOf e) $ typeErr "No type dependency allowed when using `of`"
@@ -607,10 +617,10 @@ check' (Of n e) ((), unders) = case ?my of
             outputs <- getVals outputs
             (conns, _) <- mkReplicateNodes n outputs
             let (lenIns, elemIns, vecOuts) = unzip3 conns
-            for lenIns $ \(tgt,_) -> do
+            for_ lenIns $ \(tgt,_) -> do
               wire (natOver, kindType Nat, tgt)
               defineTgt tgt n
-            zipWithM (\(dangling, ty) (hungry, _) -> wire (dangling, ty, hungry)) outputs elemIns
+            zipWithM_ (\(dangling, ty) (hungry, _) -> wire (dangling, ty, hungry)) outputs elemIns
             pure (((), vecOuts), ((), ()))
           _ -> localFC (fcOf e) $ typeErr "No type dependency allowed when using `of`"
  where
@@ -636,7 +646,7 @@ check' (Of n e) ((), unders) = case ?my of
                                                (REx ("n", Nat) (RPr ("elem", weakTy) R0)) -- the type of e
                                                (RPr ("vec", TVec weakTy (VApp (VInx VZ) B0)) R0) -- a vector of e's of length n??
     (conns, tgtMap) <- mkReplicateNodes len unders
-    pure ((lenUnder, repUnder, repOver):conns, ((fst repUnder), t):tgtMap)
+    pure ((lenUnder, repUnder, repOver):conns, (fst repUnder, t):tgtMap)
 
   getVecs :: Val Z -- The length of vectors we're looking for
           -> [(Tgt, BinderType Brat)]
@@ -716,27 +726,23 @@ checkBody :: (CheckConstraints m UVerb, EvMode m, ?my :: Modey m)
           -> FunBody Term UVerb
           -> CTy m Z -- Function type
           -> Checking Src
-checkBody fnName body cty = case body of
-  NoLhs tm -> do
-    ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
-      (((), ()), leftovers) <- check tm conns
-      checkConnectorsUsed (fcOf tm, fcOf tm) (show tm) conns leftovers
-    pure src
-  Clauses (c :| cs) -> do
-    fc <- req AskFC
-    ((box, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
-      let tm = Lambda c cs
-      (((), ()), leftovers) <- check (WC fc tm) conns
-      checkConnectorsUsed (fcOf (fst c), fcOf (snd c)) (show tm) conns leftovers
-    pure box
-  Undefined -> err (InternalError "Checking undefined clause")
- where
-  checkConnectorsUsed _ _ _ ([], []) = pure ()
-  checkConnectorsUsed (_, tmFC) tm (_, unders) ([], rightUnders) = localFC tmFC $
-    let numUsed = length unders - length rightUnders in
-     err (TypeMismatch tm (showRow unders) (showRow (take numUsed unders)))
-  checkConnectorsUsed (absFC, _) _ _ (rightOvers, _) = localFC absFC $
-    typeErr ("Inputs " ++ showRow rightOvers ++ " weren't used")
+checkBody fnName body cty = do
+  (tm, (absFC, tmFC)) <- case body of
+    NoLhs tm -> pure (tm, (fcOf tm, fcOf tm))
+    Clauses (c :| cs) -> do
+      fc <- req AskFC
+      pure $ (WC fc (Lambda c cs), (bimap fcOf fcOf c))
+    Undefined -> err (InternalError "Checking undefined clause")
+  ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \conns@(_, unders) -> do
+    (((), ()), leftovers) <- check tm conns
+    case leftovers of
+      ([], []) -> pure ()
+      ([], rightUnders) -> localFC tmFC $
+        let numUsed = length unders - length rightUnders
+        in err (TypeMismatch (show tm) (showRow unders) (showRow (take numUsed unders)))
+      (rightOvers, _) -> localFC absFC $
+        typeErr ("Inputs " ++ showRow rightOvers ++ " weren't used")
+  pure src
 
 -- Constructs row from a list of ends and types. Uses standardize to ensure that dependency is
 -- detected. Fills in the first bot ends from a stack. The stack grows every time we go under
@@ -744,15 +750,15 @@ checkBody fnName body cty = case body of
 mkArgRo :: Modey m -> Stack Z End bot -> [(NamedPort End, BinderType m)] -> Checking (Some (Stack Z End :* Ro m bot))
 mkArgRo _ ez [] = pure $ Some (ez :* R0)
 mkArgRo Braty ez ((p, Left k):rest) = mkArgRo Braty (ez :<< end p) rest >>= \case
-  Some (ez' :* ro) -> pure $ Some $ ez' :* (REx (portName p, k) ro)
+  Some (ez' :* ro) -> pure $ Some $ ez' :* REx (portName p, k) ro
 mkArgRo Braty ez ((p, Right t):rest) = mkArgRo Braty ez rest >>= \case
   Some (ez' :* ro) -> do
     t <- standardise (TypeFor Brat []) t
-    pure $ Some $ ez' :* (RPr (portName p, abstractEndz ez t) ro)
+    pure $ Some $ ez' :* RPr (portName p, abstractEndz ez t) ro
 mkArgRo Kerny ez ((p, t):rest) = mkArgRo Kerny ez rest >>= \case
   Some (ez' :* ro) -> do
     t <- standardise (TypeFor Brat []) t
-    pure $ Some $ ez' :* (RPr (portName p, abstractEndz ez t) ro)
+    pure $ Some $ ez' :* RPr (portName p, abstractEndz ez t) ro
 
 mkKindRo :: [(PortName, TypeKind)] -> Some (Ro Brat bot)
 mkKindRo [] = Some R0
@@ -799,7 +805,7 @@ kindCheck ((hungry, k@(TypeFor m [])):unders) (Con c arg) = req (TLup (m, c)) >>
         -- va = endVal of (end kindOut), so not as useful as
         -- the thing we *do* define kindOut as
 
-        (_, argUnders, [(kindOut,_)], ((_ :<< _va), _)) <-
+        (_, argUnders, [(kindOut,_)], (_ :<< _va, _)) <-
           next "" Hypo (S0, Some (Zy :* S0)) aliasArgs (REx ("type",Star []) R0)
         -- arg is a juxtaposition
         (args, emptyUnders) <- kindCheck (second (\(Left k) -> k) <$> argUnders) (unWC arg)
@@ -954,7 +960,7 @@ kindCheckRow' Braty (ny :* s) env (name,i) ((p, Left k):rest) = do -- s is Stack
   env <- pure $ M.insert (plain p) [(NamedPort dangling p, Left k)] env
   (i, env, ser) <- kindCheckRow' Braty (Sy ny :* (s :<< ExEnd dangling)) env (name, i) rest
   case ser of
-    Some (s_m :* ro) -> pure (i, env, Some (s_m :* (REx (p,k) ro)))
+    Some (s_m :* ro) -> pure (i, env, Some (s_m :* REx (p,k) ro))
 kindCheckRow' my ez@(ny :* s) env (name, i) ((p, bty):rest) = case (my, bty) of
   (Braty, Right ty) -> helper ty (Star [])
   (Kerny, ty) -> helper ty (Dollar [])
@@ -969,12 +975,12 @@ kindCheckRow' my ez@(ny :* s) env (name, i) ((p, bty):rest) = case (my, bty) of
     v <- pure $ changeVar (ParToInx (AddZ ny) s) v
     (i, env, ser) <- kindCheckRow' my ez env (name, i+1) rest
     case ser of
-      Some (s_m :* ro) -> pure (i, env, Some (s_m :* (RPr (p, v) ro)))
+      Some (s_m :* ro) -> pure (i, env, Some (s_m :* RPr (p, v) ro))
 
 -- Look for vectors to produce better error messages for mismatched lengths
 -- in terms or patterns.
-detectVecErrors :: UserName  -- Term constructor name
-                -> UserName  -- Type constructor name
+detectVecErrors :: QualName  -- Term constructor name
+                -> QualName  -- Type constructor name
                 -> [Val Z]   -- Type arguments
                 -> [ValPat]  -- Patterns the type arguments are checked against
                 -> Val Z     -- Type
@@ -1055,7 +1061,7 @@ abstractPattern Braty (dangling, Left k) pat = abstractKind k pat
  where
   abstractKind :: TypeKind -> Pattern -> Checking (Env (EnvData Brat))
   abstractKind _ (Bind x) = let ?my = Braty in singletonEnv x (dangling, Left k)
-  abstractKind _ (DontCare) = pure emptyEnv
+  abstractKind _ DontCare = pure emptyEnv
   abstractKind k (Lit x) = case (k, x) of
     (Nat, Num n) -> defineSrc dangling (VNum (nConstant (fromIntegral n))) $> emptyEnv
     (Star _, _) -> err MatchingOnTypes
@@ -1081,13 +1087,13 @@ abstractPattern my (dangling, bty) pat@(PCon pcon abst) = case (my, bty) of
   helper :: Modey m
          -> Val Z
          -> TypeKind
-         -> (UserName -> UserName -> Checking (CtorArgs m))
+         -> (QualName -> QualName -> Checking (CtorArgs m))
          -> Checking (Env (EnvData m))
   helper my v k lup = standardise k v >>=
                       throwLeft . unpackTypeConstructor >>=
                       abstractCon my lup
 
-  unpackTypeConstructor :: Val Z -> Either ErrorMsg (UserName, [Val Z])
+  unpackTypeConstructor :: Val Z -> Either ErrorMsg (QualName, [Val Z])
   unpackTypeConstructor (VCon tycon tyargs) = pure (tycon, tyargs)
   unpackTypeConstructor ty = Left (PattErr $ unwords ["Couldn't resolve pattern"
                                                      ,show pat
@@ -1095,8 +1101,8 @@ abstractPattern my (dangling, bty) pat@(PCon pcon abst) = case (my, bty) of
                                                      ,show ty])
 
   abstractCon :: Modey m
-              -> (UserName -> UserName -> Checking (CtorArgs m))
-              -> (UserName, [Val Z])
+              -> (QualName -> QualName -> Checking (CtorArgs m))
+              -> (QualName, [Val Z])
               -> Checking (Env (EnvData m))
   abstractCon my lup (tycon, tyargs) = do
     let ty = VCon tycon tyargs

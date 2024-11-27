@@ -13,7 +13,7 @@ import Brat.Syntax.Abstractor
 import Brat.Syntax.Common
 import Brat.Syntax.Simple
 import Brat.Syntax.Value
-import Brat.UserName
+import Brat.QualName
 import Bwd
 import Control.Monad.Freer
 import Hasochism
@@ -64,9 +64,7 @@ solve my ((src, DontCare):p) = do
   () <- case my of
     Kerny -> do
       ty <- typeOfSrc Kerny src
-      if not (fromJust (copyable ty))
-      then (typeErr $ "Ignoring linear variable of type " ++ show ty)
-      else pure ()
+      unless (fromJust (copyable ty)) $ typeErr $ "Ignoring linear variable of type " ++ show ty
     Braty -> pure ()
   solve my p
 solve my ((src, Bind x):p) = do
@@ -134,7 +132,7 @@ typeOfEnd my e = req (TypeOf e) >>= \case
 solveConstructor :: EvMode m
                  => Modey m
                  -> Src
-                 -> (UserName, Abstractor)
+                 -> (QualName, Abstractor)
                  -> Val Z
                  -> Problem
                  -> Checking ([(Src, PrimTest (BinderType m))]
@@ -148,7 +146,7 @@ solveConstructor my src (c, abs) ty p = do
   (_, _, _, stuff) <- next "type_args" Hypo (S0, Some (Zy :* S0)) patRo R0
   (node, _, patArgWires, _) <- let ?my = my in anext "val_args" Hypo stuff R0 argRo
   trackM ("Constructor " ++ show c ++ "; type " ++ show ty)
-  case (snd stuff) of
+  case snd stuff of
     Some (_ :* patEnds) -> do
       trackM (show pats)
       trackM (show patEnds)
@@ -235,7 +233,6 @@ solveNumMeta e nv = case (e, vars nv) of
    src <- buildNatVal nv
    instantiateMeta (InEnd tgt) (VNum nv)
    wire (src, TNat, NamedPort tgt "")
-
  where
   vars :: NumVal a -> [a]
   vars = foldMap pure
@@ -384,11 +381,11 @@ argProblemsWithLeftovers srcs (NA AEmpty) p = pure (p, srcs)
 argProblemsWithLeftovers [] abst _ = err $ NothingToBind (show abst)
 
 lookupConstructor :: Modey m
-                  -> UserName -- A value constructor
+                  -> QualName -- A value constructor
                   -> Val Z    -- A corresponding type to normalise
                   -- TODO: Something with this m
                   -> Checking (CtorArgs m -- The needed args to the value constructor
-                              ,(UserName, [Val Z])  -- The type constructor we normalised and its args
+                              ,(QualName, [Val Z])  -- The type constructor we normalised and its args
                               )
 lookupConstructor my c ty = eval S0 ty >>= \case
   (VCon tycon args) -> (,(tycon, args)) <$> case my of

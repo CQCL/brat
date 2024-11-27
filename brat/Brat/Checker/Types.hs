@@ -15,9 +15,9 @@ module Brat.Checker.Types (Overs, Unders
 import Brat.Checker.Quantity
 import Brat.FC (FC)
 import Brat.Naming (Name)
+import Brat.QualName (QualName)
 import Brat.Syntax.Common
 import Brat.Syntax.Value
-import Brat.UserName (UserName)
 import Hasochism (N(..))
 
 import Data.Kind (Type)
@@ -54,7 +54,7 @@ type family EnvData (m :: Mode) where
   EnvData Brat = [(Src, BinderType Brat)]
   EnvData Kernel = (Quantity, (Src, BinderType Kernel))
 
-type Env e = M.Map UserName e
+type Env e = M.Map QualName e
 type VEnv = Env (EnvData Brat)
 type KEnv = Env (EnvData Kernel)
 
