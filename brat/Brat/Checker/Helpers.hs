@@ -261,7 +261,7 @@ getThunks _ [] = pure ([], [], [])
 getThunks Braty row@((src, Right ty):rest) = ((src,) <$> eval S0 ty) >>= vectorise >>= \case
   (src, VFun Braty (ss :->> ts)) -> do
     (node, unders, overs, _) <- let ?my = Braty in
-                                  anext "" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
+                                  anext "Eval" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
     (nodes, unders', overs') <- getThunks Braty rest
     pure (node:nodes, unders <> unders', overs <> overs')
   -- These shouldn't happen
@@ -269,7 +269,7 @@ getThunks Braty row@((src, Right ty):rest) = ((src,) <$> eval S0 ty) >>= vectori
   v -> typeErr $ "Force called on non-thunk: " ++ show v
 getThunks Kerny row@((src, Right ty):rest) = ((src,) <$> eval S0 ty) >>= vectorise >>= \case
   (src, VFun Kerny (ss :->> ts)) -> do
-    (node, unders, overs, _) <- let ?my = Kerny in anext "" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
+    (node, unders, overs, _) <- let ?my = Kerny in anext "Splice" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
     (nodes, unders', overs') <- getThunks Kerny rest
     pure (node:nodes, unders <> unders', overs <> overs')
   (_, VFun _ _) -> err $ ExpectedThunk (showMode Kerny) (showRow row)
@@ -278,7 +278,7 @@ getThunks Braty ((src, Left (Star args)):rest) = do
   (node, unders, overs) <- case bwdStack (B0 <>< args) of
     Some (_ :* stk) -> do
       let (ri,ro) = kindArgRows stk
-      (node, unders, overs, _) <- next "" (Eval (end src)) (S0, Some (Zy :* S0)) ri ro
+      (node, unders, overs, _) <- next "Eval" (Eval (end src)) (S0, Some (Zy :* S0)) ri ro
       pure (node, unders, overs)
   (nodes, unders', overs') <- getThunks Braty rest
   pure (node:nodes, unders <> unders', overs <> overs')
@@ -355,7 +355,7 @@ vectorise (src, ty) = do
     let weak1 = changeVar (Thinning (ThDrop ThNull))
     vecFun <- vectorisedFun len my cty
     (_, [(lenTgt,_), (valTgt, _)], [(vectorSrc, Right vecTy)], _) <-
-      next "" MapFun (S0, Some (Zy :* S0))
+      next "MapFun" MapFun (S0, Some (Zy :* S0))
       (REx ("len", Nat) (RPr ("value", weak1 ty) R0))
       (RPr ("vector", weak1 vecFun) R0)
     defineTgt lenTgt (VNum len)
@@ -511,10 +511,10 @@ runArith _ _ _ = Nothing
 
 buildArithOp :: ArithOp -> Checking ((Tgt, Tgt), Src)
 buildArithOp op = do
-  (_, [(lhs,_), (rhs,_)], [(out,_)], _) <- next "" (ArithNode op) (S0, Some (Zy :* S0)) (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0)) (RPr ("value", TNat) R0)
+  (_, [(lhs,_), (rhs,_)], [(out,_)], _) <- next (show op) (ArithNode op) (S0, Some (Zy :* S0)) (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0)) (RPr ("value", TNat) R0)
   pure ((lhs, rhs), out)
 
 buildConst :: SimpleTerm -> Val Z -> Checking Src
 buildConst tm ty = do
-  (_, _, [(out,_)], _) <- next "" (Const tm) (S0, Some (Zy :* S0)) R0 (RPr ("value", ty) R0)
+  (_, _, [(out,_)], _) <- next "const" (Const tm) (S0, Some (Zy :* S0)) R0 (RPr ("value", ty) R0)
   pure out
