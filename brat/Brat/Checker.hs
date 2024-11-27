@@ -660,7 +660,7 @@ check' (Of n e) ((), unders) = case ?my of
       (elems, unders, rightUnders) <- getVecs len unders
       pure ((tgt, el):elems, (tgt, ty):unders, rightUnders)
   getVecs _ unders = pure ([], [], unders)
-check' Hope ((), ((tgt, ty):unders)) = case (?my, ty) of
+check' Hope ((), (tgt, ty):unders) = case (?my, ty) of
   (Braty, Left _k) -> do
     fc <- req AskFC
     req (ANewHope (toEnd tgt, fc))
@@ -731,7 +731,7 @@ checkBody fnName body cty = do
     NoLhs tm -> pure (tm, (fcOf tm, fcOf tm))
     Clauses (c :| cs) -> do
       fc <- req AskFC
-      pure $ (WC fc (Lambda c cs), (bimap fcOf fcOf c))
+      pure (WC fc (Lambda c cs), bimap fcOf fcOf c)
     Undefined -> err (InternalError "Checking undefined clause")
   ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \conns@(_, unders) -> do
     (((), ()), leftovers) <- check tm conns

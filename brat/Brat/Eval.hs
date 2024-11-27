@@ -302,9 +302,7 @@ eqTests tm lvkz = go
 -- We can have bogus failures here because we're not normalising under lambdas
 -- N.B. the value argument is normalised.
 doesntOccur :: End -> Val n -> Either ErrorMsg ()
-doesntOccur e (VNum nv) = case getNumVar nv of
-  Just e' -> collision e e'
-  _ -> pure ()
+doesntOccur e (VNum nv) = traverse_ (collision e) (getNumVar nv)
  where
   getNumVar :: NumVal (VVar n) -> Maybe End
   getNumVar (NumValue _ (StrictMonoFun (StrictMono _ mono))) = case mono of

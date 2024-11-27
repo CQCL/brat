@@ -15,7 +15,8 @@ import Bwd
 import Hasochism
 import Util (zipSameLength)
 
-import Data.Foldable (traverse_)
+import Data.Bifunctor (second)
+import Data.Foldable (sequenceA_)
 import Data.Functor
 import qualified Data.Map as M
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
@@ -106,11 +107,12 @@ typeEqRow :: Modey m
           -> Ro m lv top0
           -> Ro m lv top1
           -> Either ErrorMsg (Some ((Ny :* Stack Z TypeKind :* Stack Z Sem) -- The new stack of kinds and fresh level
-                                   :* (((:~:) top0) :* ((:~:) top1))) -- Proofs both input rows have same length (quantified over by Some)
+                                   :* ((:~:) top0 :* (:~:) top1)) -- Proofs both input rows have same length (quantified over by Some)
                              ,[Checking ()] -- subproblems to run in parallel
                              )
 typeEqRow _ _ stuff R0 R0 = pure (Some (stuff :* (Refl :* Refl)), [])
-typeEqRow m tm stuff (RPr (_,ty1) ro1) (RPr (_,ty2) ro2) = typeEqRow m tm stuff ro1 ro2 <&> \(res, probs) -> (res, (typeEq tm stuff (kindForMode m) ty1 ty2):probs)
+typeEqRow m tm stuff (RPr (_,ty1) ro1) (RPr (_,ty2) ro2) = typeEqRow m tm stuff ro1 ro2 <&> second
+  ((:) (typeEq tm stuff (kindForMode m) ty1 ty2))
 typeEqRow m tm (ny :* kz :* semz) (REx (_,k1) ro1) (REx (_,k2) ro2) | k1 == k2 = typeEqRow m tm (Sy ny :* (kz :<< k1) :* (semz :<< semLvl ny)) ro1 ro2
 typeEqRow _ _ _ _ _ = Left $ TypeErr "Mismatched rows"
 
@@ -144,13 +146,13 @@ typeEqRigid tm lvkz (TypeFor m []) (VCon c args) (VCon c' args') | c == c' =
 typeEqRigid tm lvkz (Star []) (VFun m0 (ins0 :->> outs0)) (VFun m1 (ins1 :->> outs1)) | Just Refl <- testEquality m0 m1 = do
   probs :: [Checking ()] <- throwLeft $ typeEqRow m0 tm lvkz ins0 ins1 >>= \case -- this is in Either ErrorMsg
         (Some (lvkz :* (Refl :* Refl)), ps1) -> typeEqRow m0 tm lvkz outs0 outs1 <&> (ps1++) . snd
-  traverse_ id probs -- uses Applicative (unlike sequence_ which uses Monad), hence parallelized
+  sequenceA_ probs -- uses Applicative (unlike sequence_ which uses Monad), hence parallelized
 typeEqRigid tm lvkz (TypeFor _ []) (VSum m0 rs0) (VSum m1 rs1)
   | Just Refl <- testEquality m0 m1 = case zipSameLength rs0 rs1 of
       Nothing -> typeErr "Mismatched sum lengths"
-      Just rs -> traverse eqVariant rs >>= (traverse_ id . concat)
+      Just rs -> traverse eqVariant rs >>= (sequenceA_ . concat)
  where
-  eqVariant (Some r0, Some r1) = throwLeft $ (snd <$> typeEqRow m0 tm lvkz r0 r1)
+  eqVariant (Some r0, Some r1) = throwLeft (snd <$> typeEqRow m0 tm lvkz r0 r1)
 typeEqRigid tm _ _ v0 v1 = err $ TypeMismatch tm (show v0) (show v1)
 
 wire :: (Src, Val Z, Tgt) -> Checking ()

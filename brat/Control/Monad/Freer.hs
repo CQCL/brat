@@ -21,7 +21,7 @@ updateEnd (News m) e = case M.lookup e m of
 -- The RHS of the operation is the newer news
 -- Invariant: The domains of these Newses are disjoint
 instance Semigroup News where
-  (News m1) <> n2@(News m2) = News (m2 `M.union` (M.map (/// n2) m1))
+  (News m1) <> n2@(News m2) = News (m2 `M.union` M.map (/// n2) m1)
 
 instance Monoid News where
   mempty = News M.empty
