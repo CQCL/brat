@@ -115,7 +115,7 @@ checkDecl pre (VDecl FuncDecl{..}) to_define = (fnName -!) $ localFC fnLoc $ do
 
 loadAlias :: TypeAlias -> Checking (QualName, Alias)
 loadAlias (TypeAlias fc name args body) = localFC fc $ do
-  (_, [(hhungry, Left k)], _, _) <- next "" Hypo (S0,Some (Zy :* S0)) (REx ("type", Star args) R0) R0
+  (_, [(hhungry, Left k)], _, _) <- next "aliasargs" Hypo (S0,Some (Zy :* S0)) (REx ("type", Star args) R0) R0
   let abs = WC fc $ foldr ((:||:) . APat . Bind . fst) AEmpty args
   ([v], unders) <- kindCheck [(hhungry, k)] $ Th (WC fc (Lambda (abs, WC fc body) []))
   ensureEmpty "loadAlias unders" unders

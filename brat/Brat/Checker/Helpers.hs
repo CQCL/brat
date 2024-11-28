@@ -499,10 +499,10 @@ runArith _ _ _ = Nothing
 
 buildArithOp :: ArithOp -> Checking ((Tgt, Tgt), Src)
 buildArithOp op = do
-  (_, [(lhs,_), (rhs,_)], [(out,_)], _) <- next "" (ArithNode op) (S0, Some (Zy :* S0)) (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0)) (RPr ("value", TNat) R0)
+  (_, [(lhs,_), (rhs,_)], [(out,_)], _) <- next (show op) (ArithNode op) (S0, Some (Zy :* S0)) (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0)) (RPr ("value", TNat) R0)
   pure ((lhs, rhs), out)
 
 buildConst :: SimpleTerm -> Val Z -> Checking Src
 buildConst tm ty = do
-  (_, _, [(out,_)], _) <- next "" (Const tm) (S0, Some (Zy :* S0)) R0 (RPr ("value", ty) R0)
+  (_, _, [(out,_)], _) <- next "const" (Const tm) (S0, Some (Zy :* S0)) R0 (RPr ("value", ty) R0)
   pure out

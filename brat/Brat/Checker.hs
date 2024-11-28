@@ -806,7 +806,7 @@ kindCheck ((hungry, k@(TypeFor m [])):unders) (Con c arg) = req (TLup (m, c)) >>
         -- the thing we *do* define kindOut as
 
         (_, argUnders, [(kindOut,_)], (_ :<< _va, _)) <-
-          next "" Hypo (S0, Some (Zy :* S0)) aliasArgs (REx ("type",Star []) R0)
+          next "aliasargs" Hypo (S0, Some (Zy :* S0)) aliasArgs (REx ("type",Star []) R0)
         -- arg is a juxtaposition
         (args, emptyUnders) <- kindCheck (second (\(Left k) -> k) <$> argUnders) (unWC arg)
         ensureEmpty "alias args" emptyUnders
@@ -876,7 +876,7 @@ kindCheck unders (Emb (WC fc (Var v))) = localFC fc $ vlup v >>= f unders
   f _ (x:_) = err $ InternalError $ "Kindchecking a row which contains " ++ show x
 -- TODO: Add other operations on numbers
 kindCheck ((hungry, Nat):unders) (Simple (Num n)) | n >= 0 = do
-  (_, _, [(dangling, _)], _) <- next "" (Const (Num n)) (S0,Some (Zy :* S0)) R0 (REx ("value", Nat) R0)
+  (_, _, [(dangling, _)], _) <- next "const" (Const (Num n)) (S0,Some (Zy :* S0)) R0 (REx ("value", Nat) R0)
   let value = VNum (nConstant (fromIntegral n))
   defineTgt hungry value
   defineSrc dangling value
