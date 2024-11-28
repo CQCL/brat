@@ -486,7 +486,7 @@ check' (Simple tm) ((), (hungry, ty):unders) = do
   case (?my, ty, tm) of
     -- The only SimpleType that checks against a kind is a Nat
     (Braty, Left Nat, Num n) -> do
-      (_, _, [(dangling, _)], _) <- next "" (Const (Num n)) (S0,Some (Zy :* S0))
+      (_, _, [(dangling, _)], _) <- next "const" (Const (Num n)) (S0,Some (Zy :* S0))
                                     R0 (REx ("value", Nat) R0)
       let val = VNum (nConstant (fromIntegral n))
       defineSrc dangling val
@@ -497,7 +497,7 @@ check' (Simple tm) ((), (hungry, ty):unders) = do
     _ -> do
       let vty = biType @m ty
       throwLeft $ simpleCheck ?my vty tm
-      (_, _, [(dangling, _)], _) <- anext @m "" (Const tm) (S0,Some (Zy :* S0))
+      (_, _, [(dangling, _)], _) <- anext @m "const" (Const tm) (S0,Some (Zy :* S0))
                                      R0 (RPr ("value", vty) R0)
       wire (dangling, vty, hungry)
       pure (((), ()), ((), unders))
