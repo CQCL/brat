@@ -252,20 +252,20 @@ getThunks Braty ((src, Right ty):rest) = do
   ty <- eval S0 ty
   (src, (ss :->> ts)) <- vectorise Braty (src, ty)
   (node, unders, overs, _) <- let ?my = Braty in
-                                anext "" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
+                                anext "Eval" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
   (nodes, unders', overs') <- getThunks Braty rest
   pure (node:nodes, unders <> unders', overs <> overs')
 getThunks Kerny ((src, Right ty):rest) = do
   ty <- eval S0 ty
   (src, (ss :->> ts)) <- vectorise Kerny (src,ty)
-  (node, unders, overs, _) <- let ?my = Kerny in anext "" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
+  (node, unders, overs, _) <- let ?my = Kerny in anext "Splice" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
   (nodes, unders', overs') <- getThunks Kerny rest
   pure (node:nodes, unders <> unders', overs <> overs')
 getThunks Braty ((src, Left (Star args)):rest) = do
   (node, unders, overs) <- case bwdStack (B0 <>< args) of
     Some (_ :* stk) -> do
       let (ri,ro) = kindArgRows stk
-      (node, unders, overs, _) <- next "" (Eval (end src)) (S0, Some (Zy :* S0)) ri ro
+      (node, unders, overs, _) <- next "Eval" (Eval (end src)) (S0, Some (Zy :* S0)) ri ro
       pure (node, unders, overs)
   (nodes, unders', overs') <- getThunks Braty rest
   pure (node:nodes, unders <> unders', overs <> overs')
@@ -340,7 +340,7 @@ vectorise my (src, ty) = do
     let weak1 = changeVar (Thinning (ThDrop ThNull))
     vecFun <- vectorisedFun len my cty
     (_, [(lenTgt,_), (valTgt, _)], [(vectorSrc, Right (VFun my' cty))], _) <-
-      next "" MapFun (S0, Some (Zy :* S0))
+      next "MapFun" MapFun (S0, Some (Zy :* S0))
       (REx ("len", Nat) (RPr ("value", weak1 ty) R0))
       (RPr ("vector", weak1 vecFun) R0)
     defineTgt lenTgt (VNum len)
