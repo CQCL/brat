@@ -141,7 +141,7 @@ solveConstructor my src (c, abs) ty p = do
   (CArgs pats _ patRo argRo, (tycon, tyargs)) <- lookupConstructor my c ty
   -- Create a row of hypothetical kinds which contextualise the arguments to the
   -- constructor.
-  -- These need to be Tgts because we don't know how to compute them dynamically/
+  -- These need to be Tgts because we don't know how to compute them dynamically
   (_, _, _, stuff) <- next "type_args" Hypo (S0, Some (Zy :* S0)) patRo R0
   (node, _, patArgWires, _) <- let ?my = my in anext "val_args" Hypo stuff R0 argRo
   trackM ("Constructor " ++ show c ++ "; type " ++ show ty)
