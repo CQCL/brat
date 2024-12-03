@@ -20,7 +20,7 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
                             ,evalSrcRow, evalTgtRow
                             )-} where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd)
+import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd, throwLeft)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (eval, EvMode(..), kindType)
@@ -101,32 +101,47 @@ pullPortsRow :: Show ty
              -> Checking [(NamedPort e, ty)]
 pullPortsRow = pullPorts portName showRow
 
+
+data PortPullError = PortNotFound PortName | Ambiguous PortName
+
 pullPortsSig :: Show ty
              => [PortName]
              -> [(PortName, ty)]
              -> Checking [(PortName, ty)]
 pullPortsSig = pullPorts id showSig
 
-pullPorts :: forall a ty. Show ty
-          => (a -> PortName) -- A way to get a port name for each element
+
+pullPorts :: forall a ty.
+             (a -> PortName) -- A way to get a port name for each element
           -> ([(a, ty)] -> String) -- A way to print the list
           -> [PortName] -- Things to pull to the front
           -> [(a, ty)]  -- The list to rearrange
           -> Checking [(a, ty)]
-pullPorts _ _ [] types = pure types
-pullPorts toPort showFn (p:ports) types = do
-  (x, types) <- pull1Port p types
-  (x:) <$> pullPorts toPort showFn ports types
+pullPorts toPort showFn pulls object = throwLeft $ first errToChecking $ pullPortsInt toPort pulls object
+ where
+  errToChecking :: (PortPullError, [(a, ty)]) -> ErrorMsg
+  errToChecking (e, row) = let r = showFn row in case e of
+    PortNotFound p -> BadPortPull $ "Port not found: " ++ p ++ " in " ++ r
+    Ambiguous p -> AmbiguousPortPull p r
+
+pullPortsInt :: forall a ty. (a -> PortName)
+             -> [PortName]
+             -> [(a, ty)]
+             -> Either (PortPullError, [(a, ty)]) [(a, ty)]
+pullPortsInt _ [] object = Right object
+pullPortsInt toPort (p:ports) object = do
+  (newfront, remaining) <- pull1Port p object
+  (newfront:) <$> pullPortsInt toPort ports remaining
  where
   pull1Port :: PortName
             -> [(a, ty)]
-            -> Checking ((a, ty), [(a, ty)])
-  pull1Port p [] = fail $ "Port not found: " ++ p ++ " in " ++ showFn types
+            -> Either (PortPullError, [(a, ty)]) ((a, ty), [(a, ty)])
+  pull1Port p [] = Left (PortNotFound p, object)
   pull1Port p (x@(a,_):xs)
    | p == toPort a
    = if p `elem` (toPort . fst <$> xs)
-     then err (AmbiguousPortPull p (showFn (x:xs)))
-     else pure (x, xs)
+     then Left (Ambiguous p, x:xs)
+     else Right (x, xs)
    | otherwise = second (x:) <$> pull1Port p xs
 
 ensureEmpty :: Show ty => String -> [(NamedPort e, ty)] -> Checking ()
