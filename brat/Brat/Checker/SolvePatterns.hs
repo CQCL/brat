@@ -289,7 +289,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   -- = 2^k * (y + 1)
   -- = 2^k + 2^k * y
   -- Hence, the predecessor is (2^k - 1) + (2^k * y)
-  demandSucc _sm@(StrictMono k (Linear (VPar (InEnd x)))) = do
+  demandSucc (StrictMono k (Linear (VPar (InEnd x)))) = do
     (_, [(y,_)], _, _) <- anext "y" Hypo (S0, Some (Zy :* S0)) (REx ("", Nat) R0) R0
     yPlus1 <- invertNatVal (nPlus 1 (nVar (VPar (InEnd (end y)))))
     solveNumMeta (InEnd x) (nVar (VPar (InEnd (end yPlus1))))
