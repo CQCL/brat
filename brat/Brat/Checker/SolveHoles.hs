@@ -79,13 +79,10 @@ typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
     [] -> typeEqRigid tm stuff k exp act
     [e1, e2] | e1 == e2 -> pure () -- trivially same, even if both still yet-to-be-defined
     _es -> error "TODO: must wait for one or the other to become more defined"
--- uhhh
--- Yield(AwaitingAny $ S.fromList es) (\_ -> typeEq tm stuff k exp act)
 
 -- This will update the `hopes` set, potentially invalidating things that have
 -- been eval'd.
 -- The Sem is closed, for now.
--- TODO: This needs to update the BRAT graph with the solution.
 solveHope :: TypeKind -> InPort -> Sem -> Checking ()
 solveHope k hope v = quote Zy v >>= \v -> case doesntOccur (InEnd hope) v of
   Right () -> do

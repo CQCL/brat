@@ -101,7 +101,6 @@ solve my ((src, PCon c abs):p) = do
         (tests, sol) <- solve my p
         pure ((src, PrimLitTest (Num 0)):tests, sol)
       _ -> case M.lookup c natConstructors of
-        -- This `relationToInner` is very sus - it doesn't do any wiring!
         Just (Just _, relationToInner) -> do
           (node, [], kids@[(dangling, _)], _) <- next "unpacked_nat" Hypo (S0, Some (Zy :* S0))
             R0 -- we don't need to wire the src in; we just need the inner stuff
@@ -206,7 +205,6 @@ instantiateMeta e val = do
 solveNumMeta :: End -> NumVal (VVar Z) -> Checking ()
 solveNumMeta e nv = case (e, vars nv) of
  -- Compute the thing that the rhs should be based on the src, and instantiate src to that
- -- TODO: sus that we're not using `tgt`??
  (ExEnd src,  [VPar (InEnd _tgt)]) -> do
    -- Compute the value of the `tgt` variable from the known `src` value by inverting nv
    tgtSrc <- invertNatVal nv
