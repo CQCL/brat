@@ -18,7 +18,6 @@ import Control.Monad.Freer
 import Control.Monad.Fail ()
 import Data.List (intercalate)
 import qualified Data.Map as M
-import qualified Data.Set as S
 
 -- import Debug.Trace
 
@@ -283,27 +282,6 @@ handler (Req s k) ctx g
                         if M.member e hset
                         then handler (k ()) (ctx { hopeSet = M.delete e hset }) g
                         else Left (dumbErr (InternalError ("Trying to remove hole not in set: " ++ show e)))
-
-howStuck :: Val n -> Stuck
-howStuck (VApp (VPar e) _) = AwaitingAny (S.singleton e)
-howStuck (VLam bod) = howStuck bod
-howStuck (VCon _ _) = Unstuck
-howStuck (VFun _ _) = Unstuck
-howStuck (VSum _ _) = Unstuck
--- Numbers are likely to cause problems.
--- Whether they are stuck or not depends on the question we're asking!
-howStuck (VNum (NumValue 0 gro)) = howStuckGro gro
- where
-  howStuckGro Constant0 = Unstuck
-  howStuckGro (StrictMonoFun f) = howStuckSM f
-
-  howStuckSM (StrictMono 0 mono) = howStuckMono mono
-  howStuckSM _ = AwaitingAny mempty
-
-  howStuckMono (Full sm) = howStuckSM sm
-  howStuckMono (Linear (VPar e)) = AwaitingAny (S.singleton e) -- ALAN was VHop
-  howStuckMono (Linear _) = AwaitingAny mempty
-howStuck _ = AwaitingAny mempty
 
 type Checking = Free CheckingSig
 
