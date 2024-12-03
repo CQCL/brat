@@ -663,7 +663,7 @@ check' (Of n e) ((), unders) = case ?my of
 check' Hope ((), ((NamedPort hope _, ty):unders)) = case (?my, ty) of
   (Braty, Left _k) -> do
     fc <- req AskFC
-    req (ANewHope (hope, fc))
+    req (ANewHope hope fc)
     pure (((), ()), ((), unders))
   (Braty, Right _ty) -> typeErr "Can only infer kinded things with !"
   (Kerny, _) -> typeErr "Won't infer kernel typed !"

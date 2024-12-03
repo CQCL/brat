@@ -93,7 +93,7 @@ data CheckingSig ty where
   AskVEnv :: CheckingSig CtxEnv
   Declare :: End -> Modey m -> BinderType m -> CheckingSig ()
   Define  :: End -> Val Z -> CheckingSig ()
-  ANewHope :: (InPort, FC) -> CheckingSig ()
+  ANewHope :: InPort -> FC -> CheckingSig ()
   AskHopes :: CheckingSig Hopes
   RemoveHope :: InPort -> CheckingSig ()
 
@@ -274,7 +274,7 @@ handler (Req s k) ctx g
                 M.lookup tycon tbl
         handler (k args) ctx g
 
-      ANewHope (e, fc) -> handler (k ()) (ctx { hopes = M.insert e fc (hopes ctx) }) g
+      ANewHope e fc -> handler (k ()) (ctx { hopes = M.insert e fc (hopes ctx) }) g
 
       AskHopes -> handler (k (hopes ctx)) ctx g
 
