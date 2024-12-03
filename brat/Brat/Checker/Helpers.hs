@@ -20,7 +20,7 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
                             ,evalSrcRow, evalTgtRow
                             )-} where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows)
+import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (eval, EvMode(..), kindType)
@@ -250,14 +250,14 @@ getThunks :: Modey m
 getThunks _ [] = pure ([], [], [])
 getThunks Braty ((src, Right ty):rest) = do
   ty <- eval S0 ty
-  (src, (ss :->> ts)) <- vectorise Braty (src, ty)
+  (src, ss :->> ts) <- vectorise Braty (src, ty)
   (node, unders, overs, _) <- let ?my = Braty in
                                 anext "Eval" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
   (nodes, unders', overs') <- getThunks Braty rest
   pure (node:nodes, unders <> unders', overs <> overs')
 getThunks Kerny ((src, Right ty):rest) = do
   ty <- eval S0 ty
-  (src, (ss :->> ts)) <- vectorise Kerny (src,ty)
+  (src, ss :->> ts) <- vectorise Kerny (src,ty)
   (node, unders, overs, _) <- let ?my = Kerny in anext "Splice" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
   (nodes, unders', overs') <- getThunks Kerny rest
   pure (node:nodes, unders <> unders', overs <> overs')
@@ -380,10 +380,10 @@ valueToBinder Braty = Right
 valueToBinder Kerny = id
 
 defineSrc :: Src -> Val Z -> Checking ()
-defineSrc src v = req (Define (ExEnd (end src)) v)
+defineSrc src = defineEnd (ExEnd (end src))
 
 defineTgt :: Tgt -> Val Z -> Checking ()
-defineTgt tgt v = req (Define (InEnd (end tgt)) v)
+defineTgt tgt = defineEnd (InEnd (end tgt))
 
 declareSrc :: Src -> Modey m -> BinderType m -> Checking ()
 declareSrc src my ty = req (Declare (ExEnd (end src)) my ty)

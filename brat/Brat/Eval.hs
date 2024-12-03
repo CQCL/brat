@@ -15,7 +15,7 @@ module Brat.Eval (EvMode(..)
                  ) where
 
 import Brat.Checker.Monad
-import Brat.Checker.Types (EndType(..))
+import Brat.Checker.Types (EndType(..), kindForMode)
 import Brat.Error (ErrorMsg(..))
 import Brat.QualName (plain)
 import Brat.Syntax.Value
@@ -275,9 +275,7 @@ eqRowTest :: Modey m
                                        ))
 eqRowTest _ _ lvkz (stk0, R0) (stk1, R0) = pure $ Right (Some lvkz, stk0, stk1)
 eqRowTest m tm lvkz (stk0, RPr (_, ty0) r0) (stk1, RPr (_, ty1) r1) = do
-  let k = case m of
-        Braty -> Star []
-        Kerny -> Dollar []
+  let k = kindForMode m
   ty0 <- sem stk0 ty0
   ty1 <- sem stk1 ty1
   eqWorker tm lvkz k ty0 ty1 >>= \case
