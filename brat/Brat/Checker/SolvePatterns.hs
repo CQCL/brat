@@ -276,13 +276,13 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   --   2^k * x
   -- = 2^k * (y + 1)
   -- = 2^k + 2^k * y
-  demandSucc _sm@(StrictMono _k (Linear (VPar (ExEnd _x)))) = error "Todo..." {-do
-    -- This is sus because we don't have any tgt?
-    ySrc <- invertNatVal (NamedPort x "") (NumValue 1 (StrictMonoFun sm))
-    let y = nVar (VPar (toEnd ySrc))
-    solveNumMeta (ExEnd x) (nPlus 1 y)
-    pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k y
-  -}
+  demandSucc (StrictMono k (Linear (VPar (ExEnd x)))) = do
+    (_, [(yTgt, _)], [(ySrc, _)], _) <-
+      next "yId" Id (S0, Some (Zy :* S0)) (REx ("value", Nat) R0) (REx ("value", Nat) R0)
+
+    defineSrc ySrc (VNum (nVar (VPar (toEnd yTgt))))
+    instantiateMeta (ExEnd x) (VNum (nPlus 1 (nVar (VPar (toEnd yTgt)))))
+    pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k (nVar (VPar (toEnd ySrc)))
   --   2^k * x
   -- = 2^k * (y + 1)
   -- = 2^k + 2^k * y
