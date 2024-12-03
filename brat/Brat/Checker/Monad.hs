@@ -50,7 +50,7 @@ data CtxEnv = CtxEnv
   , locals :: VEnv
   }
 
-type Hopes = M.Map End FC
+type Hopes = M.Map InPort FC
 
 data Context = Ctx { globalVEnv :: VEnv
                    , store :: Store
@@ -93,9 +93,9 @@ data CheckingSig ty where
   AskVEnv :: CheckingSig CtxEnv
   Declare :: End -> Modey m -> BinderType m -> CheckingSig ()
   Define  :: End -> Val Z -> CheckingSig ()
-  ANewHope :: (End, FC) -> CheckingSig ()
+  ANewHope :: (InPort, FC) -> CheckingSig ()
   AskHopes :: CheckingSig Hopes
-  RemoveHope :: End -> CheckingSig ()
+  RemoveHope :: InPort -> CheckingSig ()
 
 localAlias :: (QualName, Alias) -> Checking v -> Checking v
 localAlias _ (Ret v) = Ret v

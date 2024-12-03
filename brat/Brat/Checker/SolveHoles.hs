@@ -56,18 +56,18 @@ typeEqEta tm (lvy :* kz :* sems) hopes (TypeFor m ((_, k):ks)) exp act = do
 -- Not higher kinded - check for flex terms
 -- (We don't solve under binders for now, so we only consider Zy here)
 -- 1. "easy" flex cases
-typeEqEta _tm (Zy :* _ks :* _sems) hopes k (SApp (SPar e) B0) act
+typeEqEta _tm (Zy :* _ks :* _sems) hopes k (SApp (SPar (InEnd e)) B0) act
   | M.member e hopes = solveHope k e act
-typeEqEta _tm (Zy :* _ks :* _sems) hopes k exp (SApp (SPar e) B0)
+typeEqEta _tm (Zy :* _ks :* _sems) hopes k exp (SApp (SPar (InEnd e)) B0)
   | M.member e hopes = solveHope k e exp
 typeEqEta _ (Zy :* _ :* _) hopes Nat exp act
-  | Just (SPar e) <- isNumVar exp, M.member e hopes = solveHope Nat e act
-  | Just (SPar e) <- isNumVar act, M.member e hopes = solveHope Nat e exp
+  | Just (SPar (InEnd e)) <- isNumVar exp, M.member e hopes = solveHope Nat e act
+  | Just (SPar (InEnd e)) <- isNumVar act, M.member e hopes = solveHope Nat e exp
 -- 2. harder cases, neither is in the hope set, so we can't define it ourselves
 typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
   exp <- quote ny exp
   act <- quote ny act
-  case [e | (VApp (VPar e) _) <- [exp,act], M.member e hopes] of
+  case [e | (VApp (VPar (InEnd e)) _) <- [exp,act], M.member e hopes] of
     [] -> typeEqRigid tm stuff k exp act
     [e1, e2] | e1 == e2 -> pure () -- trivially same, even if both still yet-to-be-defined
     _es -> error "TODO: must wait for one or the other to become more defined"
@@ -78,24 +78,22 @@ typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
 -- been eval'd.
 -- The Sem is closed, for now.
 -- TODO: This needs to update the BRAT graph with the solution.
-solveHope :: TypeKind -> End -> Sem -> Checking ()
-solveHope k hope@(InEnd i) v = quote Zy v >>= \v -> case doesntOccur hope v of
+solveHope :: TypeKind -> InPort -> Sem -> Checking ()
+solveHope k hope v = quote Zy v >>= \v -> case doesntOccur (InEnd hope) v of
   Right () -> do
-    defineEnd hope v
+    defineEnd (InEnd hope) v
     dangling <- case (k, v) of
       (Nat, VNum v) -> buildNatVal v
       (Nat, _) -> err $ InternalError "Head of Nat wasn't a VNum"
       _ -> buildConst Unit TUnit
-    req (Wire (end dangling, kindType k, i))
+    req (Wire (end dangling, kindType k, hope))
     req (RemoveHope hope)
   Left msg -> case v of
-    VApp (VPar end) B0 | hope == end -> pure ()
+    VApp (VPar (InEnd end)) B0 | hope == end -> pure ()
     -- TODO: Not all occurrences are toxic. The end could be in an argument
     -- to a hoping variable which isn't used.
     -- E.g. h1 = h2 h1 - this is valid if h2 is the identity, or ignores h1.
     _ -> err msg
-solveHope _ hope@(ExEnd _) _ = err . InternalError $
-                               "solveHope: Hope was a src: " ++ show hope
 
 typeEqs :: String -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n -> [TypeKind] -> [Val n] -> [Val n] -> Checking ()
 typeEqs _ _ [] [] [] = pure ()

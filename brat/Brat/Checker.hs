@@ -660,10 +660,10 @@ check' (Of n e) ((), unders) = case ?my of
       (elems, unders, rightUnders) <- getVecs len unders
       pure ((tgt, el):elems, (tgt, ty):unders, rightUnders)
   getVecs _ unders = pure ([], [], unders)
-check' Hope ((), (tgt, ty):unders) = case (?my, ty) of
+check' Hope ((), ((NamedPort hope _, ty):unders)) = case (?my, ty) of
   (Braty, Left _k) -> do
     fc <- req AskFC
-    req (ANewHope (toEnd tgt, fc))
+    req (ANewHope (hope, fc))
     pure (((), ()), ((), unders))
   (Braty, Right _ty) -> typeErr "Can only infer kinded things with !"
   (Kerny, _) -> typeErr "Won't infer kernel typed !"
@@ -1146,7 +1146,7 @@ run ve initStore ns m = do
   -- If the `hopes` set has any remaining holes with kind Nat, we need to abort.
   -- Even though we didn't need them for typechecking problems, our runtime
   -- behaviour depends on the values of the holes, which we can't account for.
-  case M.toList $ M.filterWithKey (\e _ -> isNatKinded tyMap e) (hopes ctx) of
+  case M.toList $ M.filterWithKey (\e _ -> isNatKinded tyMap (InEnd e)) (hopes ctx) of
     [] -> pure (a, (holes, store ctx, graph))
     -- Just use the FC of the first hole while we don't have the capacity to
     -- show multiple error locations
