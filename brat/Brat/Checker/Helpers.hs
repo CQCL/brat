@@ -36,9 +36,11 @@ import Bwd
 import Hasochism
 import Util (log2)
 
+import Control.Monad (foldM)
 import Control.Monad.Freer (req)
 import Data.Bifunctor
 import Data.Foldable (foldrM)
+import Data.List (partition)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
 import Prelude hiding (last)
@@ -128,21 +130,18 @@ pullPortsInt :: forall a ty. (a -> PortName)
              -> [PortName]
              -> [(a, ty)]
              -> Either (PortPullError, [(a, ty)]) [(a, ty)]
-pullPortsInt _ [] object = Right object
-pullPortsInt toPort (p:ports) object = do
-  (newfront, remaining) <- pull1Port p object
-  (newfront:) <$> pullPortsInt toPort ports remaining
+pullPortsInt toPort pulls object = do
+  (pulled, remaining) <- foldM pull1Port ([],object) pulls
+  pure $ (reverse pulled) ++ remaining
  where
-  pull1Port :: PortName
-            -> [(a, ty)]
-            -> Either (PortPullError, [(a, ty)]) ((a, ty), [(a, ty)])
-  pull1Port p [] = Left (PortNotFound p, object)
-  pull1Port p (x@(a,_):xs)
-   | p == toPort a
-   = if p `elem` (toPort . fst <$> xs)
-     then Left (Ambiguous p, x:xs)
-     else Right (x, xs)
-   | otherwise = second (x:) <$> pull1Port p xs
+  pull1Port :: ([(a, ty)], [(a, ty)])
+            -> PortName
+            -> Either (PortPullError, [(a, ty)]) ([(a, ty)], [(a, ty)])
+  pull1Port (pulled, remaining) p = do
+    case partition ((== p) . toPort . fst) remaining of
+      ([], _) -> Left (PortNotFound p, remaining)
+      ([found], remaining) -> Right (found:pulled, remaining)
+      (_, _) -> Left (Ambiguous p, remaining)
 
 ensureEmpty :: Show ty => String -> [(NamedPort e, ty)] -> Checking ()
 ensureEmpty _ [] = pure ()
