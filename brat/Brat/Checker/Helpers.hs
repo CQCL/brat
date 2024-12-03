@@ -101,7 +101,7 @@ pullPortsRow :: Show ty
              => [PortName]
              -> [(NamedPort e, ty)]
              -> Checking [(NamedPort e, ty)]
-pullPortsRow = pullPorts portName showRow
+pullPortsRow = pullPorts portName (pure . showRow)
 
 
 data PortPullError = PortNotFound PortName | Ambiguous PortName
@@ -110,17 +110,18 @@ pullPortsSig :: Show ty
              => [PortName]
              -> [(PortName, ty)]
              -> Checking [(PortName, ty)]
-pullPortsSig = pullPorts id showSig
+pullPortsSig = pullPorts id (pure . showSig)
 
 
 pullPorts :: forall a ty.
              (a -> PortName) -- A way to get a port name for each element
-          -> ([(a, ty)] -> String) -- A way to print the list
+          -> ([(a, ty)] -> Checking String) -- A way to print the list
           -> [PortName] -- Things to pull to the front
           -> [(a, ty)]  -- The list to rearrange
           -> Checking [(a, ty)]
 pullPorts toPort showFn pulls object = case foldM pull1Port ([], object) pulls of
-    Left (e, row) -> let r = showFn row in
+    Left (e, row) -> do
+      r <- showFn row
       err $ case e of
         PortNotFound p -> BadPortPull $ "Port not found: " ++ p ++ " in " ++ r
         Ambiguous p -> AmbiguousPortPull p r
