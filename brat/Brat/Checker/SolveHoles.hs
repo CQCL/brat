@@ -19,16 +19,24 @@ import Data.Functor
 import qualified Data.Map as M
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 
+-- External interface to typeEq' for closed values only.
+typeEq :: String -- String representation of the term for error reporting
+       -> TypeKind -- The kind we're comparing at
+       -> Val Z -- Expected
+       -> Val Z -- Actual
+       -> Checking ()
+typeEq str = typeEq' str (Zy :* S0 :* S0)
+
 -- Demand that two things are equal, we're allowed to solve variables in the
 -- hope set to make this true.
 -- Raises a user error if the vals cannot be made equal.
-typeEq :: String -- String representation of the term for error reporting
-       -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n
-       -> TypeKind -- The kind we're comparing at
-       -> Val n -- Expected
-       -> Val n -- Actual
-       -> Checking ()
-typeEq str stuff@(_ny :* _ks :* sems) k exp act = do
+typeEq' :: String -- String representation of the term for error reporting
+        -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n
+        -> TypeKind -- The kind we're comparing at
+        -> Val n -- Expected
+        -> Val n -- Actual
+        -> Checking ()
+typeEq' str stuff@(_ny :* _ks :* sems) k exp act = do
   hopes <- req AskHopes
   exp <- sem sems exp
   act <- sem sems act
@@ -97,7 +105,7 @@ solveHope k hope v = quote Zy v >>= \v -> case doesntOccur (InEnd hope) v of
 
 typeEqs :: String -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n -> [TypeKind] -> [Val n] -> [Val n] -> Checking ()
 typeEqs _ _ [] [] [] = pure ()
-typeEqs tm stuff (k:ks) (exp:exps) (act:acts) = typeEqs tm stuff ks exps acts <* typeEq tm stuff k exp act
+typeEqs tm stuff (k:ks) (exp:exps) (act:acts) = typeEqs tm stuff ks exps acts <* typeEq' tm stuff k exp act
 typeEqs _ _ _ _ _ = typeErr "arity mismatch"
 
 typeEqRow :: Modey m
@@ -111,7 +119,7 @@ typeEqRow :: Modey m
                              )
 typeEqRow _ _ stuff R0 R0 = pure (Some (stuff :* (Refl :* Refl)), [])
 typeEqRow m tm stuff (RPr (_,ty1) ro1) (RPr (_,ty2) ro2) = typeEqRow m tm stuff ro1 ro2 <&> second
-  ((:) (typeEq tm stuff (kindForMode m) ty1 ty2))
+  ((:) (typeEq' tm stuff (kindForMode m) ty1 ty2))
 typeEqRow m tm (ny :* kz :* semz) (REx (_,k1) ro1) (REx (_,k2) ro2) | k1 == k2 = typeEqRow m tm (Sy ny :* (kz :<< k1) :* (semz :<< semLvl ny)) ro1 ro2
 typeEqRow _ _ _ _ _ = Left $ TypeErr "Mismatched rows"
 

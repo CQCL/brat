@@ -125,13 +125,13 @@ checkWire Braty (WC fc tm) outputs (dangling, o) (hungry, u) = localFC fc $ do
   let ot = binderToValue Braty o
   let ut = binderToValue Braty u
   if outputs
-    then typeEq (show tm) (Zy :* S0 :* S0) (Star []) ot ut
-    else typeEq (show tm) (Zy :* S0 :* S0) (Star []) ut ot
+    then typeEq (show tm) (Star []) ot ut
+    else typeEq (show tm) (Star []) ut ot
   wire (dangling, ot, hungry)
 checkWire Kerny (WC fc tm) outputs (dangling, ot) (hungry, ut) = localFC fc $ do
   if outputs
-    then typeEq (show tm) (Zy :* S0 :* S0) (Dollar []) ot ut
-    else typeEq (show tm) (Zy :* S0 :* S0) (Dollar []) ut ot
+    then typeEq (show tm) (Dollar []) ot ut
+    else typeEq (show tm) (Dollar []) ut ot
   wire (dangling, ot, hungry)
 
 checkIO :: forall m d k exp act . (CheckConstraints m k, ?my :: Modey m)
@@ -556,7 +556,7 @@ check' FanIn (overs, (tgt, ty):unders) = do
     let k = case my of
           Kerny -> Dollar []
           Braty -> Star []
-    typeEq (show FanIn) (Zy :* S0 :* S0) k elTy (binderToValue my overTy)
+    typeEq (show FanIn) k elTy (binderToValue my overTy)
     let tailTy = TVec elTy (VNum (nConstant (n - 1)))
     (_, [(hungryHead, _), (hungryTail, tailTy)], [(danglingResult, _)], _) <- anext "faninNodes" (Constructor (plain "cons")) (S0, Some (Zy :* S0))
       (RPr ("head", elTy) (RPr ("tail", tailTy) R0) :: Ro m Z Z)
