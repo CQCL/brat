@@ -119,21 +119,14 @@ pullPorts :: forall a ty.
           -> [PortName] -- Things to pull to the front
           -> [(a, ty)]  -- The list to rearrange
           -> Checking [(a, ty)]
-pullPorts toPort showFn pulls object = throwLeft $ first errToChecking $ pullPortsInt toPort pulls object
+pullPorts toPort showFn pulls object = throwLeft $ first errToChecking $ do
+    (pulled, remaining) <- foldM pull1Port ([], object) pulls
+    pure $ (reverse pulled) ++ remaining
  where
   errToChecking :: (PortPullError, [(a, ty)]) -> ErrorMsg
   errToChecking (e, row) = let r = showFn row in case e of
     PortNotFound p -> BadPortPull $ "Port not found: " ++ p ++ " in " ++ r
     Ambiguous p -> AmbiguousPortPull p r
-
-pullPortsInt :: forall a ty. (a -> PortName)
-             -> [PortName]
-             -> [(a, ty)]
-             -> Either (PortPullError, [(a, ty)]) [(a, ty)]
-pullPortsInt toPort pulls object = do
-  (pulled, remaining) <- foldM pull1Port ([],object) pulls
-  pure $ (reverse pulled) ++ remaining
- where
   pull1Port :: ([(a, ty)], [(a, ty)])
             -> PortName
             -> Either (PortPullError, [(a, ty)]) ([(a, ty)], [(a, ty)])
