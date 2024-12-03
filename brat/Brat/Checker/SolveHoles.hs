@@ -1,8 +1,8 @@
-module Brat.Checker.SolveHoles (typeEq, buildNatVal, buildNum, invertNatVal) where
+module Brat.Checker.SolveHoles (typeEq, buildNum) where
 
 import Brat.Checker.Monad
 import Brat.Checker.Types (kindForMode)
-import Brat.Checker.Helpers (buildConst, buildNatVal, buildNum, invertNatVal)
+import Brat.Checker.Helpers (buildConst, buildNatVal, buildNum)
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval
 import Brat.Syntax.Common
