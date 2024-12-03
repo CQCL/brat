@@ -222,7 +222,7 @@ solveNumMeta e nv = case (e, vars nv) of
    defineSrc idSrc (VNum (nVar (VPar (toEnd idTgt))))
    instantiateMeta (InEnd weeTgt) (VNum (nVar (VPar (toEnd idSrc))))
    wire (idSrc, TNat, NamedPort weeTgt "")
-   let nv' = fmap (const (VPar (toEnd idSrc))) nv
+   let nv' = fmap (const (VPar (toEnd idSrc))) nv -- weeTgt is the only thing to replace
    bigSrc <- buildNatVal nv'
    instantiateMeta (InEnd bigTgt) (VNum nv')
    wire (bigSrc, TNat, NamedPort bigTgt "")

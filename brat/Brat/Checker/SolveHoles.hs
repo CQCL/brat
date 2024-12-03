@@ -55,7 +55,7 @@ typeEqEta tm (lvy :* kz :* sems) hopeSet (TypeFor m ((_, k):ks)) exp act = do
   typeEqEta tm (Sy lvy :* (kz :<< k) :* (sems :<< nextSem)) hopeSet (TypeFor m ks) exp act
 -- Not higher kinded - check for flex terms
 -- (We don't solve under binders for now, so we only consider Zy here)
--- "easy" flex cases
+-- 1. "easy" flex cases
 typeEqEta _tm (Zy :* _ks :* _sems) hopeSet k (SApp (SPar e) B0) act
   | M.member e hopeSet = solveHope k e act
 typeEqEta _tm (Zy :* _ks :* _sems) hopeSet k exp (SApp (SPar e) B0)
@@ -63,12 +63,14 @@ typeEqEta _tm (Zy :* _ks :* _sems) hopeSet k exp (SApp (SPar e) B0)
 typeEqEta _ (Zy :* _ :* _) hopeSet Nat exp act
   | Just (SPar e) <- isNumVar exp, M.member e hopeSet = solveHope Nat e act
   | Just (SPar e) <- isNumVar act, M.member e hopeSet = solveHope Nat e exp
+-- 2. harder cases, neither is in the hope set, so we can't define it ourselves
 typeEqEta tm stuff@(ny :* _ks :* _sems) hopeSet k exp act = do
   exp <- quote ny exp
   act <- quote ny act
   case [e | (VApp (VPar e) _) <- [exp,act], M.member e hopeSet] of
     [] -> typeEqRigid tm stuff k exp act
-    _es -> error "TODO"
+    [e1, e2] | e1 == e2 -> pure () -- trivially same, even if both still yet-to-be-defined
+    _es -> error "TODO: must wait for one or the other to become more defined"
 -- uhhh
 -- Yield(AwaitingAny $ S.fromList es) (\_ -> typeEq tm stuff k exp act)
 
