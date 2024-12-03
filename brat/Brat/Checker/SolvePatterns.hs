@@ -77,7 +77,7 @@ solve my ((src, Lit tm):p) = do
     (Braty, Left Nat)
       | Num n <- tm -> do
           unless (n >= 0) $ typeErr "Negative Nat kind"
-          unifyNum (nConstant (fromIntegral n)) (nVar (VPar (ExEnd (end src))))
+          unifyNum (nConstant (fromIntegral n)) (nVar (VPar (toEnd src)))
     (Braty, Right ty) -> do
       throwLeft (simpleCheck Braty ty tm)
     _ -> typeErr $ "Literal " ++ show tm ++ " isn't valid at this type"
@@ -96,7 +96,7 @@ solve my ((src, PCon c abs):p) = do
       -- Special case for 0, so that we can call `unifyNum` instead of pattern
       -- matching using what's returned from `natConstructors`
       PrefixName [] "zero" -> do
-        unifyNum (nVar (VPar (ExEnd (end src)))) nZero
+        unifyNum (nVar (VPar (toEnd src))) nZero
         p <- argProblems [] (normaliseAbstractor abs) p
         (tests, sol) <- solve my p
         pure ((src, PrimLitTest (Num 0)):tests, sol)
@@ -107,7 +107,7 @@ solve my ((src, PCon c abs):p) = do
             (REx ("inner", Nat) R0)
           unifyNum
            (nVar (VPar (ExEnd (end src))))
-           (relationToInner (nVar (VPar (ExEnd (end dangling)))))
+           (relationToInner (nVar (VPar (toEnd dangling))))
           p <- argProblems [dangling] (normaliseAbstractor abs) p
           (tests, sol) <- solve my p
           -- When we get @-patterns, we shouldn't drop this anymore
@@ -289,9 +289,9 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   -- Hence, the predecessor is (2^k - 1) + (2^k * y)
   demandSucc (StrictMono k (Linear (VPar (InEnd x)))) = do
     (_, [(y,_)], _, _) <- anext "y" Hypo (S0, Some (Zy :* S0)) (REx ("", Nat) R0) R0
-    yPlus1 <- invertNatVal (nPlus 1 (nVar (VPar (InEnd (end y)))))
-    solveNumMeta (InEnd x) (nVar (VPar (InEnd (end yPlus1))))
-    pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k (nVar (VPar (InEnd (end y))))
+    yPlus1 <- invertNatVal (nPlus 1 (nVar (VPar (toEnd y))))
+    solveNumMeta (InEnd x) (nVar (VPar (toEnd yPlus1)))
+    pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k (nVar (VPar (toEnd y)))
 
   --   2^k * full(n + 1)
   -- = 2^k * (1 + 2 * full(n))
