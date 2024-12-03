@@ -315,3 +315,6 @@ localNS ns (Req (Fresh str) k) = let (name, root) = fresh str ns in
 localNS ns (Req (SplitNS str) k) = let (subSpace, newRoot) = split str ns in
                                       localNS newRoot (k subSpace)
 localNS ns (Req c k) = Req c (localNS ns . k)
+
+defineEnd :: End -> Val Z -> Checking ()
+defineEnd e v = req (Define e v)

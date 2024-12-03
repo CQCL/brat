@@ -13,12 +13,12 @@ Nodes:
 (check_defs_1_id3_thunk/in,KernelNode Source [] [("a1",Qubit),("b1",Qubit),("c1",Qubit)])
 (check_defs_1_id3_thunk/out_1,KernelNode Target [("a1",Vec(Qubit, 3))] [])
 (check_defs_1_id3_thunk_thunk_2,BratNode (Box (fromList []) check_defs_1_id3_thunk/in check_defs_1_id3_thunk/out_1) [] [("thunk",{ (a1 :: Qubit), (b1 :: Qubit), (c1 :: Qubit) -o (a1 :: Vec(Qubit, 3)) })])
-(globals__8,BratNode (Const 3) [] [("value",Nat)])
 (globals_Qubit_2,BratNode (Constructor Qubit) [] [("value",[])])
 (globals_Qubit_3,BratNode (Constructor Qubit) [] [("value",[])])
 (globals_Qubit_4,BratNode (Constructor Qubit) [] [("value",[])])
 (globals_Qubit_7,BratNode (Constructor Qubit) [] [("value",[])])
 (globals_Vec_6,BratNode (Constructor Vec) [("X",[]),("n",Nat)] [("value",[])])
+(globals_const_8,BratNode (Const 3) [] [("value",Nat)])
 (globals_decl_9_id3,BratNode Id [("a1",{ (a1 :: Qubit), (b1 :: Qubit), (c1 :: Qubit) -o (a1 :: Vec(Qubit, 3)) })] [("a1",{ (a1 :: Qubit), (b1 :: Qubit), (c1 :: Qubit) -o (a1 :: Vec(Qubit, 3)) })])
 
 Wires:
@@ -39,4 +39,4 @@ Wires:
 (Ex globals_Qubit_4 0,[],In globals___kcr__1 2)
 (Ex globals_Qubit_7 0,[],In globals_Vec_6 0)
 (Ex globals_Vec_6 0,[],In globals___kcr__5 0)
-(Ex globals__8 0,Nat,In globals_Vec_6 1)
+(Ex globals_const_8 0,Nat,In globals_Vec_6 1)
