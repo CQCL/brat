@@ -276,57 +276,11 @@ vecLayers :: Modey m -> Val Z -> Checking ([(Src, NumVal (VVar Z))] -- The sizes
                                           ,CTy m Z -- The function type at the end
                                           )
 vecLayers my (TVec ty (VNum n)) = do
-  src <- mkStaticNum n
+  src <- buildNatVal n
   first ((src, n):) <$> vecLayers my ty
 vecLayers Braty (VFun Braty cty) = pure ([], cty)
 vecLayers Kerny (VFun Kerny cty) = pure ([], cty)
 vecLayers my ty = typeErr $ "Expected a " ++ showMode my ++ "function or vector of functions, got " ++ show ty
-
-mkStaticNum :: NumVal (VVar Z) -> Checking Src
-mkStaticNum n@(NumValue c gro) = do
-  (_, [], [(constSrc,_)], _) <- next "const" (Const (Num (fromIntegral c))) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
-  src <- case gro of
-    Constant0 -> pure constSrc
-    StrictMonoFun sm -> do
-      (_, [(lhs,_),(rhs,_)], [(src,_)], _) <- next "add_const" (ArithNode Add) (S0, Some (Zy :* S0))
-                                              (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0))
-                                              (RPr ("value", TNat) R0)
-      smSrc <- mkStrictMono sm
-      wire (constSrc, TNat, lhs)
-      wire (smSrc, TNat, rhs)
-      pure src
-  defineSrc src (VNum n)
-  pure src
- where
-  mkStrictMono :: StrictMono (VVar Z) -> Checking Src
-  mkStrictMono (StrictMono k mono) = do
-    (_, [], [(constSrc,_)], _) <- next "2^k" (Const (Num (2^k))) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
-    (_, [(lhs,_),(rhs,_)], [(src,_)], _) <- next "mult_const" (ArithNode Mul) (S0, Some (Zy :* S0))
-                                            (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0))
-                                            (RPr ("value", TNat) R0)
-    monoSrc <- mkMono mono
-    wire (constSrc, TNat, lhs)
-    wire (monoSrc, TNat, rhs)
-    pure src
-
-  mkMono :: Monotone (VVar Z) -> Checking Src
-  mkMono (Linear (VPar (ExEnd e))) = pure (NamedPort e "mono")
-  mkMono (Full sm) = do
-    (_, [], [(twoSrc,_)], _) <- next "2" (Const (Num 2)) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
-    (_, [(lhs,_),(rhs,_)], [(powSrc,_)], _) <- next "2^" (ArithNode Pow) (S0, Some (Zy :* S0))
-                                               (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0))
-                                               (RPr ("value", TNat) R0)
-    smSrc <- mkStrictMono sm
-    wire (twoSrc, TNat, lhs)
-    wire (smSrc, TNat, rhs)
-
-    (_, [], [(oneSrc,_)], _) <- next "1" (Const (Num 1)) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
-    (_, [(lhs,_),(rhs,_)], [(src,_)], _) <- next "n-1" (ArithNode Sub) (S0, Some (Zy :* S0))
-                                            (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0))
-                                            (RPr ("value", TNat) R0)
-    wire (powSrc, TNat, lhs)
-    wire (oneSrc, TNat, rhs)
-    pure src
 
 vectorise :: forall m. Modey m -> (Src, Val Z) -> Checking (Src, CTy m Z)
 vectorise my (src, ty) = do
