@@ -722,9 +722,9 @@ checkBody :: (CheckConstraints m UVerb, EvMode m, ?my :: Modey m)
 checkBody fnName body cty = do
   (tm, (absFC, tmFC)) <- case body of
     NoLhs tm -> pure (tm, (fcOf tm, fcOf tm))
-    Clauses (c :| cs) -> do
+    Clauses (c@(abs, tm) :| cs) -> do
       fc <- req AskFC
-      pure (WC fc (Lambda c cs), bimap fcOf fcOf c)
+      pure (WC fc (Lambda c cs), (fcOf abs, fcOf tm))
     Undefined -> err (InternalError "Checking undefined clause")
   ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \conns@(_, unders) -> do
     (((), ()), leftovers) <- check tm conns
