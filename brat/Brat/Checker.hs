@@ -799,7 +799,7 @@ kindCheck ((hungry, k@(TypeFor m [])):unders) (Con c arg) = req (TLup (m, c)) >>
         -- the thing we *do* define kindOut as
 
         (_, argUnders, [(kindOut,_)], (_ :<< _va, _)) <-
-          next "aliasargs" Hypo (S0, Some (Zy :* S0)) aliasArgs (REx ("type",Star []) R0)
+          next "kc_alias" Hypo (S0, Some (Zy :* S0)) aliasArgs (REx ("type",Star []) R0)
         -- arg is a juxtaposition
         (args, emptyUnders) <- kindCheck (second (\(Left k) -> k) <$> argUnders) (unWC arg)
         ensureEmpty "alias args" emptyUnders
