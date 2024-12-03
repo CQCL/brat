@@ -2,7 +2,6 @@ module Brat.Checker.SolvePatterns (argProblems, argProblemsWithLeftovers, solve)
 
 import Brat.Checker.Monad
 import Brat.Checker.Helpers
-import Brat.Checker.SolveHoles (buildNatVal, invertNatVal)
 import Brat.Checker.Types (EndType(..))
 import Brat.Constructors
 import Brat.Constructors.Patterns

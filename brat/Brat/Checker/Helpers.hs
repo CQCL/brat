@@ -506,3 +506,96 @@ buildConst :: SimpleTerm -> Val Z -> Checking Src
 buildConst tm ty = do
   (_, _, [(out,_)], _) <- next "const" (Const tm) (S0, Some (Zy :* S0)) R0 (RPr ("value", ty) R0)
   pure out
+
+buildNum :: Integer -> Checking Src
+buildNum n = buildConst (Num (fromIntegral n)) TNat
+
+-- Generate wiring to produce a dynamic instance of the numval argument
+-- N.B. In these functions, we wire using Req, rather than the `wire` function
+-- because we don't want it to do any extra evaluation.
+buildNatVal :: NumVal (VVar Z) -> Checking Src
+buildNatVal nv@(NumValue n gro) = case n of
+  0 -> buildGro gro
+  n -> do
+    nDangling <- buildNum n
+    ((lhs,rhs),out) <- buildArithOp Add
+    src <- buildGro gro
+    req $ Wire (end nDangling, TNat, end lhs)
+    req $ Wire (end src, TNat, end rhs)
+    defineSrc out (VNum (nPlus n (nVar (VPar (toEnd src)))))
+    pure out
+ where
+  buildGro :: Fun00 (VVar Z) -> Checking Src
+  buildGro Constant0 = buildNum 0
+  buildGro (StrictMonoFun sm) = buildSM sm
+
+  buildSM :: StrictMono (VVar Z) -> Checking Src
+  buildSM (StrictMono k mono) = do
+    -- Calculate 2^k as `factor`
+    two <- buildNum 2
+    kDangling <- buildNum k
+    ((lhs,rhs),factor) <- buildArithOp Pow
+    req $ Wire (end two, TNat, end lhs)
+    req $ Wire (end kDangling, TNat, end rhs)
+    -- Multiply mono by 2^k
+    ((lhs,rhs),out) <- buildArithOp Mul
+    monoDangling <- buildMono mono
+    req $ Wire (end factor, TNat, end lhs)
+    req $ Wire (end monoDangling, TNat, end rhs)
+    defineSrc out (VNum (n2PowTimes k (nVar (VPar (toEnd monoDangling)))))
+    pure out
+
+  buildMono :: Monotone (VVar Z) -> Checking Src
+  buildMono (Linear (VPar (ExEnd e))) = pure $ NamedPort e "numval"
+  buildMono (Full sm) = do
+    -- Calculate 2^n as `outPlus1`
+    two <- buildNum 2
+    dangling <- buildSM sm
+    ((lhs,rhs),outPlus1) <- buildArithOp Pow
+    req $ Wire (end two, TNat, end lhs)
+    req $ Wire (end dangling, TNat, end rhs)
+    -- Then subtract 1
+    one <- buildNum 1
+    ((lhs,rhs),out) <- buildArithOp Sub
+    req $ Wire (end outPlus1, TNat, end lhs)
+    req $ Wire (end one, TNat, end rhs)
+    defineSrc out (VNum (nFull (nVar (VPar (toEnd dangling)))))
+    pure out
+  buildMono _ = err . InternalError $ "Trying to build a non-closed nat value: " ++ show nv
+
+invertNatVal :: NumVal (VVar Z) -> Checking Tgt
+invertNatVal (NumValue up gro) = case up of
+  0 -> invertGro gro
+  _ -> do
+    ((lhs,rhs),out) <- buildArithOp Sub
+    upSrc <- buildNum up
+    req $ Wire (end upSrc, TNat, end rhs)
+    tgt <- invertGro gro
+    req $ Wire (end out, TNat, end tgt)
+    defineTgt tgt (VNum (nVar (VPar (toEnd out))))
+    defineTgt lhs (VNum (nPlus up (nVar (VPar (toEnd tgt)))))
+    pure lhs
+ where
+  invertGro Constant0 = error "Invariant violated: the numval arg to invertNatVal should contain a variable"
+  invertGro (StrictMonoFun sm) = invertSM sm
+
+  invertSM (StrictMono k mono) = case k of
+    0 -> invertMono mono
+    _ -> do
+      divisor <- buildNum (2 ^ k)
+      ((lhs,rhs),out) <- buildArithOp Div
+      tgt <- invertMono mono
+      req $ Wire (end out, TNat, end tgt)
+      req $ Wire (end divisor, TNat, end rhs)
+      defineTgt tgt (VNum (nVar (VPar (toEnd out))))
+      defineTgt lhs (VNum (n2PowTimes k (nVar (VPar (toEnd tgt)))))
+      pure lhs
+
+  invertMono (Linear (VPar (InEnd e))) = pure (NamedPort e "numval")
+  invertMono (Full sm) = do
+    (_, [(llufTgt,_)], [(llufSrc,_)], _) <- next "luff" (Prim ("BRAT","lluf")) (S0, Some (Zy :* S0)) (REx ("n", Nat) R0) (REx ("n", Nat) R0)
+    tgt <- invertSM sm
+    req $ Wire (end llufSrc, TNat, end tgt)
+    defineTgt tgt (VNum (nVar (VPar (toEnd llufSrc))))
+    defineTgt llufTgt (VNum (nFull (nVar (VPar (toEnd tgt)))))
+    pure llufTgt
