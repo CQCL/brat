@@ -279,9 +279,7 @@ getThunks Braty ((src, Left (Star args)):rest) = do
       pure (node, unders, overs)
   (nodes, unders', overs') <- getThunks Braty rest
   pure (node:nodes, unders <> unders', overs <> overs')
-getThunks m ro = do
-  nm <- req AskNames
-  err $ ExpectedThunk (showMode m) (showRow nm ro)
+getThunks m ro = showRow' ro >>= err . ExpectedThunk (showMode m)
 
 -- The type given here should be normalised
 vecLayers :: Modey m -> Val Z -> Checking ([(Src, NumVal (VVar Z))] -- The sizes of the vector layers
@@ -510,3 +508,9 @@ runArith (NumValue upl grol) Pow (NumValue upr gror)
  -- 2^(2^k * upr) + 2^(2^k * upr) * (full(2^(k + k') * mono))
  = pure $ NumValue (upl ^ upr) (StrictMonoFun (StrictMono (l * upr) (Full (StrictMono (k + k') mono))))
 runArith _ _ _ = Nothing
+
+showRow' :: ShowWithMetas ty => [(NamedPort e, ty)] -> Checking String
+showRow' row = flip showRow row <$> req AskNames
+
+showWithMetas' :: ShowWithMetas t => t -> Checking String
+showWithMetas' x = flip showWithMetas x <$> req AskNames
