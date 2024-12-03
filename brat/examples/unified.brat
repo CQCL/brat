@@ -28,3 +28,7 @@ swapFront(X :: *, n :: #, Vec(X, n)) -> Vec(X, n)
 swapFront(_, _, []) = []
 swapFront(_, _, [x]) = [x]
 swapFront(X, _, cons(x, cons(y, zs))) = cons(y, cons(x, zs))
+
+mapAndConquer(X :: *, Y :: *, n :: #, f :: { X -> Y }, Vec(X, succ(n))) -> Vec(Y, succ(n))
+mapAndConquer(_, _, doub(n), f, xsl =, x ,= xsr) = mapAndConquer(!, !, !, f, xsl) =, f(x) ,= mapAndConquer(!, !, !, f, xsr)
+mapAndConquer(_, _, succ(n), f, xsl =,= xsr) = mapAndConquer(!, !, !, f, xsl) =,= mapAndConquer(!, !, !, f, xsr)
