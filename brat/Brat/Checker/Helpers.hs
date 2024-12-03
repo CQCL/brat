@@ -458,7 +458,7 @@ buildArithOp op = do
 
 buildConst :: SimpleTerm -> Val Z -> Checking Src
 buildConst tm ty = do
-  (_, _, [(out,_)], _) <- next "const" (Const tm) (S0, Some (Zy :* S0)) R0 (RPr ("value", ty) R0)
+  (_, _, [(out,_)], _) <- next "buildConst" (Const tm) (S0, Some (Zy :* S0)) R0 (RPr ("value", ty) R0)
   pure out
 
 buildNum :: Integer -> Checking Src

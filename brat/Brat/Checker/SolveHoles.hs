@@ -29,7 +29,7 @@ typeEq :: String -- String representation of the term for error reporting
        -> Val n -- Actual
        -> Checking ()
 typeEq str stuff@(_ny :* _ks :* sems) k exp act = do
-  hopes <- req AskHopeSet
+  hopes <- req AskHopes
   exp <- sem sems exp
   act <- sem sems act
   typeEqEta str stuff hopes k exp act
@@ -41,40 +41,41 @@ isNumVar _ = Nothing
 -- Presumes that the hope set and the two `Sem`s are up to date.
 typeEqEta :: String -- String representation of the term for error reporting
           -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n
-          -> HopeSet -- The hope set
+          -> Hopes -- A map from the hope set to corresponding FCs
           -> TypeKind -- The kind we're comparing at
           -> Sem -- Expected
           -> Sem -- Actual
           -> Checking ()
-typeEqEta tm (lvy :* kz :* sems) hopeSet (TypeFor m ((_, k):ks)) exp act = do
+typeEqEta tm (lvy :* kz :* sems) hopes (TypeFor m ((_, k):ks)) exp act = do
   -- Higher kinded things
   let nextSem = semLvl lvy
   let xz = B0 :< nextSem
   exp <- applySem exp xz
   act <- applySem act xz
-  typeEqEta tm (Sy lvy :* (kz :<< k) :* (sems :<< nextSem)) hopeSet (TypeFor m ks) exp act
+  typeEqEta tm (Sy lvy :* (kz :<< k) :* (sems :<< nextSem)) hopes (TypeFor m ks) exp act
 -- Not higher kinded - check for flex terms
 -- (We don't solve under binders for now, so we only consider Zy here)
 -- 1. "easy" flex cases
-typeEqEta _tm (Zy :* _ks :* _sems) hopeSet k (SApp (SPar e) B0) act
-  | M.member e hopeSet = solveHope k e act
-typeEqEta _tm (Zy :* _ks :* _sems) hopeSet k exp (SApp (SPar e) B0)
-  | M.member e hopeSet = solveHope k e exp
-typeEqEta _ (Zy :* _ :* _) hopeSet Nat exp act
-  | Just (SPar e) <- isNumVar exp, M.member e hopeSet = solveHope Nat e act
-  | Just (SPar e) <- isNumVar act, M.member e hopeSet = solveHope Nat e exp
+typeEqEta _tm (Zy :* _ks :* _sems) hopes k (SApp (SPar e) B0) act
+  | M.member e hopes = solveHope k e act
+typeEqEta _tm (Zy :* _ks :* _sems) hopes k exp (SApp (SPar e) B0)
+  | M.member e hopes = solveHope k e exp
+typeEqEta _ (Zy :* _ :* _) hopes Nat exp act
+  | Just (SPar e) <- isNumVar exp, M.member e hopes = solveHope Nat e act
+  | Just (SPar e) <- isNumVar act, M.member e hopes = solveHope Nat e exp
 -- 2. harder cases, neither is in the hope set, so we can't define it ourselves
-typeEqEta tm stuff@(ny :* _ks :* _sems) hopeSet k exp act = do
+typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
   exp <- quote ny exp
   act <- quote ny act
-  case [e | (VApp (VPar e) _) <- [exp,act], M.member e hopeSet] of
+  case [e | (VApp (VPar e) _) <- [exp,act], M.member e hopes] of
     [] -> typeEqRigid tm stuff k exp act
     [e1, e2] | e1 == e2 -> pure () -- trivially same, even if both still yet-to-be-defined
     _es -> error "TODO: must wait for one or the other to become more defined"
 -- uhhh
 -- Yield(AwaitingAny $ S.fromList es) (\_ -> typeEq tm stuff k exp act)
 
--- This will update the hopeSet, potentially invalidating things that have been eval'd
+-- This will update the `hopes` set, potentially invalidating things that have
+-- been eval'd.
 -- The Sem is closed, for now.
 -- TODO: This needs to update the BRAT graph with the solution.
 solveHope :: TypeKind -> End -> Sem -> Checking ()

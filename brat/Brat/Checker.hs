@@ -1139,14 +1139,14 @@ run ve initStore ns m = do
                 , kconstructors = kernelConstructors
                 , typeConstructors = defaultTypeConstructors
                 , aliasTable = M.empty
-                , hopeSet = M.empty
+                , hopes = M.empty
                 }
   (a,ctx,(holes, graph)) <- handler (localNS ns m) ctx mempty
   let tyMap = typeMap $ store ctx
-  -- If the hopeSet has any remaining holes with kind Nat, we need to abort.
+  -- If the `hopes` set has any remaining holes with kind Nat, we need to abort.
   -- Even though we didn't need them for typechecking problems, our runtime
   -- behaviour depends on the values of the holes, which we can't account for.
-  case M.toList $ M.filterWithKey (\e _ -> isNatKinded tyMap e) (hopeSet ctx) of
+  case M.toList $ M.filterWithKey (\e _ -> isNatKinded tyMap e) (hopes ctx) of
     [] -> pure (a, (holes, store ctx, graph))
     -- Just use the FC of the first hole while we don't have the capacity to
     -- show multiple error locations

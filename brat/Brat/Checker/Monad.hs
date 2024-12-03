@@ -50,7 +50,7 @@ data CtxEnv = CtxEnv
   , locals :: VEnv
   }
 
-type HopeSet = M.Map End FC
+type Hopes = M.Map End FC
 
 data Context = Ctx { globalVEnv :: VEnv
                    , store :: Store
@@ -59,7 +59,7 @@ data Context = Ctx { globalVEnv :: VEnv
                    , typeConstructors :: M.Map (Mode, QualName) [(PortName, TypeKind)]
                    , aliasTable :: M.Map QualName Alias
                    -- All the ends here should be targets
-                   , hopeSet :: HopeSet
+                   , hopes :: Hopes
                    }
 
 data CheckingSig ty where
@@ -94,7 +94,7 @@ data CheckingSig ty where
   Declare :: End -> Modey m -> BinderType m -> CheckingSig ()
   Define  :: End -> Val Z -> CheckingSig ()
   ANewHope :: (End, FC) -> CheckingSig ()
-  AskHopeSet :: CheckingSig HopeSet
+  AskHopes :: CheckingSig Hopes
   RemoveHope :: End -> CheckingSig ()
 
 localAlias :: (QualName, Alias) -> Checking v -> Checking v
@@ -274,13 +274,13 @@ handler (Req s k) ctx g
                 M.lookup tycon tbl
         handler (k args) ctx g
 
-      ANewHope (e, fc) -> handler (k ()) (ctx { hopeSet = M.insert e fc (hopeSet ctx) }) g
+      ANewHope (e, fc) -> handler (k ()) (ctx { hopes = M.insert e fc (hopes ctx) }) g
 
-      AskHopeSet -> handler (k (hopeSet ctx)) ctx g
+      AskHopes -> handler (k (hopes ctx)) ctx g
 
-      RemoveHope e -> let hset = hopeSet ctx in
+      RemoveHope e -> let hset = hopes ctx in
                         if M.member e hset
-                        then handler (k ()) (ctx { hopeSet = M.delete e hset }) g
+                        then handler (k ()) (ctx { hopes = M.delete e hset }) g
                         else Left (dumbErr (InternalError ("Trying to remove Hope not in set: " ++ show e)))
 
 type Checking = Free CheckingSig
