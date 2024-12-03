@@ -281,7 +281,7 @@ handler (Req s k) ctx g
       RemoveHope e -> let hset = hopeSet ctx in
                         if M.member e hset
                         then handler (k ()) (ctx { hopeSet = M.delete e hset }) g
-                        else Left (dumbErr (InternalError ("Trying to remove hole not in set: " ++ show e)))
+                        else Left (dumbErr (InternalError ("Trying to remove Hope not in set: " ++ show e)))
 
 type Checking = Free CheckingSig
 
