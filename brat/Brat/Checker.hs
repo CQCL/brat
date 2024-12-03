@@ -729,9 +729,9 @@ checkBody :: (CheckConstraints m UVerb, EvMode m, ?my :: Modey m)
 checkBody fnName body cty = do
   (tm, (absFC, tmFC)) <- case body of
     NoLhs tm -> pure (tm, (fcOf tm, fcOf tm))
-    Clauses (c :| cs) -> do
+    Clauses (c@(abs, tm) :| cs) -> do
       fc <- req AskFC
-      pure (WC fc (Lambda c cs), bimap fcOf fcOf c)
+      pure (WC fc (Lambda c cs), (fcOf abs, fcOf tm))
     Undefined -> err (InternalError "Checking undefined clause")
   ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \conns@(_, unders) -> do
     (((), ()), leftovers) <- check tm conns
@@ -806,7 +806,7 @@ kindCheck ((hungry, k@(TypeFor m [])):unders) (Con c arg) = req (TLup (m, c)) >>
         -- the thing we *do* define kindOut as
 
         (_, argUnders, [(kindOut,_)], (_ :<< _va, _)) <-
-          next "aliasargs" Hypo (S0, Some (Zy :* S0)) aliasArgs (REx ("type",Star []) R0)
+          next "kc_alias" Hypo (S0, Some (Zy :* S0)) aliasArgs (REx ("type",Star []) R0)
         -- arg is a juxtaposition
         (args, emptyUnders) <- kindCheck (second (\(Left k) -> k) <$> argUnders) (unWC arg)
         ensureEmpty "alias args" emptyUnders

@@ -250,14 +250,14 @@ getThunks :: Modey m
 getThunks _ [] = pure ([], [], [])
 getThunks Braty ((src, Right ty):rest) = do
   ty <- eval S0 ty
-  (src, (ss :->> ts)) <- vectorise Braty (src, ty)
+  (src, ss :->> ts) <- vectorise Braty (src, ty)
   (node, unders, overs, _) <- let ?my = Braty in
                                 anext "Eval" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
   (nodes, unders', overs') <- getThunks Braty rest
   pure (node:nodes, unders <> unders', overs <> overs')
 getThunks Kerny ((src, Right ty):rest) = do
   ty <- eval S0 ty
-  (src, (ss :->> ts)) <- vectorise Kerny (src,ty)
+  (src, ss :->> ts) <- vectorise Kerny (src,ty)
   (node, unders, overs, _) <- let ?my = Kerny in anext "Splice" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
   (nodes, unders', overs') <- getThunks Kerny rest
   pure (node:nodes, unders <> unders', overs <> overs')
