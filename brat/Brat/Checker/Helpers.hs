@@ -20,7 +20,7 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
                             ,evalSrcRow, evalTgtRow
                             )-} where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd, throwLeft)
+import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (eval, EvMode(..), kindType)
@@ -119,14 +119,13 @@ pullPorts :: forall a ty.
           -> [PortName] -- Things to pull to the front
           -> [(a, ty)]  -- The list to rearrange
           -> Checking [(a, ty)]
-pullPorts toPort showFn pulls object = throwLeft $ first errToChecking $ do
-    (pulled, remaining) <- foldM pull1Port ([], object) pulls
-    pure $ (reverse pulled) ++ remaining
+pullPorts toPort showFn pulls object = case foldM pull1Port ([], object) pulls of
+    Left (e, row) -> let r = showFn row in
+      err $ case e of
+        PortNotFound p -> BadPortPull $ "Port not found: " ++ p ++ " in " ++ r
+        Ambiguous p -> AmbiguousPortPull p r
+    Right (pulled, remaining) -> pure $ (reverse pulled) ++ remaining
  where
-  errToChecking :: (PortPullError, [(a, ty)]) -> ErrorMsg
-  errToChecking (e, row) = let r = showFn row in case e of
-    PortNotFound p -> BadPortPull $ "Port not found: " ++ p ++ " in " ++ r
-    Ambiguous p -> AmbiguousPortPull p r
   pull1Port :: ([(a, ty)], [(a, ty)])
             -> PortName
             -> Either (PortPullError, [(a, ty)]) ([(a, ty)], [(a, ty)])
