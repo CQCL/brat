@@ -39,6 +39,7 @@ import Util (log2)
 import Control.Monad.Freer (req)
 import Data.Bifunctor
 import Data.Foldable (foldrM)
+import Data.List (partition)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
 import Prelude hiding (last)
@@ -121,13 +122,10 @@ pullPorts toPort showFn (p:ports) types = do
   pull1Port :: PortName
             -> [(a, ty)]
             -> Checking ((a, ty), [(a, ty)])
-  pull1Port p [] = fail $ "Port not found: " ++ p ++ " in " ++ showFn types
-  pull1Port p (x@(a,_):xs)
-   | p == toPort a
-   = if p `elem` (toPort . fst <$> xs)
-     then err (AmbiguousPortPull p (showFn (x:xs)))
-     else pure (x, xs)
-   | otherwise = second (x:) <$> pull1Port p xs
+  pull1Port p available = case partition ((== p) . toPort . fst) available of
+      ([], _) -> err $ BadPortPull $ "Port not found: " ++ p ++ " in " ++ showFn available
+      ([found], remaining) -> pure (found, remaining)
+      (_, _) -> err $ AmbiguousPortPull p (showFn available)
 
 ensureEmpty :: Show ty => String -> [(NamedPort e, ty)] -> Checking ()
 ensureEmpty _ [] = pure ()
