@@ -125,8 +125,6 @@ pullPorts toPort showFn (p:ports) types = do
   pull1Port p available = case partition ((== p) . toPort . fst) available of
       ([], _) -> err $ BadPortPull $ "Port not found: " ++ p ++ " in " ++ showFn available
       ([found], remaining) -> pure (found, remaining)
-      -- this is not quite a refactor: we used to show only the suffix
-      -- of 'available' beginning with the first match
       (_, _) -> err $ AmbiguousPortPull p (showFn available)
 
 ensureEmpty :: Show ty => String -> [(NamedPort e, ty)] -> Checking ()
