@@ -36,6 +36,7 @@ import Bwd
 import Hasochism
 import Util (log2)
 
+import Control.Monad.State.Lazy (StateT(..), runStateT)
 import Control.Monad.Freer (req)
 import Data.Bifunctor
 import Data.Foldable (foldrM)
@@ -108,21 +109,18 @@ pullPortsSig :: Show ty
              -> Checking [(PortName, ty)]
 pullPortsSig = pullPorts id showSig
 
-pullPorts :: forall a ty. Show ty
-          => (a -> PortName) -- A way to get a port name for each element
+pullPorts :: forall a ty
+           . (a -> PortName) -- A way to get a port name for each element
           -> ([(a, ty)] -> String) -- A way to print the list
           -> [PortName] -- Things to pull to the front
           -> [(a, ty)]  -- The list to rearrange
           -> Checking [(a, ty)]
-pullPorts _ _ [] types = pure types
-pullPorts toPort showFn (p:ports) types = do
-  (x, types) <- pull1Port p types
-  (x:) <$> pullPorts toPort showFn ports types
+pullPorts toPort showFn to_pull types =
+  -- the "state" here is the things still available to be pulled
+  (\(pulled, rest) -> pulled ++ rest) <$> runStateT (mapM pull1Port to_pull) types
  where
-  pull1Port :: PortName
-            -> [(a, ty)]
-            -> Checking ((a, ty), [(a, ty)])
-  pull1Port p available = case partition ((== p) . toPort . fst) available of
+  pull1Port :: PortName -> StateT [(a, ty)] Checking (a, ty)
+  pull1Port p = StateT $ \available -> case partition ((== p) . toPort . fst) available of
       ([], _) -> err $ BadPortPull $ "Port not found: " ++ p ++ " in " ++ showFn available
       ([found], remaining) -> pure (found, remaining)
       (_, _) -> err $ AmbiguousPortPull p (showFn available)
