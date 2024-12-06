@@ -121,7 +121,7 @@ pullPorts toPort showFn to_pull types =
  where
   pull1Port :: PortName -> StateT [a] Checking a
   pull1Port p = StateT $ \available -> case partition ((== p) . toPort) available of
-      ([], _) -> err $ BadPortPull $ "Port not found: " ++ p ++ " in " ++ showFn available
+      ([], _) -> err $ BadPortPull p (showFn available)
       ([found], remaining) -> pure (found, remaining)
       (_, _) -> err $ AmbiguousPortPull p (showFn available)
 
