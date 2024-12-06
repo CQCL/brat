@@ -660,7 +660,7 @@ check' (Of n e) ((), unders) = case ?my of
       (elems, unders, rightUnders) <- getVecs len unders
       pure ((tgt, el):elems, (tgt, ty):unders, rightUnders)
   getVecs _ unders = pure ([], [], unders)
-check' Hope ((), ((NamedPort hope _, ty):unders)) = case (?my, ty) of
+check' Hope ((), (NamedPort hope _, ty):unders) = case (?my, ty) of
   (Braty, Left _k) -> do
     fc <- req AskFC
     req (ANewHope hope fc)
