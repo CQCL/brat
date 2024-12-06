@@ -3,7 +3,7 @@ module Brat.Unelaborator (unelab) where
 import Brat.FC (unWC)
 import Brat.Syntax.Concrete (Flat(..))
 import Brat.Syntax.Common (Dir(..), Kind(..), Diry(..), Kindy(..)
-                          ,KindOr, PortName, TypeRowElem(Named), CType'(..)
+                          ,KindOr, PortName, TypeRowElem(Named), FunType'(..)
                           )
 import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Raw (Raw(..), RawVType)

@@ -276,7 +276,7 @@ rawIO' tyP = rowElem `sepBy` void (try comma)
 functionType :: Parser RawVType
 functionType = try (RFn <$> ctype) <|> (RKernel <$> kernel)
  where
-  ctype :: Parser RawCType
+  ctype :: Parser RawFunType
   ctype = do
     ins <- round $ rawIO (unWC <$> vtype)
     match Arrow

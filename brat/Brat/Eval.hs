@@ -6,7 +6,7 @@ module Brat.Eval (EvMode(..)
                  ,apply
                  ,eval
                  ,sem
-                 ,evalCTy
+                 ,evalFunTy
                  ,eqTest
                  ,kindEq
                  ,kindType
@@ -64,11 +64,11 @@ numVal val = error $ "Found a " ++ show val ++ " at Nat kind"
 eval :: Stack Z Sem n -> Val n -> Checking (Val Z)
 eval stk v = sem stk v >>= quote Zy
 
-evalCTy :: Stack Z Sem n
-        -> Modey m
-        -> CTy m n
-        -> Checking (CTy m Z)
-evalCTy stk my = quoteCTy Zy my stk
+evalFunTy :: Stack Z Sem n
+          -> Modey m
+          -> FunTy m n
+          -> Checking (FunTy m Z)
+evalFunTy stk my = quoteFunTy Zy my stk
 
 sem :: Stack Z Sem n -- An environment for looking up VInxs
     -> Val n         -- The thing we're evaluating
@@ -116,15 +116,15 @@ quote lvy (SCon nm args) = VCon nm <$> traverse (quote lvy) args
 quote lvy (SLam stk body) = do
   body <- sem (stk :<< semLvl lvy) body
   VLam <$> quote (Sy lvy) body
-quote lvy (SFun my ga cty) = VFun my <$> quoteCTy lvy my ga cty
+quote lvy (SFun my ga cty) = VFun my <$> quoteFunTy lvy my ga cty
 quote lvy (SApp f vz) = VApp (quoteVar lvy f) <$> traverse (quote lvy) vz
 quote lvy (SSum my ga ts) = VSum my <$> traverse quoteVariant ts
   where
   quoteVariant (Some ro) = quoteRo my ga ro lvy >>= \case
     (_, Some (ro :* _)) -> pure (Some ro)
 
-quoteCTy :: Ny lv -> Modey m -> Stack Z Sem n -> CTy m n -> Checking (CTy m lv)
-quoteCTy lvy my ga (ins :->> outs) = quoteRo my ga ins lvy >>= \case
+quoteFunTy :: Ny lv -> Modey m -> Stack Z Sem n -> FunTy m n -> Checking (FunTy m lv)
+quoteFunTy lvy my ga (ins :->> outs) = quoteRo my ga ins lvy >>= \case
   (ga', Some (ins' :* lvy')) -> quoteRo my ga' outs lvy' >>= \case
     (_, Some (outs' :* _)) -> pure (ins' :->> outs')
 
@@ -263,7 +263,7 @@ eqWorker tm _ _ s0 s1 = do
 
 -- Type rows have bot0,bot1 dangling de Bruijn indices, which we instantiate with
 -- de Bruijn levels. As we go under binders in these rows, we add to the scope's
--- environments, which we return at the end for eqCType.
+-- environments, which we return at the end for eqFunType.
 eqRowTest :: Modey m
           -> String -- The term we complain about in errors
           -> (Ny :* Stack Z TypeKind) lv -- Next available level, the kinds of existing levels

@@ -39,7 +39,7 @@ data Flat
  | FEmpty
  | FPull [PortName] (WC Flat)
  -- We can get away with not elaborating type signatures in the short term
- | FFn RawCType
+ | FFn RawFunType
  | FKernel RawKType
  | FUnderscore
  | FPass

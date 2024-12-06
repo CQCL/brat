@@ -95,17 +95,17 @@ checkDecl pre (VDecl FuncDecl{..}) to_define = (fnName -!) $ localFC fnLoc $ do
       Left body -> let ?my = Braty in check body ((), to_define) $> ()
  where
   getClauses :: FunBody Term Noun
-             -> (Modey m, CTy m Z)
+             -> (Modey m, FunTy m Z)
              -> Checking (Either
                           (WC (Term Chk Noun))
-                          (Some (Modey :* Flip CTy Z), FunBody Term UVerb)
+                          (Some (Modey :* Flip FunTy Z), FunBody Term UVerb)
                          )
   getClauses (ThunkOf (WC _ verb)) (my, cty) = pure (Right (Some (my :* Flip cty), verb))
   getClauses (NoLhs rhs) _ = pure (Left rhs)
   getClauses Undefined _ = err (InternalError "No body in `checkDecl`")
 
 
-  getFunTy :: Some (Ro m Z) -> Checking (Maybe (Some (Modey :* Flip CTy Z)))
+  getFunTy :: Some (Ro m Z) -> Checking (Maybe (Some (Modey :* Flip FunTy Z)))
   getFunTy (Some (RPr (_, VFun my cty) R0)) = pure $ Just (Some (my :* Flip cty))
   getFunTy (Some R0) = err $ EmptyRow name
   getFunTy _ = pure Nothing

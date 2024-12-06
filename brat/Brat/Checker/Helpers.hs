@@ -273,7 +273,7 @@ getThunks m ro = err $ ExpectedThunk (showMode m) (showRow ro)
 
 -- The type given here should be normalised
 vecLayers :: Modey m -> Val Z -> Checking ([(Src, NumVal (VVar Z))] -- The sizes of the vector layers
-                                          ,CTy m Z -- The function type at the end
+                                          ,FunTy m Z -- The function type at the end
                                           )
 vecLayers my (TVec ty (VNum n)) = do
   src <- mkStaticNum n
@@ -328,14 +328,14 @@ mkStaticNum n@(NumValue c gro) = do
     wire (oneSrc, TNat, rhs)
     pure src
 
-vectorise :: forall m. Modey m -> (Src, Val Z) -> Checking (Src, CTy m Z)
+vectorise :: forall m. Modey m -> (Src, Val Z) -> Checking (Src, FunTy m Z)
 vectorise my (src, ty) = do
   (layers, cty) <- vecLayers my ty
   modily my $ foldrM mkMapFun (src, cty) layers
  where
   mkMapFun :: (Src, NumVal (VVar Z)) -- Layer to apply
-            -> (Src, CTy m Z) -- The input to this level of mapfun
-            -> Checking (Src, CTy m Z)
+            -> (Src, FunTy m Z) -- The input to this level of mapfun
+            -> Checking (Src, FunTy m Z)
   mkMapFun (lenSrc, len) (valSrc, cty) = do
     let weak1 = changeVar (Thinning (ThDrop ThNull))
     vecFun <- vectorisedFun len my cty
@@ -346,13 +346,13 @@ vectorise my (src, ty) = do
     defineTgt lenTgt (VNum len)
     wire (lenSrc, kindType Nat, lenTgt)
     wire (valSrc, ty, valTgt)
-    let vecCTy = case (my,my',cty) of
+    let vecFunTy = case (my,my',cty) of
           (Braty,Braty,cty) -> cty
           (Kerny,Kerny,cty) -> cty
           _ -> error "next returned wrong mode of computation type to that passed in"
-    pure (vectorSrc, vecCTy)
+    pure (vectorSrc, vecFunTy)
 
-  vectorisedFun :: NumVal (VVar Z) -> Modey m -> CTy m Z -> Checking (Val Z)
+  vectorisedFun :: NumVal (VVar Z) -> Modey m -> FunTy m Z -> Checking (Val Z)
   vectorisedFun nv my (ss :->> ts) = do
     (ss', ny) <- vectoriseRo True nv Zy ss
     (ts', _)  <- vectoriseRo False nv ny ts
@@ -398,7 +398,7 @@ declareTgt tgt my ty = req (Declare (InEnd (end tgt)) my ty)
 -- Build a box corresponding to the inside of a thunk
 makeBox :: (?my :: Modey m, EvMode m)
         => String -- A label for the nodes we create
-        -> CTy m Z
+        -> FunTy m Z
         -> ((Overs m UVerb, Unders m Chk) -> Checking a) -- checks + builds the body using srcs/tgts from the box
         -> Checking ((Src, BinderType Brat), a)
 makeBox name cty@(ss :->> ts) body = do

@@ -263,7 +263,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
   portNamesToBoundNames :: [(String, (Src, BinderType m))] -> [(String, (Src, BinderType m))]
   portNamesToBoundNames = fmap (\(n, (src, ty)) -> (n, (NamedPort (end src) n, ty)))
 
-  mkSig :: ToEnd t => [(Src, BinderType m)] -> [(NamedPort t, BinderType m)] -> Checking (CTy m Z)
+  mkSig :: ToEnd t => [(Src, BinderType m)] -> [(NamedPort t, BinderType m)] -> Checking (FunTy m Z)
   mkSig overs unders = rowToRo ?my (retuple <$> overs) S0 >>=
     \(Some (inRo :* endz)) -> rowToRo ?my (retuple <$> unders) endz >>=
       \(Some (outRo :* _)) -> pure (inRo :->> outRo)
@@ -288,7 +288,7 @@ check' (Pull ports t) (overs, unders) = do
   unders <- pullPortsRow ports unders
   check t (overs, unders)
 check' (t ::: outs) (overs, ()) | Braty <- ?my = do
-  (ins :->> outs) :: CTy Brat Z <- kindCheckAnnotation Braty ":::" outs
+  (ins :->> outs) :: FunTy Brat Z <- kindCheckAnnotation Braty ":::" outs
   (_, hungries, danglies, _) <- next "id" Id (S0,Some (Zy :* S0)) ins outs
   ((), leftOvers) <- noUnders $ check t (overs, hungries)
   pure (((), danglies), (leftOvers, ()))
@@ -311,7 +311,7 @@ check' (Th tm) ((), u@(hungry, ty):unders) = case (?my, ty) of
   checkThunk :: forall m. (CheckConstraints m UVerb, EvMode m)
            => Modey m
            -> String
-           -> CTy m Z
+           -> FunTy m Z
            -> WC (Term Chk UVerb)
            -> Checking Src
   checkThunk m name cty tm = do
@@ -677,7 +677,7 @@ data Clause = Clause
 -- refined overs)
 checkClause :: forall m. (CheckConstraints m UVerb, EvMode m) => Modey m
             -> String
-            -> CTy m Z
+            -> FunTy m Z
             -> Clause
             -> Checking
                ( TestMatchData m -- TestMatch data (LHS)
@@ -717,7 +717,7 @@ checkClause my fnName cty clause = modily my $ do
 checkBody :: (CheckConstraints m UVerb, EvMode m, ?my :: Modey m)
           => String -- The function name
           -> FunBody Term UVerb
-          -> CTy m Z -- Function type
+          -> FunTy m Z -- Function type
           -> Checking Src
 checkBody fnName body cty = do
   (tm, (absFC, tmFC)) <- case body of
@@ -925,7 +925,7 @@ kindCheckRow my name r = do
 kindCheckAnnotation :: Modey m
                     -> String -- for node name
                     -> [(PortName, ThunkRowType m)]
-                    -> Checking (CTy m Z)
+                    -> Checking (FunTy m Z)
 kindCheckAnnotation my name outs = do
   trackM "kca"
   name <- req (Fresh $ "__kca_" ++ name)

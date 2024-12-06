@@ -155,7 +155,7 @@ data Val :: N -> Type where
   VNum :: NumVal (VVar n) -> Val n
   VCon :: QualName -> [Val n] -> Val n
   VLam :: Val (S n) -> Val n -- Just body (binds DeBruijn index n)
-  VFun :: MODEY m => Modey m -> CTy m n -> Val n
+  VFun :: MODEY m => Modey m -> FunTy m n -> Val n
   VApp :: VVar n -> Bwd (Val n) -> Val n
   VSum :: MODEY m => Modey m -> [Some (Ro m n)] -> Val n -- (Hugr-like) Sum types
 
@@ -169,16 +169,16 @@ data Sem where
   -- Second is just body, we do NOT substitute under the binder,
   -- instead we stash Sem's for each free DeBruijn index into the first member:
   SLam :: Stack Z Sem n -> Val (S n) -> Sem
-  SFun :: MODEY m => Modey m -> Stack Z Sem n -> CTy m n -> Sem
+  SFun :: MODEY m => Modey m -> Stack Z Sem n -> FunTy m n -> Sem
   SApp :: SVar -> Bwd Sem -> Sem
   -- Sum types, stash like SLam (shared between all variants)
   SSum :: MODEY m => Modey m -> Stack Z Sem n -> [Some (Ro m n)] -> Sem
 deriving instance Show Sem
 
-data CTy :: Mode -> N -> Type where
-  (:->>) :: Ro m i j -> Ro m j k -> CTy m i
+data FunTy :: Mode -> N -> Type where
+  (:->>) :: Ro m i j -> Ro m j k -> FunTy m i
 
-instance MODEY m => Show (CTy m n) where
+instance MODEY m => Show (FunTy m n) where
   show (ri :->> ro) = unwords [show ri, arrow, show ro]
    where
     arrow = case modey :: Modey m of
@@ -544,7 +544,7 @@ varChangerThroughRo vc {- src -> tgt -} (REx pk ro {- S src' -> src'' -})
   = case varChangerThroughRo (weakenVC vc) ro of
         Some (vc {- src'' -> tgt'' -} :* ro {- S tgt' -> tgt'' -}) -> Some (vc :* REx pk ro)
 
-instance DeBruijn (CTy m) where
+instance DeBruijn (FunTy m) where
   changeVar (vc {- srcIn -> tgtIn -}) (ri {- srcIn -> srcMid -} :->> ro {- srcMid -> srcOut -}) = case varChangerThroughRo vc ri of
     Some {- tgtMid -} (vc {- srcMid -> tgtMid -} :* ri {- tgtIn -> tgtMid -}) -> case varChangerThroughRo vc ro of
       Some {- tgtOut -} (_vc {- srcOut -> tgtOut -} :* ro {- tgtMid -> tgtOut -}) -> ri :->> ro
@@ -572,7 +572,7 @@ data KernelVal :: N -> Type where
   KCons :: KernelVal n -> KernelVal n -> KernelVal n
 deriving instance Show (KernelVal n)
 
-type FunVal m = CTy m Z
+type FunVal m = FunTy m Z
 --value :: Modey m -> FunVal m -> Val Z
 --value = VFun
 
