@@ -6,7 +6,6 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
                             ,ensureEmpty, noUnders
                             ,rowToSig
                             ,showMode, getVec
-                            ,mkThunkTy
                             ,wire
                             ,next, knext, anext
                             ,kindType, getThunks
@@ -152,15 +151,6 @@ type family ThunkFCType (m :: Mode) where
 type family ThunkRowType (m :: Mode) where
   ThunkRowType Brat = KindOr (Term Chk Noun)
   ThunkRowType Kernel = Term Chk Noun
-
-mkThunkTy :: Modey m
-          -> ThunkFCType m
-          -> [(PortName, ThunkRowType m)]
-          -> [(PortName, ThunkRowType m)]
-          -> Term Chk Noun
--- mkThunkTy Braty fc ss ts = C (WC fc (ss :-> ts))
-mkThunkTy Braty _ ss ts = C (ss :-> ts)
-mkThunkTy Kerny () ss ts = K (ss :-> ts)
 
 anext :: forall m i j k
        . EvMode m
