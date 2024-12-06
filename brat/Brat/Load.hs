@@ -67,7 +67,9 @@ checkDecl pre (VDecl FuncDecl{..}) to_define = (fnName -!) $ localFC fnLoc $ do
     -- We must have a row of nouns as the definition
     Nothing -> case fnBody of
       NoLhs body -> do
-        (((), ()), ((), rightUnders)) <- let ?my = Braty in check body ((), to_define)
+        (((), ()), ((), rightUnders)) <- let ?my = Braty
+                                             ?props = ()
+                                         in  check body ((), to_define)
         case rightUnders of
           [] -> pure ()
           _ -> localFC (fcOf body) $
@@ -92,7 +94,7 @@ checkDecl pre (VDecl FuncDecl{..}) to_define = (fnName -!) $ localFC fnLoc $ do
             Kerny -> wire (box_out, VFun my cty, thunk_in)
           [] -> err $ ExpectedThunk (showMode my) "No body"
           row -> err $ ExpectedThunk (showMode my) (showRow row)
-      Left body -> let ?my = Braty in check body ((), to_define) $> ()
+      Left body -> let ?my = Braty in let ?props = () in check body ((), to_define) $> ()
  where
   getClauses :: FunBody Term Noun
              -> (Modey m, FunTy m Z)
@@ -145,7 +147,7 @@ loadStmtsWithEnv ns (venv, oldDecls, oldEndData) (fname, pre, stmts, cts) = addS
                         Local -> do
                           -- kindCheckAnnotation gives the signature of an Id node,
                           -- hence ins == outs (modulo haskell's knowledge about their scopes)
-                          ins :->> outs <- kindCheckAnnotation Braty (show name) (fnSig d)
+                          ins :->> outs <- kindCheckAnnotation Braty () (show name) (fnSig d)
                           pure (Id, ins :->> outs, Some ins, "decl")
                         Extern sym -> do
                           (Some outs) <- kindCheckRow Braty (show name) (fnSig d)

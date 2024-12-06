@@ -219,7 +219,7 @@ doesntOccur e (VApp var args) = case var of
   _ -> pure ()
 doesntOccur e (VCon _ args) = traverse_ (doesntOccur e) args
 doesntOccur e (VLam body) = doesntOccur e body
-doesntOccur e (VFun my (ins :->> outs)) = case my of
+doesntOccur e (VFun my (FunTy _ ins outs)) = case my of
   Braty -> doesntOccurRo my e ins *> doesntOccurRo my e outs
   Kerny -> doesntOccurRo my e ins *> doesntOccurRo my e outs
 doesntOccur e (VSum my rows) = traverse_ (\(Some ro) -> doesntOccurRo my e ro) rows

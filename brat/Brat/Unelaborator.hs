@@ -3,7 +3,7 @@ module Brat.Unelaborator (unelab) where
 import Brat.FC (unWC)
 import Brat.Syntax.Concrete (Flat(..))
 import Brat.Syntax.Common (Dir(..), Kind(..), Diry(..), Kindy(..)
-                          ,KindOr, PortName, TypeRowElem(Named), FunType'(..)
+                          ,KindOr, PortName, TypeRowElem(Named), CType'(..)
                           )
 import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Raw (Raw(..), RawVType)
@@ -36,7 +36,7 @@ unelab dy ky (f :$: s) = FApp (unelab dy KVerby <$> f) (unelab Chky ky <$> s)
 unelab dy _ (Lambda (abs,rhs) cs) = FLambda ((abs, unelab dy Nouny <$> rhs) :| (second (fmap (unelab Chky Nouny)) <$> cs))
 unelab _ _ (Con c args) = FCon c (unelab Chky Nouny <$> args)
 unelab _ _ (C (ss :-> ts)) = FFn (toRawRo ss :-> toRawRo ts)
-unelab _ _ (K cty) = FKernel $ fmap (\(p, ty) -> Named p (toRaw ty)) cty
+unelab _ _ (K ps cty) = FKernel ps $ fmap (\(p, ty) -> Named p (toRaw ty)) cty
 unelab _ _ Identity = FIdentity
 unelab _ _ FanIn = FFanIn
 unelab _ _ FanOut = FFanOut
@@ -65,7 +65,7 @@ toRaw (f :$: s) = (toRaw <$> f) ::$:: (toRaw <$> s)
 toRaw (Lambda (abs,rhs) cs) = RLambda (abs, toRaw <$> rhs) (second (fmap toRaw) <$> cs)
 toRaw (Con c args) = RCon c (toRaw <$> args)
 toRaw (C (ss :-> ts)) = RFn (toRawRo ss :-> toRawRo ts)
-toRaw (K cty) = RKernel $ (\(p, ty) -> Named p (toRaw ty)) <$> cty
+toRaw (K ps cty) = RKernel ps $ (\(p, ty) -> Named p (toRaw ty)) <$> cty
 toRaw Identity = RIdentity
 toRaw FanIn = RFanIn
 toRaw FanOut = RFanOut

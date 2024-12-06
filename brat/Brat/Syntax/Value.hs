@@ -24,7 +24,8 @@ module Brat.Syntax.Value {-(VDecl
 
 import Brat.Error
 import Brat.QualName
-import Brat.Syntax.Common
+import Brat.Syntax.CircuitProperties
+import Brat.Syntax.Common hiding (pattern PNone)
 import Brat.Syntax.Core (Term (..))
 import Brat.Syntax.FuncDecl (FunBody, FuncDecl(..))
 import Bwd
@@ -176,10 +177,14 @@ data Sem where
 deriving instance Show Sem
 
 data FunTy :: Mode -> N -> Type where
-  (:->>) :: Ro m i j -> Ro m j k -> FunTy m i
+  FunTy :: Properties m -> Ro m i j -> Ro m j k -> FunTy m i
+
+pattern (:->>) :: Ro Brat i j -> Ro Brat j k -> FunTy Brat i
+pattern ss :->> ts = FunTy () ss ts
 
 instance MODEY m => Show (FunTy m n) where
-  show (ri :->> ro) = unwords [show ri, arrow, show ro]
+  -- Properties don't exist in the surface syntax, so hide them from the user here.
+  show (FunTy _ ri ro) = unwords [show ri, arrow, show ro]
    where
     arrow = case modey :: Modey m of
       Braty -> "->"
@@ -545,9 +550,9 @@ varChangerThroughRo vc {- src -> tgt -} (REx pk ro {- S src' -> src'' -})
         Some (vc {- src'' -> tgt'' -} :* ro {- S tgt' -> tgt'' -}) -> Some (vc :* REx pk ro)
 
 instance DeBruijn (FunTy m) where
-  changeVar (vc {- srcIn -> tgtIn -}) (ri {- srcIn -> srcMid -} :->> ro {- srcMid -> srcOut -}) = case varChangerThroughRo vc ri of
+  changeVar (vc {- srcIn -> tgtIn -}) (FunTy ps ri {- srcIn -> srcMid -} ro {- srcMid -> srcOut -}) = case varChangerThroughRo vc ri of
     Some {- tgtMid -} (vc {- srcMid -> tgtMid -} :* ri {- tgtIn -> tgtMid -}) -> case varChangerThroughRo vc ro of
-      Some {- tgtOut -} (_vc {- srcOut -> tgtOut -} :* ro {- tgtMid -> tgtOut -}) -> ri :->> ro
+      Some {- tgtOut -} (_vc {- srcOut -> tgtOut -} :* ro {- tgtMid -> tgtOut -}) -> FunTy ps ri ro
 
 kernelNoBind :: Ro Kernel bot top -> bot :~: top
 kernelNoBind R0 = Refl

@@ -141,7 +141,7 @@ compileSig :: Modey m -> FunTy m Z -> Compile PolyFuncType
 compileSig my cty = do
   runCheckingInCompile (evalFunTy S0 my cty) <&> compileFunTy
 
-compileFunTy (ss :->> ts )= PolyFuncType [] (FunctionType (compileRo ss) (compileRo ts))
+compileFunTy (FunTy _ ss ts) = PolyFuncType [] (FunctionType (compileRo ss) (compileRo ts))
 
 compileRo :: Ro m i j -- The Ro that we're processing
           -> [HugrType]       -- The hugr type of the row

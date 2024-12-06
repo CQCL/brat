@@ -8,6 +8,7 @@ import Brat.Lexer.Token (Keyword(..), Token(..), Tok(..))
 import qualified Brat.Lexer.Token as Lexer
 import Brat.QualName ( plain, QualName(..) )
 import Brat.Syntax.Abstractor
+import Brat.Syntax.CircuitProperties (CircuitProperties(..))
 import Brat.Syntax.Common hiding (end)
 import qualified Brat.Syntax.Common as Syntax
 import Brat.Syntax.FuncDecl (FuncDecl(..), Locality(..))
@@ -274,9 +275,9 @@ rawIO' tyP = rowElem `sepBy` void (try comma)
        Nothing -> Anon <$> tyP
 
 functionType :: Parser RawVType
-functionType = try (RFn <$> ctype) <|> (RKernel <$> kernel)
+functionType = try (RFn <$> ctype) <|> (RKernel PControllable <$> kernel)
  where
-  ctype :: Parser RawFunType
+  ctype :: Parser RawCType
   ctype = do
     ins <- round $ rawIO (unWC <$> vtype)
     match Arrow
@@ -321,7 +322,7 @@ cthunk = try bratFn <|> try kernel <|> thunk
     ss <- rawIO' (unWC <$> vtype)
     match Lolly
     ts <- rawIO' (unWC <$> vtype)
-    pure $ FKernel (ss :-> ts)
+    pure $ FKernel PControllable (ss :-> ts)
 
   -- Explicit lambda or brace section
   thunk = FThunk <$> withFC (curly braceSection)
@@ -553,7 +554,7 @@ decl = do
     where
       is_fun_ty :: RawVType -> Bool
       is_fun_ty (RFn _) = True
-      is_fun_ty (RKernel _) = True
+      is_fun_ty (RKernel _ _) = True
       is_fun_ty _ = False
 
       nbody :: String -> Parser (WC Flat)

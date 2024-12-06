@@ -18,6 +18,7 @@ import Brat.Checker.Monad
 import Brat.Checker.Types (EndType(..), kindForMode)
 import Brat.Error (ErrorMsg(..))
 import Brat.QualName (plain)
+import Brat.Syntax.CircuitProperties (eqProps)
 import Brat.Syntax.Value
 import Brat.Syntax.Common
 import Control.Monad.Freer (req)
@@ -124,9 +125,9 @@ quote lvy (SSum my ga ts) = VSum my <$> traverse quoteVariant ts
     (_, Some (ro :* _)) -> pure (Some ro)
 
 quoteFunTy :: Ny lv -> Modey m -> Stack Z Sem n -> FunTy m n -> Checking (FunTy m lv)
-quoteFunTy lvy my ga (ins :->> outs) = quoteRo my ga ins lvy >>= \case
+quoteFunTy lvy my ga (FunTy ps ins outs) = quoteRo my ga ins lvy >>= \case
   (ga', Some (ins' :* lvy')) -> quoteRo my ga' outs lvy' >>= \case
-    (_, Some (outs' :* _)) -> pure (ins' :->> outs')
+    (_, Some (outs' :* _)) -> pure (FunTy ps ins' outs')
 
 -- first number is next Lvl to use in Value
 --         require every Lvl in Sem is < n (converted by n - 1 - lvl), else must fail at runtime
@@ -246,10 +247,16 @@ eqWorker tm lvkz (TypeFor m []) (SCon c args) (SCon c' args') | c == c' =
         Just ks -> eqTests tm lvkz (snd <$> ks) args args'
         Nothing -> pure . Left . TypeErr $ "Type constructor " ++ show c
                         ++ " undefined " ++ " at kind " ++ show (TypeFor m [])
-eqWorker tm lvkz (Star []) (SFun m0 stk0 (ins0 :->> outs0)) (SFun m1 stk1 (ins1 :->> outs1)) | Just Refl <- testEquality m0 m1 =
-  eqRowTest m0 tm lvkz (stk0,ins0) (stk1,ins1) >>= \case
-    Left msg -> pure (Left msg)
-    Right (Some lvkz, stk0, stk1) -> eqRowTest m0 tm lvkz (stk0, outs0) (stk1, outs1) <&> dropRight
+eqWorker tm lvkz (Star []) (SFun m0 stk0 (FunTy ps0 ins0 outs0)) (SFun m1 stk1 (FunTy ps1 ins1 outs1))
+ -- Give nice error for kind mismatch
+  | Just Refl <- testEquality m0 m1
+  = if eqProps m0 ps0 ps1
+    then eqRowTest m0 tm lvkz (stk0,ins0) (stk1,ins1) >>= \case
+      Left msg -> pure (Left msg)
+      Right (Some lvkz, stk0, stk1) -> eqRowTest m0 tm lvkz (stk0, outs0) (stk1, outs1) <&> dropRight
+    -- TODO: Better error message
+    else pure (Left (TypeErr "Kernels had different properties"))
+
 eqWorker tm lvkz (TypeFor _ []) (SSum m0 stk0 rs0) (SSum m1 stk1 rs1)
   | Just Refl <- testEquality m0 m1 = case zipSameLength rs0 rs1 of
       Nothing -> pure (Left (TypeErr "Mismatched sum lengths"))
