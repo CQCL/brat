@@ -9,6 +9,7 @@ module Brat.Error (ParseError(..)
                   ) where
 
 import Brat.FC
+import Brat.Syntax.Port (PortName)
 
 import Data.List (intercalate)
 import System.Exit
@@ -60,8 +61,8 @@ data ErrorMsg
  | FileNotFound String [String]
  | SymbolNotFound String String
  | InternalError String
- | AmbiguousPortPull String String
- | BadPortPull String String
+ | AmbiguousPortPull PortName String
+ | BadPortPull PortName String
  | VConNotFound String
  | TyConNotFound String String
  | MatchingOnTypes
