@@ -372,7 +372,7 @@ argProblems srcs na p = argProblemsWithLeftovers srcs na p >>= \case
   _ -> err $ UnificationError "Pattern doesn't match expected length for constructor args"
 
 argProblemsWithLeftovers :: [Src] -> NormalisedAbstractor -> Problem -> Checking (Problem, [Src])
-argProblemsWithLeftovers srcs (NA (APull ps abs)) p = pullPorts portName show ps (map (, ()) srcs) >>= \srcs -> argProblemsWithLeftovers (fst <$> srcs) (NA abs) p
+argProblemsWithLeftovers srcs (NA (APull ps abs)) p = pullPorts portName show ps srcs >>= \srcs -> argProblemsWithLeftovers srcs (NA abs) p
 argProblemsWithLeftovers (src:srcs) na p | Just (pat, na) <- unconsNA na = first ((src, pat):) <$> argProblemsWithLeftovers srcs na p
 argProblemsWithLeftovers srcs (NA AEmpty) p = pure (p, srcs)
 argProblemsWithLeftovers [] abst _ = err $ NothingToBind (show abst)
