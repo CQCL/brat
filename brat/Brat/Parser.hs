@@ -7,9 +7,9 @@ import Brat.Lexer (lex)
 import Brat.Lexer.Token (Keyword(..), Token(..), Tok(..))
 import qualified Brat.Lexer.Token as Lexer
 import Brat.QualName ( plain, QualName(..) )
-import Brat.Syntax.Abstractor
+import Brat.Syntax.Abstractor hiding (PNone)
 import Brat.Syntax.CircuitProperties (CircuitProperties(..))
-import Brat.Syntax.Common hiding (end)
+import Brat.Syntax.Common hiding (PNone, end)
 import qualified Brat.Syntax.Common as Syntax
 import Brat.Syntax.FuncDecl (FuncDecl(..), Locality(..))
 import Brat.Syntax.Concrete
@@ -26,7 +26,7 @@ import Data.List.HT (chop, viewR)
 import Data.List.NonEmpty (toList, NonEmpty(..), nonEmpty)
 import Data.Foldable (msum)
 import Data.Functor (($>), (<&>))
-import Data.Maybe (fromJust, maybeToList, fromMaybe)
+import Data.Maybe (fromJust, isJust, maybeToList, fromMaybe)
 import Data.Set (empty)
 import Prelude hiding (lex, round)
 import Text.Megaparsec hiding (Pos, Token, State, empty, match, ParseError, parse)
@@ -275,22 +275,20 @@ rawIO' tyP = rowElem `sepBy` void (try comma)
        Nothing -> Anon <$> tyP
 
 functionType :: Parser RawVType
-functionType = try (RFn <$> ctype) <|> (RKernel PControllable <$> kernel)
+functionType = try ctype <|> kernel
  where
-  ctype :: Parser RawCType
   ctype = do
     ins <- round $ rawIO (unWC <$> vtype)
     match Arrow
     outs <- rawIO (unWC <$> vtype)
-    pure (ins :-> outs)
+    pure (RFn (ins :-> outs))
 
-  kernel :: Parser RawKType
   kernel = do
     ins <- round $ rawIO' (unWC <$> vtype)
     match Lolly
+    isWeird <- isJust <$> optional (match Hash)
     outs <- rawIO' (unWC <$> vtype)
-    pure (ins :-> outs)
-
+    pure (RKernel (if isWeird then PNone else PControllable) (ins :-> outs))
 
 vec :: Parser Flat
 vec = (\(WC fc x) -> unWC $ vec2Cons (end fc) x) <$>  withFC (square elems)
@@ -321,8 +319,9 @@ cthunk = try bratFn <|> try kernel <|> thunk
   kernel = curly $ do
     ss <- rawIO' (unWC <$> vtype)
     match Lolly
+    isWeird <- isJust <$> optional (match Hash)
     ts <- rawIO' (unWC <$> vtype)
-    pure $ FKernel PControllable (ss :-> ts)
+    pure (FKernel (if isWeird then PNone else PControllable) (ss :-> ts))
 
   -- Explicit lambda or brace section
   thunk = FThunk <$> withFC (curly braceSection)
