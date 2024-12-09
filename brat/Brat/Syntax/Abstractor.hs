@@ -1,13 +1,13 @@
 module Brat.Syntax.Abstractor where
 
+import Brat.QualName
 import Brat.Syntax.Port
 import Brat.Syntax.Simple
-import Brat.UserName
 
 -- Ways to bind one thing
 data Pattern
  = Bind String
- | PCon UserName Abstractor
+ | PCon QualName Abstractor
  | Lit SimpleTerm
  | DontCare
  deriving Eq

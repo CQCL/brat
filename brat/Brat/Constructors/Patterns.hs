@@ -1,9 +1,9 @@
 module Brat.Constructors.Patterns where
 
-import Brat.UserName
+import Brat.QualName
 
 pattern CSucc, CDoub, CNil, CCons, CSome, CNone, CTrue, CFalse, CZero, CSnoc,
-        CConcatEqEven, CConcatEqOdd, CRiffle :: UserName
+        CConcatEqEven, CConcatEqOdd, CRiffle :: QualName
 pattern CSucc = PrefixName [] "succ"
 pattern CDoub = PrefixName [] "doub"
 pattern CNil = PrefixName [] "nil"
@@ -18,7 +18,7 @@ pattern CConcatEqEven = PrefixName [] "concatEqEven"
 pattern CConcatEqOdd = PrefixName [] "concatEqOdd"
 pattern CRiffle = PrefixName [] "riffle"
 
-pattern CList, CVec, CNat, CInt, COption, CBool, CBit, CFloat, CString :: UserName
+pattern CList, CVec, CNat, CInt, COption, CBool, CBit, CFloat, CString :: QualName
 pattern CList = PrefixName [] "List"
 pattern CVec = PrefixName [] "Vec"
 pattern CNat = PrefixName [] "Nat"
@@ -29,6 +29,6 @@ pattern CBit = PrefixName [] "Bit"
 pattern CFloat = PrefixName [] "Float"
 pattern CString = PrefixName [] "String"
 
-pattern CQubit, CMoney :: UserName
+pattern CQubit, CMoney :: QualName
 pattern CQubit = PrefixName [] "Qubit"
 pattern CMoney = PrefixName [] "Money"

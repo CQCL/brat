@@ -3,9 +3,9 @@ module Brat.Constructors where
 import qualified Data.Map as M
 
 import Brat.Constructors.Patterns
+import Brat.QualName (QualName, plain)
 import Brat.Syntax.Common
 import Brat.Syntax.Value
-import Brat.UserName (UserName, plain)
 import Bwd
 import Hasochism (N(..), Ny(..))
 
@@ -20,8 +20,8 @@ data CtorArgs m where
         -> CtorArgs m
 
 type ConstructorMap m
-  = M.Map UserName  -- The name of a constructor "C"
-    (M.Map UserName -- The name of the type we're checking against "Ty"
+  = M.Map QualName  -- The name of a constructor "C"
+    (M.Map QualName -- The name of the type we're checking against "Ty"
      (CtorArgs m)
     )
 
@@ -125,7 +125,7 @@ kernelConstructors = M.fromList
   ,(CFalse, M.fromList [(CBit, CArgs [] Zy R0 R0)])
   ]
 
-defaultTypeConstructors :: M.Map (Mode, UserName) [(PortName, TypeKind)]
+defaultTypeConstructors :: M.Map (Mode, QualName) [(PortName, TypeKind)]
 defaultTypeConstructors = M.fromList
   [((Brat, COption), [("value", Star [])])
   ,((Brat, CList),   [("listValue", Star [])])
@@ -149,7 +149,7 @@ defaultTypeConstructors = M.fromList
 -- TODO: Make type aliases more flexible. Allow different patterns and allow Nat
 -- kinds. Allow port pulling when applying them
 -- TODO: Aliases for kernel types
-typeAliases :: M.Map UserName (Modey m, [ValPat], BinderType m)
+typeAliases :: M.Map QualName (Modey m, [ValPat], BinderType m)
 typeAliases = M.empty
 {- Here is an example, for `type Vec5(X) = Vec(X, n)`:
 M.fromList $
@@ -160,7 +160,7 @@ M.fromList $
 -}
 -}
 
-natConstructors :: M.Map UserName (Maybe NumPat, NumVal (VVar Z) -> NumVal (VVar Z))
+natConstructors :: M.Map QualName (Maybe NumPat, NumVal (VVar Z) -> NumVal (VVar Z))
 natConstructors = M.fromList
   [(plain "succ", (Just (NP1Plus NPVar)
                   ,nPlus 1))
