@@ -1,3 +1,5 @@
+{-# LANGUAGE ApplicativeDo #-}
+
 module Brat.Checker (checkBody
                     ,check
                     ,run
@@ -5,6 +7,7 @@ module Brat.Checker (checkBody
                     ,kindCheckAnnotation
                     ,kindCheckRow
                     ,tensor
+                    ,CheckConstraints
                     ) where
 
 import Control.Exception (assert)
@@ -144,7 +147,7 @@ checkIO :: forall m d k exp act . (CheckConstraints m k, ?my :: Modey m)
 checkIO tm@(WC fc _) exps acts wireFn errMsg = modily ?my $ do
   let (rows, rest) = zipSuffixes exps acts
   localFC fc $ forM rows $ \(e:|exps, a:|acts) ->
-      wrapError (addRowContext (showRow $ e:exps) (showRow $ a:acts)) $ wireFn e a
+      mkFork "checkIO" $ wrapError (addRowContext (showRow $ e:exps) (showRow $ a:acts)) $ wireFn e a
   throwLeft $ first (\(b:|bs) -> TypeErr $ errMsg ++ showRow (b:bs) ++ " for " ++ show tm) rest
  where
   addRowContext :: String -> String -> Error -> Error
@@ -179,7 +182,7 @@ check :: (CheckConstraints m k
       -> ChkConnectors m d k
       -> Checking (SynConnectors m d k
                   ,ChkConnectors m d k)
-check (WC fc tm) conn = localFC fc (check' tm conn)
+check (WC fc tm) conn = track ("Beginning check of " ++ show tm) $ localFC fc (check' tm conn)
 
 check' :: forall m d k
         . (CheckConstraints m k
@@ -220,7 +223,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
       -- with the other clauses, as part of the body.
       (ins :->> outs) <- mkSig usedOvers unders
       (allFakeUnders, rightFakeUnders, tgtMap) <- suppressHoles $ suppressGraph $ do
-        (_, [], fakeOvers, fakeAcc) <- anext "lambda_fake_source" Hypo (S0, Some (Zy :* S0)) R0 ins
+        (_, [], fakeOvers, fakeAcc) <- anext' "lambda_fake_source" Hypo (S0, Some (Zy :* S0)) R0 ins True
         -- Hypo `check` calls need an environment, even just to compute leftovers;
         -- we get that env by solving `problem` reformulated in terms of the `fakeOvers`
         let srcMap = fromJust $ zipSameLength (fst <$> usedOvers) (fst <$> fakeOvers)
@@ -235,9 +238,11 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
       let usedFakeUnders = (fst <$> allFakeUnders) \\ (fst <$> rightFakeUnders)
       let usedUnders = [ fromJust (lookup tgt tgtMap) | tgt <- usedFakeUnders ]
       let rightUnders = [ fromJust (lookup tgt tgtMap) | (tgt, _) <- rightFakeUnders ]
-      sig <- mkSig usedOvers usedUnders
-      patOuts <- checkClauses sig usedOvers (c :| cs)
-      mkWires patOuts usedUnders
+      mkFork "LambdaChk" $ do
+            sig <- mkSig usedOvers usedUnders
+            patOuts <- checkClauses sig usedOvers (c :| cs)
+            mkWires patOuts usedUnders
+            pure ()
       pure (((), ()), (rightOvers, rightUnders))
     Syny -> do
       synthOuts <- suppressHoles $ suppressGraph $ do
@@ -275,14 +280,19 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
     Nothing -> err $ InternalError "Trying to wire up different sized lists of wires"
     Just conns -> traverse (\((src, ty), (tgt, _)) -> wire (src, binderToValue ?my ty, tgt)) conns
 
+  checkClauses :: CTy m Z -> [(Src, BinderType m)] -> NonEmpty (WC Abstractor, WC (Term Chk Noun)) -> Checking [(Src, BinderType m)]
   checkClauses cty@(ins :->> outs) overs all_cs = do
-    let clauses = NE.zip (NE.fromList [0..]) all_cs <&>
-            \(i, (abs, tm)) -> Clause i (normaliseAbstractor <$> abs) tm
-    clauses <- traverse (checkClause ?my "lambda" cty) clauses
-    (_, patMatchUnders, patMatchOvers, _) <- anext "lambda" (PatternMatch clauses) (S0, Some (Zy :* S0))
-                                             ins
-                                             outs
-    mkWires overs patMatchUnders
+    (node, patMatchUnders, patMatchOvers, _) <- suppressGraph $
+        anext "lambda" Hypo (S0, Some (Zy :* S0)) ins outs
+    mkFork "checkClauses" $ do
+      let clauses = NE.zip (NE.fromList [0..]) all_cs <&>
+                  \(i, (abs, tm)) -> Clause i (normaliseAbstractor <$> abs) tm
+      clauses <- traverse (checkClause ?my "lambda" cty) clauses
+      let inputs  = [ (portName p, biType @m ty) | (p, ty) <- patMatchUnders ]
+      let outputs = [ (portName p, biType @m ty) | (p, ty) <- patMatchOvers  ]
+      req $ AddNode node (mkNode ?my (PatternMatch clauses) inputs outputs) -- not added by anext because suppressGraph
+      mkWires overs patMatchUnders -- might canonicalize type better now
+      pure ()
     pure patMatchOvers
 
 check' (Pull ports t) (overs, unders) = do
@@ -291,7 +301,8 @@ check' (Pull ports t) (overs, unders) = do
 check' (t ::: outs) (overs, ()) | Braty <- ?my = do
   (ins :->> outs) :: CTy Brat Z <- kindCheckAnnotation Braty ":::" outs
   (_, hungries, danglies, _) <- next "id" Id (S0,Some (Zy :* S0)) ins outs
-  ((), leftOvers) <- noUnders $ check t (overs, hungries)
+  (((), ()), (leftOvers, unders)) <- check t (overs, hungries)
+  ensureEmpty "unders" unders
   pure (((), danglies), (leftOvers, ()))
 check' (Emb t) (overs, unders) = do
   ((ins, outs), (overs, ())) <- check t (overs, ())
@@ -299,13 +310,12 @@ check' (Emb t) (overs, unders) = do
   pure ((ins, ()), (overs, unders))
 check' (Th tm) ((), u@(hungry, ty):unders) = case (?my, ty) of
   (Braty, ty) -> do
-    ty <- evalBinder Braty ty
-    case ty of
-      -- the case split here is so we can be sure we have the necessary CheckConstraints
-      Right ty@(VFun Braty cty) -> checkThunk Braty "thunk" cty tm >>= wire . (,ty, hungry)
-      Right ty@(VFun Kerny cty) -> checkThunk Kerny "thunk" cty tm >>= wire . (,ty, hungry)
-      Left (Star args) -> kindCheck [(hungry, Star args)] (Th tm) $> ()
-      _ -> err . ExpectedThunk "" $ showRow (u:unders)
+    mkFork "check'Th" $ evalBinder Braty ty >>= \case
+          -- the case split here is so we can be sure we have the necessary CheckConstraints
+          Right ty@(VFun Braty cty) -> checkThunk Braty "thunk" cty tm >>= wire . (,ty, hungry)
+          Right ty@(VFun Kerny cty) -> checkThunk Kerny "thunk" cty tm >>= wire . (,ty, hungry)
+          Left (Star args) -> kindCheck [(hungry, Star args)] (Th tm) $> ()
+          _ -> err . ExpectedThunk "" $ showRow (u:unders)
     pure (((), ()), ((), unders))
   (Kerny, _) -> err . ThunkInKernel $ show (Th tm)
  where
@@ -377,7 +387,6 @@ check' (Arith op l r) ((), u@(hungry, ty):unders) = case (?my, ty) of
       Right TInt -> check_arith TInt
       Right TFloat -> check_arith TFloat
       _ -> err . ArithNotExpected $ show u
-    pure (((), ()), ((), unders))
   (Kerny, _) -> err ArithInKernel
  where
   check_arith ty = let ?my = Braty in do
@@ -446,18 +455,20 @@ check' (VHole (mnemonic, name)) connectors = do
   pure (((), ()), ([], []))
 -- TODO: Better error message
 check' tm@(Con _ _) ((), []) = typeErr $ "No type to check " ++ show tm ++ " against"
-check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = case (?my, ty) of
-  (Braty, Left k) -> do
-    (_, leftOvers) <- kindCheck [(hungry, k)] (Con vcon vargs)
-    ensureEmpty "kindCheck leftovers" leftOvers
-    pure (((), ()), ((), unders))
-  (Braty, Right ty) -> aux Braty clup ty $> (((), ()), ((), unders))
-  (Kerny, _) -> aux Kerny kclup ty $> (((), ()), ((), unders))
+check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = do
+  trackM ("check' Con vcon=" ++ show vcon ++ "  vargs=" ++ show vargs)
+  mkFork "check'Con" $ case (?my, ty) of
+      (Braty, Left k) -> do
+        (_, leftOvers) <- kindCheck [(hungry, k)] (Con vcon vargs)
+        ensureEmpty "kindCheck leftovers" leftOvers
+      (Braty, Right ty) -> aux Braty clup ty
+      (Kerny, _) -> track "Kerny" $ aux Kerny kclup ty
+  pure (((), ()), ((), unders))
  where
   aux :: Modey m -> (QualName -> QualName -> Checking (CtorArgs m)) -> Val Z -> Checking ()
   aux my lup ty = do
-    VCon tycon tyargs <- eval S0 ty
-    (CArgs pats nFree _ argTypeRo) <- lup vcon tycon
+    VCon tycon tyargs <- track "In forked aux for check' Con" $ eval S0 ty
+    (CArgs pats nFree _ argTypeRo) <- track "forked aux doing lup" $ lup vcon tycon
     -- Look for vectors to produce better error messages for mismatched lengths
     wrap <- detectVecErrors vcon tycon tyargs pats ty (Left tm)
     Some (ny :* env) <- throwLeft $ valMatches tyargs pats
@@ -496,7 +507,7 @@ check' (Simple tm) ((), (hungry, ty):unders) = do
     -- No defining needed, so everything else can be unified
     _ -> do
       let vty = biType @m ty
-      throwLeft $ simpleCheck ?my vty tm
+      simpleCheck ?my vty tm
       (_, _, [(dangling, _)], _) <- anext @m "const" (Const tm) (S0,Some (Zy :* S0))
                                      R0 (RPr ("value", vty) R0)
       wire (dangling, vty, hungry)
@@ -703,12 +714,13 @@ checkClause my fnName cty clause = modily my $ do
     (tests, sol) <- localFC (fcOf (lhs clause)) $ solve my problem
     -- The solution gives us the variables bound by the patterns.
     -- We turn them into a row
-    Some (patEz :* patRo) <- mkArgRo my S0 ((\(n, (src, ty)) -> (NamedPort (toEnd src) n, ty)) <$> sol)
-    -- Also make a row for the refined outputs (shifted by the pattern environment)
-    Some (_ :* outRo) <- mkArgRo my patEz (first (fmap toEnd) <$> unders)
-    let match = TestMatchData my $ MatchSequence overs tests (snd <$> sol)
-    let vars = fst <$> sol
-    pure (vars, match, patRo :->> outRo)
+    mkArgRo my S0 ((\(n, (src, ty)) -> (NamedPort (toEnd src) n, ty)) <$> sol) >>= \case
+      -- Also make a row for the refined outputs (shifted by the pattern environment)
+      Some (patEz :* patRo) -> mkArgRo my patEz (first (fmap toEnd) <$> unders) >>= \case
+        Some (_ :* outRo) -> do
+          let match = TestMatchData my $ MatchSequence overs tests (snd <$> sol)
+          let vars = fst <$> sol
+          pure (vars, match, patRo :->> outRo)
 
   -- Now actually make a box for the RHS and check it
   ((boxPort, _ty), _) <- let ?my = my in makeBox (clauseName ++ "_rhs") rhsCty $ \(rhsOvers, rhsUnders) -> do
@@ -956,7 +968,7 @@ kindCheckRow' :: forall m n
 kindCheckRow' _ ez env (_,i) [] = pure (i, env, Some (ez :* R0))
 kindCheckRow' Braty (ny :* s) env (name,i) ((p, Left k):rest) = do -- s is Stack Z n
   let dangling = Ex name (ny2int ny)
-  req (Declare (ExEnd dangling) Braty (Left k))
+  req (Declare (ExEnd dangling) Braty (Left k) False) -- assume none are Skolem consts??
   env <- pure $ M.insert (plain p) [(NamedPort dangling p, Left k)] env
   (i, env, ser) <- kindCheckRow' Braty (Sy ny :* (s :<< ExEnd dangling)) env (name, i) rest
   case ser of
@@ -1054,9 +1066,9 @@ abstractPattern :: forall m
                 -> Pattern
                 -> Checking (Env (EnvData m)) -- Local env for checking body of lambda
 abstractPattern m (src, ty) (Bind x) = let ?my = m in singletonEnv x (src, ty)
-abstractPattern Braty (_, Left Nat) (Lit tm) = throwLeft (simpleCheck Braty TNat tm) $> emptyEnv
-abstractPattern Braty (_, Right ty) (Lit tm) = throwLeft (simpleCheck Braty ty tm) $> emptyEnv
-abstractPattern Kerny (_, ty) (Lit tm) = throwLeft (simpleCheck Kerny ty tm) $> emptyEnv
+abstractPattern Braty (_, Left Nat) (Lit tm) = simpleCheck Braty TNat tm $> emptyEnv
+abstractPattern Braty (_, Right ty) (Lit tm) = simpleCheck Braty ty tm $> emptyEnv
+abstractPattern Kerny (_, ty) (Lit tm) = simpleCheck Kerny ty tm $> emptyEnv
 abstractPattern Braty (dangling, Left k) pat = abstractKind k pat
  where
   abstractKind :: TypeKind -> Pattern -> Checking (Env (EnvData Brat))
@@ -1130,7 +1142,7 @@ run :: VEnv
     -> Store
     -> Namespace
     -> Checking a
-    -> Either Error (a, ([TypedHole], Store, Graph))
+    -> Either Error (a, ([TypedHole], Store, Graph, CaptureSets))
 run ve initStore ns m = do
   let ctx = Ctx { globalVEnv = ve
                 , store = initStore
@@ -1140,6 +1152,7 @@ run ve initStore ns m = do
                 , typeConstructors = defaultTypeConstructors
                 , aliasTable = M.empty
                 , hopes = M.empty
+                , captureSets = M.empty
                 }
   (a,ctx,(holes, graph)) <- handler (localNS ns m) ctx mempty
   let tyMap = typeMap $ store ctx
@@ -1147,11 +1160,11 @@ run ve initStore ns m = do
   -- Even though we didn't need them for typechecking problems, our runtime
   -- behaviour depends on the values of the holes, which we can't account for.
   case M.toList $ M.filterWithKey (\e _ -> isNatKinded tyMap (InEnd e)) (hopes ctx) of
-    [] -> pure (a, (holes, store ctx, graph))
+    [] -> pure (a, (holes, store ctx, graph, captureSets ctx))
     -- Just use the FC of the first hole while we don't have the capacity to
     -- show multiple error locations
     hs@((_,fc):_) -> Left $ Err (Just fc) (RemainingNatHopes (show . fst <$> hs))
  where
   isNatKinded tyMap e = case tyMap M.! e of
-    EndType Braty (Left Nat) -> True
+    (EndType Braty (Left Nat), _) -> True
     _ -> False

@@ -19,6 +19,7 @@ import Hasochism
 
 import Control.Monad (unless)
 import Data.Bifunctor (first)
+import Data.Functor ((<&>))
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import Data.Type.Equality ((:~:)(..), testEquality)
@@ -77,9 +78,9 @@ solve my ((src, Lit tm):p) = do
     (Braty, Left Nat)
       | Num n <- tm -> do
           unless (n >= 0) $ typeErr "Negative Nat kind"
-          unifyNum (nConstant (fromIntegral n)) (nVar (VPar (toEnd src)))
+          unifyNum (nConstant (fromIntegral n)) (nVar (VPar (ExEnd (end src))))
     (Braty, Right ty) -> do
-      throwLeft (simpleCheck Braty ty tm)
+      simpleCheck Braty ty tm
     _ -> typeErr $ "Literal " ++ show tm ++ " isn't valid at this type"
   (tests, sol) <- solve my p
   pure ((src, PrimLitTest tm):tests, sol)
@@ -96,18 +97,19 @@ solve my ((src, PCon c abs):p) = do
       -- Special case for 0, so that we can call `unifyNum` instead of pattern
       -- matching using what's returned from `natConstructors`
       PrefixName [] "zero" -> do
-        unifyNum (nVar (VPar (toEnd src))) nZero
+        unifyNum (nVar (VPar (ExEnd (end src)))) nZero
         p <- argProblems [] (normaliseAbstractor abs) p
         (tests, sol) <- solve my p
         pure ((src, PrimLitTest (Num 0)):tests, sol)
       _ -> case M.lookup c natConstructors of
+        -- This `relationToInner` is very sus - it doesn't do any wiring!
         Just (Just _, relationToInner) -> do
           (node, [], kids@[(dangling, _)], _) <- next "unpacked_nat" Hypo (S0, Some (Zy :* S0))
             R0 -- we don't need to wire the src in; we just need the inner stuff
             (REx ("inner", Nat) R0)
           unifyNum
            (nVar (VPar (ExEnd (end src))))
-           (relationToInner (nVar (VPar (toEnd dangling))))
+           (relationToInner (nVar (VPar (ExEnd (end dangling)))))
           p <- argProblems [dangling] (normaliseAbstractor abs) p
           (tests, sol) <- solve my p
           -- When we get @-patterns, we shouldn't drop this anymore
@@ -117,7 +119,7 @@ solve my ((src, PCon c abs):p) = do
 
 
 typeOfEnd :: Modey m -> End -> Checking (BinderType m)
-typeOfEnd my e = req (TypeOf e) >>= \case
+typeOfEnd my e = (req (TypeOf e) <&> fst) >>= \case
   EndType my' ty
     | Just Refl <- testEquality my my' -> case my' of
         Braty -> case ty of

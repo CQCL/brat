@@ -13,10 +13,13 @@ import Bwd
 import Hasochism
 import Util (zipSameLength)
 
+import Control.Monad (filterM, unless, (>=>))
 import Data.Bifunctor (second)
 import Data.Foldable (sequenceA_)
 import Data.Functor
+import Data.Maybe (catMaybes)
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 
 -- External interface to typeEq' for closed values only.
@@ -75,10 +78,17 @@ typeEqEta _ (Zy :* _ :* _) hopes Nat exp act
 typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
   exp <- quote ny exp
   act <- quote ny act
-  case [e | (VApp (VPar (InEnd e)) _) <- [exp,act], M.member e hopes] of
-    [] -> typeEqRigid tm stuff k exp act
-    [e1, e2] | e1 == e2 -> pure () -- trivially same, even if both still yet-to-be-defined
-    _es -> error "TODO: must wait for one or the other to become more defined"
+  let ends = catMaybes $ [exp,act] <&> getEnd
+  unless (not $ any (flip M.member hopes) [ie | InEnd ie <- ends]) $ typeErr "ends were in hopeset"
+  filterM (isSkolem >=> pure . not) ends >>= \case
+    [] -> typeEqRigid tm stuff k exp act -- easyish, both rigid i.e. already defined
+    [e1, e2] | e1 == e2 -> pure () -- trivially same, even if they're both still yet-to-be-defined
+    es -> -- tricky: must wait for one or other to become more defined
+      mkYield "typeEqEta" (S.fromList es) >> typeEq' tm stuff k exp act
+ where
+  getEnd (VApp (VPar e) _) = Just e
+  getEnd (VNum n) = getNumVar n
+  getEnd _ = Nothing
 
 -- This will update the `hopes` set, potentially invalidating things that have
 -- been eval'd.

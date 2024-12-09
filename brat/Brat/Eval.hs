@@ -17,6 +17,7 @@ module Brat.Eval (EvMode(..)
                  ,kindType
                  ,numVal
                  ,quote
+                 ,getNumVar
                  ) where
 
 import Brat.Checker.Monad
@@ -25,7 +26,7 @@ import Brat.Error (ErrorMsg(..))
 import Brat.QualName (plain)
 import Brat.Syntax.Common
 import Brat.Syntax.Value
-import Control.Monad.Freer (req)
+import Control.Monad.Freer
 import Bwd
 import Hasochism
 import Util (zipSameLength)
@@ -34,7 +35,7 @@ import Data.Bifunctor (second)
 import Data.Functor
 import Data.Kind (Type)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
-import Data.Foldable (traverse_)
+import Data.Foldable (for_, traverse_)
 
 kindType :: TypeKind -> Val Z
 kindType Nat = TNat
@@ -190,7 +191,7 @@ kindEq (TypeFor m xs) (TypeFor m' ys) | m == m' = kindListEq xs ys
 kindEq k k' = Left . TypeErr $ "Unequal kinds " ++ show k ++ " and " ++ show k'
 
 kindOf :: VVar Z -> Checking TypeKind
-kindOf (VPar e) = req (TypeOf e) >>= \case
+kindOf (VPar e) = (req (TypeOf e) <&> fst) >>= \case
   EndType Braty (Left k) -> pure k
   EndType my ty -> typeErr $ "End " ++ show e ++ " isn't a kind, it's type is " ++ case my of
     Braty -> show ty
@@ -298,19 +299,19 @@ eqTests tm lvkz = go
   go _ us vs = pure . Left . TypeErr $ "Arity mismatch in type constructor arguments:\n  "
                    ++ show us ++ "\n  " ++ show vs
 
+getNumVar :: NumVal (VVar n) -> Maybe End
+getNumVar (NumValue _ (StrictMonoFun (StrictMono _ mono))) = case mono of
+  Linear v -> case v of
+    VPar e -> Just e
+    _ -> Nothing
+  Full sm -> getNumVar (numValue sm)
+getNumVar _ = Nothing
+
 -- Be conservative, fail if in doubt. Not dangerous like being wrong while succeeding
 -- We can have bogus failures here because we're not normalising under lambdas
 -- N.B. the value argument is normalised.
 doesntOccur :: End -> Val n -> Either ErrorMsg ()
-doesntOccur e (VNum nv) = traverse_ (collision e) (getNumVar nv)
- where
-  getNumVar :: NumVal (VVar n) -> Maybe End
-  getNumVar (NumValue _ (StrictMonoFun (StrictMono _ mono))) = case mono of
-    Linear v -> case v of
-      VPar e -> Just e
-      _ -> Nothing
-    Full sm -> getNumVar (numValue sm)
-  getNumVar _ = Nothing
+doesntOccur e (VNum nv) = for_ (getNumVar nv) (collision e)
 doesntOccur e (VApp var args) = case var of
   VPar e' -> collision e e' *> traverse_ (doesntOccur e) args
   _ -> pure ()

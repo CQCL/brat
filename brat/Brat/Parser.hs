@@ -514,6 +514,7 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
               <|> try (match DotDot $> FPass)
               <|> var
               <|> match Underscore $> FUnderscore
+              <|> match Bang $> FHope
               <|> match Pipe $> FIdentity
               <|> match Bang $> FHope
 

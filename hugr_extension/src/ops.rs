@@ -37,6 +37,8 @@ pub enum BratOp {
         ctor: BratCtor,
         args: Vec<TypeArg>,
     },
+    // The inverse operation of "full" on Nats
+    Lluf,
     Replicate(TypeArg),
 }
 
@@ -50,6 +52,7 @@ impl NamedOp for BratOp {
             Panic { .. } => "Panic".into(),
             Ctor { ctor, .. } => format_smolstr!("Ctor::{}", ctor.name()),
             PrimCtorTest { ctor, .. } => format_smolstr!("PrimCtorTest::{}", ctor.name()),
+            Lluf => "Lluf".into(),
             Replicate(_) => "Replicate".into(),
         }
     }
@@ -106,6 +109,7 @@ impl MakeExtensionOp for BratOp {
                 ctor,
                 args: ext_op.args().to_vec(),
             }),
+            BratOpDef::Lluf => Ok(BratOp::Lluf),
             BratOpDef::Replicate => Ok(BratOp::Replicate(ext_op.args()[0].clone())),
         }
     }
@@ -144,6 +148,7 @@ impl MakeExtensionOp for BratOp {
             BratOp::Panic { sig } => vec![arg_from_row(sig.input()), arg_from_row(sig.output())],
             BratOp::Ctor { args, .. } => args.clone(),
             BratOp::PrimCtorTest { args, .. } => args.clone(),
+            BratOp::Lluf => vec![],
             BratOp::Replicate(arg) => vec![arg.clone()],
         }
     }
