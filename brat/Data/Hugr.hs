@@ -13,6 +13,19 @@ import Data.Text (Text, pack)
 
 import Brat.Syntax.Simple
 
+-- We should be able to work out exact extension requirements for our functions,
+-- but instead we'll overapproximate.
+bratExts :: [ExtensionId]
+bratExts =
+ ["prelude"
+ ,"arithmetic.int_ops"
+ ,"arithmetic.float_ops"
+ ,"collections"
+ ,"logic"
+ ,"tket2.quantum"
+ ,"BRAT"]
+
+
 ------------------------------------- TYPES ------------------------------------
 -------------------------  (Depends on HugrValue and Hugr)  --------------------
 
@@ -25,6 +38,8 @@ data SumType = SU UnitSum | SG GeneralSum
  deriving (Eq, Show)
 
 newtype SumOfRows = SoR [[HugrType]] deriving Show
+
+type ExtensionId = String
 
 -- Convert from a hugr sum of tuples to a SumOfRows
 sumOfRows :: HugrType -> SumOfRows
@@ -64,7 +79,7 @@ instance ToJSON HugrType where
   toJSON (HTFunc sig) = object ["t" .= ("G" :: Text)
                                ,"input" .= input (body sig)
                                ,"output" .= output (body sig)
-                               ,"extension_reqs" .= ([] :: [Text])
+                               ,"extension_reqs" .= (extensions (body sig))
                                ]
   toJSON ty = error $ "todo: json of " ++ show ty
 
@@ -88,9 +103,6 @@ data CustomTypeArg = CustomTypeArg
  } deriving (Eq, Show)
 
 data CustomType deriving (Eq, Show)
-data ExtensionId deriving (Eq, Show)
-instance ToJSON ExtensionId where
-  toJSON = undefined
 
 data TypeBound = TBEq | TBCopy | TBAny deriving (Eq, Ord, Show)
 
@@ -131,13 +143,14 @@ instance ToJSON TypeParam where
 data FunctionType = FunctionType
  { input :: [HugrType]
  , output :: [HugrType]
+ , extensions :: [ExtensionId]
  } deriving (Eq, Show)
 
 instance ToJSON FunctionType where
-  toJSON (FunctionType ins outs) = object ["input" .= ins
-                                          ,"output" .= outs
-                                          ,"extension_reqs" .= ([] :: [Text])
-                                          ]
+  toJSON (FunctionType ins outs exts) = object ["input" .= ins
+                                               ,"output" .= outs
+                                               ,"extension_reqs" .= exts
+                                               ]
 
 data Array = Array
  { ty :: HugrType
@@ -428,17 +441,18 @@ instance ToJSON node => ToJSON (CallOp node) where
            ,"instantiation" .= signature_
            ]
 
-intOp :: node -> String -> FunctionType -> [TypeArg] -> CustomOp node
-intOp parent = CustomOp parent "arithmetic.int"
+intOp :: node -> String -> [HugrType] -> [HugrType] -> [TypeArg] -> CustomOp node
+intOp parent opName ins outs = CustomOp parent "arithmetic.int_ops" opName (FunctionType ins outs ["arithmetic.int_ops"])
 
 binaryIntOp :: node -> String -> CustomOp node
-binaryIntOp parent name = intOp parent name (FunctionType [hugrInt, hugrInt] [hugrInt]) [TANat intWidth]
+binaryIntOp parent name
+ = intOp parent name [hugrInt, hugrInt] [hugrInt] [TANat intWidth]
 
-floatOp :: node -> String -> FunctionType -> [TypeArg] -> CustomOp node
-floatOp parent = CustomOp parent "arithmetic.float"
+floatOp :: node -> String -> [HugrType] -> [HugrType] -> [TypeArg] -> CustomOp node
+floatOp parent opName ins outs = CustomOp parent "arithmetic.float_ops" opName (FunctionType ins outs ["arithmetic.float_ops"])
 
 binaryFloatOp :: node -> String -> CustomOp node
-binaryFloatOp parent name = floatOp parent name (FunctionType [hugrFloat, hugrFloat] [hugrFloat]) []
+binaryFloatOp parent name = floatOp parent name [hugrFloat, hugrFloat] [hugrFloat] []
 
 data CallIndirectOp node = CallIndirectOp
   { parent :: node
@@ -455,7 +469,8 @@ instance ToJSON node => ToJSON (CallIndirectOp node) where
                                                      ]
 
 holeOp :: node -> Int -> FunctionType -> CustomOp node
-holeOp parent idx sig = CustomOp parent "BRAT" "Hole" sig [TANat idx]
+holeOp parent idx sig = CustomOp parent "BRAT" "Hole" sig
+                        [TANat idx, TAType (HTFunc (PolyFuncType [] sig))]
 
 -- TYPE ARGS:
 --  * A length-2 sequence comprising:
@@ -472,15 +487,13 @@ substOp :: node
         -> {- innerSigs :: -}[FunctionType]{- length n -}
         -> CustomOp node
 substOp parent outerSig innerSigs
-  = CustomOp parent "Brat" "Substitute" sig args
+  = CustomOp parent "BRAT" "Substitute" sig [toArg outerSig, TASequence (toArg <$> innerSigs)]
  where
-  sig = FunctionType (toFunc <$> (outerSig : innerSigs)) [toFunc outerSig]
-  args = [funcToSeq outerSig, TASequence (funcToSeq <$> innerSigs)]
-
-  funcToSeq (FunctionType ins outs) = TASequence [toSeq ins, toSeq outs]
+  sig = FunctionType (toFunc <$> (outerSig : innerSigs)) [toFunc outerSig] ["BRAT"]
+  toArg = TAType . HTFunc . PolyFuncType []
 
 toFunc :: FunctionType -> HugrType
-toFunc = HTFunc . PolyFuncType []
+toFunc ty = HTFunc (PolyFuncType [] ty)
 
 toSeq :: [HugrType] -> TypeArg
 toSeq tys = TASequence (TAType <$> tys)
@@ -489,9 +502,13 @@ partialOp :: node  -- Parent
           -> FunctionType  -- Signature of the function that is partially evaluated
           -> Int  -- Number of arguments that are evaluated
           -> CustomOp node
-partialOp parent funcSig numSupplied = CustomOp parent "Brat" "Partial" sig args
+partialOp parent funcSig numSupplied = CustomOp parent "BRAT" "Partial" sig args
  where
-  sig = FunctionType (toFunc funcSig : partialInputs) [toFunc $ FunctionType otherInputs (output funcSig)]
+  sig :: FunctionType
+  sig = FunctionType
+        (toFunc funcSig : partialInputs)
+        [toFunc (FunctionType otherInputs (output funcSig) (extensions funcSig))]
+        ["BRAT"]
   args = [toSeq partialInputs, toSeq otherInputs, toSeq (output funcSig)]
 
   partialInputs = take numSupplied (input funcSig)
