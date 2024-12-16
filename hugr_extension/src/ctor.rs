@@ -112,7 +112,7 @@ fn nat_type() -> Type {
         int_types::INT_TYPE_ID,
         [TypeArg::BoundedNat { n: WIDTH }],
         int_types::EXTENSION_ID,
-        TypeBound::Eq,
+        TypeBound::Copyable,
     ))
 }
 

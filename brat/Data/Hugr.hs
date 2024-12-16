@@ -412,7 +412,7 @@ instance ToJSON node => ToJSON (CustomOp node) where
                                     ,"description" .= ("" :: Text)
                                     ,"extension" .= pack extension
                                     ,"args" .= args
-                                    ,"op_name" .= pack op_name
+                                    ,"name" .= pack op_name
                                     ,"signature" .= signature_
                                     ]
 
@@ -624,7 +624,7 @@ data Hugr node = Hugr [HugrOp node] [(PortId node, PortId node)]
   deriving (Eq, Functor, Show)
 
 instance ToJSON node => ToJSON (Hugr node) where
-  toJSON (Hugr ns es) = object ["version" .= ("v1" :: Text)
+  toJSON (Hugr ns es) = object ["version" .= ("live" :: Text)
                                ,"nodes" .= ns
                                ,"edges" .= es
                                ,"encoder" .= ("BRAT" :: Text)
