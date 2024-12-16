@@ -2,10 +2,7 @@ use enum_iterator::Sequence;
 use hugr::{
     ops::NamedOp,
     std_extensions::{arithmetic::int_types, collections},
-    types::{
-        type_param::TypeParam, CustomType, PolyFuncType, Signature, Type, TypeArg,
-        TypeBound,
-    },
+    types::{type_param::TypeParam, CustomType, PolyFuncType, Signature, Type, TypeArg, TypeBound},
 };
 use smol_str::{format_smolstr, SmolStr};
 use std::str::FromStr;

@@ -6,7 +6,7 @@ use enum_iterator::all;
 use hugr::{
     extension::{
         simple_op::{MakeOpDef, MakeRegisteredOp},
-        ExtensionId, ExtensionRegistry, ExtensionSet,
+        ExtensionId, ExtensionRegistry, ExtensionSet, Version,
     },
     std_extensions::{arithmetic::int_types, collections},
     Extension,
@@ -18,13 +18,14 @@ use crate::defs::BratOpDef;
 
 /// Reported unique name of the Brat extension
 pub const EXTENSION_ID: ExtensionId = ExtensionId::new_unchecked("Brat");
+pub const EXTENSION_VERSION: Version = Version::new(0, 0, 0);
 
 lazy_static! {
     /// Extension for Brat operations.
     pub static ref EXTENSION: Extension = {
         let reqs = ExtensionSet::from_iter([int_types::EXTENSION_ID, collections::EXTENSION_NAME]);
 
-        let mut extension = Extension::new_with_reqs(EXTENSION_ID, reqs);
+        let mut extension = Extension::new(EXTENSION_ID, EXTENSION_VERSION).with_reqs(reqs);
 
         for op in all::<BratOpDef>() {
             op.add_to_extension(&mut extension).unwrap();
