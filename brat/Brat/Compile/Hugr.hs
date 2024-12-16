@@ -295,7 +295,7 @@ compileClauses parent ins ((matchData, rhs) :| clauses) = do
     Just clauses -> compileClauses parent ins clauses
     -- If there are no more clauses left to test, then the Hugr panics
     -- TODO: This should just be [BRAT] - would that work?
-    Nothing -> let sig = FunctionType (snd <$> ins) outTys bratExts in
+    Nothing -> let sig = FunctionType (snd <$> ins) outTys ["BRAT"] in
       addNodeWithInputs "Panic" (OpCustom (CustomOp parent "BRAT" "panic" sig [])) ins outTys
 
   didMatch :: [HugrType] -> NodeId -> [TypedPort] -> Compile [TypedPort]
