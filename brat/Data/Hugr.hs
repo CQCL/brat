@@ -83,7 +83,7 @@ instance ToJSON HugrType where
   toJSON (HTFunc sig) = object ["t" .= ("G" :: Text)
                                ,"input" .= input (body sig)
                                ,"output" .= output (body sig)
-                               ,"extension_reqs" .= (extensions (body sig))
+                               ,"extension_reqs" .= extensions (body sig)
                                ]
   toJSON ty = error $ "todo: json of " ++ show ty
 
