@@ -36,7 +36,7 @@ instance Show BToken where
   show (Bracketed _ b ts) = showOpen b ++ show ts ++ showClose b
 
 instance VisualStream [BToken] where
-  showTokens _ ts = concatMap show ts
+  showTokens _ = concatMap show
   tokensLength _ = sum . fmap btokLen
 
 instance TraversableStream [BToken] where

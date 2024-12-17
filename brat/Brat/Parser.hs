@@ -59,7 +59,7 @@ matchTok :: (Tok -> Maybe a) -> Parser (WC a)
 matchTok f = token (matcher f) empty
  where
   matcher :: (Tok -> Maybe a) -> BToken -> Maybe (WC a)
-  matcher f (FlatTok (Token fc t)) = (WC fc) <$> f t
+  matcher f (FlatTok (Token fc t)) = WC fc <$> f t
   -- Returns the FC at the beginning of the token
   matcher f (Bracketed _ Paren [t]) = matcher f t
   matcher _ _ = Nothing
@@ -160,7 +160,7 @@ abstractor = do ps <- many (try portPull)
                        else let fc = spanFCOf (head ps) abs in WC fc (APull (unWC <$> ps) (unWC abs))
  where
   -- Minus port pulling
-  binders = try (joinBinders <$> ((:|) <$> binding <*> (many (match Comma *> binding))))
+  binders = try (joinBinders <$> ((:|) <$> binding <*> many (match Comma *> binding)))
    where
     joinBinders xs = let (abs, startFC, endFC) = joinBindersAux xs in WC (spanFC startFC endFC) abs
 
@@ -173,7 +173,7 @@ abstractor = do ps <- many (try portPull)
 
   vecPat :: Parser (WC Pattern)
   vecPat = do
-    WC fc elems <- inBracketsFC Bracket ((unWC <$> binding) `sepBy` (match Comma))
+    WC fc elems <- inBracketsFC Bracket ((unWC <$> binding) `sepBy` match Comma)
     WC fc <$> list2Cons elems
 
   list2Cons :: [Abstractor] -> Parser Pattern
@@ -205,10 +205,10 @@ abstractor = do ps <- many (try portPull)
   weePat = try vecPat
     <|> (fmap (const DontCare) <$> matchFC Underscore)
     <|> try (fmap Lit <$> simpleTerm)
-    <|> try (constructorsWithArgs)
+    <|> try constructorsWithArgs
     <|> try nullaryConstructors
     <|> (fmap Bind <$> simpleName)
-    <|> (inBrackets Paren bigPat)
+    <|> inBrackets Paren bigPat
    where
     nullaryConstructor c = do
       WC fc () <- matchString c
@@ -257,7 +257,7 @@ typekind = try (fmap (const Nat) <$> matchFC Hash) <|> kindHelper Lexer.Dollar S
   row = (`sepBy` match Comma) $ do
     p <- unWC <$> port
     match TypeColon
-    ((p,) . unWC) <$> typekind
+    (p,) . unWC <$> typekind
 
 vtype :: Parser (WC (Raw Chk Noun))
 vtype = cnoun (expr' PApp)
@@ -314,13 +314,13 @@ rawIOWithSpanFC :: Parser (WC [RawIO])
 rawIOWithSpanFC = spanningFC =<< rawIOFC
 
 vec :: Parser (WC Flat)
-vec = (\(WC fc x) -> WC fc (unWC (vec2Cons fc x))) <$> (inBracketsFC Bracket elems)
+vec = (\(WC fc x) -> WC fc (unWC (vec2Cons fc x))) <$> inBracketsFC Bracket elems
   where
     elems = (element `chainl1` try vecComma) <|> pure []
     vecComma = match Comma $> (++)
 
     element :: Parser [WC Flat]
-    element = (:[]) <$> (expr' (succ PJuxtPull))
+    element = (:[]) <$> expr' (succ PJuxtPull)
 
     mkNil fc = FCon (plain "nil") (WC fc FEmpty)
 
@@ -370,7 +370,7 @@ cthunk = try bratFn <|> try kernel <|> thunk
       -- If we don't have a `=>` at the start of a kernel, it could (and should)
       -- be a verb, not the RHS of a no-arg lambda
       (e', n) -> let abs = braceSectionAbstractor [0..n-1]
-                 in pure $ WC (fcOf e) $ FLambda (((WC (fcOf e) abs), e') :| [])
+                 in pure $ WC (fcOf e) $ FLambda ((WC (fcOf e) abs, e') :| [])
 
   replaceU :: WC Flat -> State Int (WC Flat)
   replaceU (WC fc x) = WC fc <$> replaceU' x
@@ -494,7 +494,7 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
     applied f = do
       first <- inBracketsFC Paren $ (unWC <$> expr) <|> pure FEmpty
       let one = WC (spanFCOf f first) (FApp f first)
-      optional (applied $ one) <&> fromMaybe one
+      optional (applied one) <&> fromMaybe one
 
   binary :: [ArithOp] -> Precedence -> Parser (WC Flat)
   binary ops lvl = subExpr lvl `chainl1` choice (try . arith <$> ops)
@@ -507,8 +507,7 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
   annotation = do
     tm <- subExpr PAnn
     colon <- matchFC TypeColon
-    tys <- rawIO
-    pure $ WC (spanFCOf tm colon) (FAnnotation tm tys)
+    WC (spanFCOf tm colon) . FAnnotation tm <$> rawIO
 
   letIn :: Parser (WC Flat)
   letIn = label "let ... in" $ do
@@ -538,7 +537,7 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
   -- A single `abstractor => expr`
   lambdaClause :: Parser (WC Abstractor, WC Flat)
   lambdaClause = do
-    mabs <- (try (Right <$> abstractor) <|> pure (Left AEmpty))
+    mabs <- try (Right <$> abstractor) <|> pure (Left AEmpty)
     WC arrowFC () <- matchFC FatArrow
     let abs = either (WC arrowFC) id mabs
     body <- expr
@@ -552,7 +551,7 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
     pure $ WC (spanFC lhs (fcOf rhs)) $ FInto (WC lhs FEmpty) rhs
 
   into :: Parser (WC Flat)
-  into = subExpr PInto `chainl1` (divider Into FInto)
+  into = subExpr PInto `chainl1` divider Into FInto
 
   composition :: Parser (WC Flat)
   composition = subExpr PComp `chainl1` divider Semicolon FCompose
@@ -730,13 +729,13 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
  where
   alias :: Parser RawAlias
   alias = aliasContents <&>
-          \(fc, name, args, ty) -> (TypeAlias fc name args ty)
+          \(fc, name, args, ty) -> TypeAlias fc name args ty
 
   aliasContents :: Parser (FC, QualName, [(String, TypeKind)], RawVType)
   aliasContents = do
     WC startFC () <- matchFC (K KType)
     WC _ alias <- qualName
-    args <- option [] $ inBrackets Paren $ ((unWC <$> simpleName) `sepBy` (match Comma))
+    args <- option [] $ inBrackets Paren $ (unWC <$> simpleName) `sepBy` match Comma
 {- future stuff
     args <- option [] $ inBrackets Paren $ (`sepBy` (match Comma)) $ do
       port <- port
@@ -783,7 +782,7 @@ declSignature = try nDecl <|> vDecl where
   where
    ctype :: Parser (WC RawCType)
    ctype = do
-     WC startFC ins <- inBracketsFC Paren $ rawIO
+     WC startFC ins <- inBracketsFC Paren rawIO
      match Arrow
      WC endFC outs <- rawIOWithSpanFC
      pure (WC (spanFC startFC endFC) (ins :-> outs))

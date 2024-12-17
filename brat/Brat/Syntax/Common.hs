@@ -114,7 +114,7 @@ data TypeKind = TypeFor Mode [(PortName, TypeKind)] | Nat
   deriving Eq
 
 instance Show TypeKind where
-  show (TypeFor m args) = let argsStr = if null args then "" else ("(" ++ intercalate ", " (show <$> args) ++ ")")
+  show (TypeFor m args) = let argsStr = if null args then "" else "(" ++ intercalate ", " (show <$> args) ++ ")"
                               kindStr = case m of
                                 Brat -> "*"
                                 Kernel -> "$"
