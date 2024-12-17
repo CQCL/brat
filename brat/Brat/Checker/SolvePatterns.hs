@@ -12,14 +12,14 @@ import Brat.Syntax.Abstractor
 import Brat.Syntax.Common
 import Brat.Syntax.Simple
 import Brat.Syntax.Value
-import Brat.UserName
+import Brat.QualName
 import Bwd
 import Control.Monad.Freer
 import Hasochism
 
 import Control.Monad (unless)
 import Data.Bifunctor (first)
-import Data.Foldable (traverse_)
+import Data.Foldable (for_, traverse_)
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import Data.Type.Equality ((:~:)(..), testEquality)
@@ -64,9 +64,7 @@ solve my ((src, DontCare):p) = do
   () <- case my of
     Kerny -> do
       ty <- typeOfSrc Kerny src
-      if not (fromJust (copyable ty))
-      then (typeErr $ "Ignoring linear variable of type " ++ show ty)
-      else pure ()
+      unless (fromJust (copyable ty)) $ typeErr $ "Ignoring linear variable of type " ++ show ty
     Braty -> pure ()
   solve my p
 solve my ((src, Bind x):p) = do
@@ -133,7 +131,7 @@ typeOfEnd my e = req (TypeOf e) >>= \case
 solveConstructor :: EvMode m
                  => Modey m
                  -> Src
-                 -> (UserName, Abstractor)
+                 -> (QualName, Abstractor)
                  -> Val Z
                  -> Problem
                  -> Checking ([(Src, PrimTest (BinderType m))]
@@ -141,13 +139,18 @@ solveConstructor :: EvMode m
                              )
 solveConstructor my src (c, abs) ty p = do
   (CArgs pats _ patRo argRo, (tycon, tyargs)) <- lookupConstructor my c ty
+  -- Create a row of hypothetical kinds which contextualise the arguments to the
+  -- constructor.
+  -- These need to be Tgts because we don't know how to compute them dynamically
   (_, _, _, stuff) <- next "type_args" Hypo (S0, Some (Zy :* S0)) patRo R0
   (node, _, patArgWires, _) <- let ?my = my in anext "val_args" Hypo stuff R0 argRo
   trackM ("Constructor " ++ show c ++ "; type " ++ show ty)
-  case (snd stuff) of
+  case snd stuff of
     Some (_ :* patEnds) -> do
       trackM (show pats)
       trackM (show patEnds)
+      -- Match the patterns for `c` against the ends of the Hypo node, to
+      -- produce the terms that we're interested in
       let (lhss, leftovers) = patVals pats (stkList patEnds)
       unless (null leftovers) $ error "There's a bug in the constructor table"
       tyArgKinds <- tlup (Brat, tycon)
@@ -188,19 +191,19 @@ unify l k r = do
       --       the whole `Problem`.
       (l, r, _) -> err . UnificationError $ "Can't unify " ++ show l ++ " with " ++ show r
 
+-- Solve a metavariable statically - don't do anything dynamic
+-- Once a metavariable is solved, we expect to not see it again in a normal form.
 instantiateMeta :: End -> Val Z -> Checking ()
 instantiateMeta e val = do
   throwLeft (doesntOccur e val)
-  req (Define e val)
+  defineEnd e val
 
 
 -- Be conservative, fail if in doubt. Not dangerous like being wrong while succeeding
 -- We can have bogus failures here because we're not normalising under lambdas
 -- N.B. the value argument is normalised.
 doesntOccur :: End -> Val n -> Either ErrorMsg ()
-doesntOccur e (VNum nv) = case getNumVar nv of
-  Just e' -> collision e e'
-  _ -> pure ()
+doesntOccur e (VNum nv) = for_ (getNumVar nv) (collision e)
  where
   getNumVar :: NumVal (VVar n) -> Maybe End
   getNumVar (NumValue _ (StrictMonoFun (StrictMono _ mono))) = case mono of
@@ -229,6 +232,9 @@ doesntOccurRo _ _ R0 = pure ()
 doesntOccurRo my e (RPr (_, ty) ro) = doesntOccur e ty *> doesntOccurRo my e ro
 doesntOccurRo Braty e (REx _ ro) = doesntOccurRo Braty e ro
 
+-- Need to keep track of which way we're solving - which side is known/unknown
+-- Things which are dynamically unknown must be Tgts - information flows from Srcs
+-- ...But we don't need to do any wiring here, right?
 unifyNum :: NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
 unifyNum (NumValue lup lgro) (NumValue rup rgro)
   | lup <= rup = lhsFun00 lgro (NumValue (rup - lup) rgro)
@@ -338,6 +344,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     req $ Define (ExEnd out) (VNum (nPlus 1 (nVar (VPar (toEnd pred)))))
     pure (nVar (VPar (toEnd pred)))
 
+-- The variable must be a non-zero nat!!
 patVal :: ValPat -> [End] -> (Val Z, [End])
 -- Nat variables will only be found in a `NumPat`, not a `ValPat`
 patVal VPVar (e:es) = (VApp (VPar e) B0, es)
@@ -365,17 +372,17 @@ argProblems srcs na p = argProblemsWithLeftovers srcs na p >>= \case
   _ -> err $ UnificationError "Pattern doesn't match expected length for constructor args"
 
 argProblemsWithLeftovers :: [Src] -> NormalisedAbstractor -> Problem -> Checking (Problem, [Src])
-argProblemsWithLeftovers srcs (NA (APull ps abs)) p = pullPorts portName show ps (map (, ()) srcs) >>= \srcs -> argProblemsWithLeftovers (fst <$> srcs) (NA abs) p
+argProblemsWithLeftovers srcs (NA (APull ps abs)) p = pullPorts portName show ps srcs >>= \srcs -> argProblemsWithLeftovers srcs (NA abs) p
 argProblemsWithLeftovers (src:srcs) na p | Just (pat, na) <- unconsNA na = first ((src, pat):) <$> argProblemsWithLeftovers srcs na p
 argProblemsWithLeftovers srcs (NA AEmpty) p = pure (p, srcs)
 argProblemsWithLeftovers [] abst _ = err $ NothingToBind (show abst)
 
 lookupConstructor :: Modey m
-                  -> UserName -- A value constructor
+                  -> QualName -- A value constructor
                   -> Val Z    -- A corresponding type to normalise
                   -- TODO: Something with this m
                   -> Checking (CtorArgs m -- The needed args to the value constructor
-                              ,(UserName, [Val Z])  -- The type constructor we normalised and its args
+                              ,(QualName, [Val Z])  -- The type constructor we normalised and its args
                               )
 lookupConstructor my c ty = eval S0 ty >>= \case
   (VCon tycon args) -> (,(tycon, args)) <$> case my of

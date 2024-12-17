@@ -7,6 +7,7 @@ import Brat.Lexer (lex)
 import Brat.Lexer.Bracketed (BToken(..), brackets)
 import Brat.Lexer.Token (Keyword(..), Token(..), Tok(..))
 import qualified Brat.Lexer.Token as Lexer
+import Brat.QualName ( plain, QualName(..) )
 import Brat.Syntax.Abstractor
 import Brat.Syntax.Common hiding (end)
 import qualified Brat.Syntax.Common as Syntax
@@ -14,7 +15,6 @@ import Brat.Syntax.FuncDecl (FuncDecl(..), Locality(..))
 import Brat.Syntax.Concrete
 import Brat.Syntax.Raw
 import Brat.Syntax.Simple
-import Brat.UserName ( plain, UserName(..) )
 import Brat.Elaborator
 import Data.Bracket
 import Util ((**^))
@@ -82,13 +82,11 @@ simpleName = matchTok $ \case
   Ident str -> Just str
   _ -> Nothing
 
-qualifiedName :: Parser (WC UserName)
-qualifiedName = label "qualified name" $ matchTok $ \case
+qualName :: Parser (WC QualName)
+qualName = label "qualified name" $ matchTok $ \case
   QualifiedId prefix str -> Just (PrefixName (toList prefix) str)
+  Ident str -> Just (PrefixName [] str)
   _ -> Nothing
-
-userName :: Parser (WC UserName)
-userName = (<?> "name") $ try qualifiedName <|> (fmap (PrefixName []) <$> simpleName)
 
 inBrackets :: BracketType -> Parser a -> Parser a
 inBrackets b p = unWC <$> inBracketsFC b p
@@ -121,7 +119,7 @@ string = matchTok $ \case
   _ -> Nothing
 
 var :: Parser (WC Flat)
-var = fmap FVar <$> userName
+var = fmap FVar <$> qualName
 
 port :: Parser (WC String)
 port = simpleName
@@ -180,7 +178,7 @@ abstractor = do ps <- many (try portPull)
 
   list2Cons :: [Abstractor] -> Parser Pattern
   list2Cons [] = pure PNil
-  list2Cons (APat x:xs) = PCons x <$> (list2Cons xs)
+  list2Cons (APat x:xs) = PCons x <$> list2Cons xs
   list2Cons _ = customFailure (Custom "Internal error list2Cons")
 
   portPull = port <* match PortColon
@@ -318,7 +316,7 @@ rawIOWithSpanFC = spanningFC =<< rawIOFC
 vec :: Parser (WC Flat)
 vec = (\(WC fc x) -> WC fc (unWC (vec2Cons fc x))) <$> (inBracketsFC Bracket elems)
   where
-    elems = (element `chainl1` (try vecComma)) <|> pure []
+    elems = (element `chainl1` try vecComma) <|> pure []
     vecComma = match Comma $> (++)
 
     element :: Parser [WC Flat]
@@ -596,8 +594,7 @@ cnoun pe = do
     Left err -> fail (showError err)
     Right (SomeRaw r) -> case do
       r <- assertChk r
-      r <- assertNoun r
-      pure r
+      assertNoun r
      of
       Left err -> fail (showError err)
       Right r -> pure r
@@ -647,23 +644,23 @@ decl = do
 class FCStream a where
   getFC :: Int -> PosState a -> FC
 
-sp_to_fc :: SourcePos -> FC
-sp_to_fc (SourcePos _ line col) = let
+spToFC :: SourcePos -> FC
+spToFC (SourcePos _ line col) = let
   l = unPos line
   c = unPos col
  in FC (Pos l c) (Pos l (c + 1))
 
 instance FCStream String where
-  getFC os pst = let (_, pst') = reachOffset os pst in sp_to_fc $ pstateSourcePos pst'
+  getFC os pst = let (_, pst') = reachOffset os pst in spToFC $ pstateSourcePos pst'
 
 instance FCStream [Token] where
   getFC o PosState{..} = case drop (o - pstateOffset) pstateInput of
-    [] -> sp_to_fc pstateSourcePos
+    [] -> spToFC pstateSourcePos
     (Token fc _):_ -> fc
 
 instance FCStream [BToken] where
   getFC o PosState{..} = case drop (o - pstateOffset) pstateInput of
-    [] -> sp_to_fc pstateSourcePos
+    [] -> spToFC pstateSourcePos
     (Bracketed fc _ _):_ -> fc
     (FlatTok (Token fc _)):_ -> fc
 
@@ -679,16 +676,14 @@ parseFile fname contents = addSrcContext fname contents $ do
   wrapParseErr wrapper er = let
       -- TODO: return all of the errors? There is generally only one.
       e :| errs = bundleErrors er
-      prettyErr = (parseErrorTextPretty e) ++ case errs of
+      prettyErr = parseErrorTextPretty e ++ case errs of
         [] -> ""
-        xs -> " and " ++ (show $ length xs) ++ " other errors"
+        xs -> " and " ++ show (length xs) ++ " other errors"
       fc = getFC (errorOffset e) (bundlePosState er)
     in  Err (Just fc) $ wrapper (PE prettyErr)
 
 clauses :: String -> Parser (NonEmpty (WC Abstractor, WC Flat))
-clauses declName = label "clauses" $
-                   fmap (fromJust . nonEmpty) $
-                   some (try branch)
+clauses declName = label "clauses" (fromJust . nonEmpty <$> some (try branch))
  where
   branch :: Parser (WC Abstractor, WC Flat)
   branch = do
@@ -703,10 +698,9 @@ pimport :: Parser Import
 pimport = do
   o <- open
   kmatch KImport
-  x <- userName
+  x <- qualName
   a <- alias
-  s <- selection
-  pure (Import x (not o) a s)
+  Import x (not o) a <$> selection
  where
   open :: Parser Bool
   open = optional (matchString "open") >>= \case
@@ -738,10 +732,10 @@ pstmt = ((comment <?> "comment")                 <&> \_ -> ([] , []))
   alias = aliasContents <&>
           \(fc, name, args, ty) -> (TypeAlias fc name args ty)
 
-  aliasContents :: Parser (FC, UserName, [(String, TypeKind)], RawVType)
+  aliasContents :: Parser (FC, QualName, [(String, TypeKind)], RawVType)
   aliasContents = do
     WC startFC () <- matchFC (K KType)
-    WC _ alias <- userName
+    WC _ alias <- qualName
     args <- option [] $ inBrackets Paren $ ((unWC <$> simpleName) `sepBy` (match Comma))
 {- future stuff
     args <- option [] $ inBrackets Paren $ (`sepBy` (match Comma)) $ do

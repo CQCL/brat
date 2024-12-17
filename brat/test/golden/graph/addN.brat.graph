@@ -1,6 +1,6 @@
 Nodes:
 (check_defs_1_addN_addN.box_2_lambda_11,BratNode (PatternMatch ((TestMatchData Braty (MatchSequence {matchInputs = [(NamedPort {end = Ex check_defs_1_addN_addN.box_2_lambda.0_setup/in_3 0, portName = "inp"},Int)], matchTests = [], matchOutputs = [(NamedPort {end = Ex check_defs_1_addN_addN.box_2_lambda.0_setup/in_3 0, portName = "inp"},Int)]}),check_defs_1_addN_addN.box_2_lambda.0_rhs_thunk_10) :| [])) [("inp",Int)] [("out",Int)])
-(check_defs_1_addN_addN.box_2_lambda.0_rhs_9_,BratNode (Eval (Ex globals_prim_8_add 0)) [("a",Int),("b",Int)] [("c",Int)])
+(check_defs_1_addN_addN.box_2_lambda.0_rhs_9_Eval,BratNode (Eval (Ex globals_prim_8_add 0)) [("a",Int),("b",Int)] [("c",Int)])
 (check_defs_1_addN_addN.box_2_lambda.0_rhs/in_7,BratNode Source [] [("n",Int)])
 (check_defs_1_addN_addN.box_2_lambda.0_rhs/out_8,BratNode Target [("out",Int)] [])
 (check_defs_1_addN_addN.box_2_lambda.0_rhs_thunk_10,BratNode (Box (fromList []) check_defs_1_addN_addN.box_2_lambda.0_rhs/in_7 check_defs_1_addN_addN.box_2_lambda.0_rhs/out_8) [] [("thunk",{ (n :: Int) -> (out :: Int) })])
@@ -22,8 +22,8 @@ Nodes:
 
 Wires:
 (Ex check_defs_1_addN_addN.box/in 0,Int,In check_defs_1_addN_addN.box_2_lambda_11 0)
-(Ex check_defs_1_addN_addN.box_2_lambda.0_rhs/in_7 0,Int,In check_defs_1_addN_addN.box_2_lambda.0_rhs_9_ 0)
-(Ex check_defs_1_addN_addN.box_2_lambda.0_rhs_9_ 0,Int,In check_defs_1_addN_addN.box_2_lambda.0_rhs/out_8 0)
+(Ex check_defs_1_addN_addN.box_2_lambda.0_rhs/in_7 0,Int,In check_defs_1_addN_addN.box_2_lambda.0_rhs_9_Eval 0)
+(Ex check_defs_1_addN_addN.box_2_lambda.0_rhs_9_Eval 0,Int,In check_defs_1_addN_addN.box_2_lambda.0_rhs/out_8 0)
 (Ex check_defs_1_addN_addN.box_2_lambda_11 0,Int,In check_defs_1_addN_addN.box/out_1 0)
 (Ex check_defs_1_addN_addN.box_thunk_3 0,{ (inp :: Int) -> (out :: Int) },In globals_decl_13_addN 0)
 (Ex globals_Int_1 0,[],In globals___kcr_N 0)
@@ -32,4 +32,4 @@ Wires:
 (Ex globals_Int_5 0,[],In globals___kcc_4 0)
 (Ex globals_Int_6 0,[],In globals___kcc_4 1)
 (Ex globals_Int_7 0,[],In globals___kcc_4 2)
-(Ex globals_prim_2_N 0,Int,In check_defs_1_addN_addN.box_2_lambda.0_rhs_9_ 1)
+(Ex globals_prim_2_N 0,Int,In check_defs_1_addN_addN.box_2_lambda.0_rhs_9_Eval 1)
