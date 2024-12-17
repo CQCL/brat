@@ -19,11 +19,14 @@ bratExts :: [ExtensionId]
 bratExts =
  ["prelude"
  ,"arithmetic.int_ops"
+ ,"arithmetic.int_types"
  ,"arithmetic.float_ops"
+ ,"arithmetic.float_types"
  ,"collections"
  ,"logic"
  ,"tket2.quantum"
- ,"BRAT"]
+ ,"BRAT"
+ ]
 
 
 ------------------------------------- TYPES ------------------------------------
