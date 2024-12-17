@@ -3,7 +3,8 @@ use hugr::{
     ops::NamedOp,
     std_extensions::{arithmetic::int_types, collections},
     types::{
-        type_param::TypeParam, CustomType, FunctionType, PolyFuncType, Type, TypeArg, TypeBound,
+        type_param::TypeParam, CustomType, PolyFuncType, Signature, Type, TypeArg,
+        TypeBound,
     },
 };
 use smol_str::{format_smolstr, SmolStr};
@@ -82,8 +83,8 @@ impl Ctor for BratCtor {
 impl Ctor for NatCtor {
     fn signature(self) -> PolyFuncType {
         match self {
-            NatCtor::zero => FunctionType::new(vec![], vec![nat_type()]).into(),
-            NatCtor::succ => FunctionType::new(vec![nat_type()], vec![nat_type()]).into(),
+            NatCtor::zero => Signature::new(vec![], vec![nat_type()]).into(),
+            NatCtor::succ => Signature::new(vec![nat_type()], vec![nat_type()]).into(),
         }
     }
 }
@@ -94,11 +95,11 @@ impl Ctor for VecCtor {
         let ta = Type::new_var_use(0, TypeBound::Any);
         match self {
             VecCtor::nil => {
-                PolyFuncType::new(vec![tp], FunctionType::new(vec![], vec![vec_type(&ta)]))
+                PolyFuncType::new(vec![tp], Signature::new(vec![], vec![vec_type(&ta)]))
             }
             VecCtor::cons => PolyFuncType::new(
                 vec![tp],
-                FunctionType::new(vec![ta.clone(), vec_type(&ta)], vec![vec_type(&ta)]),
+                Signature::new(vec![ta.clone(), vec_type(&ta)], vec![vec_type(&ta)]),
             ),
         }
     }
