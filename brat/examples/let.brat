@@ -42,3 +42,12 @@ bind2 = let i, b = dyad in b
 -- It shouldn't matter if we put brackets in the binding sites
 bind2' :: Bool
 bind2' = let (i, b) = dyad in b
+
+bind2'' :: Bool
+bind2'' = let (i), (b) = dyad in b
+
+bind4 :: Bool
+bind4 = let i, b, (i', b') = dyad, dyad in b
+
+bind4' :: Bool
+bind4' = let i, (b, i'), b' = dyad, dyad in b
