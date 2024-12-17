@@ -9,6 +9,7 @@ module Data.Hugr where
 
 import Data.Aeson
 import qualified Data.Aeson.KeyMap as KeyMap
+import qualified  Data.Set as S
 import Data.Text (Text, pack)
 
 import Brat.Syntax.Simple
@@ -492,7 +493,10 @@ substOp :: node
 substOp parent outerSig innerSigs
   = CustomOp parent "BRAT" "Substitute" sig [toArg outerSig, TASequence (toArg <$> innerSigs)]
  where
-  sig = FunctionType (toFunc <$> (outerSig : innerSigs)) [toFunc outerSig] ["BRAT"]
+  fnExts (FunctionType _ _ exts) = S.fromList exts
+  combinedExts = S.toList $ foldr S.union (fnExts outerSig) (fnExts <$> innerSigs)
+
+  sig = FunctionType (toFunc <$> (outerSig : innerSigs)) [toFunc outerSig] combinedExts
   toArg = TAType . HTFunc . PolyFuncType []
 
 toFunc :: FunctionType -> HugrType

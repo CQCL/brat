@@ -294,8 +294,7 @@ compileClauses parent ins ((matchData, rhs) :| clauses) = do
   didntMatch outTys parent ins = case nonEmpty clauses of
     Just clauses -> compileClauses parent ins clauses
     -- If there are no more clauses left to test, then the Hugr panics
-    -- TODO: This should just be [BRAT] - would that work?
-    Nothing -> let sig = FunctionType (snd <$> ins) outTys bratExts in
+    Nothing -> let sig = FunctionType (snd <$> ins) outTys ["BRAT"] in
       addNodeWithInputs "Panic" (OpCustom (CustomOp parent "BRAT" "panic" sig [])) ins outTys
 
   didMatch :: [HugrType] -> NodeId -> [TypedPort] -> Compile [TypedPort]
@@ -823,8 +822,6 @@ compileModule venv = do
     put st { compiled = M.empty }
     body)
  where
-  -- HELP! This doesn't work at all when extensions are involved!!!
-  --
   -- Given the Brat-Graph Id node for the decl, work out how to compile it (later);
   -- return the type of the Hugr FuncDefn, whether said FuncDefn requires an extra Call,
   -- and the procedure for compiling the contents of the FuncDefn for execution later,
