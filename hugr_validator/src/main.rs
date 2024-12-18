@@ -1,5 +1,6 @@
 use brat_extension;
 use hugr::extension::{ExtensionRegistry, PRELUDE};
+use hugr::ops::custom::resolve_extension_ops;
 use hugr::std_extensions::arithmetic::{float_ops, float_types, int_ops, int_types};
 use hugr::std_extensions::{collections, logic};
 use hugr::{hugr::ValidationError, Hugr};
@@ -11,7 +12,7 @@ fn parse_and_validate() -> Result<(), ValidationError> {
     let mut buffer = String::new();
     let mut stdin = stdin();
     stdin.read_to_string(&mut buffer).unwrap();
-    let hugr: Hugr = serde_json::from_str(&buffer).unwrap();
+    let mut hugr: Hugr = serde_json::from_str(&buffer).unwrap();
 
     let registry = ExtensionRegistry::try_new([
         PRELUDE.to_owned(),
@@ -25,6 +26,7 @@ fn parse_and_validate() -> Result<(), ValidationError> {
     ])
     .unwrap();
 
+    resolve_extension_ops(&mut hugr, &registry)?;
     hugr.validate(&registry)?;
     println!("hugr parsed & validated successfully!");
     Ok(())

@@ -408,7 +408,7 @@ instance Eq node => Ord (CustomOp node) where
 
 instance ToJSON node => ToJSON (CustomOp node) where
   toJSON (CustomOp { .. }) = object ["parent" .= parent
-                                    ,"op" .= ("CustomOp" :: Text)
+                                    ,"op" .= ("Extension" :: Text)
                                     ,"description" .= ("" :: Text)
                                     ,"extension" .= pack extension
                                     ,"args" .= args

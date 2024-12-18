@@ -17,13 +17,13 @@ use lazy_static::lazy_static;
 use crate::defs::BratOpDef;
 
 /// Reported unique name of the Brat extension
-pub const EXTENSION_ID: ExtensionId = ExtensionId::new_unchecked("Brat");
+pub const EXTENSION_ID: ExtensionId = ExtensionId::new_unchecked("BRAT");
 pub const EXTENSION_VERSION: Version = Version::new(0, 0, 0);
 
 lazy_static! {
     /// Extension for Brat operations.
     pub static ref EXTENSION: Extension = {
-        let reqs = ExtensionSet::from_iter([int_types::EXTENSION_ID, collections::EXTENSION_NAME]);
+        let reqs = ExtensionSet::from_iter([int_types::EXTENSION_ID, collections::EXTENSION_ID]);
 
         let mut extension = Extension::new(EXTENSION_ID, EXTENSION_VERSION).with_reqs(reqs);
 

@@ -118,7 +118,7 @@ fn vec_type(elem: &Type) -> Type {
     Type::new_extension(CustomType::new(
         collections::LIST_TYPENAME,
         [TypeArg::Type { ty: elem.clone() }],
-        collections::EXTENSION_NAME,
+        collections::EXTENSION_ID,
         elem.least_upper_bound(),
     ))
 }
