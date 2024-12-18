@@ -43,6 +43,7 @@ data Tok
  | Dollar
  | Underscore
  | Pipe
+ | Bang
  | Cons
  | Snoc
  | ConcatEqEven
@@ -88,6 +89,7 @@ instance Show Tok where
   show Dollar = "$"
   show Underscore = "_"
   show Pipe = "|"
+  show Bang = "!"
   show Cons = ",-"
   show Snoc = "-,"
   show ConcatEqEven = "=,="
