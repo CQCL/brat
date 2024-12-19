@@ -29,8 +29,9 @@ instance Show a => Show (LengthConstraintF a) where
 type LengthConstraint = LengthConstraintF Int
 
 data BracketErrMsg
-  = EOFInBracket BracketType -- FC points to the open bracket
-  | OpenCloseMismatch (FC, BracketType) BracketType -- Closer FC is in the `Err` fc
+  = EOFInBracket BracketType -- FC in enclosing `Err` should point to the open bracket
+  -- FC here is opening; closing FC in the enclosing `Err`
+  | OpenCloseMismatch (FC, BracketType) BracketType
   | UnexpectedClose BracketType
 
 instance Show BracketErrMsg where

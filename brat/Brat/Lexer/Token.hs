@@ -21,8 +21,8 @@ data Tok
  | RParen
  | LBrace
  | RBrace
- | LBracket
- | RBracket
+ | LSquare
+ | RSquare
  | Semicolon
  | Into
  | Comma
@@ -66,8 +66,8 @@ instance Show Tok where
   show RParen = ")"
   show LBrace = "{"
   show RBrace = "}"
-  show LBracket = "["
-  show RBracket = "]"
+  show LSquare = "["
+  show RSquare = "]"
   show Semicolon = ";"
   show Into = "|>"
   show Comma = ","

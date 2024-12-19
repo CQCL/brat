@@ -1,13 +1,13 @@
 module Data.Bracket where
 
-data BracketType = Paren | Bracket | Brace deriving (Eq, Ord)
+data BracketType = Paren | Square | Brace deriving (Eq, Ord)
 
 showOpen :: BracketType -> String
 showOpen Paren = "("
-showOpen Bracket = "["
+showOpen Square = "["
 showOpen Brace = "{"
 
 showClose :: BracketType -> String
 showClose Paren = ")"
-showClose Bracket = "]"
+showClose Square = "]"
 showClose Brace = "}"

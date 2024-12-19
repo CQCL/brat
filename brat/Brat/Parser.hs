@@ -173,7 +173,7 @@ abstractor = do ps <- many (try portPull)
 
   vecPat :: Parser (WC Pattern)
   vecPat = do
-    WC fc elems <- inBracketsFC Bracket ((unWC <$> binding) `sepBy` match Comma)
+    WC fc elems <- inBracketsFC Square ((unWC <$> binding) `sepBy` match Comma)
     WC fc <$> list2Cons elems
 
   list2Cons :: [Abstractor] -> Parser Pattern
@@ -314,7 +314,7 @@ rawIOWithSpanFC :: Parser (WC [RawIO])
 rawIOWithSpanFC = spanningFC =<< rawIOFC
 
 vec :: Parser (WC Flat)
-vec = (\(WC fc x) -> WC fc (unWC (vec2Cons fc x))) <$> inBracketsFC Bracket elems
+vec = (\(WC fc x) -> WC fc (unWC (vec2Cons fc x))) <$> inBracketsFC Square elems
   where
     elems = (element `chainl1` try vecComma) <|> pure []
     vecComma = match Comma $> (++)
@@ -583,8 +583,8 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
         Nothing -> expr
         Just rest@(WC restFC _) -> WC (spanFC (fcOf expr) restFC) (FJuxt expr rest)
 
-fanout = inBracketsFC Bracket (FFanOut <$ match Slash <* match Backslash)
-fanin = inBracketsFC Bracket (FFanIn <$ match Backslash <* match Slash)
+fanout = inBracketsFC Square (FFanOut <$ match Slash <* match Backslash)
+fanin = inBracketsFC Square (FFanIn <$ match Backslash <* match Slash)
 
 cnoun :: Parser (WC Flat) -> Parser (WC (Raw 'Chk 'Noun))
 cnoun pe = do
