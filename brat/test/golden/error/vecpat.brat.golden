@@ -1,6 +1,6 @@
 Error in test/golden/error/vecpat.brat on line 3:
 fst3(nil) = none
-    ^^^^^
+     ^^^
 
   Unification error: Couldn't force 3 to be 0
 

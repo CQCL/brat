@@ -35,3 +35,9 @@ fcOf (WC fc _) = fc
 -- TODO: Remove this
 dummyFC :: a -> WC a
 dummyFC = WC (FC (Pos 0 0) (Pos 0 0))
+
+spanFC :: FC -> FC -> FC
+spanFC afc bfc = FC (start afc) (end bfc)
+
+spanFCOf :: WC a -> WC b -> FC
+spanFCOf (WC afc _) (WC bfc _) = spanFC afc bfc

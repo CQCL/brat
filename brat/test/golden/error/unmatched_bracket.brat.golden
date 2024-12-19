@@ -1,8 +1,6 @@
 Error in test/golden/error/unmatched_bracket.brat on line 1:
 f(n, Vec([], n) -> Vec([], n) -- First bracket never closed
-                ^^
+ ^
 
-  Parse error unexpected -> 
-expecting (...) or )
-
+  File ended before this ( was closed
 

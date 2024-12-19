@@ -1,6 +1,6 @@
 Error in test/golden/error/vecpat3.brat on line 3:
 fst3([a,b]) = none
-    ^^^^^^^
+     ^^^^^
 
   Unification error: Couldn't force 1 to be 0
 

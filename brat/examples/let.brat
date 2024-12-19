@@ -32,3 +32,13 @@ nums' = let xs = map(inc, [0,2,3]) in xs
 
 nums'' :: List(Int)
 nums'' = let i2 = {inc; inc} in map(i2, xs)
+
+dyad :: Int, Bool
+dyad = 42, true
+
+bind2 :: Bool
+bind2 = let i, b = dyad in b
+
+-- It shouldn't matter if we put brackets in the binding sites
+bind2' :: Bool
+bind2' = let (i, b) = dyad in b
