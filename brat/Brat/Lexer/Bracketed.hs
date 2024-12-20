@@ -93,14 +93,11 @@ within ctx@(_, b) (t:ts)
  | otherwise = (\(fc, acc, rem) -> (fc, (FlatTok t):acc, rem)) <$> within ctx ts
 
 brackets :: [Token] -> Either Error [BToken]
-brackets ts = bracketsWorker ts
- where
-  bracketsWorker :: [Token] -> Either Error [BToken]
-  bracketsWorker [] = pure []
-  bracketsWorker (t:ts)
-   | Just b <- opener (_tok t) = do
-       (closeFC, xs, ts) <- within (fc t, b) ts
-       let enclosingFC = spanFC (fc t) closeFC
-       ((Bracketed enclosingFC b xs):) <$> bracketsWorker ts
-   | Just b <- closer (_tok t) = Left $ unexpectedCloseErr (fc t) b
-   | otherwise = ((FlatTok t):) <$> bracketsWorker ts
+brackets [] = pure []
+brackets (t:ts)
+  | Just b <- opener (_tok t) = do
+      (closeFC, xs, ts) <- within (fc t, b) ts
+      let enclosingFC = spanFC (fc t) closeFC
+      ((Bracketed enclosingFC b xs):) <$> brackets ts
+  | Just b <- closer (_tok t) = Left $ unexpectedCloseErr (fc t) b
+  | otherwise = ((FlatTok t):) <$> brackets ts
