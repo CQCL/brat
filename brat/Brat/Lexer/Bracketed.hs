@@ -4,8 +4,8 @@ import Data.Bracket
 import Brat.Error (BracketErrMsg(..), Error(Err), ErrorMsg(..))
 import Brat.FC
 import Brat.Lexer.Token
-import Bwd
 
+import Data.Bifunctor (first)
 import Text.Megaparsec (PosState(..), SourcePos(..), TraversableStream(..), VisualStream(..))
 import Text.Megaparsec.Pos (mkPos)
 
@@ -73,35 +73,28 @@ openCloseMismatchErr open (fcClose, bClose)
 unexpectedCloseErr :: FC -> BracketType -> Error
 unexpectedCloseErr fc b = Err (Just fc) (BracketErr (UnexpectedClose b))
 
--- Parse between two brackets of the same type
-within :: (FC, BracketType) -- The nearest opening bracket to the left of us
-       -> Bwd BToken -- The tokens that we've passed since that open bracket
-       -> [Token]    -- The tokens to the right of us, unparsed
-       -> Either Error (FC         -- The location of the closing bracket
-                       ,Bwd BToken -- The tokens between the open and close
-                       ,[Token]    -- Tokens after the closing bracket
-                       )
-within (openFC, b) _ [] = Left $ eofErr openFC b
-within ctx@(_, b) acc (t:ts)
- | Just b' <- closer (_tok t) = if b' == b
-                                then pure (fc t, acc, ts)
-                                else Left $ openCloseMismatchErr ctx (fc t, b')
- | Just b' <- opener (_tok t) = do
-     let innerOpenFC = fc t
-     (innerCloseFC, xs, ts) <- within (innerOpenFC, b') B0 ts
-     let fc = spanFC innerOpenFC innerCloseFC
-     within ctx (acc :< Bracketed fc b' (xs <>> [])) ts
- | otherwise = within ctx (acc :< FlatTok t) ts
-
 brackets :: [Token] -> Either Error [BToken]
-brackets ts = (<>> []) <$> bracketsWorker B0 ts
+brackets ts = helper ts >>= \case
+  (res, []) -> pure res
+  (_, t:_) -> let Just b = closer (_tok t) -- guaranteed, helper consumes anything else
+              in Left $ unexpectedCloseErr (fc t) b
  where
-  bracketsWorker :: Bwd BToken -> [Token] -> Either Error (Bwd BToken)
-  bracketsWorker acc [] = pure acc
-  bracketsWorker acc (t:ts)
-   | Just b <- opener (_tok t) = do
-       (closeFC, xs, ts) <- within (fc t, b) B0 ts
-       let enclosingFC = spanFC (fc t) closeFC
-       bracketsWorker (acc :< Bracketed enclosingFC b (xs <>> [])) ts
-   | Just b <- closer (_tok t) = Left $ unexpectedCloseErr (fc t) b
-   | otherwise = bracketsWorker (acc :< FlatTok t) ts
+  -- Given a list of tokens, either
+  -- (success) return [BToken] consisting of the prefix of the input [Token] in which all opened brackets are closed,
+  --           and the remaining [Token] beginning with a closer that does not match any opener in the input;
+  -- (failure) return an error, if a bracket opened in the input, is either not closed (EOF) or does not match the closer
+  helper :: [Token] -> Either Error ([BToken], [Token])
+  helper [] = pure ([], [])
+  helper (t:ts)
+    | Just b <- opener (_tok t) = let openFC = fc t in helper ts >>= \case
+        (_, []) -> Left $ eofErr openFC b
+        (within, r:rs) ->
+          let Just b' = closer (_tok r) -- guaranteed, recursive call consumes anything else
+              closeFC = fc r
+              enclosingFC = (spanFC openFC closeFC)
+          in if b == b' then
+              (first ((Bracketed enclosingFC b within):)) <$> helper rs
+            else
+              Left $ openCloseMismatchErr (openFC, b) (closeFC, b')
+    | Just _ <- closer (_tok t) = pure ([], (t:ts)) -- return closer for caller
+    | otherwise = (first ((FlatTok t):)) <$> helper ts
