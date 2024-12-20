@@ -72,6 +72,9 @@ openCloseMismatchErr open (fcClose, bClose)
 unexpectedCloseErr :: FC -> BracketType -> Error
 unexpectedCloseErr fc b = Err (Just fc) (BracketErr (UnexpectedClose b))
 
+second3 :: (b -> d) -> (a,b,c) -> (a,d,c)
+second3 f (a,b,c) = (a, f b, c)
+
 -- Parse between two brackets of the same type
 within :: (FC, BracketType) -- The nearest opening bracket to the left of us
        -> [Token]    -- The tokens to the right of us, unparsed
@@ -87,10 +90,9 @@ within ctx@(_, b) (t:ts)
  | Just b' <- opener (_tok t) = do
      let innerOpenFC = fc t
      (innerCloseFC, xs, ts) <- within (innerOpenFC, b') ts
-     let fc' = spanFC innerOpenFC innerCloseFC
-     (fc, acc, remaining) <- within ctx ts
-     pure (fc, (Bracketed fc' b' xs):acc, remaining)
- | otherwise = (\(fc, acc, rem) -> (fc, (FlatTok t):acc, rem)) <$> within ctx ts
+     let fc = spanFC innerOpenFC innerCloseFC
+     (second3 ((Bracketed fc b' xs):)) <$> within ctx ts
+ | otherwise = (second3 ((FlatTok t):)) <$> within ctx ts
 
 brackets :: [Token] -> Either Error [BToken]
 brackets [] = pure []
