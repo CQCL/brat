@@ -75,23 +75,23 @@ unexpectedCloseErr fc b = Err (Just fc) (BracketErr (UnexpectedClose b))
 
 -- Parse between two brackets of the same type
 within :: (FC, BracketType) -- The nearest opening bracket to the left of us
-       -> Bwd BToken -- The tokens that we've passed since that open bracket
        -> [Token]    -- The tokens to the right of us, unparsed
        -> Either Error (FC         -- The location of the closing bracket
-                       ,Bwd BToken -- The tokens between the open and close
+                       ,[BToken] -- The tokens between the open and close
                        ,[Token]    -- Tokens after the closing bracket
                        )
-within (openFC, b) _ [] = Left $ eofErr openFC b
-within ctx@(_, b) acc (t:ts)
+within (openFC, b) [] = Left $ eofErr openFC b
+within ctx@(_, b) (t:ts)
  | Just b' <- closer (_tok t) = if b' == b
-                                then pure (fc t, acc, ts)
+                                then pure (fc t, [], ts)
                                 else Left $ openCloseMismatchErr ctx (fc t, b')
  | Just b' <- opener (_tok t) = do
      let innerOpenFC = fc t
-     (innerCloseFC, xs, ts) <- within (innerOpenFC, b') B0 ts
-     let fc = spanFC innerOpenFC innerCloseFC
-     within ctx (acc :< Bracketed fc b' (xs <>> [])) ts
- | otherwise = within ctx (acc :< FlatTok t) ts
+     (innerCloseFC, xs, ts) <- within (innerOpenFC, b') ts
+     let fc' = spanFC innerOpenFC innerCloseFC
+     (fc, acc, remaining) <- within ctx ts
+     pure (fc, (Bracketed fc' b' xs):acc, remaining)
+ | otherwise = (\(fc, acc, rem) -> (fc, (FlatTok t):acc, rem)) <$> within ctx ts
 
 brackets :: [Token] -> Either Error [BToken]
 brackets ts = (<>> []) <$> bracketsWorker B0 ts
@@ -100,8 +100,8 @@ brackets ts = (<>> []) <$> bracketsWorker B0 ts
   bracketsWorker acc [] = pure acc
   bracketsWorker acc (t:ts)
    | Just b <- opener (_tok t) = do
-       (closeFC, xs, ts) <- within (fc t, b) B0 ts
+       (closeFC, xs, ts) <- within (fc t, b) ts
        let enclosingFC = spanFC (fc t) closeFC
-       bracketsWorker (acc :< Bracketed enclosingFC b (xs <>> [])) ts
+       bracketsWorker (acc :< Bracketed enclosingFC b xs) ts
    | Just b <- closer (_tok t) = Left $ unexpectedCloseErr (fc t) b
    | otherwise = bracketsWorker (acc :< FlatTok t) ts
