@@ -106,6 +106,7 @@ library
 
   build-depends:       base < 5,
                        megaparsec >= 9.0.0,
+                       extra,
                        mtl,
                        HUnit,
                        containers,

@@ -5,6 +5,7 @@ import Brat.Error (BracketErrMsg(..), Error(Err), ErrorMsg(..))
 import Brat.FC
 import Brat.Lexer.Token
 
+import Data.Tuple.Extra (second3)
 import Text.Megaparsec (PosState(..), SourcePos(..), TraversableStream(..), VisualStream(..))
 import Text.Megaparsec.Pos (mkPos)
 
@@ -71,9 +72,6 @@ openCloseMismatchErr open (fcClose, bClose)
 
 unexpectedCloseErr :: FC -> BracketType -> Error
 unexpectedCloseErr fc b = Err (Just fc) (BracketErr (UnexpectedClose b))
-
-second3 :: (b -> d) -> (a,b,c) -> (a,d,c)
-second3 f (a,b,c) = (a, f b, c)
 
 -- Parse between two brackets of the same type
 within :: (FC, BracketType) -- The nearest opening bracket to the left of us
