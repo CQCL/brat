@@ -4,7 +4,6 @@ import Data.Bracket
 import Brat.Error (BracketErrMsg(..), Error(Err), ErrorMsg(..))
 import Brat.FC
 import Brat.Lexer.Token
-import Bwd
 
 import Text.Megaparsec (PosState(..), SourcePos(..), TraversableStream(..), VisualStream(..))
 import Text.Megaparsec.Pos (mkPos)
@@ -94,14 +93,14 @@ within ctx@(_, b) (t:ts)
  | otherwise = (\(fc, acc, rem) -> (fc, (FlatTok t):acc, rem)) <$> within ctx ts
 
 brackets :: [Token] -> Either Error [BToken]
-brackets ts = (<>> []) <$> bracketsWorker B0 ts
+brackets ts = bracketsWorker ts
  where
-  bracketsWorker :: Bwd BToken -> [Token] -> Either Error (Bwd BToken)
-  bracketsWorker acc [] = pure acc
-  bracketsWorker acc (t:ts)
+  bracketsWorker :: [Token] -> Either Error [BToken]
+  bracketsWorker [] = pure []
+  bracketsWorker (t:ts)
    | Just b <- opener (_tok t) = do
        (closeFC, xs, ts) <- within (fc t, b) ts
        let enclosingFC = spanFC (fc t) closeFC
-       bracketsWorker (acc :< Bracketed enclosingFC b xs) ts
+       ((Bracketed enclosingFC b xs):) <$> bracketsWorker ts
    | Just b <- closer (_tok t) = Left $ unexpectedCloseErr (fc t) b
-   | otherwise = bracketsWorker (acc :< FlatTok t) ts
+   | otherwise = ((FlatTok t):) <$> bracketsWorker ts
