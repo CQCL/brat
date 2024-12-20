@@ -5,6 +5,7 @@ import Brat.Error (BracketErrMsg(..), Error(Err), ErrorMsg(..))
 import Brat.FC
 import Brat.Lexer.Token
 
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Bifunctor (first)
 import Text.Megaparsec (PosState(..), SourcePos(..), TraversableStream(..), VisualStream(..))
 import Text.Megaparsec.Pos (mkPos)
@@ -75,26 +76,25 @@ unexpectedCloseErr fc b = Err (Just fc) (BracketErr (UnexpectedClose b))
 
 brackets :: [Token] -> Either Error [BToken]
 brackets ts = helper ts >>= \case
-  (res, []) -> pure res
-  (_, t:_) -> let Just b = closer (_tok t) -- guaranteed, helper consumes anything else
-              in Left $ unexpectedCloseErr (fc t) b
+  (res, Nothing) -> pure res
+  (_, Just (b, t:|_)) -> Left $ unexpectedCloseErr (fc t) b
  where
   -- Given a list of tokens, either
   -- (success) return [BToken] consisting of the prefix of the input [Token] in which all opened brackets are closed,
-  --           and the remaining [Token] beginning with a closer that does not match any opener in the input;
+  --           and any remaining [Token] beginning with a closer that does not match any opener in the input
+  --               (either Nothing = no remaining tokens; or tokens with the BracketType that the first token closes)
   -- (failure) return an error, if a bracket opened in the input, is either not closed (EOF) or does not match the closer
-  helper :: [Token] -> Either Error ([BToken], [Token])
-  helper [] = pure ([], [])
+  helper :: [Token] -> Either Error ([BToken], Maybe (BracketType, NonEmpty Token))
+  helper [] = pure ([], Nothing)
   helper (t:ts)
     | Just b <- opener (_tok t) = let openFC = fc t in helper ts >>= \case
-        (_, []) -> Left $ eofErr openFC b
-        (within, r:rs) ->
-          let Just b' = closer (_tok r) -- guaranteed, recursive call consumes anything else
-              closeFC = fc r
+        (_, Nothing) -> Left $ eofErr openFC b
+        (within, Just (b', r :| rs)) ->
+          let closeFC = fc r
               enclosingFC = (spanFC openFC closeFC)
           in if b == b' then
               (first ((Bracketed enclosingFC b within):)) <$> helper rs
             else
               Left $ openCloseMismatchErr (openFC, b) (closeFC, b')
-    | Just _ <- closer (_tok t) = pure ([], (t:ts)) -- return closer for caller
+    | Just b <- closer (_tok t) = pure ([], Just (b, t :| ts)) -- return closer for caller
     | otherwise = (first ((FlatTok t):)) <$> helper ts
