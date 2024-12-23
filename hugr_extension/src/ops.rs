@@ -79,7 +79,7 @@ impl MakeExtensionOp for BratOp {
                         })
                         .collect();
                     let closed_sig = Signature::try_from(*func_sig.clone())
-                            .map_err(|_| SignatureError::InvalidTypeArgs)?;
+                        .map_err(|_| SignatureError::InvalidTypeArgs)?;
 
                     let closed_hole_sigs: Result<Vec<Signature>, SignatureError> = hole_sigs?
                         .iter()
