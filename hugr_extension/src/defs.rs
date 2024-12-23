@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use crate::ctor::BratCtor;
+use crate::ctor::{BratCtor, CtorTest};
 use enum_iterator::Sequence;
 use hugr::{
     extension::{
@@ -16,11 +16,8 @@ use hugr::{
 };
 
 use lazy_static::lazy_static;
-
 use smol_str::{format_smolstr, SmolStr};
 use strum::ParseError;
-
-use crate::ctor::Ctor;
 
 /// Brat extension operation definitions.
 #[derive(Clone, Debug, PartialEq, Eq, Sequence)]
@@ -47,6 +44,11 @@ impl NamedOp for BratOpDef {
             PrimCtorTest(ctor) => format_smolstr!("PrimCtorTest::{}", ctor.name()),
             Replicate => "Replicate".into(),
         }
+    }
+
+    fn add_to_extension(&self, extension: &mut Extension) -> Result<(), ExtensionBuildError> {
+        // TODO: Do something special for constructors and constructor tests
+        todo!();
     }
 }
 
@@ -80,17 +82,8 @@ impl MakeOpDef for BratOpDef {
             Substitute => SignatureFunc::CustomFunc(Box::new(SubstituteSigFun())),
             Partial => SignatureFunc::CustomFunc(Box::new(PartialSigFun())),
             Panic => SignatureFunc::CustomFunc(Box::new(PanicSigFun())),
-            Ctor(ctor) => ctor.signature().into(),
-            PrimCtorTest(ctor) => {
-                let sig = ctor.signature();
-                let input = sig.body().output(); // Ctor output is input for the test
-                let output = Type::new_sum(vec![input.clone(), sig.body().input().clone()]);
-                PolyFuncTypeRV::new(
-                    sig.params(),
-                    FuncValueType::new(input.clone(), vec![output]),
-                )
-                .into()
-            }
+            Ctor(ctor) => SignatureFunc::CustomFunc(Box::new(*ctor)),
+            PrimCtorTest(ctor) => SignatureFunc::CustomFunc(Box::new(CtorTest(*ctor))),
             Replicate => PolyFuncTypeRV::new(
                 [TypeParam::Type {
                     b: TypeBound::Copyable,

@@ -5,10 +5,12 @@ pub mod ops;
 use enum_iterator::all;
 use hugr::{
     extension::{
+        prelude::PRELUDE,
         simple_op::{MakeOpDef, MakeRegisteredOp},
         ExtensionId, ExtensionRegistry, ExtensionSet, Version,
+        SignatureFromArgs,
     },
-    std_extensions::{arithmetic::int_types, collections},
+    std_extensions::{arithmetic::{float_ops, float_types, int_ops, int_types}, collections},
     Extension,
 };
 
@@ -36,8 +38,12 @@ lazy_static! {
 
     /// Registry of extensions required to validate Brat operations.
     pub static ref BRAT_OPS_REGISTRY: ExtensionRegistry  = ExtensionRegistry::try_new([
-        int_types::EXTENSION.to_owned(),
         collections::EXTENSION.to_owned(),
+        int_ops::EXTENSION.to_owned(),
+        int_types::EXTENSION.to_owned(),
+        float_ops::EXTENSION.to_owned(),
+        float_types::EXTENSION.to_owned(),
+        PRELUDE.to_owned(),
         EXTENSION.to_owned(),
     ])
     .unwrap();
@@ -58,11 +64,11 @@ mod test {
     use hugr::{
         extension::simple_op::MakeExtensionOp,
         ops::{custom::ExtensionOp, NamedOp},
-        types::{type_param::TypeParam, FunctionType, Type, TypeArg},
+        types::{Signature, type_param::TypeParam, Type, TypeArg},
     };
 
     use crate::{
-        ctor::{BratCtor, Ctor},
+        ctor::BratCtor,
         ops::BratOp,
     };
 
@@ -82,9 +88,9 @@ mod test {
             .unwrap()
         }
 
-        let sig1 = FunctionType::new(vec![Type::UNIT, Type::UNIT], vec![Type::UNIT]);
-        let sig2 = FunctionType::new(vec![Type::UNIT], vec![Type::UNIT, Type::UNIT]);
-        let sig3 = FunctionType::new_endo(vec![Type::UNIT]);
+        let sig1 = Signature::new(vec![Type::UNIT, Type::UNIT], vec![Type::UNIT]);
+        let sig2 = Signature::new(vec![Type::UNIT], vec![Type::UNIT, Type::UNIT]);
+        let sig3 = Signature::new_endo(vec![Type::UNIT]);
 
         let hole = BratOp::Hole {
             idx: 0,
@@ -110,7 +116,7 @@ mod test {
         for ctor in all::<BratCtor>() {
             // Make dummy args for constructor params
             let args: Vec<TypeArg> = ctor
-                .signature()
+                .compute_signature(&[]).unwrap()
                 .params()
                 .iter()
                 .map(|p| match p {
@@ -130,3 +136,39 @@ mod test {
         }
     }
 }
+
+/*
+#[cfg(test)]
+mod test {
+    use super::*;
+    use hugr::std_extensions::arithmetic::{float_ops, float_types, int_ops, int_types};
+    use hugr::std_extensions::{collections, logic};
+    use hugr::extension::prelude::PRELUDE;
+    use hugr::ops::custom::resolve_extension_ops;
+    use hugr::Hugr;
+
+    #[test]
+    fn test_resolve_op() {
+        let registry = ExtensionRegistry::try_new([
+            PRELUDE.to_owned(),
+            logic::EXTENSION.to_owned(),
+            int_types::extension(),
+            int_ops::EXTENSION.to_owned(),
+            float_types::EXTENSION.to_owned(),
+            float_ops::EXTENSION.to_owned(),
+            collections::EXTENSION.to_owned(),
+            super::EXTENSION.to_owned(),
+        ])
+        .unwrap();
+
+        let opqaue = OpaqueOp::new(
+            "BRAT",
+
+
+        let hugr = Hugr::default();
+        hugr.dfg
+
+        resolve_extension_ops
+    }
+}
+*/

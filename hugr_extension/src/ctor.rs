@@ -1,9 +1,11 @@
 use enum_iterator::Sequence;
 use hugr::{
+    extension::{SignatureError::{self, InvalidTypeArgs}, SignatureFromArgs},
     ops::NamedOp,
     std_extensions::{arithmetic::int_types, collections},
-    types::{type_param::TypeParam, CustomType, PolyFuncType, Signature, Type, TypeArg, TypeBound},
+    types::{type_param::TypeParam, CustomType, FuncValueType, PolyFuncType, PolyFuncTypeRV, Signature, SumType, Type, TypeArg, TypeBound, TypeEnum, TypeRV},
 };
+use lazy_static::lazy_static;
 use smol_str::{format_smolstr, SmolStr};
 use std::str::FromStr;
 use strum::ParseError;
@@ -13,6 +15,7 @@ use strum_macros::{EnumString, IntoStaticStr};
 pub enum BratCtor {
     Nat(NatCtor),
     Vec(VecCtor),
+    Tup(TupleCtor),
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Sequence, IntoStaticStr, EnumString)]
@@ -29,11 +32,19 @@ pub enum VecCtor {
     cons,
 }
 
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Sequence, IntoStaticStr, EnumString)]
+#[allow(non_camel_case_types)]
+pub enum TupleCtor {
+    nil,
+    cons,
+}
+
 impl NamedOp for BratCtor {
     fn name(&self) -> SmolStr {
         match self {
             BratCtor::Nat(ctor) => format_smolstr!("Nat::{}", ctor.name()),
             BratCtor::Vec(ctor) => format_smolstr!("Vec::{}", ctor.name()),
+            BratCtor::Tup(ctor) => format_smolstr!("cons::{}", ctor.name()),
         }
     }
 }
@@ -46,14 +57,63 @@ impl FromStr for BratCtor {
         match v.as_slice() {
             ["Nat", ctor] => Ok(BratCtor::Nat(NatCtor::from_str(ctor)?)),
             ["Vec", ctor] => Ok(BratCtor::Vec(VecCtor::from_str(ctor)?)),
+            ["List", ctor] => Ok(BratCtor::Vec(VecCtor::from_str(ctor)?)),
+            ["cons", ctor] => Ok(BratCtor::Tup(TupleCtor::from_str(ctor)?)),
             _ => Err(ParseError::VariantNotFound),
         }
     }
 }
 
-pub trait Ctor: Into<BratCtor> {
-    /// The signature of the constructor
-    fn signature(self) -> PolyFuncType;
+// BRAT constructors should take as type args a list of the types of their inputs
+// and a list of the types of their outputs.
+impl SignatureFromArgs for BratCtor {
+    fn static_params(&self) -> &[TypeParam] {
+        lazy_static! {
+            static ref PARAMS: [TypeParam; 2] =
+                [TypeParam::List { param: Box::new(TypeParam::Type { b: TypeBound::Any }) },
+                 TypeParam::Type { b: TypeBound::Any },
+                ];
+        }
+        PARAMS.as_slice()
+    }
+
+    fn compute_signature(&self, arg_values: &[TypeArg]) -> Result<PolyFuncTypeRV, SignatureError> {
+        let [TypeArg::Sequence { elems: ctor_arg_tyargs }, TypeArg::Type { ty: out_ty }] = arg_values else {
+            return Err(InvalidTypeArgs)
+        };
+        let Some(ctor_arg_tys): Option<Vec<TypeRV>> = ctor_arg_tyargs.into_iter().map(move |a| match a {
+            TypeArg::Type { ty } => Some(ty.clone().into()),
+            _ => None,
+        }).collect() else {
+            return Err(InvalidTypeArgs);
+        };
+
+        let out_tys: Vec<TypeRV> = vec![out_ty.clone().into()];
+
+        Ok(PolyFuncTypeRV::new([], FuncValueType::new(ctor_arg_tys, out_tys)))
+/*
+        match self {
+            BratCtor::Nat(ctor) => ctor.compute_signature().map(|a| a.into()),
+            BratCtor::Vec(ctor) => ctor.compute_signature(ctor_arg_tys, out_ty).map(|a| a.into()),
+            BratCtor::Tup(ctor) => ctor.compute_signature(ctor_arg_tys, out_ty).map(|a| a.into()),
+        }
+*/
+    }
+}
+
+pub(crate) struct CtorTest(pub BratCtor);
+
+impl SignatureFromArgs for CtorTest {
+    fn static_params(&self) -> &[TypeParam] {
+        self.0.static_params()
+    }
+
+    fn compute_signature(&self, arg_values: &[TypeArg]) -> Result<PolyFuncTypeRV, SignatureError> {
+        let sig = self.0.compute_signature(arg_values)?;
+        let input = sig.body().output.clone();
+        let output = sig.body().input.clone();
+        Ok(PolyFuncTypeRV::new(sig.params(), FuncValueType::new(input, output)))
+    }
 }
 
 impl From<NatCtor> for BratCtor {
@@ -68,39 +128,59 @@ impl From<VecCtor> for BratCtor {
     }
 }
 
-impl Ctor for BratCtor {
-    fn signature(self) -> PolyFuncType {
+impl From<TupleCtor> for BratCtor {
+    fn from(val: TupleCtor) -> Self {
+        BratCtor::Tup(val)
+    }
+}
+
+/*
+impl NatCtor {
+    fn compute_signature(&self) -> Result<PolyFuncType, SignatureError> {
         match self {
-            BratCtor::Nat(ctor) => ctor.signature(),
-            BratCtor::Vec(ctor) => ctor.signature(),
+            NatCtor::zero => Ok(Signature::new(vec![], vec![nat_type()]).into()),
+            NatCtor::succ => Ok(Signature::new(vec![nat_type()], vec![nat_type()]).into()),
         }
     }
 }
 
-impl Ctor for NatCtor {
-    fn signature(self) -> PolyFuncType {
-        match self {
-            NatCtor::zero => Signature::new(vec![], vec![nat_type()]).into(),
-            NatCtor::succ => Signature::new(vec![nat_type()], vec![nat_type()]).into(),
-        }
-    }
-}
-
-impl Ctor for VecCtor {
-    fn signature(self) -> PolyFuncType {
-        let tp = TypeParam::Type { b: TypeBound::Any };
-        let ta = Type::new_var_use(0, TypeBound::Any);
+impl VecCtor {
+    fn compute_signature(&self, ctor_arg_tys: &[Type], out_ty: &Type) -> Result<PolyFuncType, SignatureError> {
         match self {
             VecCtor::nil => {
-                PolyFuncType::new(vec![tp], Signature::new(vec![], vec![vec_type(&ta)]))
-            }
-            VecCtor::cons => PolyFuncType::new(
-                vec![tp],
-                Signature::new(vec![ta.clone(), vec_type(&ta)], vec![vec_type(&ta)]),
-            ),
+                Ok(Signature::new(vec![], vec![list_type(&elem_ty)]).into())
+            },
+            VecCtor::cons =>
+                Ok(Signature::new(vec![elem_ty.clone(), list_type(&elem_ty)], vec![list_type(&elem_ty)]).into()),
         }
     }
 }
+
+impl TupleCtor {
+    fn compute_signature(self, arg_values: &[TypeArg]) -> Result<PolyFuncType, SignatureError> {
+        todo!();
+/*
+        let tpl = TypeParam::Type { b: TypeBound::Any };
+        let tpr = TypeParam::Type { b: TypeBound::Any };
+        match self {
+            TupleCtor::nil => {
+                PolyFuncType::new(vec![],
+                                  Signature::new(vec![], vec![SumType::new([])])
+                )
+            },
+/*
+            TupleCtor::cons => {
+                PolyFuncType::new(vec![head, tail],
+                                  Signature::new(vec![head, tail], vec![])
+                )
+            },
+*/
+        };
+        todo!()
+*/
+    }
+}
+*/
 
 /// The Hugr representation of Brat nats.
 fn nat_type() -> Type {
@@ -114,11 +194,30 @@ fn nat_type() -> Type {
 }
 
 /// The Hugr representation of Brat vectors.
-fn vec_type(elem: &Type) -> Type {
+fn list_type(elem: &Type) -> Type {
     Type::new_extension(CustomType::new(
         collections::LIST_TYPENAME,
         [TypeArg::Type { ty: elem.clone() }],
         collections::EXTENSION_ID,
         elem.least_upper_bound(),
     ))
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+    use hugr::extension::prelude::USIZE_T;
+
+    #[test]
+    fn is_list_type() {
+        let act = collections::list_type(USIZE_T);
+
+        let TypeEnum::Extension(custom) = act.as_type_enum() else {
+            panic!("pee");
+        };
+
+        assert_eq!(*custom.name(), collections::LIST_TYPENAME);
+        assert_eq!(*custom.extension(), collections::EXTENSION_ID);
+    }
 }

@@ -784,7 +784,7 @@ compilePrimTest parent port@(_, ty) (PrimLitTest tm) = do
            [sumOut]
 
 constructorOp :: NodeId -> QualName -> QualName -> FunctionType -> HugrOp NodeId
-constructorOp parent tycon c sig = OpCustom (CustomOp parent "BRAT" ("Ctor::" ++ show tycon ++ "::" ++ show c) sig [])
+constructorOp parent tycon c sig@(FunctionType ins [out] _) = OpCustom (CustomOp parent "BRAT" ("Ctor::" ++ show tycon ++ "::" ++ show c) sig [TASequence (TAType <$> ins), TAType out])
 
 undoPrimTest :: NodeId
              -> [TypedPort] -- The inputs we have to put back together

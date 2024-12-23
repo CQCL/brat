@@ -171,7 +171,7 @@ boundOf (HTFunc _) = TBCopy
 boundOf _ = error "unimplemented bound"
 
 hugrList :: HugrType -> HugrType
-hugrList ty = HTOpaque "Collections" "List" [TAType ty] (boundOf ty)
+hugrList ty = HTOpaque "collections" "List" [TAType ty] (boundOf ty)
 
 intWidth :: Int
 intWidth = 6  -- 2^6 = 64 bits
