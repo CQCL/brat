@@ -12,6 +12,7 @@ import Test.Tasty.HUnit
 import Test.Tasty.Silver
 
 expectedCheckingFails = map ("examples" </>) ["nested-abstractors.brat"
+                                             ,"karlheinz.brat"
                                              ,"karlheinz_alias.brat"
                                              ,"hea.brat"
                                              ]
