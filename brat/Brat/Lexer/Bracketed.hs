@@ -33,7 +33,7 @@ btokLen (Bracketed _ _ bs) = sum (btokLen <$> bs) + 2
 
 instance Show BToken where
   show (FlatTok t) = show t
-  show (Bracketed _ b ts) = showOpen b ++ concat (show <$> ts) ++ showClose b
+  show (Bracketed _ b ts) = showOpen b ++ concatMap show ts ++ showClose b
 
 instance VisualStream [BToken] where
   showTokens _ = concatMap show
