@@ -4,10 +4,10 @@ module Brat.Graph where
 
 import Brat.Checker.Types (VEnv)
 import Brat.Naming
+import Brat.QualName
 import Brat.Syntax.Common
 import Brat.Syntax.Simple
 import Brat.Syntax.Value
-import Brat.UserName
 
 import Hasochism (N(..))
 
@@ -48,8 +48,8 @@ data NodeType :: Mode -> Type where
                   )
                -> NodeType a
   Hypo :: NodeType a  -- Hypothesis for type checking
-  Constructor :: UserName -> NodeType a
-  Selector :: UserName -> NodeType a -- TODO: Get rid of this in favour of pattern matching
+  Constructor :: QualName -> NodeType a
+  Selector :: QualName -> NodeType a -- TODO: Get rid of this in favour of pattern matching
   ArithNode :: ArithOp -> NodeType Brat
   Replicate :: NodeType Brat
   MapFun :: NodeType a
@@ -79,8 +79,8 @@ deriving instance Show ty => Show (MatchSequence ty)
 
 data PrimTest ty
   = PrimCtorTest
-      UserName      -- the data constructor
-      UserName      -- the type constructor
+      QualName      -- the data constructor
+      QualName      -- the type constructor
       -- (CtorArgs m)  -- (hope we don't need) its entry in the constructor table
       Name          -- the name of the node which "outputs" the data packed inside
       [(Src, ty)]  -- ...these sources for extracted data descend
@@ -115,7 +115,7 @@ toGraph (ns, ws) = G.graphFromEdges adj
 wiresFrom :: Name -> Graph -> [Wire]
 wiresFrom src (_, ws) = [ w | w@(Ex a _, _, _) <- ws, a == src ]
 
-lookupNode :: Name -> Graph -> Maybe (Node)
+lookupNode :: Name -> Graph -> Maybe Node
 lookupNode name (ns, _) = M.lookup name ns
 
 wireStart :: Wire -> Name

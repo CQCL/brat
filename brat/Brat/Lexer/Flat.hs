@@ -41,11 +41,10 @@ qualified :: Lexer Tok
 qualified = (<?> "qualified name") $ do
   first <- ident <* string "."
   rest  <- many (try $ ident <* string ".")
-  last  <- ident
-  pure (QualifiedId (first :| rest) last)
+  QualifiedId (first :| rest) <$> ident
 
 space :: Lexer ()
-space = (many $ (satisfy isSpace >> return ()) <|> comment) >> return ()
+space = many ((satisfy isSpace >> return ()) <|> comment) >> return ()
  where
   comment :: Lexer ()
   comment = string "--" *> ((printChar `manyTill` lookAhead (void newline <|> void eof)) >> return ())
@@ -55,8 +54,8 @@ tok = try (char '(' $> LParen)
       <|> try (char ')' $> RParen)
       <|> try (char '{' $> LBrace)
       <|> try (char '}' $> RBrace)
-      <|> try (char '[' $> LBracket)
-      <|> try (char ']' $> RBracket)
+      <|> try (char '[' $> LSquare)
+      <|> try (char ']' $> RSquare)
       <|> try (Underscore <$ string "_")
       <|> try (Quoted <$> (char '"' *> printChar `manyTill` char '"'))
       <|> try (FloatLit <$> float)
@@ -118,4 +117,4 @@ convPos :: SourcePos -> Pos
 convPos (SourcePos _ l c) = Pos (unPos l) (unPos c)
 
 lexFlat :: Lexer [Token]
-lexFlat = token `manyTill` (try $ space >> eof)
+lexFlat = token `manyTill` try (space >> eof)

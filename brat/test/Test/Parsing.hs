@@ -15,8 +15,7 @@ testParse file = testCase (show file) $ do
     Left err -> assertFailure (show err)
     Right _ -> return () -- OK
 
-expectedParsingFails = map ("examples" </>) [
-    "thin.brat"]
+expectedParsingFails = ["examples" </> "thin.brat"]
 
 parseXF = expectFailForPaths expectedParsingFails testParse
 

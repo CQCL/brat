@@ -42,9 +42,9 @@ module Brat.Syntax.Common (PortName,
                           ) where
 
 import Brat.FC
+import Brat.QualName
 import Brat.Syntax.Abstractor
 import Brat.Syntax.Port
-import Brat.UserName
 
 import Data.Bifunctor (first)
 import Data.List (intercalate)
@@ -114,7 +114,7 @@ data TypeKind = TypeFor Mode [(PortName, TypeKind)] | Nat
   deriving Eq
 
 instance Show TypeKind where
-  show (TypeFor m args) = let argsStr = if null args then "" else ("(" ++ intercalate ", " (show <$> args) ++ ")")
+  show (TypeFor m args) = let argsStr = if null args then "" else "(" ++ intercalate ", " (show <$> args) ++ ")"
                               kindStr = case m of
                                 Brat -> "*"
                                 Kernel -> "$"
@@ -173,7 +173,7 @@ instance Semigroup (CType' (PortName, ty)) where
   (ss :-> ts) <> (us :-> vs) = (ss <> us) :-> (ts <> vs)
 
 data Import
-  = Import { importName :: WC UserName
+  = Import { importName :: WC QualName
            , importQualified :: Bool
            , importAlias :: Maybe (WC String)
            , importSelection :: ImportSelection

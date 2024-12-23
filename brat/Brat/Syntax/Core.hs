@@ -15,10 +15,10 @@ import Brat.Constructors.Patterns (pattern CCons,
                                    pattern CRiffle)
 import Brat.FC
 import Brat.Naming
+import Brat.QualName
 import Brat.Syntax.Common
 import Brat.Syntax.FuncDecl
 import Brat.Syntax.Simple
-import Brat.UserName
 
 import Data.Kind (Type)
 import Data.Maybe (fromJust)
@@ -47,7 +47,7 @@ data Term :: Dir -> Kind -> Type where
   Emb      :: WC (Term Syn k) -> Term Chk k
   Forget   :: WC (Term d KVerb) -> Term d UVerb
   Pull     :: [PortName] -> WC (Term Chk k) -> Term Chk k
-  Var      :: UserName -> Term Syn Noun  -- Look up in noun (value) env
+  Var      :: QualName -> Term Syn Noun  -- Look up in noun (value) env
   Identity :: Term Syn UVerb
   Arith    :: ArithOp -> WC (Term Chk Noun) -> WC (Term Chk Noun) -> Term Chk Noun
   Of       :: WC (Term Chk Noun) -> WC (Term d Noun) -> Term d Noun
@@ -64,7 +64,7 @@ data Term :: Dir -> Kind -> Type where
   -- In `Syn`, for now, the first clause provides the type.
   Lambda   :: (WC Abstractor, WC (Term d Noun)) -> [(WC Abstractor, WC (Term Chk Noun))] -> Term d UVerb
   -- Type constructors
-  Con      :: UserName -> WC (Term Chk Noun) -> Term Chk Noun
+  Con      :: QualName -> WC (Term Chk Noun) -> Term Chk Noun
   -- Brat function types
   C        :: CType' (PortName, KindOr (Term Chk Noun)) -> Term Chk Noun
   -- Kernel types
@@ -119,7 +119,7 @@ instance Show (Term d k) where
   show (fun :$: arg) = bracket PApp fun ++ ('(' : show arg ++ ")")
   show (tm ::: ty) = bracket PAnn tm ++ " :: " ++ show ty
   show (a :-: b) = bracket PComp a ++ "; " ++ bracket PComp b
-  show (Lambda c cs) = unlines $ (showClause c : (("| "++) . showClause <$> cs))
+  show (Lambda c cs) = unlines (showClause c : (("| "++) . showClause <$> cs))
    where
     showClause (xs, bod) = show xs ++ " => " ++ bracket PLambda bod
   show p@(Con c arg) = case prettyPat p of
@@ -130,7 +130,7 @@ instance Show (Term d k) where
    where
     prettyPat :: Term Chk Noun -> Maybe [Term Chk Noun]
     prettyPat (Con (PrefixName [] "nil") (WC _ Empty)) = Just []
-    prettyPat (Con (PrefixName [] "cons") (WC _ (x :|: xs))) = ((unWC x) :) <$> prettyPat (unWC xs)
+    prettyPat (Con (PrefixName [] "cons") (WC _ (x :|: xs))) = (unWC x :) <$> prettyPat (unWC xs)
     prettyPat _ = Nothing
 
   show (C f) = "{" ++ show f ++ "}"
@@ -147,7 +147,7 @@ bracket n (WC _ tm) = case precedence tm of
 
 -- Report tightness of binding, or `Nothing` if not a binary op
 precedence :: Term d k -> Maybe Precedence
-precedence (Let _ _ _)  = Just PLetIn
+precedence (Let {})  = Just PLetIn
 precedence (Lambda _ _) = Just PLambda
 precedence (_ :-: _)    = Just PComp
 precedence (Pull _ _)   = Just PJuxtPull

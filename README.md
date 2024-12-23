@@ -29,6 +29,17 @@ There is a tool in the root of the repository called `hugr_validator` (install b
 brat --compile my-program.brat | hugr_validator
 ```
 
+# Development
+Before opening a PR, make sure to run hlint on your code, using:
+```sh
+make hlint
+```
+or try to automatically apply fixes with:
+```sh
+make hlint-fix
+```
+
+
 # Reference
 The [`brat/examples`](brat/examples) directory contains some examples of BRAT programs.
 For example:

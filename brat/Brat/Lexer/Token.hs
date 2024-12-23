@@ -21,8 +21,8 @@ data Tok
  | RParen
  | LBrace
  | RBrace
- | LBracket
- | RBracket
+ | LSquare
+ | RSquare
  | Semicolon
  | Into
  | Comma
@@ -66,8 +66,8 @@ instance Show Tok where
   show RParen = ")"
   show LBrace = "{"
   show RBrace = "}"
-  show LBracket = "["
-  show RBracket = "]"
+  show LSquare = "["
+  show RSquare = "]"
   show Semicolon = ";"
   show Into = "|>"
   show Comma = ","
@@ -103,6 +103,7 @@ instance Eq Token where
 
 instance Show Token where
   show (Token _ t) = show t
+
 instance Ord Token where
   compare (Token (FC st nd) _) (Token (FC st' nd') _) = if st == st'
                                                         then compare nd nd'
@@ -131,5 +132,5 @@ tokLen = length . show
 tokenLen = tokLen . _tok
 
 instance VisualStream [Token] where
-  showTokens _ ts = concatMap show ts
   tokensLength _ = sum . fmap (\(Token _ t) -> tokLen t)
+  showTokens _ = concatMap show

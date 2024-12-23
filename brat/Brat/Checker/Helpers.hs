@@ -20,7 +20,7 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
                             ,evalSrcRow, evalTgtRow
                             )-} where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows)
+import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (eval, EvMode(..), kindType)
@@ -32,17 +32,17 @@ import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Simple
 import Brat.Syntax.Port (ToEnd(..))
 import Brat.Syntax.Value
-import Brat.UserName
 import Bwd
 import Hasochism
 import Util (log2)
 
-import Control.Monad.Freer (req, Free(Ret))
-import Control.Arrow ((***))
-import Data.List (intercalate)
+import Control.Monad.State.Lazy (StateT(..), runStateT)
+import Control.Monad.Freer (req)
+import Data.Bifunctor
+import Data.Foldable (foldrM)
+import Data.List (partition)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
-import qualified Data.Set as S
 import Prelude hiding (last)
 
 simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Either ErrorMsg ()
@@ -101,43 +101,29 @@ pullPortsRow :: Show ty
              => [PortName]
              -> [(NamedPort e, ty)]
              -> Checking [(NamedPort e, ty)]
-pullPortsRow = pullPorts portName showRow
+pullPortsRow = pullPorts (portName . fst) showRow
 
 pullPortsSig :: Show ty
              => [PortName]
              -> [(PortName, ty)]
              -> Checking [(PortName, ty)]
-pullPortsSig = pullPorts id showSig
+pullPortsSig = pullPorts fst showSig
 
-pullPorts :: forall a ty. Show ty
-          => (a -> PortName) -- A way to get a port name for each element
-          -> ([(a, ty)] -> String) -- A way to print the list
+pullPorts :: forall a ty
+           . (a -> PortName) -- A way to get a port name for each element
+          -> ([a] -> String) -- A way to print the list
           -> [PortName] -- Things to pull to the front
-          -> [(a, ty)]  -- The list to rearrange
-          -> Checking [(a, ty)]
-pullPorts _ _ [] types = pure types
-pullPorts toPort showFn (p:ports) types = do
-  (x, types) <- pull1Port p types
-  (x:) <$> pullPorts toPort showFn ports types
+          -> [a]  -- The list to rearrange
+          -> Checking [a]
+pullPorts toPort showFn to_pull types =
+  -- the "state" here is the things still available to be pulled
+  (\(pulled, rest) -> pulled ++ rest) <$> runStateT (mapM pull1Port to_pull) types
  where
-  pull1Port :: PortName
-            -> [(a, ty)]
-            -> Checking ((a, ty), [(a, ty)])
-  pull1Port p [] = fail $ "Port not found: " ++ p ++ " in " ++ showFn types
-  pull1Port p (x@(a,_):xs)
-   | p == toPort a
-   = if (p `elem` (toPort . fst <$> xs))
-     then err (AmbiguousPortPull p (showFn (x:xs)))
-     else pure (x, xs)
-   | otherwise = (id *** (x:)) <$> pull1Port p xs
-
-combineDisjointEnvs :: M.Map UserName v -> M.Map UserName v -> Checking (M.Map UserName v)
-combineDisjointEnvs l r =
-  let commonKeys = S.intersection (M.keysSet l) (M.keysSet r)
-  in if S.null commonKeys
-    then Ret $ M.union l r
-    else typeErr ("Variable(s) defined twice: " ++
-      (intercalate "," $ map show $ S.toList commonKeys))
+  pull1Port :: PortName -> StateT [a] Checking a
+  pull1Port p = StateT $ \available -> case partition ((== p) . toPort) available of
+      ([], _) -> err $ BadPortPull p (showFn available)
+      ([found], remaining) -> pure (found, remaining)
+      (_, _) -> err $ AmbiguousPortPull p (showFn available)
 
 ensureEmpty :: Show ty => String -> [(NamedPort e, ty)] -> Checking ()
 ensureEmpty _ [] = pure ()
@@ -149,7 +135,7 @@ noUnders m = do
   pure (outs, overs)
 
 rowToSig :: Traversable t => t (NamedPort e, ty) -> t (PortName, ty)
-rowToSig = fmap $ \(p,ty) -> (portName p, ty)
+rowToSig = fmap $ first portName
 
 showMode :: Modey m -> String
 showMode Braty = ""
@@ -258,42 +244,39 @@ getThunks :: Modey m
                       ,Overs m UVerb
                       )
 getThunks _ [] = pure ([], [], [])
-getThunks Braty row@((src, Right ty):rest) = ((src,) <$> eval S0 ty) >>= vectorise >>= \case
-  (src, VFun Braty (ss :->> ts)) -> do
-    (node, unders, overs, _) <- let ?my = Braty in
-                                  anext "" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
-    (nodes, unders', overs') <- getThunks Braty rest
-    pure (node:nodes, unders <> unders', overs <> overs')
-  -- These shouldn't happen
-  (_, VFun _ _) -> err $ ExpectedThunk (showMode Braty) (showRow row)
-  v -> typeErr $ "Force called on non-thunk: " ++ show v
-getThunks Kerny row@((src, Right ty):rest) = ((src,) <$> eval S0 ty) >>= vectorise >>= \case
-  (src, VFun Kerny (ss :->> ts)) -> do
-    (node, unders, overs, _) <- let ?my = Kerny in anext "" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
-    (nodes, unders', overs') <- getThunks Kerny rest
-    pure (node:nodes, unders <> unders', overs <> overs')
-  (_, VFun _ _) -> err $ ExpectedThunk (showMode Kerny) (showRow row)
-  v -> typeErr $ "Force called on non-(kernel)-thunk: " ++ show v
+getThunks Braty ((src, Right ty):rest) = do
+  ty <- eval S0 ty
+  (src, ss :->> ts) <- vectorise Braty (src, ty)
+  (node, unders, overs, _) <- let ?my = Braty in
+                                anext "Eval" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
+  (nodes, unders', overs') <- getThunks Braty rest
+  pure (node:nodes, unders <> unders', overs <> overs')
+getThunks Kerny ((src, Right ty):rest) = do
+  ty <- eval S0 ty
+  (src, ss :->> ts) <- vectorise Kerny (src,ty)
+  (node, unders, overs, _) <- let ?my = Kerny in anext "Splice" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
+  (nodes, unders', overs') <- getThunks Kerny rest
+  pure (node:nodes, unders <> unders', overs <> overs')
 getThunks Braty ((src, Left (Star args)):rest) = do
   (node, unders, overs) <- case bwdStack (B0 <>< args) of
     Some (_ :* stk) -> do
       let (ri,ro) = kindArgRows stk
-      (node, unders, overs, _) <- next "" (Eval (end src)) (S0, Some (Zy :* S0)) ri ro
+      (node, unders, overs, _) <- next "Eval" (Eval (end src)) (S0, Some (Zy :* S0)) ri ro
       pure (node, unders, overs)
   (nodes, unders', overs') <- getThunks Braty rest
   pure (node:nodes, unders <> unders', overs <> overs')
 getThunks m ro = err $ ExpectedThunk (showMode m) (showRow ro)
 
 -- The type given here should be normalised
-vecLayers :: Val Z -> Checking ([(Src, NumVal (VVar Z))] -- The sizes of the vector layers
-                               ,Some (Modey :* Flip CTy Z) -- The function type at the end
-                               )
-vecLayers (TVec ty (VNum n)) = do
+vecLayers :: Modey m -> Val Z -> Checking ([(Src, NumVal (VVar Z))] -- The sizes of the vector layers
+                                          ,CTy m Z -- The function type at the end
+                                          )
+vecLayers my (TVec ty (VNum n)) = do
   src <- mkStaticNum n
-  (layers, fun) <- vecLayers ty
-  pure ((src, n):layers, fun)
-vecLayers (VFun my cty) = pure ([], Some (my :* Flip cty))
-vecLayers ty = typeErr $ "Expected a function or vector of functions, got " ++ show ty
+  first ((src, n):) <$> vecLayers my ty
+vecLayers Braty (VFun Braty cty) = pure ([], cty)
+vecLayers Kerny (VFun Kerny cty) = pure ([], cty)
+vecLayers my ty = typeErr $ "Expected a " ++ showMode my ++ "function or vector of functions, got " ++ show ty
 
 mkStaticNum :: NumVal (VVar Z) -> Checking Src
 mkStaticNum n@(NumValue c gro) = do
@@ -341,27 +324,29 @@ mkStaticNum n@(NumValue c gro) = do
     wire (oneSrc, TNat, rhs)
     pure src
 
-vectorise :: (Src, Val Z) -> Checking (Src, Val Z)
-vectorise (src, ty) = do
-  (layers, Some (my :* Flip cty)) <- vecLayers ty
-  modily my $ mkMapFuns (src, VFun my cty) layers
+vectorise :: forall m. Modey m -> (Src, Val Z) -> Checking (Src, CTy m Z)
+vectorise my (src, ty) = do
+  (layers, cty) <- vecLayers my ty
+  modily my $ foldrM mkMapFun (src, cty) layers
  where
-  mkMapFuns :: (Src, Val Z) -- The input to the mapfun
-            -> [(Src, NumVal (VVar Z))] -- Remaining layers
-            -> Checking (Src, Val Z)
-  mkMapFuns over [] = pure over
-  mkMapFuns (valSrc, ty) ((lenSrc, len):layers) = do
-    (valSrc, ty@(VFun my cty)) <- mkMapFuns (valSrc, ty) layers
+  mkMapFun :: (Src, NumVal (VVar Z)) -- Layer to apply
+            -> (Src, CTy m Z) -- The input to this level of mapfun
+            -> Checking (Src, CTy m Z)
+  mkMapFun (lenSrc, len) (valSrc, cty) = do
     let weak1 = changeVar (Thinning (ThDrop ThNull))
     vecFun <- vectorisedFun len my cty
-    (_, [(lenTgt,_), (valTgt, _)], [(vectorSrc, Right vecTy)], _) <-
-      next "" MapFun (S0, Some (Zy :* S0))
+    (_, [(lenTgt,_), (valTgt, _)], [(vectorSrc, Right (VFun my' cty))], _) <-
+      next "MapFun" MapFun (S0, Some (Zy :* S0))
       (REx ("len", Nat) (RPr ("value", weak1 ty) R0))
       (RPr ("vector", weak1 vecFun) R0)
     defineTgt lenTgt (VNum len)
     wire (lenSrc, kindType Nat, lenTgt)
     wire (valSrc, ty, valTgt)
-    pure (vectorSrc, vecTy)
+    let vecCTy = case (my,my',cty) of
+          (Braty,Braty,cty) -> cty
+          (Kerny,Kerny,cty) -> cty
+          _ -> error "next returned wrong mode of computation type to that passed in"
+    pure (vectorSrc, vecCTy)
 
   vectorisedFun :: NumVal (VVar Z) -> Modey m -> CTy m Z -> Checking (Val Z)
   vectorisedFun nv my (ss :->> ts) = do
@@ -391,10 +376,10 @@ valueToBinder Braty = Right
 valueToBinder Kerny = id
 
 defineSrc :: Src -> Val Z -> Checking ()
-defineSrc src v = req (Define (ExEnd (end src)) v)
+defineSrc src = defineEnd (ExEnd (end src))
 
 defineTgt :: Tgt -> Val Z -> Checking ()
-defineTgt tgt v = req (Define (InEnd (end tgt)) v)
+defineTgt tgt = defineEnd (InEnd (end tgt))
 
 declareSrc :: Src -> Modey m -> BinderType m -> Checking ()
 declareSrc src my ty = req (Declare (ExEnd (end src)) my ty)
@@ -422,7 +407,7 @@ makeBox name cty@(ss :->> ts) body = do
       bres <- name -! body (overs, unders)
       pure (thunk, bres)
     (Braty, body) -> do
-      (bres, captures) <- name -! (captureOuterLocals $ body (overs, unders))
+      (bres, captures) <- name -! captureOuterLocals (body (overs, unders))
       (_, [], [thunk], _) <- next (name ++ "_thunk") (Box captures src tgt) (S0, Some (Zy :* S0))
                                      R0 (RPr ("thunk", VFun ?my cty) R0)
       pure (thunk, bres)
@@ -438,26 +423,25 @@ natEqOrBust :: Ny i -> Ny j -> Either ErrorMsg (i :~: j)
 natEqOrBust n m | Just q <- testEquality n m = pure q
 natEqOrBust _ _ = Left $ InternalError "We can't count"
 
-rowToRo :: ToEnd t => Modey m -> [(String, t, BinderType m)] -> Stack Z End i -> Checking (Some ((Ro m i) :* Stack Z End))
+rowToRo :: ToEnd t => Modey m -> [(String, t, BinderType m)] -> Stack Z End i -> Checking (Some (Ro m i :* Stack Z End))
 rowToRo _ [] stk = pure $ Some (R0 :* stk)
 rowToRo Kerny ((p, _, ty):row) S0 = do
   ty <- eval S0 ty
   rowToRo Kerny row S0 >>= \case
-    Some (ro :* stk) -> pure . Some $ ((RPr (p, changeVar (ParToInx (AddZ Zy) S0) ty) ro)) :* stk
+    Some (ro :* stk) -> pure . Some $ RPr (p, changeVar (ParToInx (AddZ Zy) S0) ty) ro :* stk
 rowToRo Kerny _ (_ :<< _) = err $ InternalError "rowToRo - no binding allowed in kernels"
 
 rowToRo Braty ((p, _, Right ty):row) endz = do
   ty <- eval S0 ty
   rowToRo Braty row endz >>= \case
-    Some (ro :* stk) -> pure . Some $ (RPr (p, changeVar (ParToInx (AddZ (stackLen endz)) endz) ty) ro) :* stk
+    Some (ro :* stk) -> pure . Some $ RPr (p, changeVar (ParToInx (AddZ (stackLen endz)) endz) ty) ro :* stk
 rowToRo Braty ((p, tgt, Left k):row) endz = rowToRo Braty row (endz :<< toEnd tgt) >>= \case
-  Some (ro :* stk) -> pure . Some $ (REx (p, k) ro) :* stk
+  Some (ro :* stk) -> pure . Some $ REx (p, k) ro :* stk
 
 roToTuple :: Ro m Z Z -> Val Z
 roToTuple R0 = TNil
 roToTuple (RPr (_, ty) ro) = TCons ty (roToTuple ro)
-roToTuple (REx _ ro) = case ro of
-  _ -> error "the impossible happened"
+roToTuple (REx _ _) = error "the impossible happened"
 
 -- Low hanging fruit that we can easily do to our normal forms of numbers
 runArith :: NumVal (VVar Z) -> ArithOp -> NumVal (VVar Z) -> Maybe (NumVal (VVar Z))

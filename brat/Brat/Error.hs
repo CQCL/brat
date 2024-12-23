@@ -11,6 +11,7 @@ module Brat.Error (ParseError(..)
 
 import Brat.FC
 import Data.Bracket
+import Brat.Syntax.Port (PortName)
 
 import Data.List (intercalate)
 import System.Exit
@@ -28,8 +29,9 @@ instance Show a => Show (LengthConstraintF a) where
 type LengthConstraint = LengthConstraintF Int
 
 data BracketErrMsg
-  = EOFInBracket BracketType -- FC points to the open bracket
-  | OpenCloseMismatch (FC, BracketType) BracketType -- Closer FC is in the `Err` fc
+  = EOFInBracket BracketType -- FC in enclosing `Err` should point to the open bracket
+  -- FC here is opening; closing FC in the enclosing `Err`
+  | OpenCloseMismatch (FC, BracketType) BracketType
   | UnexpectedClose BracketType
 
 instance Show BracketErrMsg where
@@ -83,8 +85,8 @@ data ErrorMsg
  | FileNotFound String [String]
  | SymbolNotFound String String
  | InternalError String
- | AmbiguousPortPull String String
- | BadPortPull String
+ | AmbiguousPortPull PortName String
+ | BadPortPull PortName String
  | VConNotFound String
  | TyConNotFound String String
  | MatchingOnTypes
@@ -163,7 +165,7 @@ instance Show ErrorMsg where
   show (SymbolNotFound s i) = "Symbol `" ++ s ++ "` not found in `" ++ i ++ "`"
   show (InternalError x) = "Internal error: " ++ x
   show (AmbiguousPortPull p row) = "Port " ++ p ++ " is ambiguous in " ++ row
-  show (BadPortPull x) = "Port " ++ x ++ " can't be pulled because it depends on a previous port"
+  show (BadPortPull p row) = "Port not found: " ++ p ++ " in " ++ row
   show (VConNotFound x) = "Value constructor not recognised: " ++ x
   show (TyConNotFound ty v) = show v ++ " is not a valid constructor for type " ++ ty
   show MatchingOnTypes = "Trying to pattern match on a type"
