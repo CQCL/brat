@@ -63,20 +63,20 @@ instance TraversableStream [BToken] where
     closeTok Square = RSquare
     closeTok Brace = RBrace
 
-eofErr :: FC -> BracketType -> Error
-eofErr fc b = Err (Just fc) (BracketErr (EOFInBracket b))
+eofErr :: (FC, BracketType) -> Error
+eofErr (fc, b) = Err (Just fc) (BracketErr (EOFInBracket b))
 
 openCloseMismatchErr :: (FC, BracketType) -> (FC, BracketType) -> Error
 openCloseMismatchErr open (fcClose, bClose)
   = Err (Just fcClose) (BracketErr (OpenCloseMismatch open bClose))
 
-unexpectedCloseErr :: FC -> BracketType -> Error
-unexpectedCloseErr fc b = Err (Just fc) (BracketErr (UnexpectedClose b))
+unexpectedCloseErr :: (FC, BracketType) -> Error
+unexpectedCloseErr (fc, b) = Err (Just fc) (BracketErr (UnexpectedClose b))
 
 brackets :: [Token] -> Either Error [BToken]
 brackets ts = helper ts >>= \case
   (res, Nothing) -> pure res
-  (_, Just (b, t:|_)) -> Left $ unexpectedCloseErr (fc t) b
+  (_, Just (b, t:|_)) -> Left $ unexpectedCloseErr (fc t, b)
  where
   -- Given a list of tokens, either
   -- (success) return [BToken] consisting of the prefix of the input [Token] in which all opened brackets are closed,
@@ -87,7 +87,7 @@ brackets ts = helper ts >>= \case
   helper [] = pure ([], Nothing)
   helper (t:ts) = case openClose (_tok t) of
     Just (Open b) -> let openFC = fc t in helper ts >>= \case
-      (_, Nothing) -> Left $ eofErr openFC b
+      (_, Nothing) -> Left $ eofErr (fc t, b)
       (within, Just (b', r :| rs)) ->
         let closeFC = fc r
             enclosingFC = spanFC openFC closeFC
