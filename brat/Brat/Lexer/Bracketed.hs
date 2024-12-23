@@ -53,7 +53,7 @@ instance TraversableStream [BToken] where
     skipChars 0 inp@(Bracketed fc _ _:_) = (start fc, inp)
     skipChars 0 inp@(FlatTok t:_) = (start (fc t), inp)
     skipChars i ((Bracketed fc b bts):rest) =
-      let Pos closeLine closeCol = (end fc)
+      let Pos closeLine closeCol = end fc
           closeFC = FC (Pos closeLine (closeCol - 1)) (Pos closeLine closeCol)
       in  skipChars (i - 1) (bts ++ [FlatTok (Token closeFC (closeTok b))] ++ rest)
     skipChars i (FlatTok t:rest)
@@ -91,10 +91,10 @@ brackets ts = helper ts >>= \case
         (_, Nothing) -> Left $ eofErr openFC b
         (within, Just (b', r :| rs)) ->
           let closeFC = fc r
-              enclosingFC = (spanFC openFC closeFC)
+              enclosingFC = spanFC openFC closeFC
           in if b == b' then
-              (first ((Bracketed enclosingFC b within):)) <$> helper rs
+              first (Bracketed enclosingFC b within:) <$> helper rs
             else
               Left $ openCloseMismatchErr (openFC, b) (closeFC, b')
     | Just b <- closer (_tok t) = pure ([], Just (b, t :| ts)) -- return closer for caller
-    | otherwise = (first ((FlatTok t):)) <$> helper ts
+    | otherwise = first (FlatTok t:) <$> helper ts
