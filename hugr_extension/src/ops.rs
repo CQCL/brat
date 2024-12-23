@@ -78,16 +78,20 @@ impl MakeExtensionOp for BratOp {
                             _ => Err(SignatureError::InvalidTypeArgs.into()),
                         })
                         .collect();
+                    let closed_sig = Signature::try_from(*func_sig.clone())
+                            .map_err(|_| SignatureError::InvalidTypeArgs)?;
+
+                    let closed_hole_sigs: Result<Vec<Signature>, SignatureError> = hole_sigs?
+                        .iter()
+                        .map(|a| {
+                            Signature::try_from(a.clone())
+                                .map_err(|_| SignatureError::InvalidTypeArgs)
+                        })
+                        .collect();
+
                     Ok(BratOp::Substitute {
-                        func_sig: Signature::try_from(*func_sig.clone())
-                            .expect("Invalid type arg to substitute"),
-                        hole_sigs: hole_sigs?
-                            .iter()
-                            .map(|a| {
-                                Signature::try_from(a.clone())
-                                    .expect("Invalid type arg for hole to substitute")
-                            })
-                            .collect(),
+                        func_sig: closed_sig,
+                        hole_sigs: closed_hole_sigs?,
                     })
                 }
                 _ => Err(OpLoadError::InvalidArgs(SignatureError::InvalidTypeArgs)),
