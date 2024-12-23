@@ -50,12 +50,16 @@ data CtxEnv = CtxEnv
   , locals :: VEnv
   }
 
+type Hopes = M.Map InPort FC
+
 data Context = Ctx { globalVEnv :: VEnv
                    , store :: Store
                    , constructors :: ConstructorMap Brat
                    , kconstructors :: ConstructorMap Kernel
                    , typeConstructors :: M.Map (Mode, QualName) [(PortName, TypeKind)]
                    , aliasTable :: M.Map QualName Alias
+                   -- All the ends here should be targets
+                   , hopes :: Hopes
                    }
 
 data CheckingSig ty where
@@ -89,6 +93,9 @@ data CheckingSig ty where
   AskVEnv :: CheckingSig CtxEnv
   Declare :: End -> Modey m -> BinderType m -> CheckingSig ()
   Define  :: End -> Val Z -> CheckingSig ()
+  ANewHope :: InPort -> FC -> CheckingSig ()
+  AskHopes :: CheckingSig Hopes
+  RemoveHope :: InPort -> CheckingSig ()
 
 localAlias :: (QualName, Alias) -> Checking v -> Checking v
 localAlias _ (Ret v) = Ret v
@@ -266,6 +273,15 @@ handler (Req s k) ctx g
         args <- maybeToRight (Err (Just fc) $ TyConNotFound (show tycon) (show vcon)) $
                 M.lookup tycon tbl
         handler (k args) ctx g
+
+      ANewHope e fc -> handler (k ()) (ctx { hopes = M.insert e fc (hopes ctx) }) g
+
+      AskHopes -> handler (k (hopes ctx)) ctx g
+
+      RemoveHope e -> let hset = hopes ctx in
+                        if M.member e hset
+                        then handler (k ()) (ctx { hopes = M.delete e hset }) g
+                        else Left (dumbErr (InternalError ("Trying to remove Hope not in set: " ++ show e)))
 
 type Checking = Free CheckingSig
 

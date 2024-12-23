@@ -515,6 +515,7 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
               <|> var
               <|> match Underscore $> FUnderscore
               <|> match Pipe $> FIdentity
+              <|> match Bang $> FHope
 
 
 cnoun :: Parser Flat -> Parser (WC (Raw 'Chk 'Noun))
