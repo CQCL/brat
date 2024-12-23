@@ -1,6 +1,6 @@
 Error in test/golden/error/vecpat2.brat on line 3:
 fst3(some(x)) = none
-    ^^^^^^^^^
+     ^^^^^^^
 
   "some" is not a valid constructor for type Vec
 

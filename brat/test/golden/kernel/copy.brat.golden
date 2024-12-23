@@ -1,6 +1,6 @@
 Error in test/golden/kernel/copy.brat on line 2:
 copy = { q => q, q }
-       ^^^^^^^^^^^^^
+         ^^^^^^^^^
 
   Type error: q has already been used
 

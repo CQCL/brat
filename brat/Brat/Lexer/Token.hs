@@ -1,4 +1,4 @@
-module Brat.Lexer.Token (Tok(..), Token(..), Keyword(..)) where
+module Brat.Lexer.Token (Tok(..), Token(..), Keyword(..), tokenLen) where
 
 import Brat.FC
 
@@ -21,8 +21,8 @@ data Tok
  | RParen
  | LBrace
  | RBrace
- | LBracket
- | RBracket
+ | LSquare
+ | RSquare
  | Semicolon
  | Into
  | Comma
@@ -66,8 +66,8 @@ instance Show Tok where
   show RParen = ")"
   show LBrace = "{"
   show RBrace = "}"
-  show LBracket = "["
-  show RBracket = "]"
+  show LSquare = "["
+  show RSquare = "]"
   show Semicolon = ";"
   show Into = "|>"
   show Comma = ","
@@ -102,7 +102,8 @@ instance Eq Token where
   (Token fc t) == (Token fc' t') = t == t' && fc == fc'
 
 instance Show Token where
-  show (Token _ t) = show t ++ " "
+  show (Token _ t) = show t
+
 instance Ord Token where
   compare (Token (FC st nd) _) (Token (FC st' nd') _) = if st == st'
                                                         then compare nd nd'
@@ -127,6 +128,8 @@ instance Show Keyword where
 
 tokLen :: Tok -> Int
 tokLen = length . show
+
+tokenLen = tokLen . _tok
 
 instance VisualStream [Token] where
   tokensLength _ = sum . fmap (\(Token _ t) -> tokLen t)
