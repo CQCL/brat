@@ -1,8 +1,8 @@
-module Brat.Checker.SolveHoles (typeEq) where
+module Brat.Checker.SolveHoles (typeEq, buildNum) where
 
-import Brat.Checker.Helpers (buildConst)
 import Brat.Checker.Monad
 import Brat.Checker.Types (kindForMode)
+import Brat.Checker.Helpers (buildConst, buildNatVal, buildNum)
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval
 import Brat.Syntax.Common
@@ -88,7 +88,7 @@ solveHope k hope v = quote Zy v >>= \v -> case doesntOccur (InEnd hope) v of
   Right () -> do
     defineEnd (InEnd hope) v
     dangling <- case (k, v) of
-      (Nat, VNum _v) -> err $ Unimplemented "Nat hope solving" []
+      (Nat, VNum v) -> buildNatVal v
       (Nat, _) -> err $ InternalError "Head of Nat wasn't a VNum"
       _ -> buildConst Unit TUnit
     req (Wire (end dangling, kindType k, hope))
