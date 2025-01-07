@@ -38,7 +38,6 @@ nonCompilingExamples = expectedCheckingFails ++ expectedParsingFails ++
   ,"fanout" -- Contains Selectors
   ,"vectorise" -- Generates MapFun nodes which aren't implemented yet
   ,"batcher-merge-sort" -- Generates MapFun nodes which aren't implemented yet
-  ,"infer" -- Generates `Pow` nodes which aren't implemented yet
   -- Victims of #13
   ,"arith"
   ,"cqcconf"

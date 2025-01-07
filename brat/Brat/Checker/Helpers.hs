@@ -481,13 +481,8 @@ buildNatVal nv@(NumValue n gro) = case n of
 
   buildSM :: StrictMono (VVar Z) -> Checking Src
   buildSM (StrictMono k mono) = do
-    -- Calculate 2^k as `factor`
-    two <- buildNum 2
-    kDangling <- buildNum k
-    ((lhs,rhs),factor) <- buildArithOp Pow
-    req $ Wire (end two, TNat, end lhs)
-    req $ Wire (end kDangling, TNat, end rhs)
-    -- Multiply mono by 2^k
+    factor <- buildNum $ 2 ^ k
+    -- Multiply mono by 2^k; note we could avoid this if k==0
     ((lhs,rhs),out) <- buildArithOp Mul
     monoDangling <- buildMono mono
     req $ Wire (end factor, TNat, end lhs)
