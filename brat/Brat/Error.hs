@@ -1,5 +1,6 @@
 module Brat.Error (ParseError(..)
                   ,LengthConstraintF(..), LengthConstraint
+                  ,BracketErrMsg(..)
                   ,ErrorMsg(..)
                   ,Error(..), showError
                   ,SrcErr(..)
@@ -9,6 +10,7 @@ module Brat.Error (ParseError(..)
                   ) where
 
 import Brat.FC
+import Data.Bracket
 import Brat.Syntax.Port (PortName)
 
 import Data.List (intercalate)
@@ -25,6 +27,28 @@ instance Show a => Show (LengthConstraintF a) where
   show (LongerThan a) = "(> " ++ show a ++ ")"
 
 type LengthConstraint = LengthConstraintF Int
+
+data BracketErrMsg
+  = EOFInBracket BracketType -- FC in enclosing `Err` should point to the open bracket
+  -- FC here is opening; closing FC in the enclosing `Err`
+  | OpenCloseMismatch (FC, BracketType) BracketType
+  | UnexpectedClose BracketType
+
+instance Show BracketErrMsg where
+  show (EOFInBracket b) = "File ended before this " ++ showOpen b ++ " was closed"
+  show (OpenCloseMismatch (openFC, bOpen) bClose) = unwords ["This"
+                                                            ,showClose bClose
+                                                            ,"doesn't match the"
+                                                            ,showOpen bOpen
+                                                            ,"at"
+                                                            ,show openFC
+                                                            ]
+  show (UnexpectedClose b) = unwords ["There is no"
+                                     ,showOpen b
+                                     ,"for this"
+                                     ,showClose b
+                                     ,"to close"
+                                     ]
 
 data ErrorMsg
  = TypeErr String
@@ -83,6 +107,7 @@ data ErrorMsg
  -- The argument is the row of unused connectors
  | ThunkLeftOvers String
  | ThunkLeftUnders String
+ | BracketErr BracketErrMsg
  | RemainingNatHopes [String]
 
 instance Show ErrorMsg where
@@ -167,6 +192,7 @@ instance Show ErrorMsg where
   show UnreachableBranch = "Branch cannot be reached"
   show (ThunkLeftOvers overs) = "Expected function to address all inputs, but " ++ overs ++ " wasn't used"
   show (ThunkLeftUnders unders) = "Expected function to return additional values of type: " ++ unders
+  show (BracketErr msg) = show msg
   show (RemainingNatHopes hs) = unlines ("Expected to work out values for these holes:":(("    " ++) <$> hs))
 
 data Error = Err { fc  :: Maybe FC

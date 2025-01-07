@@ -13,13 +13,17 @@ import Bwd
 import Hasochism
 import Util (zipSameLength)
 
+import Control.Monad (when)
 import Data.Bifunctor (second)
 import Data.Foldable (sequenceA_)
 import Data.Functor
+import Data.Maybe (mapMaybe)
 import qualified Data.Map as M
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 
--- External interface to typeEq' for closed values only.
+-- Demand that two closed values are equal, we're allowed to solve variables in the
+-- hope set to make this true.
+-- Raises a user error if the vals cannot be made equal.
 typeEq :: String -- String representation of the term for error reporting
        -> TypeKind -- The kind we're comparing at
        -> Val Z -- Expected
@@ -27,9 +31,8 @@ typeEq :: String -- String representation of the term for error reporting
        -> Checking ()
 typeEq str = typeEq' str (Zy :* S0 :* S0)
 
--- Demand that two things are equal, we're allowed to solve variables in the
--- hope set to make this true.
--- Raises a user error if the vals cannot be made equal.
+
+-- Internal version of typeEq with environment for non-closed values
 typeEq' :: String -- String representation of the term for error reporting
         -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n
         -> TypeKind -- The kind we're comparing at
@@ -75,12 +78,19 @@ typeEqEta _ (Zy :* _ :* _) hopes Nat exp act
 typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
   exp <- quote ny exp
   act <- quote ny act
-  case [e | (VApp (VPar (InEnd e)) _) <- [exp,act], M.member e hopes] of
-    [] -> typeEqRigid tm stuff k exp act
+  let ends = mapMaybe getEnd [exp,act]
+  -- sanity check: we've already dealt with either end being in the hopeset
+  when (or [M.member ie hopes | InEnd ie <- ends]) $ typeErr "ends were in hopeset"
+  case ends of
+    [] -> typeEqRigid tm stuff k exp act -- easyish, both rigid i.e. already defined
     [e1, e2] | e1 == e2 -> pure () -- trivially same, even if both still yet-to-be-defined
     _es -> error "TODO: must wait for one or the other to become more defined"
+ where
+  getEnd (VApp (VPar e) _) = Just e
+  getEnd (VNum n) = getNumVar n
+  getEnd _ = Nothing
 
--- This will update the `hopes` set, potentially invalidating things that have
+-- This will update the `hopes`, potentially invalidating things that have
 -- been eval'd.
 -- The Sem is closed, for now.
 solveHope :: TypeKind -> InPort -> Sem -> Checking ()
