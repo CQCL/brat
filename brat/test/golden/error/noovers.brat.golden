@@ -1,6 +1,6 @@
 Error in test/golden/error/noovers.brat on line 2:
 f(a, b) = []
- ^^^^^^
+  ^^^^
 
   Nothing to bind to: b
 

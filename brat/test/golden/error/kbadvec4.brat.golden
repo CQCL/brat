@@ -1,6 +1,6 @@
 Error in test/golden/error/kbadvec4.brat on line 2:
-f = { [1,2] => true }
-      ^^^^^
+f = { [1, 2] => true }
+      ^^^^^^
 
   Type error: Expected something of type `Bool` but got `1`
 

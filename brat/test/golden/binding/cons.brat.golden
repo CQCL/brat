@@ -1,6 +1,6 @@
 Error in test/golden/binding/cons.brat on line 7:
 badUncons(cons(stuff)) = stuff
-         ^^^^^^^^^^^^^
+          ^^^^^^^^^^^
 
   Unification error: Pattern doesn't match expected length for constructor args
 
