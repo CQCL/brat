@@ -111,7 +111,7 @@ instance Eq ty => Eq (TypeRowElem ty) where
   Anon ty == Anon ty' = ty == ty'
 
 data TypeKind = TypeFor Mode [(PortName, TypeKind)] | Nat
-  deriving (Eq, Ord)
+  deriving Eq
 
 instance Show TypeKind where
   show (TypeFor m args) = let argsStr = if null args then "" else "(" ++ intercalate ", " (show <$> args) ++ ")"
