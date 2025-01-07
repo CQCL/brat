@@ -17,6 +17,7 @@ import Control.Monad (when)
 import Data.Bifunctor (second)
 import Data.Foldable (sequenceA_)
 import Data.Functor
+import Data.Maybe (catMaybes)
 import qualified Data.Map as M
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 
@@ -77,13 +78,17 @@ typeEqEta _ (Zy :* _ :* _) hopes Nat exp act
 typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
   exp <- quote ny exp
   act <- quote ny act
-  let ends = [e | (VApp (VPar e) _) <- [exp, act]]
+  let ends = catMaybes $ [exp,act] <&> getEnd
   -- sanity check: we've already dealt with either end being in the hopeset
   when (or [M.member ie hopes | InEnd ie <- ends]) $ typeErr "ends were in hopeset"
   case ends of
     [] -> typeEqRigid tm stuff k exp act -- easyish, both rigid i.e. already defined
     [e1, e2] | e1 == e2 -> pure () -- trivially same, even if both still yet-to-be-defined
     _es -> error "TODO: must wait for one or the other to become more defined"
+ where
+  getEnd (VApp (VPar e) _) = Just e
+  getEnd (VNum n) = getNumVar n
+  getEnd _ = Nothing
 
 -- This will update the `hopes`, potentially invalidating things that have
 -- been eval'd.
