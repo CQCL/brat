@@ -568,7 +568,7 @@ expr' p = choice $ (try . getParser <$> enumFrom p) ++ [atomExpr]
     let firstPortFC = fcOf . fst <$> uncons ports
     case ports of
       [] -> juxtRhsWithPull
-      _ -> (\juxt@(WC juxtFC _) -> WC (maybe juxtFC (\fc -> spanFC fc juxtFC) firstPortFC) (FPull (unWC <$> ports) juxt)) <$> juxtRhsWithPull
+      _ -> (\juxt@(WC juxtFC _) -> WC (maybe juxtFC (`spanFC` juxtFC) firstPortFC) (FPull (unWC <$> ports) juxt)) <$> juxtRhsWithPull
    where
     portPull :: Parser (WC String)
     portPull = do

@@ -17,7 +17,7 @@ import Control.Monad (when)
 import Data.Bifunctor (second)
 import Data.Foldable (sequenceA_)
 import Data.Functor
-import Data.Maybe (catMaybes)
+import Data.Maybe (mapMaybe)
 import qualified Data.Map as M
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 
@@ -78,7 +78,7 @@ typeEqEta _ (Zy :* _ :* _) hopes Nat exp act
 typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
   exp <- quote ny exp
   act <- quote ny act
-  let ends = catMaybes $ [exp,act] <&> getEnd
+  let ends = mapMaybe getEnd [exp,act]
   -- sanity check: we've already dealt with either end being in the hopeset
   when (or [M.member ie hopes | InEnd ie <- ends]) $ typeErr "ends were in hopeset"
   case ends of

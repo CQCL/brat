@@ -117,7 +117,7 @@ pullPorts :: forall a ty
           -> Checking [a]
 pullPorts toPort showFn to_pull types =
   -- the "state" here is the things still available to be pulled
-  (\(pulled, rest) -> pulled ++ rest) <$> runStateT (mapM pull1Port to_pull) types
+  uncurry (++) <$> runStateT (mapM pull1Port to_pull) types
  where
   pull1Port :: PortName -> StateT [a] Checking a
   pull1Port p = StateT $ \available -> case partition ((== p) . toPort) available of

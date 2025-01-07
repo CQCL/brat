@@ -199,8 +199,6 @@ instantiateMeta e val = do
   defineEnd e val
 
 
- where
-
 -- Need to keep track of which way we're solving - which side is known/unknown
 -- Things which are dynamically unknown must be Tgts - information flows from Srcs
 -- ...But we don't need to do any wiring here, right?
