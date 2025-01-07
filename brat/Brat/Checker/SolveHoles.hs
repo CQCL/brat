@@ -13,6 +13,7 @@ import Bwd
 import Hasochism
 import Util (zipSameLength)
 
+import Control.Monad (when)
 import Data.Bifunctor (second)
 import Data.Foldable (sequenceA_)
 import Data.Functor
@@ -76,7 +77,10 @@ typeEqEta _ (Zy :* _ :* _) hopes Nat exp act
 typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
   exp <- quote ny exp
   act <- quote ny act
-  case [e | (VApp (VPar (InEnd e)) _) <- [exp,act], M.member e hopes] of
+  let ends = [e | (VApp (VPar e) _) <- [exp, act]]
+  -- sanity check: we've already dealt with either end being in the hopeset
+  when (or [M.member ie hopes | InEnd ie <- ends]) $ typeErr "ends were in hopeset"
+  case ends of
     [] -> typeEqRigid tm stuff k exp act -- easyish, both rigid i.e. already defined
     [e1, e2] | e1 == e2 -> pure () -- trivially same, even if both still yet-to-be-defined
     _es -> error "TODO: must wait for one or the other to become more defined"
