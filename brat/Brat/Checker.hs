@@ -25,6 +25,7 @@ import Prelude hiding (filter)
 import Brat.Checker.Helpers
 import Brat.Checker.Monad
 import Brat.Checker.Quantity
+import Brat.Checker.SolveHoles (typeEq)
 import Brat.Checker.SolvePatterns (argProblems, argProblemsWithLeftovers, solve)
 import Brat.Checker.Types
 import Brat.Constructors
@@ -659,7 +660,13 @@ check' (Of n e) ((), unders) = case ?my of
       (elems, unders, rightUnders) <- getVecs len unders
       pure ((tgt, el):elems, (tgt, ty):unders, rightUnders)
   getVecs _ unders = pure ([], [], unders)
-
+check' Hope ((), (NamedPort hope _, ty):unders) = case (?my, ty) of
+  (Braty, Left _k) -> do
+    fc <- req AskFC
+    req (ANewHope hope fc)
+    pure (((), ()), ((), unders))
+  (Braty, Right _ty) -> typeErr "Can only infer kinded things with !"
+  (Kerny, _) -> typeErr "Won't infer kernel typed !"
 check' tm _ = error $ "check' " ++ show tm
 
 
@@ -1124,7 +1131,7 @@ run :: VEnv
     -> Namespace
     -> Checking a
     -> Either Error (a, ([TypedHole], Store, Graph))
-run ve initStore ns m =
+run ve initStore ns m = do
   let ctx = Ctx { globalVEnv = ve
                 , store = initStore
                 -- TODO: fill with default constructors
@@ -1132,5 +1139,19 @@ run ve initStore ns m =
                 , kconstructors = kernelConstructors
                 , typeConstructors = defaultTypeConstructors
                 , aliasTable = M.empty
-                } in
-    (\(a,ctx,(holes, graph)) -> (a, (holes, store ctx, graph))) <$> handler (localNS ns m) ctx mempty
+                , hopes = M.empty
+                }
+  (a,ctx,(holes, graph)) <- handler (localNS ns m) ctx mempty
+  let tyMap = typeMap $ store ctx
+  -- If the `hopes` set has any remaining holes with kind Nat, we need to abort.
+  -- Even though we didn't need them for typechecking problems, our runtime
+  -- behaviour depends on the values of the holes, which we can't account for.
+  case M.toList $ M.filterWithKey (\e _ -> isNatKinded tyMap (InEnd e)) (hopes ctx) of
+    [] -> pure (a, (holes, store ctx, graph))
+    -- Just use the FC of the first hole while we don't have the capacity to
+    -- show multiple error locations
+    hs@((_,fc):_) -> Left $ Err (Just fc) (RemainingNatHopes (show . fst <$> hs))
+ where
+  isNatKinded tyMap e = case tyMap M.! e of
+    EndType Braty (Left Nat) -> True
+    _ -> False

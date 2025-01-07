@@ -19,7 +19,6 @@ import Hasochism
 
 import Control.Monad (unless)
 import Data.Bifunctor (first)
-import Data.Foldable (for_, traverse_)
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import Data.Type.Equality ((:~:)(..), testEquality)
@@ -78,7 +77,7 @@ solve my ((src, Lit tm):p) = do
     (Braty, Left Nat)
       | Num n <- tm -> do
           unless (n >= 0) $ typeErr "Negative Nat kind"
-          unifyNum (nConstant (fromIntegral n)) (nVar (VPar (ExEnd (end src))))
+          unifyNum (nConstant (fromIntegral n)) (nVar (VPar (toEnd src)))
     (Braty, Right ty) -> do
       throwLeft (simpleCheck Braty ty tm)
     _ -> typeErr $ "Literal " ++ show tm ++ " isn't valid at this type"
@@ -97,7 +96,7 @@ solve my ((src, PCon c abs):p) = do
       -- Special case for 0, so that we can call `unifyNum` instead of pattern
       -- matching using what's returned from `natConstructors`
       PrefixName [] "zero" -> do
-        unifyNum (nVar (VPar (ExEnd (end src)))) nZero
+        unifyNum (nVar (VPar (toEnd src))) nZero
         p <- argProblems [] (normaliseAbstractor abs) p
         (tests, sol) <- solve my p
         pure ((src, PrimLitTest (Num 0)):tests, sol)
@@ -108,7 +107,8 @@ solve my ((src, PCon c abs):p) = do
             (REx ("inner", Nat) R0)
           unifyNum
            (nVar (VPar (ExEnd (end src))))
-           (relationToInner (nVar (VPar (ExEnd (end dangling)))))
+           (relationToInner (nVar (VPar (toEnd dangling))))
+          -- TODO also do wiring corresponding to relationToInner
           p <- argProblems [dangling] (normaliseAbstractor abs) p
           (tests, sol) <- solve my p
           -- When we get @-patterns, we shouldn't drop this anymore
@@ -198,39 +198,6 @@ instantiateMeta e val = do
   throwLeft (doesntOccur e val)
   defineEnd e val
 
-
--- Be conservative, fail if in doubt. Not dangerous like being wrong while succeeding
--- We can have bogus failures here because we're not normalising under lambdas
--- N.B. the value argument is normalised.
-doesntOccur :: End -> Val n -> Either ErrorMsg ()
-doesntOccur e (VNum nv) = for_ (getNumVar nv) (collision e)
- where
-  getNumVar :: NumVal (VVar n) -> Maybe End
-  getNumVar (NumValue _ (StrictMonoFun (StrictMono _ mono))) = case mono of
-    Linear v -> case v of
-      VPar e -> Just e
-      _ -> Nothing
-    Full sm -> getNumVar (numValue sm)
-  getNumVar _ = Nothing
-doesntOccur e (VApp var args) = case var of
-  VPar e' -> collision e e' *> traverse_ (doesntOccur e) args
-  _ -> pure ()
-doesntOccur e (VCon _ args) = traverse_ (doesntOccur e) args
-doesntOccur e (VLam body) = doesntOccur e body
-doesntOccur e (VFun my (ins :->> outs)) = case my of
-  Braty -> doesntOccurRo my e ins *> doesntOccurRo my e outs
-  Kerny -> doesntOccurRo my e ins *> doesntOccurRo my e outs
-doesntOccur e (VSum my rows) = traverse_ (\(Some ro) -> doesntOccurRo my e ro) rows
-
-collision :: End -> End -> Either ErrorMsg ()
-collision e v | e == v = Left . UnificationError $
-                         show e ++ " is cyclic"
-              | otherwise = pure ()
-
-doesntOccurRo :: Modey m -> End -> Ro m i j -> Either ErrorMsg ()
-doesntOccurRo _ _ R0 = pure ()
-doesntOccurRo my e (RPr (_, ty) ro) = doesntOccur e ty *> doesntOccurRo my e ro
-doesntOccurRo Braty e (REx _ ro) = doesntOccurRo Braty e ro
 
 -- Need to keep track of which way we're solving - which side is known/unknown
 -- Things which are dynamically unknown must be Tgts - information flows from Srcs

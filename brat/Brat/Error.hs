@@ -108,6 +108,7 @@ data ErrorMsg
  | ThunkLeftOvers String
  | ThunkLeftUnders String
  | BracketErr BracketErrMsg
+ | RemainingNatHopes [String]
 
 instance Show ErrorMsg where
   show (TypeErr x) = "Type error: " ++ x
@@ -192,7 +193,7 @@ instance Show ErrorMsg where
   show (ThunkLeftOvers overs) = "Expected function to address all inputs, but " ++ overs ++ " wasn't used"
   show (ThunkLeftUnders unders) = "Expected function to return additional values of type: " ++ unders
   show (BracketErr msg) = show msg
-
+  show (RemainingNatHopes hs) = unlines ("Expected to work out values for these holes:":(("    " ++) <$> hs))
 
 data Error = Err { fc  :: Maybe FC
                  , msg :: ErrorMsg

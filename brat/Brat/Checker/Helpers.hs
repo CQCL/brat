@@ -117,7 +117,7 @@ pullPorts :: forall a ty
           -> Checking [a]
 pullPorts toPort showFn to_pull types =
   -- the "state" here is the things still available to be pulled
-  (\(pulled, rest) -> pulled ++ rest) <$> runStateT (mapM pull1Port to_pull) types
+  uncurry (++) <$> runStateT (mapM pull1Port to_pull) types
  where
   pull1Port :: PortName -> StateT [a] Checking a
   pull1Port p = StateT $ \available -> case partition ((== p) . toPort) available of
@@ -492,3 +492,8 @@ runArith (NumValue upl grol) Pow (NumValue upr gror)
  -- 2^(2^k * upr) + 2^(2^k * upr) * (full(2^(k + k') * mono))
  = pure $ NumValue (upl ^ upr) (StrictMonoFun (StrictMono (l * upr) (Full (StrictMono (k + k') mono))))
 runArith _ _ _ = Nothing
+
+buildConst :: SimpleTerm -> Val Z -> Checking Src
+buildConst tm ty = do
+  (_, _, [(out,_)], _) <- next "buildConst" (Const tm) (S0, Some (Zy :* S0)) R0 (RPr ("value", ty) R0)
+  pure out

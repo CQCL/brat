@@ -22,6 +22,7 @@ type FEnv = ([FDecl], [RawAlias])
 
 data Flat
  = FVar QualName
+ | FHope
  | FApp (WC Flat) (WC Flat)
  | FJuxt (WC Flat) (WC Flat)
  | FThunk (WC Flat)
