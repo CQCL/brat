@@ -58,7 +58,6 @@ data Context = Ctx { globalVEnv :: VEnv
                    , kconstructors :: ConstructorMap Kernel
                    , typeConstructors :: M.Map (Mode, QualName) [(PortName, TypeKind)]
                    , aliasTable :: M.Map QualName Alias
-                   -- All the ends here should be targets
                    , hopes :: Hopes
                    }
 
@@ -281,7 +280,7 @@ handler (Req s k) ctx g
       RemoveHope e -> let hset = hopes ctx in
                         if M.member e hset
                         then handler (k ()) (ctx { hopes = M.delete e hset }) g
-                        else Left (dumbErr (InternalError ("Trying to remove Hope not in set: " ++ show e)))
+                        else Left (dumbErr (InternalError ("Trying to remove unknown Hope: " ++ show e)))
 
 type Checking = Free CheckingSig
 

@@ -19,7 +19,9 @@ import Data.Functor
 import qualified Data.Map as M
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 
--- External interface to typeEq' for closed values only.
+-- Demand that two closed values are equal, we're allowed to solve variables in the
+-- hope set to make this true.
+-- Raises a user error if the vals cannot be made equal.
 typeEq :: String -- String representation of the term for error reporting
        -> TypeKind -- The kind we're comparing at
        -> Val Z -- Expected
@@ -27,9 +29,8 @@ typeEq :: String -- String representation of the term for error reporting
        -> Checking ()
 typeEq str = typeEq' str (Zy :* S0 :* S0)
 
--- Demand that two things are equal, we're allowed to solve variables in the
--- hope set to make this true.
--- Raises a user error if the vals cannot be made equal.
+
+-- Internal version of typeEq with environment for non-closed values
 typeEq' :: String -- String representation of the term for error reporting
         -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n
         -> TypeKind -- The kind we're comparing at
@@ -80,7 +81,7 @@ typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
     [e1, e2] | e1 == e2 -> pure () -- trivially same, even if both still yet-to-be-defined
     _es -> error "TODO: must wait for one or the other to become more defined"
 
--- This will update the `hopes` set, potentially invalidating things that have
+-- This will update the `hopes`, potentially invalidating things that have
 -- been eval'd.
 -- The Sem is closed, for now.
 solveHope :: TypeKind -> InPort -> Sem -> Checking ()

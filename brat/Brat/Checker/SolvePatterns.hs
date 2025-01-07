@@ -108,6 +108,7 @@ solve my ((src, PCon c abs):p) = do
           unifyNum
            (nVar (VPar (ExEnd (end src))))
            (relationToInner (nVar (VPar (toEnd dangling))))
+          -- TODO also do wiring corresponding to relationToInner
           p <- argProblems [dangling] (normaliseAbstractor abs) p
           (tests, sol) <- solve my p
           -- When we get @-patterns, we shouldn't drop this anymore
