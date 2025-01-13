@@ -255,7 +255,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   demandSucc (StrictMono k (Full nPlus1)) = do
     n <- demandSucc nPlus1
     pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes (k + 1) $ nFull n
-  demandSucc n = req AskNames >>= \nm -> err (UnificationError $ "Couldn't force " ++ showWithMetas nm n ++ " to be a successor")
+  demandSucc n = req AskNames >>= \nm -> err (UnificationError $ "Couldn't force " ++ showWithMetas nm (NumValue 0 $ StrictMonoFun n) ++ " to be a successor")
 
   -- Complain if a number isn't even, otherwise return half
   demandEven :: NumVal (VVar Z) -> Checking (NumVal (VVar Z))
