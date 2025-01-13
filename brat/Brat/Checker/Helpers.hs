@@ -69,8 +69,10 @@ pull1PortRo :: MODEY m
 -- TODO: Make an `Error` constructor for this
 pull1PortRo _ p _ R0 = fail $ "Port not found: " ++ p
 pull1PortRo m p stuff (RPr (p', ty) ro)
- | p == p' = if portNameExists m p ro
-   then err (AmbiguousPortPull p (show (RPr (p', ty) ro)))
+ | p == p' = do
+   names <- req AskNames
+   if portNameExists m p ro
+   then err (AmbiguousPortPull p (showWithMetas names (RPr (p', ty) ro)))
    else pure ((p', ty), rebuildRo m ro (stuff <>> []))
  | otherwise = pull1PortRo m p (stuff :< (p', ty)) ro
  where

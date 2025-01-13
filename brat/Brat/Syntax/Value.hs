@@ -47,6 +47,23 @@ class ShowWithMetas t where
 instance ShowWithMetas () where
   showWithMetas _ () = "()"
 
+instance ShowWithMetas a => ShowWithMetas [a] where
+  showWithMetas m xs = '[' : intercalate ", " (showWithMetas m <$> xs) ++ "]"
+
+instance (ShowWithMetas a, ShowWithMetas b) => ShowWithMetas (a, b) where
+  showWithMetas m (a, b) = "(" ++ showWithMetas m a ++ ", " ++ showWithMetas m b ++ ")"
+
+instance ShowWithMetas a => ShowWithMetas (Bwd a) where
+  showWithMetas _ B0 = "B0"
+  showWithMetas m (zx :< x) = showWithMetas m zx ++ " :< " ++ showWithMetas m x
+
+instance ShowWithMetas a => ShowWithMetas (Stack i a j) where
+  showWithMetas _ S0 = "S0"
+  showWithMetas m (zx :<< x) = showWithMetas m zx ++ " :<< " ++ showWithMetas m x
+
+instance forall t. (forall a. ShowWithMetas (t a)) => ShowWithMetas (Some t) where
+  showWithMetas m (Some x) = "Some " ++ showWithMetas m x
+
 newtype VDecl = VDecl (FuncDecl (Some (Ro Brat Z)) (FunBody Term Noun))
 
 instance MODEY Brat => ShowWithMetas VDecl where
@@ -116,10 +133,6 @@ data Stack :: N -> Type -> N -> Type where
   S0 :: Stack n x n
   (:<<) :: Stack n x m -> x -> Stack n x (S m)
 infixl 7 :<<
-
-instance ShowWithMetas t => ShowWithMetas (Stack n t m) where
-  showWithMetas _ S0 = "S0"
-  showWithMetas m (zx :<< x) = showWithMetas m zx ++ " :<< " ++ showWithMetas m x
 
 deriving instance Show t => Show (Stack n t m)
 
@@ -245,9 +258,6 @@ instance MODEY m => ShowWithMetas (CTy m n) where
       Braty -> "->"
       Kerny -> "-o"
 
-instance MODEY m => Show (CTy m n) where
-  show = showWithMetas M.empty
-
 data Ro :: Mode
         -> N -- The number of free variables (in scope) at the start (bottom)
         -> N -- The number of free variables at the end (top)
@@ -274,9 +284,6 @@ instance forall m top bot. MODEY m => ShowWithMetas (Ro m bot top) where
                                 in  ('(':p ++ " :: " ++ tyStr ++ ")"):roToList ro
     roToList  (REx (p, k) ro) = ('(':p ++ " :: " ++ show k ++ ")"):roToList ro
 
-instance MODEY m => Show (Ro m bot top) where
-  show = showWithMetas M.empty
-
 ----------------------------------- Sem ---------------------------------------
 
 data SVar = SPar End | SLvl Int
@@ -298,7 +305,13 @@ data Sem where
   -- Sum types, stash like SLam (shared between all variants)
   SSum :: MODEY m => Modey m -> Stack Z Sem n -> [Some (Ro m n)] -> Sem
 
-deriving instance Show Sem
+instance ShowWithMetas Sem where
+  showWithMetas m (SNum nv) = "SNum " ++ showWithMetas m nv
+  showWithMetas m (SCon c ss) = "SCon " ++ show c ++ " " ++ showWithMetas m ss
+  showWithMetas m (SLam stk vs) = "SLam " ++ showWithMetas m stk ++ " " ++ showWithMetas m vs
+  showWithMetas m (SFun my stk cty) = unwords ["SFun", show my, showWithMetas m stk, showWithMetas m cty]
+  showWithMetas m (SApp v zs) = unwords ["SApp" ++ showWithMetas m v, showWithMetas m zs]
+  showWithMetas m (SSum my stk rows) = unwords ["SSum", show my, showWithMetas m stk, showWithMetas m rows]
 
 ---------------------------------- Patterns -----------------------------------
 pattern TNat, TInt, TFloat, TBool, TText, TUnit, TNil :: Val n
