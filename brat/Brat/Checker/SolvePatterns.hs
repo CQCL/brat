@@ -225,7 +225,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     VPar e -> instantiateMeta e (VNum num)
     _ -> case num of -- our only hope is to instantiate the RHS
       NumValue 0 (StrictMonoFun (StrictMono 0 (Linear (VPar (ExEnd e))))) -> instantiateMeta (toEnd e) (VNum (nVar v))
-      _ -> err . UnificationError $ "Couldn't instantiate variable " ++ show v
+      _ -> req AskNames >>= \names -> err . UnificationError $ "Couldn't instantiate variable " ++ showWithMetas names v
   lhsMono (Full sm) (NumValue 0 (StrictMonoFun (StrictMono 0 (Full sm'))))
     = lhsStrictMono sm (NumValue 0 (StrictMonoFun sm'))
   lhsMono m@(Full _) (NumValue 0 gro) = lhsFun00 gro (NumValue 0 (StrictMonoFun (StrictMono 0 m)))
@@ -238,8 +238,8 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   demand0 n@(NumValue 0 (StrictMonoFun (StrictMono _ mono))) = case mono of
     Linear (VPar e) -> instantiateMeta e (VNum (nConstant 0))
     Full sm -> demand0 (NumValue 0 (StrictMonoFun sm))
-    _ -> err . UnificationError $ "Couldn't force " ++ show n ++ " to be 0"
-  demand0 n = err . UnificationError $ "Couldn't force " ++ show n ++ " to be 0"
+    _ -> req AskNames >>= \names -> err . UnificationError $ "Couldn't force " ++ showWithMetas names n ++ " to be 0"
+  demand0 n = req AskNames >>= \names -> err . UnificationError $ "Couldn't force " ++ showWithMetas names n ++ " to be 0"
 
   -- Complain if a number isn't a successor, else return its predecessor
   demandSucc :: StrictMono (VVar Z) -> Checking (NumVal (VVar Z))
@@ -269,7 +269,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
       Linear (VPar (ExEnd out)) -> do
         half <- mkHalf out
         pure (StrictMonoFun (StrictMono 0 (Linear (VPar (toEnd half)))))
-      Linear _ -> err . UnificationError $ "Can't force " ++ show n ++ " to be even"
+      Linear _ -> req AskNames >>= \names -> err . UnificationError $ "Can't force " ++ showWithMetas names n ++ " to be even"
       Full sm -> StrictMonoFun sm <$ demand0 (NumValue 0 (StrictMonoFun sm))
     evenGro (StrictMonoFun (StrictMono n mono)) = pure (StrictMonoFun (StrictMono (n - 1) mono))
 
@@ -277,11 +277,11 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     oddGro :: Fun00 (VVar Z) -> Checking (NumVal (VVar Z))
     oddGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
       Linear (VPar (ExEnd out)) -> mkPred out >>= demandEven
-      Linear _ -> err . UnificationError $ "Can't force " ++ show n ++ " to be even"
+      Linear _ -> req AskNames >>= \names -> err . UnificationError $ "Can't force " ++ showWithMetas names n ++ " to be even"
       -- full(n + 1) = 1 + 2 * full(n)
       -- hence, full(n) is the rounded down half
       Full sm -> nFull <$> demandSucc sm
-    oddGro _ = err . UnificationError $ "Can't force " ++ show n ++ " to be even"
+    oddGro _ = req AskNames >>= \names -> err . UnificationError $ "Can't force " ++ showWithMetas names n ++ " to be even"
 
   -- Add dynamic logic to compute half of a variable.
   mkHalf :: OutPort -> Checking Src

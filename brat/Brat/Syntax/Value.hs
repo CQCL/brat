@@ -179,9 +179,6 @@ instance ShowWithMetas (VVar n) where
   showWithMetas m (VPar e) = fromMaybe ("VPar " ++ show e) (M.lookup e m)
   showWithMetas _ (VInx i) = "VInx " ++ show i
 
-instance Show (VVar n) where
-  show = showWithMetas M.empty
-
 instance Eq (VVar n) where
   (VPar e0) == (VPar e1) = e0 == e1
   (VInx i) == (VInx i') = i == i'
@@ -504,14 +501,14 @@ numMatch :: Bwd (Val Z) -- Stuff we've already matched
 numMatch zv arg NPVar = pure (zv :< VNum arg)
 numMatch zv arg NP0
   | arg == nZero = pure zv
-  | otherwise = Left $ NumMatchFail "0" (show arg)
+  | otherwise = Left $ NumMatchFail "0" (showWithMetas M.empty arg)
 numMatch zv arg@NumValue{upshift = upshift} (NP1Plus np)
   | upshift > 0 = numMatch zv (arg { upshift = upshift - 1 }) np
-  | otherwise = Left $ NumMatchFail "1 + n" (show arg)
+  | otherwise = Left $ NumMatchFail "1 + n" (showWithMetas M.empty arg)
 numMatch zv arg (NP2Times np)
   | Just (h, False) <- half arg
   = numMatch zv h np
-  | otherwise = Left $ NumMatchFail "2 * n" (show arg)
+  | otherwise = Left $ NumMatchFail "2 * n" (showWithMetas M.empty arg)
 
 valMatch :: Val Z -- Type argument
          -> ValPat -- Pattern to match against arg
@@ -656,7 +653,6 @@ data KernelVal :: N -> Type where
   KBit  :: Bool -> KernelVal n
   KNil  :: KernelVal n
   KCons :: KernelVal n -> KernelVal n -> KernelVal n
-deriving instance Show (KernelVal n)
 
 type FunVal m = CTy m Z
 --value :: Modey m -> FunVal m -> Val Z
