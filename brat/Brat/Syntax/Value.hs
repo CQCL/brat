@@ -351,13 +351,13 @@ data NumVal x = NumValue
   , grower  :: Fun00 x
   } deriving (Eq, Foldable, Functor, Traversable)
 
-instance ShowWithMetas x => ShowWithMetas (NumVal x) where
-  showWithMetas m (NumValue 0 g) = showWithMetas m g
-  showWithMetas _ (NumValue n Constant0) = show n
-  showWithMetas m (NumValue n g) = show n ++ " + " ++ showWithMetas m g
+instance Show x => Show (NumVal x) where
+  show (NumValue 0 g) = show g
+  show (NumValue n Constant0) = show n
+  show (NumValue n g) = show n ++ " + " ++ show g
 
-instance ShowWithMetas x => Show (NumVal x) where
-  show = showWithMetas M.empty
+instance ShowWithMetas x => ShowWithMetas (NumVal x) where
+  showWithMetas names nv = show $ fmap (showWithMetas names) nv
 
 -- Functions which map 0 to 0
 data Fun00 x
@@ -365,12 +365,9 @@ data Fun00 x
  | StrictMonoFun (StrictMono x)
  deriving (Eq, Foldable, Functor, Traversable)
 
-instance ShowWithMetas x => ShowWithMetas (Fun00 x) where
-  showWithMetas _ Constant0 = "0"
-  showWithMetas m (StrictMonoFun sm) = showWithMetas m sm
-
-instance ShowWithMetas x => Show (Fun00 x) where
-  show = showWithMetas M.empty
+instance Show x => Show (Fun00 x) where
+  show Constant0 = "0"
+  show (StrictMonoFun sm) = show sm
 
 -- Strictly increasing function
 data StrictMono x = StrictMono
@@ -378,27 +375,20 @@ data StrictMono x = StrictMono
  , monotone :: Monotone x
  } deriving (Eq, Foldable, Functor, Traversable)
 
-instance ShowWithMetas x => ShowWithMetas (StrictMono x) where
-  showWithMetas m (StrictMono 0 mono) = showWithMetas m mono
-  showWithMetas m (StrictMono n mono) =
-   let a = "2^" ++ show n
-       b = show (2 ^ n :: Int)
-   in (minimumBy (comparing length) [b,a]) ++ " * " ++ showWithMetas m mono
-
-instance ShowWithMetas x => Show (StrictMono x) where
-  show = showWithMetas M.empty
+instance Show x => Show (StrictMono x) where
+  show (StrictMono 0 m) = show m
+  show (StrictMono n m) = let a = "2^" ++ show n
+                              b = show (2 ^ n :: Int)
+                          in minimumBy (comparing length) [b,a] ++ " * " ++ show m
 
 data Monotone x
  = Linear x
  | Full (StrictMono x)
  deriving (Eq, Foldable, Functor, Traversable)
 
-instance ShowWithMetas x => ShowWithMetas (Monotone x) where
-  showWithMetas m (Linear v) = showWithMetas m v
-  showWithMetas m (Full sm) = "(2^(" ++ showWithMetas m sm ++ ") - 1)"
-
-instance ShowWithMetas x => Show (Monotone x) where
-  show = showWithMetas M.empty
+instance Show x => Show (Monotone x) where
+  show (Linear v) = show v
+  show (Full sm) = "(2^(" ++ show sm ++ ") - 1)"
 
 -- Reference semantics for NumValue types
 class NumFun (t :: Type -> Type) where
