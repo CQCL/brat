@@ -276,9 +276,7 @@ getThunks Braty ((src, Left (Star args)):rest) = do
       pure (node, unders, overs)
   (nodes, unders', overs') <- getThunks Braty rest
   pure (node:nodes, unders <> unders', overs <> overs')
-getThunks m ro = do
-  nm <- req AskNames
-  err $ ExpectedThunk (showMode m) (showRow nm ro)
+getThunks m ro = showRow' ro >>= err . ExpectedThunk (showMode m)
 
 -- The type given here should be normalised
 vecLayers :: Modey m -> Val Z -> Checking ([(Src, NumVal (VVar Z))] -- The sizes of the vector layers
@@ -512,3 +510,9 @@ buildConst :: SimpleTerm -> Val Z -> Checking Src
 buildConst tm ty = do
   (_, _, [(out,_)], _) <- next "buildConst" (Const tm) (S0, Some (Zy :* S0)) R0 (RPr ("value", ty) R0)
   pure out
+
+showRow' :: ShowWithMetas ty => [(NamedPort e, ty)] -> Checking String
+showRow' row = flip showRow row <$> req AskNames
+
+showWithMetas' :: ShowWithMetas t => t -> Checking String
+showWithMetas' x = flip showWithMetas x <$> req AskNames

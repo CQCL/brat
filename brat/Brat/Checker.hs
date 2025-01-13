@@ -307,9 +307,7 @@ check' (Th tm) ((), u@(hungry, ty):unders) = case (?my, ty) of
       Right ty@(VFun Braty cty) -> checkThunk Braty "thunk" cty tm >>= wire . (,ty, hungry)
       Right ty@(VFun Kerny cty) -> checkThunk Kerny "thunk" cty tm >>= wire . (,ty, hungry)
       Left (Star args) -> kindCheck [(hungry, Star args)] (Th tm) $> ()
-      _ -> do
-        nm <- req AskNames
-        err . ExpectedThunk "" $ showRow nm (u:unders)
+      _ -> showRow' (u:unders) >>= err . ExpectedThunk ""
     pure (((), ()), ((), unders))
   (Kerny, _) -> err . ThunkInKernel $ show (Th tm)
  where
@@ -323,13 +321,12 @@ check' (Th tm) ((), u@(hungry, ty):unders) = case (?my, ty) of
     ((dangling, _), ()) <- let ?my = m in makeBox name cty $
       \(thOvers, thUnders) -> do
         (((), ()), leftovers) <- check tm (thOvers, thUnders)
-        nm <- req AskNames
         case leftovers of
           ([], []) -> pure ()
-          ([], unders) -> err (ThunkLeftUnders (showRow nm unders))
+          ([], unders) -> showRow' unders >>= err . ThunkLeftUnders
           -- If there are leftovers and leftunders, complain about the leftovers
           -- Until we can report multiple errors!
-          (overs, _) -> err (ThunkLeftOvers (showRow nm overs))
+          (overs, _) -> showRow' overs >>= err . ThunkLeftOvers
     pure dangling
 check' (TypedTh t) ((), ()) = case ?my of
   -- the thunk itself must be Braty
@@ -583,11 +580,11 @@ check' (Of n e) ((), unders) = case ?my of
     ensureEmpty "" leftovers
     case diry @d of
       -- Get the largest prefix of unders whose types are vectors of the right length
-      Chky -> req AskNames >>= \nm -> getVecs n unders >>= \case
+      Chky -> getVecs n unders >>= \case
         -- If none of the unders have the right type, we should fail
-        ([], [], _) -> let expected = if null unders then "empty row" else showRow nm unders in
-                        typeErr $ unlines ["Got: Vector of length " ++ show n
-                                          ,"Expected: " ++ expected]
+        ([], [], _) -> do
+            expected <- if null unders then pure "empty row" else showRow' unders
+            typeErr $ unlines ["Got: Vector of length " ++ show n, "Expected: " ++ expected]
         (elemUnders, vecUnders, rightUnders) -> do
           (Some (_ :* stk)) <- rowToRo ?my [ (portName tgt, tgt, Right ty) | (tgt, ty) <- elemUnders ] S0
           case stk of
@@ -733,7 +730,6 @@ checkBody :: (CheckConstraints m UVerb, EvMode m, ?my :: Modey m)
           -> CTy m Z -- Function type
           -> Checking Src
 checkBody fnName body cty = do
-  nm <- req AskNames
   (tm, (absFC, tmFC)) <- case body of
     NoLhs tm -> pure (tm, (fcOf tm, fcOf tm))
     Clauses (c@(abs, tm) :| cs) -> do
@@ -742,6 +738,7 @@ checkBody fnName body cty = do
     Undefined -> err (InternalError "Checking undefined clause")
   ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \conns@(_, unders) -> do
     (((), ()), leftovers) <- check tm conns
+    nm <- req AskNames
     case leftovers of
       ([], []) -> pure ()
       ([], rightUnders) -> localFC tmFC $
@@ -994,17 +991,17 @@ detectVecErrors :: QualName  -- Term constructor name
                 -> Either (Term d k) Pattern  -- Term or pattern
                 -> Checking (Error -> Error)  -- Returns error wrapper to use for recursion
 detectVecErrors vcon (PrefixName [] "Vec") [_, VNum n] [_, VPNum p] ty tp = do
-  nm <- req AskNames
+  ty_str <- showWithMetas' ty
+  n_str <- showWithMetas' n
   case numMatch B0 n p of
     Left (NumMatchFail _ _) -> do
       p' <- toLenConstr p
-      err $ getVecErr tp (showWithMetas nm ty) (showWithMetas nm n) p'
+      err $ getVecErr tp ty_str n_str p'
     -- Even if we succed here, the error might pop up when checking the
     -- rest of the vector. We return a function here that intercepts the
     -- error and extends it to the whole vector.
     _ -> if vcon == PrefixName [] "cons"
-         then do fc <- req AskFC
-                 pure (consError fc tp (showWithMetas nm ty) (showWithMetas nm n))
+         then req AskFC <&> \fc -> consError fc tp ty_str n_str
          else pure id
  where
   -- For constructors that produce something of type Vec we should
