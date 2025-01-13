@@ -1,0 +1,9 @@
+Error in test/golden/error/vec_length.brat on line 2:
+f(_, _, xs) = xs
+              ^^
+
+  Type mismatch when checking xs
+Expected: (a1 :: Vec(X, n))
+But got:  (xs :: Vec(X, 1 + n))
+
+

@@ -83,8 +83,11 @@ typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
   when (or [M.member ie hopes | InEnd ie <- ends]) $ typeErr "ends were in hopeset"
   case ends of
     [] -> typeEqRigid tm stuff k exp act -- easyish, both rigid i.e. already defined
-    [e1, e2] | e1 == e2 -> pure () -- trivially same, even if both still yet-to-be-defined
-    _es -> error "TODO: must wait for one or the other to become more defined"
+    -- variables are trivially the same, even if undefined, but the values may
+    -- be different! E.g. X =? 1 + X
+    [_, _] | exp == act -> pure ()
+    -- TODO: Once we have scheduling, we must wait for one or the other to become more defined, rather than failing
+    _  -> err (TypeMismatch tm (show exp) (show act))
  where
   getEnd (VApp (VPar e) _) = Just e
   getEnd (VNum n) = getNumVar n
@@ -143,7 +146,9 @@ typeEqRigid tm (_ :* _ :* semz) Nat exp act = do
   act <- sem semz act
   if getNum exp == getNum act
   then pure ()
-  else err $ TypeMismatch tm (show exp) (show act)
+  else do
+    names <- req AskNames
+    err $ TypeMismatch tm (showWithMetas names exp) (showWithMetas names act)
 typeEqRigid tm stuff@(_ :* kz :* _) (TypeFor m []) (VApp f args) (VApp f' args') | f == f' =
   svKind f >>= \case
     TypeFor m' ks | m == m' -> typeEqs tm stuff (snd <$> ks) (args <>> []) (args' <>> [])
