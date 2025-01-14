@@ -157,7 +157,6 @@ data Val :: N -> Type where
   VLam :: Val (S n) -> Val n -- Just body (binds DeBruijn index n)
   VFun :: MODEY m => Modey m -> CTy m n -> Val n
   VApp :: VVar n -> Bwd (Val n) -> Val n
-  VSum :: MODEY m => Modey m -> [Some (Ro m n)] -> Val n -- (Hugr-like) Sum types
 
 data SVar = SPar End | SLvl Int
  deriving (Show, Eq)
@@ -223,12 +222,6 @@ instance Show (Val n) where
   show (VFun m cty) = "{ " ++ modily m (show cty) ++ " }"
   show (VApp v ctx) = "VApp " ++ show v ++ " " ++ show ctx
   show (VLam body) = "VLam " ++ show body
-  show (VSum my ros) = case my of
-    Braty -> "VSum (" ++ intercalate " + " (helper <$> ros) ++ ")"
-    Kerny -> "VSum (" ++ intercalate " + " (helper <$> ros) ++ ")"
-   where
-    helper :: MODEY m => Some (Ro m n) -> String
-    helper (Some ro) = show ro
 
 ---------------------------------- Patterns -----------------------------------
 pattern TNat, TInt, TFloat, TBool, TText, TUnit, TNil :: Val n
@@ -524,9 +517,6 @@ instance DeBruijn Val where
     = VFun Braty $ changeVar vc cty
   changeVar vc (VFun Kerny cty)
     = VFun Kerny $ changeVar vc cty
-  changeVar vc (VSum my ros)
-    = VSum my (f <$> ros)
-    where f (Some ro) = case varChangerThroughRo vc ro of Some (_ :* ro) -> Some ro
 
 varChangerThroughRo :: VarChanger src tgt
                     -> Ro m src src'
