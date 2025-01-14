@@ -160,7 +160,7 @@ data Val :: N -> Type where
   VApp :: VVar n -> Bwd (Val n) -> Val n
 
 -- Define a naive version of equality, which only says whether the data
--- structures are on-the-node equal
+-- structures are on-the-nose equal
 instance Eq (Val n) where
   VNum a == VNum b = a == b
   (VCon c xs) == (VCon d ys) = c == d && xs == ys
