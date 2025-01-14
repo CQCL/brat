@@ -88,7 +88,6 @@ sem ga (VApp f vz) = do
     f <- semVar ga f
     vz <- traverse (sem ga) vz
     applySem f vz
-sem ga (VSum my ts) = pure $ SSum my ga ts
 
 semVar :: Stack Z Sem n -> VVar n -> Checking Sem
 semVar vz (VInx inx) = pure $ proj vz inx
@@ -125,10 +124,6 @@ quote lvy (SLam stk body) = do
   VLam <$> quote (Sy lvy) body
 quote lvy (SFun my ga cty) = VFun my <$> quoteCTy lvy my ga cty
 quote lvy (SApp f vz) = VApp (quoteVar lvy f) <$> traverse (quote lvy) vz
-quote lvy (SSum my ga ts) = VSum my <$> traverse quoteVariant ts
-  where
-  quoteVariant (Some ro) = quoteRo my ga ro lvy >>= \case
-    (_, Some (ro :* _)) -> pure (Some ro)
 
 quoteCTy :: Ny lv -> Modey m -> Stack Z Sem n -> CTy m n -> Checking (CTy m lv)
 quoteCTy lvy my ga (ins :->> outs) = quoteRo my ga ins lvy >>= \case
@@ -320,7 +315,6 @@ doesntOccur e (VLam body) = doesntOccur e body
 doesntOccur e (VFun my (ins :->> outs)) = case my of
   Braty -> doesntOccurRo my e ins *> doesntOccurRo my e outs
   Kerny -> doesntOccurRo my e ins *> doesntOccurRo my e outs
-doesntOccur e (VSum my rows) = traverse_ (\(Some ro) -> doesntOccurRo my e ro) rows
 
 collision :: End -> End -> Either ErrorMsg ()
 collision e v | e == v = Left . UnificationError $
