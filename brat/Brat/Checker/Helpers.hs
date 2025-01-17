@@ -37,9 +37,11 @@ import Hasochism
 import Util (log2)
 
 import Control.Monad (when)
+import Control.Monad.State.Lazy (StateT(..), runStateT)
 import Control.Monad.Freer (req)
 import Data.Bifunctor
 import Data.Foldable (foldrM)
+import Data.List (partition)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
 import Prelude hiding (last)
@@ -100,35 +102,29 @@ pullPortsRow :: Show ty
              => [PortName]
              -> [(NamedPort e, ty)]
              -> Checking [(NamedPort e, ty)]
-pullPortsRow = pullPorts portName showRow
+pullPortsRow = pullPorts (portName . fst) showRow
 
 pullPortsSig :: Show ty
              => [PortName]
              -> [(PortName, ty)]
              -> Checking [(PortName, ty)]
-pullPortsSig = pullPorts id showSig
+pullPortsSig = pullPorts fst showSig
 
-pullPorts :: forall a ty. Show ty
-          => (a -> PortName) -- A way to get a port name for each element
-          -> ([(a, ty)] -> String) -- A way to print the list
+pullPorts :: forall a ty
+           . (a -> PortName) -- A way to get a port name for each element
+          -> ([a] -> String) -- A way to print the list
           -> [PortName] -- Things to pull to the front
-          -> [(a, ty)]  -- The list to rearrange
-          -> Checking [(a, ty)]
-pullPorts _ _ [] types = pure types
-pullPorts toPort showFn (p:ports) types = do
-  (x, types) <- pull1Port p types
-  (x:) <$> pullPorts toPort showFn ports types
+          -> [a]  -- The list to rearrange
+          -> Checking [a]
+pullPorts toPort showFn to_pull types =
+  -- the "state" here is the things still available to be pulled
+  uncurry (++) <$> runStateT (mapM pull1Port to_pull) types
  where
-  pull1Port :: PortName
-            -> [(a, ty)]
-            -> Checking ((a, ty), [(a, ty)])
-  pull1Port p [] = fail $ "Port not found: " ++ p ++ " in " ++ showFn types
-  pull1Port p (x@(a,_):xs)
-   | p == toPort a
-   = if p `elem` (toPort . fst <$> xs)
-     then err (AmbiguousPortPull p (showFn (x:xs)))
-     else pure (x, xs)
-   | otherwise = second (x:) <$> pull1Port p xs
+  pull1Port :: PortName -> StateT [a] Checking a
+  pull1Port p = StateT $ \available -> case partition ((== p) . toPort) available of
+      ([], _) -> err $ BadPortPull p (showFn available)
+      ([found], remaining) -> pure (found, remaining)
+      (_, _) -> err $ AmbiguousPortPull p (showFn available)
 
 ensureEmpty :: Show ty => String -> [(NamedPort e, ty)] -> Checking ()
 ensureEmpty _ [] = pure ()
@@ -506,3 +502,8 @@ runArith (NumValue upl grol) Pow (NumValue upr gror)
  -- 2^(2^k * upr) + 2^(2^k * upr) * (full(2^(k + k') * mono))
  = pure $ NumValue (upl ^ upr) (StrictMonoFun (StrictMono (l * upr) (Full (StrictMono (k + k') mono))))
 runArith _ _ _ = Nothing
+
+buildConst :: SimpleTerm -> Val Z -> Checking Src
+buildConst tm ty = do
+  (_, _, [(out,_)], _) <- next "buildConst" (Const tm) (S0, Some (Zy :* S0)) R0 (RPr ("value", ty) R0)
+  pure out
