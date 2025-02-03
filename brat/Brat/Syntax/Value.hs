@@ -195,10 +195,9 @@ data Val :: N -> Type where
   VLam :: Val (S n) -> Val n -- Just body (binds DeBruijn index n)
   VFun :: MODEY m => Modey m -> CTy m n -> Val n
   VApp :: VVar n -> Bwd (Val n) -> Val n
-  VSum :: MODEY m => Modey m -> [Some (Ro m n)] -> Val n -- (Hugr-like) Sum types
 
 -- Define a naive version of equality, which only says whether the data
--- structures are on-the-node equal
+-- structures are on-the-nose equal
 instance Eq (Val n) where
   VNum a == VNum b = a == b
   (VCon c xs) == (VCon d ys) = c == d && xs == ys
@@ -235,12 +234,6 @@ instance ShowWithMetas (Val n) where
   showWithMetas m (VApp v B0) = showWithMetas m v
   showWithMetas m (VApp v ctx) = "VApp " ++ showWithMetas m v ++ " " ++ show (showWithMetas m <$> ctx)
   showWithMetas m (VLam body) = "VLam " ++ showWithMetas m body
-  showWithMetas m (VSum my ros) = case my of
-    Braty -> "VSum (" ++ intercalate " + " (helper m <$> ros) ++ ")"
-    Kerny -> "VSum (" ++ intercalate " + " (helper m <$> ros) ++ ")"
-   where
-    helper :: MODEY m => M.Map End String -> Some (Ro m n) -> String
-    helper m (Some ro) = showWithMetas m ro
 
 instance Show (Val n) where
   show = showWithMetas M.empty
@@ -620,9 +613,6 @@ instance DeBruijn Val where
     = VFun Braty $ changeVar vc cty
   changeVar vc (VFun Kerny cty)
     = VFun Kerny $ changeVar vc cty
-  changeVar vc (VSum my ros)
-    = VSum my (f <$> ros)
-    where f (Some ro) = case varChangerThroughRo vc ro of Some (_ :* ro) -> Some ro
 
 varChangerThroughRo :: VarChanger src tgt
                     -> Ro m src src'

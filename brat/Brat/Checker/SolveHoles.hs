@@ -11,7 +11,6 @@ import Brat.Syntax.Value
 import Control.Monad.Freer
 import Bwd
 import Hasochism
-import Util (zipSameLength)
 
 import Control.Monad (when)
 import Data.Bifunctor (second)
@@ -166,10 +165,4 @@ typeEqRigid tm lvkz (Star []) (VFun m0 (ins0 :->> outs0)) (VFun m1 (ins1 :->> ou
   probs :: [Checking ()] <- throwLeft $ typeEqRow m0 tm lvkz ins0 ins1 >>= \case -- this is in Either ErrorMsg
         (Some (lvkz :* (Refl :* Refl)), ps1) -> typeEqRow m0 tm lvkz outs0 outs1 <&> (ps1++) . snd
   sequenceA_ probs -- uses Applicative (unlike sequence_ which uses Monad), hence parallelized
-typeEqRigid tm lvkz (TypeFor _ []) (VSum m0 rs0) (VSum m1 rs1)
-  | Just Refl <- testEquality m0 m1 = case zipSameLength rs0 rs1 of
-      Nothing -> typeErr "Mismatched sum lengths"
-      Just rs -> traverse eqVariant rs >>= (sequenceA_ . concat)
- where
-  eqVariant (Some r0, Some r1) = throwLeft (snd <$> typeEqRow m0 tm lvkz r0 r1)
 typeEqRigid tm _ _ v0 v1 = err $ TypeMismatch tm (show v0) (show v1)
