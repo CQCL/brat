@@ -341,3 +341,9 @@ localNS ns (Req c k) = Req c (localNS ns . k)
 
 defineEnd :: End -> Val Z -> Checking ()
 defineEnd e v = req (Define e v)
+
+showRowM :: ShowWithMetas ty => [(NamedPort e, ty)] -> Checking String
+showRowM row = flip showRow row <$> req AskNames
+
+showWithMetasM :: ShowWithMetas t => t -> Checking String
+showWithMetasM x = flip showWithMetas x <$> req AskNames

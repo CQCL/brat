@@ -78,8 +78,8 @@ checkDecl pre (VDecl FuncDecl{..}) to_define = (fnName -!) $ localFC fnLoc $ do
                (showRow nm to_define)
                (showRow nm $ filter ((`notElem` (fst <$> rightUnders)) . fst) to_define)
       Undefined -> error "No body in `checkDecl`"
-      ThunkOf _ -> req AskNames >>= \names -> case fnSig of
-        Some ro -> err $ ExpectedThunk (showMode Braty) (showWithMetas names ro)
+      ThunkOf _ -> case fnSig of
+        Some ro -> err =<< ExpectedThunk (showMode Braty) <$> (showWithMetasM ro)
     Just (Some (my :* Flip cty)) -> getClauses fnBody (my, cty) >>= \case
       Right stuff -> do
         box_out :: Src <- case stuff of

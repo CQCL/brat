@@ -111,8 +111,7 @@ applySem f (vz :< v) = applySem f vz >>= \case
   SApp f vz -> pure $ SApp f (vz :< v)
   SLam ga body -> sem (ga :<< v) body
   v -> do
-    names <- req AskNames
-    err $ InternalError $ "applySem called on " ++ showWithMetas names v
+    err =<< InternalError . ("applySem called on " ++) <$> showWithMetasM v
 
 semLvl :: Ny n -> Sem
 semLvl lvy = SApp (SLvl $ ny2int lvy) B0
@@ -231,10 +230,7 @@ eqWorker tm (lvy :* kz) (TypeFor m ((_, k):ks)) exp act = do
 eqWorker tm _ Nat exp act = do
   if getNum exp == getNum act
   then pure (Right ())
-  else do
-    names <- req AskNames
-    let msg = TypeMismatch tm (showWithMetas names exp) (showWithMetas names act)
-    pure (Left msg)
+  else Left <$> modily Braty (TypeMismatch tm <$> showWithMetasM exp <*> showWithMetasM act)
 eqWorker tm (lvy :* kz) (TypeFor m []) (SApp f args) (SApp f' args') | f == f' =
   svKind (quoteVar lvy f) >>= \case
     TypeFor m' ks | m == m' -> eqTests tm (lvy :* kz) (snd <$> ks) (args <>> []) (args' <>> [])
@@ -258,9 +254,8 @@ eqWorker tm lvkz (TypeFor _ []) (SSum m0 stk0 rs0) (SSum m1 stk1 rs1)
       Just rs -> traverse eqVariant rs <&> sequence_
  where
   eqVariant (Some r0, Some r1) = eqRowTest m0 tm lvkz (stk0,r0) (stk1,r1) <&> dropRight
-eqWorker tm _ _ v0 v1 = do
-  names <- req AskNames
-  pure . Left $ TypeMismatch tm (showWithMetas names v0) (showWithMetas names v1)
+eqWorker tm _ _ v0 v1 =
+  Left <$> (TypeMismatch tm <$> showWithMetasM v0 <*> showWithMetasM v1)
 
 -- Type rows have bot0,bot1 dangling de Bruijn indices, which we instantiate with
 -- de Bruijn levels. As we go under binders in these rows, we add to the scope's
@@ -288,9 +283,7 @@ eqRowTest m tm (lvy :* kz) (stk0, REx (_, k0) r0) (stk1, REx (_, k1) r1) =
       Right () -> do
         let l = semLvl lvy
         eqRowTest m tm (Sy lvy :* (kz :<< k0)) (stk0 :<< l, r0) (stk1 :<< l, r1)
-eqRowTest m tm _ exp act = do
-  names <- req AskNames
-  modily m $ pure . Left $ TypeMismatch tm (showWithMetas names exp) (showWithMetas names act)
+eqRowTest m tm _ exp act = Left <$> modily m (TypeMismatch tm <$> showWithMetasM exp <*> showWithMetasM act)
 
 eqTests :: String -> (Ny :* Stack Z TypeKind) n -> [TypeKind] -> [Sem] -> [Sem] -> Checking (Either ErrorMsg ())
   -- note alternative - traverse zip3/zipSameLen*2 + currying
@@ -302,9 +295,10 @@ eqTests tm lvkz = go
     Right () -> go ks us vs
     Left e -> pure $ Left e
   go _ us vs = do
-    names <- req AskNames
+    us <- showWithMetasM us
+    vs <- showWithMetasM vs
     pure . Left . TypeErr $ "Arity mismatch in type constructor arguments:\n  "
-                   ++ showWithMetas names us ++ "\n  " ++ showWithMetas names vs
+                            ++ us ++ "\n  " ++ vs
 
 getNumVar :: NumVal (VVar n) -> Maybe End
 getNumVar (NumValue _ (StrictMonoFun (StrictMono _ mono))) = case mono of

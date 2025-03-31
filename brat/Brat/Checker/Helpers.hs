@@ -20,7 +20,11 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
                             ,evalSrcRow, evalTgtRow
                             )-} where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd)
+import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals
+                          ,err, typeErr
+                          ,kindArgRows, defineEnd
+                          ,showWithMetasM, showRowM
+                          )
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (eval, EvMode(..), kindType)
@@ -70,9 +74,8 @@ pull1PortRo :: MODEY m
 pull1PortRo _ p _ R0 = fail $ "Port not found: " ++ p
 pull1PortRo m p stuff (RPr (p', ty) ro)
  | p == p' = do
-   names <- req AskNames
    if portNameExists m p ro
-   then err (AmbiguousPortPull p (showWithMetas names (RPr (p', ty) ro)))
+   then err =<< AmbiguousPortPull p <$> showWithMetasM (RPr (p', ty) ro)
    else pure ((p', ty), rebuildRo m ro (stuff <>> []))
  | otherwise = pull1PortRo m p (stuff :< (p', ty)) ro
  where
@@ -139,9 +142,7 @@ combineDisjointEnvs l r =
 
 ensureEmpty :: ShowWithMetas ty => String -> [(NamedPort e, ty)] -> Checking ()
 ensureEmpty _ [] = pure ()
-ensureEmpty str xs = do
-  nm <- req AskNames
-  err $ InternalError $ "Expected empty " ++ str ++ ", got:\n  " ++ showRow nm xs
+ensureEmpty str xs = showRowM xs >>= \row -> err $ InternalError $ "Expected empty " ++ str ++ ", got:\n  " ++ row
 
 noUnders m = do
   ((outs, ()), (overs, unders)) <- m
@@ -276,9 +277,7 @@ getThunks Braty ((src, Left (Star args)):rest) = do
       pure (node, unders, overs)
   (nodes, unders', overs') <- getThunks Braty rest
   pure (node:nodes, unders <> unders', overs <> overs')
-getThunks m ro = do
-  nm <- req AskNames
-  err $ ExpectedThunk (showMode m) (showRow nm ro)
+getThunks m ro = err =<< ExpectedThunk (showMode m) <$> showRowM ro
 
 -- The type given here should be normalised
 vecLayers :: Modey m -> Val Z -> Checking ([(Src, NumVal (VVar Z))] -- The sizes of the vector layers

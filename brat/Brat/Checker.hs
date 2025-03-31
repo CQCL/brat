@@ -307,9 +307,7 @@ check' (Th tm) ((), u@(hungry, ty):unders) = case (?my, ty) of
       Right ty@(VFun Braty cty) -> checkThunk Braty "thunk" cty tm >>= wire . (,ty, hungry)
       Right ty@(VFun Kerny cty) -> checkThunk Kerny "thunk" cty tm >>= wire . (,ty, hungry)
       Left (Star args) -> kindCheck [(hungry, Star args)] (Th tm) $> ()
-      _ -> do
-        nm <- req AskNames
-        err . ExpectedThunk "" $ showRow nm (u:unders)
+      _ -> err =<< ExpectedThunk "" <$> showRowM (u:unders)
     pure (((), ()), ((), unders))
   (Kerny, _) -> err . ThunkInKernel $ show (Th tm)
  where
@@ -323,13 +321,12 @@ check' (Th tm) ((), u@(hungry, ty):unders) = case (?my, ty) of
     ((dangling, _), ()) <- let ?my = m in makeBox name cty $
       \(thOvers, thUnders) -> do
         (((), ()), leftovers) <- check tm (thOvers, thUnders)
-        nm <- req AskNames
         case leftovers of
           ([], []) -> pure ()
-          ([], unders) -> err (ThunkLeftUnders (showRow nm unders))
+          ([], unders) -> err =<< ThunkLeftUnders <$> showRowM unders
           -- If there are leftovers and leftunders, complain about the leftovers
           -- Until we can report multiple errors!
-          (overs, _) -> err (ThunkLeftOvers (showRow nm overs))
+          (overs, _) -> err =<< ThunkLeftOvers <$> showRowM overs
     pure dangling
 check' (TypedTh t) ((), ()) = case ?my of
   -- the thunk itself must be Braty
@@ -398,13 +395,14 @@ check' (Arith op l r) ((), u@(hungry, ty):unders) = case (?my, ty) of
 check' (fun :$: arg) (overs, unders) = do
   ((ins, outputs), ((), leftUnders)) <- check fun ((), unders)
   ((argIns, ()), (leftOvers, argUnders)) <- check arg (overs, ins)
-  nm <- req AskNames
   if null argUnders
   then pure ((argIns, outputs), (leftOvers, leftUnders))
-  else typeErr $ unwords ["Expected function", show fun
-                         ,"to consume all of its arguments (" ++ show arg ++ ")\n"
-                         ,"but found leftovers:", showRow nm argUnders
-                         ]
+  else do
+    argUnders <- showRowM argUnders
+    typeErr $ unwords ["Expected function", show fun
+                       ,"to consume all of its arguments (" ++ show arg ++ ")\n"
+                       ,"but found leftovers:", argUnders
+                       ]
 check' (Let abs x y) conn = do
   (((), dangling), ((), ())) <- check x ((), ())
   env <- abstractAll dangling (unWC abs)
@@ -583,11 +581,11 @@ check' (Of n e) ((), unders) = case ?my of
     ensureEmpty "" leftovers
     case diry @d of
       -- Get the largest prefix of unders whose types are vectors of the right length
-      Chky -> req AskNames >>= \nm -> getVecs n unders >>= \case
+      Chky -> getVecs n unders >>= \case
         -- If none of the unders have the right type, we should fail
-        ([], [], _) -> let expected = if null unders then "empty row" else showRow nm unders in
-                        typeErr $ unlines ["Got: Vector of length " ++ show n
-                                          ,"Expected: " ++ expected]
+        ([], [], _) -> do expected <- if null unders then pure "empty row" else showRowM unders
+                          typeErr $ unlines ["Got: Vector of length " ++ show n
+                                            ,"Expected: " ++ expected]
         (elemUnders, vecUnders, rightUnders) -> do
           (Some (_ :* stk)) <- rowToRo ?my [ (portName tgt, tgt, Right ty) | (tgt, ty) <- elemUnders ] S0
           case stk of
