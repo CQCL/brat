@@ -90,12 +90,11 @@ data CheckingSig ty where
   Wire    :: Wire -> CheckingSig ()
   KDone   :: CheckingSig ()
   AskVEnv :: CheckingSig CtxEnv
-  Declare :: End -> Modey m -> BinderType m -> CheckingSig ()
+  Declare :: End -> Modey m -> BinderType m -> Maybe String -> CheckingSig ()
   Define  :: End -> Val Z -> CheckingSig ()
   ANewHope :: InPort -> FC -> CheckingSig ()
   AskHopes :: CheckingSig Hopes
   RemoveHope :: InPort -> CheckingSig ()
-  NameMeta :: End -> String -> CheckingSig ()
   AskNames :: CheckingSig (M.Map End String)
 
 localAlias :: (QualName, Alias) -> Checking v -> Checking v
@@ -235,15 +234,19 @@ handler (Req s k) ctx g
       TypeOf end -> case M.lookup end . typeMap . store $ ctx of
         Just et -> handler (k et) ctx g
         Nothing -> Left (dumbErr . InternalError $ "End " ++ show end ++ " isn't Declared")
-      Declare end my bty ->
-        let st@Store{typeMap=m} = store ctx
-        in case M.lookup end m of
+      Declare end my bty mname ->
+        let st@Store{typeMap=typeMap,userNames=userNames} = store ctx
+        in case M.lookup end typeMap of
           Just _ -> Left $ dumbErr (InternalError $ "Redeclaring " ++ show end)
           Nothing -> let bty_str = case my of { Braty -> show bty; Kerny -> show bty } in
                        track ("Declared " ++ show end ++ " :: " ++ bty_str) $
                        handler (k ())
                        (ctx { store =
-                              st { typeMap = M.insert end (EndType my bty) m }
+                              st { typeMap = M.insert end (EndType my bty) typeMap
+                                 , userNames = case mname of
+                                    Just name -> M.insert end name userNames
+                                    Nothing -> userNames
+                                 }
                             }) g
       Define end v ->
         let st@Store{typeMap=tm, valueMap=vm} = store ctx
@@ -283,11 +286,6 @@ handler (Req s k) ctx g
                         if M.member e hset
                         then handler (k ()) (ctx { hopes = M.delete e hset }) g
                         else Left (dumbErr (InternalError ("Trying to remove unknown Hope: " ++ show e)))
-      NameMeta end name -> let names = userNames (store ctx) in
-                             case M.lookup end names of
-                               Just oldName -> error $ "Trying to name end (" ++ show end ++ ")\nas " ++ show name ++ " but it's already called " ++ oldName
-                               Nothing -> let st = store ctx in
-                                            handler (k ()) (ctx { store = st { userNames = M.insert end name (userNames st) } }) g
       AskNames -> handler (k (userNames (store ctx))) ctx g
 
 type Checking = Free CheckingSig

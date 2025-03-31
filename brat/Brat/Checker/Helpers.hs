@@ -394,12 +394,10 @@ defineTgt :: Tgt -> Val Z -> Checking ()
 defineTgt tgt = defineEnd (InEnd (end tgt))
 
 declareSrc :: Src -> Modey m -> BinderType m -> Checking ()
-declareSrc (NamedPort end name) my ty = req (Declare (ExEnd end) my ty) *>
-                                        req (NameMeta (ExEnd end) name)
+declareSrc (NamedPort end name) my ty = req (Declare (ExEnd end) my ty (Just name))
 
 declareTgt :: Tgt -> Modey m -> BinderType m -> Checking ()
-declareTgt (NamedPort end name) my ty = req (Declare (InEnd end) my ty) *>
-                                        req (NameMeta (InEnd end) name)
+declareTgt (NamedPort end name) my ty = req (Declare (InEnd end) my ty (Just name))
 
 -- listToRow :: [(PortName, BinderType m)] -> Ro m Z i
 -- listToRow [] = R0
