@@ -1,4 +1,4 @@
-module Brat.Checker.SolvePatterns (argProblems, argProblemsWithLeftovers, solve) where
+module Brat.Checker.SolvePatterns (argProblems, argProblemsWithLeftovers, solve, solveNumMeta) where
 
 import Brat.Checker.Monad
 import Brat.Checker.Helpers

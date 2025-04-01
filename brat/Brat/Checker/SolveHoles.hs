@@ -1,12 +1,14 @@
 module Brat.Checker.SolveHoles (typeEq) where
 
-import Brat.Checker.Helpers (buildConst, buildNatVal)
+import Brat.Checker.Helpers (buildConst)
 import Brat.Checker.Monad
+import Brat.Checker.SolvePatterns (solveNumMeta)
 import Brat.Checker.Types (kindForMode)
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval
 import Brat.Syntax.Common
 import Brat.Syntax.Simple (SimpleTerm(..))
+import Brat.Syntax.Port (ToEnd(..))
 import Brat.Syntax.Value
 import Control.Monad.Freer
 import Bwd
@@ -99,11 +101,11 @@ solveHope :: TypeKind -> InPort -> Sem -> Checking ()
 solveHope k hope v = quote Zy v >>= \v -> case doesntOccur (InEnd hope) v of
   Right () -> do
     defineEnd (InEnd hope) v
-    dangling <- case (k, v) of
-      (Nat, VNum v) -> buildNatVal v
+    _ <- case (k, v) of
+      (Nat, VNum nv) -> () <$ solveNumMeta (toEnd hope) nv
       (Nat, _) -> err $ InternalError "Head of Nat wasn't a VNum"
-      _ -> buildConst Unit TUnit
-    req (Wire (end dangling, kindType k, hope))
+      _ -> () <$ buildConst Unit TUnit
+    --req (Wire (end dangling, kindType k, hope))
     req (RemoveHope hope)
   Left msg -> case v of
     VApp (VPar (InEnd end)) B0 | hope == end -> pure ()
@@ -111,6 +113,7 @@ solveHope k hope v = quote Zy v >>= \v -> case doesntOccur (InEnd hope) v of
     -- to a hoping variable which isn't used.
     -- E.g. h1 = h2 h1 - this is valid if h2 is the identity, or ignores h1.
     _ -> err msg
+
 
 typeEqs :: String -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n -> [TypeKind] -> [Val n] -> [Val n] -> Checking ()
 typeEqs _ _ [] [] [] = pure ()

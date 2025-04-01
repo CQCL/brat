@@ -1,5 +1,5 @@
-resolver: "lts-22.7"
-compiler: "ghc-9.6.4"
+resolver: "lts-22.43"
+compiler: "ghc-9.6.6"
 system-ghc: True
 
 packages:
