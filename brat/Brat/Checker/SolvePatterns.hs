@@ -312,11 +312,12 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     evenGro Constant0 = pure Constant0
     evenGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
       Linear (VPar (ExEnd out)) -> do
-        half <- invertNatVal (NumValue 0 (StrictMonoFun (StrictMono 1 mono)))
-        solveNumMeta (ExEnd out) (n2PowTimes 1 (nVar (VPar (toEnd half))))
-        pure (StrictMonoFun (StrictMono 0 (Linear (VPar (toEnd half)))))
+        (_, [], [(halfSrc, _)], _) <-
+          next "half" Hypo (S0, Some (Zy :* S0)) R0 (REx ("value", Nat) R0)
+        solveNumMeta (ExEnd out) (n2PowTimes 1 (nVar (VPar (toEnd halfSrc))))
+        pure (StrictMonoFun (StrictMono 0 (Linear (VPar (toEnd halfSrc)))))
       Linear (VPar (InEnd tgt)) -> do
-        halfTgt <- buildNatVal (NumValue 0 (StrictMonoFun (StrictMono 1 (Linear (VPar (toEnd tgt))))))
+        halfTgt <- invertNatVal (NumValue 0 (StrictMonoFun (StrictMono 1 mono)))
         let half = nVar (VPar (toEnd halfTgt))
         solveNumMeta (InEnd tgt) (n2PowTimes 1 half)
         pure (StrictMonoFun (StrictMono 0 (Linear (VPar (toEnd halfTgt)))))
