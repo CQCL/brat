@@ -33,7 +33,8 @@ import Hasochism
 import Data.List (intercalate, minimumBy)
 import Data.Ord (comparing)
 import Data.Kind (Type)
-import Data.Type.Equality ((:~:)(..))
+import Data.Maybe (isJust)
+import Data.Type.Equality ((:~:)(..), testEquality)
 
 newtype VDecl = VDecl (FuncDecl (Some (Ro Brat Z)) (FunBody Term Noun))
 
@@ -157,7 +158,31 @@ data Val :: N -> Type where
   VLam :: Val (S n) -> Val n -- Just body (binds DeBruijn index n)
   VFun :: MODEY m => Modey m -> CTy m n -> Val n
   VApp :: VVar n -> Bwd (Val n) -> Val n
-  VSum :: MODEY m => Modey m -> [Some (Ro m n)] -> Val n -- (Hugr-like) Sum types
+
+-- Define a naive version of equality, which only says whether the data
+-- structures are on-the-nose equal
+instance Eq (Val n) where
+  VNum a == VNum b = a == b
+  (VCon c xs) == (VCon d ys) = c == d && xs == ys
+  (VLam x) == (VLam y) = x == y
+  (VFun m cty) == (VFun m' cty') = case testEquality m m' of
+    Just Refl -> cty == cty'
+    Nothing -> False
+  (VApp v zx) == (VApp w zy) = v == w && zx == zy
+  _ == _ =  False
+
+instance MODEY m => Eq (CTy m i) where
+  (ss :->> ts) == (us :->> vs) = case roEq (modey @m) ss us of
+                                   Just Refl -> isJust (roEq (modey @m) ts vs)
+                                   Nothing -> False
+   where
+    roEq :: forall m i j k. Modey m -> Ro m i j -> Ro m i k -> Maybe (j :~: k)
+    roEq _ R0 R0 = Just Refl
+    roEq my (RPr x ro) (RPr y rp) | x == y = roEq my ro rp
+    roEq Braty (REx x ro) (REx y rp) | x == y = case roEq Braty ro rp of
+      Just Refl -> Just Refl
+      Nothing -> Nothing
+    roEq _ _ _ = Nothing
 
 data SVar = SPar End | SLvl Int
  deriving (Show, Eq)
@@ -223,12 +248,6 @@ instance Show (Val n) where
   show (VFun m cty) = "{ " ++ modily m (show cty) ++ " }"
   show (VApp v ctx) = "VApp " ++ show v ++ " " ++ show ctx
   show (VLam body) = "VLam " ++ show body
-  show (VSum my ros) = case my of
-    Braty -> "VSum (" ++ intercalate " + " (helper <$> ros) ++ ")"
-    Kerny -> "VSum (" ++ intercalate " + " (helper <$> ros) ++ ")"
-   where
-    helper :: MODEY m => Some (Ro m n) -> String
-    helper (Some ro) = show ro
 
 ---------------------------------- Patterns -----------------------------------
 pattern TNat, TInt, TFloat, TBool, TText, TUnit, TNil :: Val n
@@ -524,9 +543,6 @@ instance DeBruijn Val where
     = VFun Braty $ changeVar vc cty
   changeVar vc (VFun Kerny cty)
     = VFun Kerny $ changeVar vc cty
-  changeVar vc (VSum my ros)
-    = VSum my (f <$> ros)
-    where f (Some ro) = case varChangerThroughRo vc ro of Some (_ :* ro) -> Some ro
 
 varChangerThroughRo :: VarChanger src tgt
                     -> Ro m src src'
