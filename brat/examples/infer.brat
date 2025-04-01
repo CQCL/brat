@@ -2,10 +2,12 @@ map(X :: *, Y :: *, { X -> Y }, List(X)) -> List(Y)
 map(_, _, _, []) = []
 map(_, _, f, x ,- xs) = f(x) ,- map(!, !, f, xs)
 
--- The "succ" being required in all 3 of these cases is https://github.com/CQCL/brat/issues/35
 mapVec(X :: *, Y :: *, { X -> Y }, n :: #, Vec(X, n)) -> Vec(Y, n)
 mapVec(_, _, _, _, []) = []
-mapVec(_, _, f, succ(_), x ,- xs) = f(x) ,- mapVec(!, !, f, !, xs)
+mapVec(_, _, f, _, x ,- xs) = f(x) ,- mapVec(!, !, f, !, xs)
+
+
+-- The "succ" still being required in both of these cases is https://github.com/CQCL/brat/issues/35
 
 -- While map above can infer the holes from the other arguments,
 -- here we need to infer the holes (arguments) from the results:

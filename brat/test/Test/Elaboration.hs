@@ -2,7 +2,7 @@ module Test.Elaboration (elaborationTests) where
 
 import Brat.Elaborator
 import Brat.Error (showError)
-import Brat.UserName (plain)
+import Brat.QualName (plain)
 import Brat.Syntax.Concrete
 import Brat.Syntax.Common
 import Brat.Syntax.Raw (kind, dir)

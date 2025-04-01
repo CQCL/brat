@@ -16,11 +16,12 @@ import Control.Monad.Freer
 import Data.Bifunctor
 import Data.Foldable (for_)
 import Data.Functor (($>), (<&>))
-import Data.List ((\\))
+import Data.List ((\\), intercalate)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
+import qualified Data.Set as S
 import Data.Type.Equality ((:~:)(..))
 import Prelude hiding (filter)
 
@@ -37,6 +38,7 @@ import Brat.FC hiding (end)
 import qualified Brat.FC as FC
 import Brat.Graph
 import Brat.Naming
+import Brat.QualName
 -- import Brat.Search
 import Brat.Syntax.Abstractor (NormalisedAbstractor(..), normaliseAbstractor)
 import Brat.Syntax.Common
@@ -45,7 +47,6 @@ import Brat.Syntax.FuncDecl (FunBody(..))
 import Brat.Syntax.Port (ToEnd, toEnd)
 import Brat.Syntax.Simple
 import Brat.Syntax.Value
-import Brat.UserName
 import Bwd
 import Hasochism
 import Util (zipSameLength)
@@ -59,6 +60,15 @@ standardise k val = eval S0 val >>= (\case
 
 mergeEnvs :: [Env a] -> Checking (Env a)
 mergeEnvs = foldM combineDisjointEnvs M.empty
+ where
+  combineDisjointEnvs :: M.Map QualName v -> M.Map QualName v -> Checking (M.Map QualName v)
+  combineDisjointEnvs l r =
+    let commonKeys = S.intersection (M.keysSet l) (M.keysSet r)
+    in if S.null commonKeys
+       then pure $ M.union l r
+       else typeErr ("Variable(s) defined twice: " ++
+    intercalate "," (map show $ S.toList commonKeys))
+
 
 singletonEnv :: (?my :: Modey m) => String -> (Src, BinderType m) -> Checking (Env (EnvData m))
 singletonEnv x input@(p, ty) = case ?my of
@@ -118,13 +128,13 @@ checkWire Braty (WC fc tm) outputs (dangling, o) (hungry, u) = localFC fc $ do
   let ot = binderToValue Braty o
   let ut = binderToValue Braty u
   if outputs
-    then typeEq (show tm) (Zy :* S0 :* S0) (Star []) ot ut
-    else typeEq (show tm) (Zy :* S0 :* S0) (Star []) ut ot
+    then typeEq (show tm) (Star []) ot ut
+    else typeEq (show tm) (Star []) ut ot
   wire (dangling, ot, hungry)
 checkWire Kerny (WC fc tm) outputs (dangling, ot) (hungry, ut) = localFC fc $ do
   if outputs
-    then typeEq (show tm) (Zy :* S0 :* S0) (Dollar []) ot ut
-    else typeEq (show tm) (Zy :* S0 :* S0) (Dollar []) ut ot
+    then typeEq (show tm) (Dollar []) ot ut
+    else typeEq (show tm) (Dollar []) ut ot
   wire (dangling, ot, hungry)
 
 checkIO :: forall m d k exp act . (CheckConstraints m k, ?my :: Modey m)
@@ -253,7 +263,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
   -- N.B.: Here we update the port names to be the user variable names for nicer
   -- error messages. This mirrors previous behaviour using `abstract`, but is a
   --  bit of a hack. See issue #23.
-  solToEnv :: [(String, (Src, BinderType m))] -> Checking (M.Map UserName (EnvData m))
+  solToEnv :: [(String, (Src, BinderType m))] -> Checking (M.Map QualName (EnvData m))
   solToEnv xs = traverse (uncurry singletonEnv) (portNamesToBoundNames xs) >>= mergeEnvs
 
   portNamesToBoundNames :: [(String, (Src, BinderType m))] -> [(String, (Src, BinderType m))]
@@ -421,7 +431,7 @@ check' (NHole (mnemonic, name)) connectors = do
       let ss = intercalate ", " . fmap show <$> sugg
       pure $ take 5 (ms ++ ss)
 
-    findMatchingNouns :: Checking [[UserName]]
+    findMatchingNouns :: Checking [[QualName]]
     findMatchingNouns = do
       -- TODO
       pure []
@@ -455,7 +465,7 @@ check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = do
       (Kerny, _) -> track "Kerny" $ aux Kerny kclup ty
   pure (((), ()), ((), unders))
  where
-  aux :: Modey m -> (UserName -> UserName -> Checking (CtorArgs m)) -> Val Z -> Checking ()
+  aux :: Modey m -> (QualName -> QualName -> Checking (CtorArgs m)) -> Val Z -> Checking ()
   aux my lup ty = do
     VCon tycon tyargs <- track "In forked aux for check' Con" $ eval S0 ty
     (CArgs pats nFree _ argTypeRo) <- track "forked aux doing lup" $ lup vcon tycon
@@ -487,7 +497,7 @@ check' (Simple tm) ((), (hungry, ty):unders) = do
   case (?my, ty, tm) of
     -- The only SimpleType that checks against a kind is a Nat
     (Braty, Left Nat, Num n) -> do
-      (_, _, [(dangling, _)], _) <- next "" (Const (Num n)) (S0,Some (Zy :* S0))
+      (_, _, [(dangling, _)], _) <- next "const" (Const (Num n)) (S0,Some (Zy :* S0))
                                     R0 (REx ("value", Nat) R0)
       let val = VNum (nConstant (fromIntegral n))
       defineSrc dangling val
@@ -498,17 +508,10 @@ check' (Simple tm) ((), (hungry, ty):unders) = do
     _ -> do
       let vty = biType @m ty
       simpleCheck ?my vty tm
-      (_, _, [(dangling, _)], _) <- anext @m "" (Const tm) (S0,Some (Zy :* S0))
+      (_, _, [(dangling, _)], _) <- anext @m "const" (Const tm) (S0,Some (Zy :* S0))
                                      R0 (RPr ("value", vty) R0)
       wire (dangling, vty, hungry)
       pure (((), ()), ((), unders))
-check' Hope ((), ((tgt, ty):unders)) = case (?my, ty) of
-  (Braty, Left _k) -> do
-    fc <- req AskFC
-    req (ANewHope (toEnd tgt, fc))
-    pure (((), ()), ((), unders))
-  (Braty, Right _ty) -> typeErr "Can only infer kinded things with !"
-  (Kerny, _) -> typeErr "Won't infer kernel typed !"
 check' FanOut ((p, ty):overs, ()) = do
   ty <- eval S0 (binderToValue ?my ty)
   case ty of
@@ -564,8 +567,7 @@ check' FanIn (overs, (tgt, ty):unders) = do
     let k = case my of
           Kerny -> Dollar []
           Braty -> Star []
-    -- ALAN merge conflict merge, I added (Zy :* S0 :* S0) but is it correct??
-    typeEq (show FanIn) (Zy :* S0 :* S0) k elTy (binderToValue my overTy)
+    typeEq (show FanIn) k elTy (binderToValue my overTy)
     let tailTy = TVec elTy (VNum (nConstant (n - 1)))
     (_, [(hungryHead, _), (hungryTail, tailTy)], [(danglingResult, _)], _) <- anext "faninNodes" (Constructor (plain "cons")) (S0, Some (Zy :* S0))
       (RPr ("head", elTy) (RPr ("tail", tailTy) R0) :: Ro m Z Z)
@@ -669,7 +671,13 @@ check' (Of n e) ((), unders) = case ?my of
       (elems, unders, rightUnders) <- getVecs len unders
       pure ((tgt, el):elems, (tgt, ty):unders, rightUnders)
   getVecs _ unders = pure ([], [], unders)
-
+check' Hope ((), (NamedPort hope _, ty):unders) = case (?my, ty) of
+  (Braty, Left _k) -> do
+    fc <- req AskFC
+    req (ANewHope hope fc)
+    pure (((), ()), ((), unders))
+  (Braty, Right _ty) -> typeErr "Can only infer kinded things with !"
+  (Kerny, _) -> typeErr "Won't infer kernel typed !"
 check' tm _ = error $ "check' " ++ show tm
 
 
@@ -730,27 +738,23 @@ checkBody :: (CheckConstraints m UVerb, EvMode m, ?my :: Modey m)
           -> FunBody Term UVerb
           -> CTy m Z -- Function type
           -> Checking Src
-checkBody fnName body cty = case body of
-  NoLhs tm -> do
-    ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
-      (((), ()), leftovers) <- check tm conns
-      checkConnectorsUsed (fcOf tm, fcOf tm) (show tm) conns leftovers
-    pure src
-  Clauses (c :| cs) -> do
-    fc <- req AskFC
-    ((box, _), _) <- makeBox (fnName ++ ".box") cty $ \conns -> do
-      let tm = Lambda c cs
-      (((), ()), leftovers) <- check (WC fc tm) conns
-      checkConnectorsUsed (bimap fcOf fcOf c) (show tm) conns leftovers
-    pure box
-  Undefined -> err (InternalError "Checking undefined clause")
- where
-  checkConnectorsUsed _ _ _ ([], []) = pure ()
-  checkConnectorsUsed (_, tmFC) tm (_, unders) ([], rightUnders) = localFC tmFC $
-    let numUsed = length unders - length rightUnders in
-     err (TypeMismatch tm (showRow unders) (showRow (take numUsed unders)))
-  checkConnectorsUsed (absFC, _) _ _ (rightOvers, _) = localFC absFC $
-    typeErr ("Inputs " ++ showRow rightOvers ++ " weren't used")
+checkBody fnName body cty = do
+  (tm, (absFC, tmFC)) <- case body of
+    NoLhs tm -> pure (tm, (fcOf tm, fcOf tm))
+    Clauses (c@(abs, tm) :| cs) -> do
+      fc <- req AskFC
+      pure (WC fc (Lambda c cs), (fcOf abs, fcOf tm))
+    Undefined -> err (InternalError "Checking undefined clause")
+  ((src, _), _) <- makeBox (fnName ++ ".box") cty $ \conns@(_, unders) -> do
+    (((), ()), leftovers) <- check tm conns
+    case leftovers of
+      ([], []) -> pure ()
+      ([], rightUnders) -> localFC tmFC $
+        let numUsed = length unders - length rightUnders
+        in err (TypeMismatch (show tm) (showRow unders) (showRow (take numUsed unders)))
+      (rightOvers, _) -> localFC absFC $
+        typeErr ("Inputs " ++ showRow rightOvers ++ " weren't used")
+  pure src
 
 -- Constructs row from a list of ends and types. Uses standardize to ensure that dependency is
 -- detected. Fills in the first bot ends from a stack. The stack grows every time we go under
@@ -814,7 +818,7 @@ kindCheck ((hungry, k@(TypeFor m [])):unders) (Con c arg) = req (TLup (m, c)) >>
         -- the thing we *do* define kindOut as
 
         (_, argUnders, [(kindOut,_)], (_ :<< _va, _)) <-
-          next "" Hypo (S0, Some (Zy :* S0)) aliasArgs (REx ("type",Star []) R0)
+          next "kc_alias" Hypo (S0, Some (Zy :* S0)) aliasArgs (REx ("type",Star []) R0)
         -- arg is a juxtaposition
         (args, emptyUnders) <- kindCheck (second (\(Left k) -> k) <$> argUnders) (unWC arg)
         ensureEmpty "alias args" emptyUnders
@@ -884,7 +888,7 @@ kindCheck unders (Emb (WC fc (Var v))) = localFC fc $ vlup v >>= f unders
   f _ (x:_) = err $ InternalError $ "Kindchecking a row which contains " ++ show x
 -- TODO: Add other operations on numbers
 kindCheck ((hungry, Nat):unders) (Simple (Num n)) | n >= 0 = do
-  (_, _, [(dangling, _)], _) <- next "" (Const (Num n)) (S0,Some (Zy :* S0)) R0 (REx ("value", Nat) R0)
+  (_, _, [(dangling, _)], _) <- next "const" (Const (Num n)) (S0,Some (Zy :* S0)) R0 (REx ("value", Nat) R0)
   let value = VNum (nConstant (fromIntegral n))
   defineTgt hungry value
   defineSrc dangling value
@@ -987,8 +991,8 @@ kindCheckRow' my ez@(ny :* s) env (name, i) ((p, bty):rest) = case (my, bty) of
 
 -- Look for vectors to produce better error messages for mismatched lengths
 -- in terms or patterns.
-detectVecErrors :: UserName  -- Term constructor name
-                -> UserName  -- Type constructor name
+detectVecErrors :: QualName  -- Term constructor name
+                -> QualName  -- Type constructor name
                 -> [Val Z]   -- Type arguments
                 -> [ValPat]  -- Patterns the type arguments are checked against
                 -> Val Z     -- Type
@@ -1095,13 +1099,13 @@ abstractPattern my (dangling, bty) pat@(PCon pcon abst) = case (my, bty) of
   helper :: Modey m
          -> Val Z
          -> TypeKind
-         -> (UserName -> UserName -> Checking (CtorArgs m))
+         -> (QualName -> QualName -> Checking (CtorArgs m))
          -> Checking (Env (EnvData m))
   helper my v k lup = standardise k v >>=
                       throwLeft . unpackTypeConstructor >>=
                       abstractCon my lup
 
-  unpackTypeConstructor :: Val Z -> Either ErrorMsg (UserName, [Val Z])
+  unpackTypeConstructor :: Val Z -> Either ErrorMsg (QualName, [Val Z])
   unpackTypeConstructor (VCon tycon tyargs) = pure (tycon, tyargs)
   unpackTypeConstructor ty = Left (PattErr $ unwords ["Couldn't resolve pattern"
                                                      ,show pat
@@ -1109,8 +1113,8 @@ abstractPattern my (dangling, bty) pat@(PCon pcon abst) = case (my, bty) of
                                                      ,show ty])
 
   abstractCon :: Modey m
-              -> (UserName -> UserName -> Checking (CtorArgs m))
-              -> (UserName, [Val Z])
+              -> (QualName -> QualName -> Checking (CtorArgs m))
+              -> (QualName, [Val Z])
               -> Checking (Env (EnvData m))
   abstractCon my lup (tycon, tyargs) = do
     let ty = VCon tycon tyargs
@@ -1147,15 +1151,15 @@ run ve initStore ns m = do
                 , kconstructors = kernelConstructors
                 , typeConstructors = defaultTypeConstructors
                 , aliasTable = M.empty
-                , hopeSet = M.empty
+                , hopes = M.empty
                 , captureSets = M.empty
                 }
   (a,ctx,(holes, graph)) <- handler (localNS ns m) ctx mempty
   let tyMap = typeMap $ store ctx
-  -- If the hopeSet has any remaining holes with kind Nat, we need to abort.
+  -- If the `hopes` set has any remaining holes with kind Nat, we need to abort.
   -- Even though we didn't need them for typechecking problems, our runtime
   -- behaviour depends on the values of the holes, which we can't account for.
-  case M.toList $ M.filterWithKey (\e _ -> isNatKinded tyMap e) (hopeSet ctx) of
+  case M.toList $ M.filterWithKey (\e _ -> isNatKinded tyMap (InEnd e)) (hopes ctx) of
     [] -> pure (a, (holes, store ctx, graph, captureSets ctx))
     -- Just use the FC of the first hole while we don't have the capacity to
     -- show multiple error locations

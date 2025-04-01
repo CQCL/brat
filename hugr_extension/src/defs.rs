@@ -6,12 +6,14 @@ use hugr::{
     extension::{
         prelude::USIZE_T,
         simple_op::{MakeOpDef, OpLoadError},
-        OpDef, SignatureError, SignatureFromArgs, SignatureFunc,
+        ExtensionId, OpDef, SignatureError, SignatureFromArgs, SignatureFunc,
     },
     ops::NamedOp,
     std_extensions::arithmetic::int_types::INT_TYPES,
     std_extensions::collections::list_type,
-    types::{type_param::TypeParam, FunctionType, PolyFuncType, Type, TypeArg, TypeBound},
+    types::{
+        type_param::TypeParam, FuncValueType, PolyFuncTypeRV, Type, TypeArg, TypeBound, TypeEnum,
+    },
 };
 
 use lazy_static::lazy_static;
@@ -76,7 +78,7 @@ impl FromStr for BratOpDef {
 
 impl MakeOpDef for BratOpDef {
     fn from_def(op_def: &OpDef) -> Result<Self, OpLoadError> {
-        hugr::extension::simple_op::try_from_name(op_def.name())
+        hugr::extension::simple_op::try_from_name(op_def.name(), &super::EXTENSION_ID)
     }
 
     fn signature(&self) -> SignatureFunc {
@@ -91,15 +93,18 @@ impl MakeOpDef for BratOpDef {
                 let sig = ctor.signature();
                 let input = sig.body().output(); // Ctor output is input for the test
                 let output = Type::new_sum(vec![input.clone(), sig.body().input().clone()]);
-                PolyFuncType::new(sig.params(), FunctionType::new(input.clone(), vec![output]))
-                    .into()
-            },
+                PolyFuncTypeRV::new(
+                    sig.params(),
+                    FuncValueType::new(input.clone(), vec![output]),
+                )
+                .into()
+            }
             Lluf => FunctionType::new(vec![U64.clone()], vec![U64.clone()]).into(),
-            Replicate => PolyFuncType::new(
+            Replicate => PolyFuncTypeRV::new(
                 [TypeParam::Type {
                     b: TypeBound::Copyable,
                 }],
-                FunctionType::new(
+                FuncValueType::new(
                     vec![USIZE_T, Type::new_var_use(0, TypeBound::Copyable)],
                     vec![list_type(Type::new_var_use(0, TypeBound::Copyable))],
                 ),
@@ -107,17 +112,24 @@ impl MakeOpDef for BratOpDef {
             .into(),
         }
     }
+
+    fn extension(&self) -> ExtensionId {
+        super::EXTENSION_ID.clone()
+    }
 }
 
 /// Binary compute_signature function for the `Hole` op
 struct HoleSigFun();
 impl SignatureFromArgs for HoleSigFun {
-    fn compute_signature(&self, arg_values: &[TypeArg]) -> Result<PolyFuncType, SignatureError> {
+    fn compute_signature(&self, arg_values: &[TypeArg]) -> Result<PolyFuncTypeRV, SignatureError> {
         // The Hole op expects a nat identifier and two type sequences specifiying
         // the signature of the hole
         match arg_values {
-            [TypeArg::BoundedNat { n: _ }, input, output] => {
-                Ok(FunctionType::new(row_from_arg(input)?, row_from_arg(output)?).into())
+            [TypeArg::BoundedNat { n: _ }, TypeArg::Type { ty: fun_ty }] => {
+                let TypeEnum::Function(sig) = fun_ty.as_type_enum().clone() else {
+                    return Err(SignatureError::InvalidTypeArgs);
+                };
+                Ok(PolyFuncTypeRV::new([], *sig))
             }
             _ => Err(SignatureError::InvalidTypeArgs),
         }
@@ -125,8 +137,8 @@ impl SignatureFromArgs for HoleSigFun {
 
     fn static_params(&self) -> &[TypeParam] {
         lazy_static! {
-            static ref PARAMS: [TypeParam; 3] =
-                [TypeParam::max_nat(), list_of_type(), list_of_type()];
+            static ref PARAMS: [TypeParam; 2] =
+                [TypeParam::max_nat(), TypeParam::Type { b: TypeBound::Any }];
         }
         PARAMS.as_slice()
     }
@@ -135,16 +147,18 @@ impl SignatureFromArgs for HoleSigFun {
 /// Binary compute_signature function for the `Substitute` op
 struct SubstituteSigFun();
 impl SignatureFromArgs for SubstituteSigFun {
-    fn compute_signature(&self, arg_values: &[TypeArg]) -> Result<PolyFuncType, SignatureError> {
+    fn compute_signature(&self, arg_values: &[TypeArg]) -> Result<PolyFuncTypeRV, SignatureError> {
         // The Substitute op expects a function signature and a list of hole signatures
         match arg_values {
-            [fun_sig, TypeArg::Sequence { elems: hole_sigs }] => {
-                let fun_ty = Type::new_function(sig_from_arg(fun_sig)?);
-                let mut inputs = vec![fun_ty.clone()];
+            [TypeArg::Type { ty: outer_fun_ty }, TypeArg::Sequence { elems: hole_sigs }] => {
+                let mut inputs = vec![outer_fun_ty.clone()];
                 for sig in hole_sigs {
-                    inputs.push(Type::new_function(sig_from_arg(sig)?))
+                    let TypeArg::Type { ty: inner_fun_ty } = sig else {
+                        return Err(SignatureError::InvalidTypeArgs);
+                    };
+                    inputs.push(inner_fun_ty.clone())
                 }
-                Ok(FunctionType::new(inputs, vec![fun_ty]).into())
+                Ok(FuncValueType::new(inputs, vec![outer_fun_ty.clone()]).into())
             }
             _ => Err(SignatureError::InvalidTypeArgs),
         }
@@ -153,9 +167,11 @@ impl SignatureFromArgs for SubstituteSigFun {
     fn static_params(&self) -> &[TypeParam] {
         lazy_static! {
             static ref PARAMS: [TypeParam; 2] = [
-                tuple_of_list_of_type(),
+                // The signature of outer functions
+                TypeParam::Type { b: TypeBound::Any },
+                // A list of signatures for the inner functions which fill in holes
                 TypeParam::List {
-                    param: Box::new(tuple_of_list_of_type())
+                    param: Box::new(TypeParam::Type { b: TypeBound::Any }),
                 },
             ];
         }
@@ -166,7 +182,7 @@ impl SignatureFromArgs for SubstituteSigFun {
 /// Binary compute_signature function for the `Partial` op
 struct PartialSigFun();
 impl SignatureFromArgs for PartialSigFun {
-    fn compute_signature(&self, arg_values: &[TypeArg]) -> Result<PolyFuncType, SignatureError> {
+    fn compute_signature(&self, arg_values: &[TypeArg]) -> Result<PolyFuncTypeRV, SignatureError> {
         // The Partial op expects a type sequence specifying the supplied partial inputs, a type
         // sequence specifiying the remaining inputs and a type sequence for the function outputs.
         match arg_values {
@@ -175,13 +191,13 @@ impl SignatureFromArgs for PartialSigFun {
                 let other_inputs = row_from_arg(other_inputs)?;
                 let outputs = row_from_arg(outputs)?;
                 let res_func =
-                    Type::new_function(FunctionType::new(other_inputs.clone(), outputs.clone()));
-                let mut inputs = vec![Type::new_function(FunctionType::new(
+                    Type::new_function(FuncValueType::new(other_inputs.clone(), outputs.clone()));
+                let mut inputs = vec![Type::new_function(FuncValueType::new(
                     [partial_inputs.clone(), other_inputs].concat(),
                     outputs,
                 ))];
                 inputs.extend(partial_inputs);
-                Ok(FunctionType::new(inputs, vec![res_func]).into())
+                Ok(FuncValueType::new(inputs, vec![res_func]).into())
             }
             _ => Err(SignatureError::InvalidTypeArgs),
         }
@@ -198,11 +214,11 @@ impl SignatureFromArgs for PartialSigFun {
 /// Binary compute_signature function for the `Panic` op
 struct PanicSigFun();
 impl SignatureFromArgs for PanicSigFun {
-    fn compute_signature(&self, arg_values: &[TypeArg]) -> Result<PolyFuncType, SignatureError> {
+    fn compute_signature(&self, arg_values: &[TypeArg]) -> Result<PolyFuncTypeRV, SignatureError> {
         // The Panic op expects two type sequences specifiying the signature of the op
         match arg_values {
             [input, output] => {
-                Ok(FunctionType::new(row_from_arg(input)?, row_from_arg(output)?).into())
+                Ok(FuncValueType::new(row_from_arg(input)?, row_from_arg(output)?).into())
             }
             _ => Err(SignatureError::InvalidTypeArgs),
         }
@@ -236,24 +252,8 @@ fn row_from_arg(arg: &TypeArg) -> Result<Vec<Type>, SignatureError> {
     }
 }
 
-fn sig_from_arg(arg: &TypeArg) -> Result<FunctionType, SignatureError> {
-    match arg {
-        TypeArg::Sequence { elems } if elems.len() == 2 => Ok(FunctionType::new(
-            row_from_arg(&elems[0])?,
-            row_from_arg(&elems[1])?,
-        )),
-        _ => Err(SignatureError::InvalidTypeArgs),
-    }
-}
-
 fn list_of_type() -> TypeParam {
     TypeParam::List {
         param: Box::new(TypeParam::Type { b: TypeBound::Any }),
-    }
-}
-
-fn tuple_of_list_of_type() -> TypeParam {
-    TypeParam::Tuple {
-        params: vec![list_of_type(), list_of_type()],
     }
 }

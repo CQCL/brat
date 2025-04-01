@@ -1,5 +1,6 @@
 module Brat.Error (ParseError(..)
                   ,LengthConstraintF(..), LengthConstraint
+                  ,BracketErrMsg(..)
                   ,ErrorMsg(..)
                   ,Error(..), showError
                   ,SrcErr(..)
@@ -9,6 +10,8 @@ module Brat.Error (ParseError(..)
                   ) where
 
 import Brat.FC
+import Data.Bracket
+import Brat.Syntax.Port (PortName)
 
 import Data.List (intercalate)
 import System.Exit
@@ -24,6 +27,28 @@ instance Show a => Show (LengthConstraintF a) where
   show (LongerThan a) = "(> " ++ show a ++ ")"
 
 type LengthConstraint = LengthConstraintF Int
+
+data BracketErrMsg
+  = EOFInBracket BracketType -- FC in enclosing `Err` should point to the open bracket
+  -- FC here is opening; closing FC in the enclosing `Err`
+  | OpenCloseMismatch (FC, BracketType) BracketType
+  | UnexpectedClose BracketType
+
+instance Show BracketErrMsg where
+  show (EOFInBracket b) = "File ended before this " ++ showOpen b ++ " was closed"
+  show (OpenCloseMismatch (openFC, bOpen) bClose) = unwords ["This"
+                                                            ,showClose bClose
+                                                            ,"doesn't match the"
+                                                            ,showOpen bOpen
+                                                            ,"at"
+                                                            ,show openFC
+                                                            ]
+  show (UnexpectedClose b) = unwords ["There is no"
+                                     ,showOpen b
+                                     ,"for this"
+                                     ,showClose b
+                                     ,"to close"
+                                     ]
 
 data ErrorMsg
  = TypeErr String
@@ -60,8 +85,8 @@ data ErrorMsg
  | FileNotFound String [String]
  | SymbolNotFound String String
  | InternalError String
- | AmbiguousPortPull String String
- | BadPortPull String
+ | AmbiguousPortPull PortName String
+ | BadPortPull PortName String
  | VConNotFound String
  | TyConNotFound String String
  | MatchingOnTypes
@@ -78,11 +103,12 @@ data ErrorMsg
  | UnreachableBranch
  | UnrecognisedTypeCon String
  | WrongModeForType String
- | RemainingNatHopes [String]
  -- For thunks which don't address enough inputs, or produce enough outputs.
  -- The argument is the row of unused connectors
  | ThunkLeftOvers String
  | ThunkLeftUnders String
+ | BracketErr BracketErrMsg
+ | RemainingNatHopes [String]
 
 instance Show ErrorMsg where
   show (TypeErr x) = "Type error: " ++ x
@@ -140,7 +166,7 @@ instance Show ErrorMsg where
   show (SymbolNotFound s i) = "Symbol `" ++ s ++ "` not found in `" ++ i ++ "`"
   show (InternalError x) = "Internal error: " ++ x
   show (AmbiguousPortPull p row) = "Port " ++ p ++ " is ambiguous in " ++ row
-  show (BadPortPull x) = "Port " ++ x ++ " can't be pulled because it depends on a previous port"
+  show (BadPortPull p row) = "Port not found: " ++ p ++ " in " ++ row
   show (VConNotFound x) = "Value constructor not recognised: " ++ x
   show (TyConNotFound ty v) = show v ++ " is not a valid constructor for type " ++ ty
   show MatchingOnTypes = "Trying to pattern match on a type"
@@ -164,11 +190,10 @@ instance Show ErrorMsg where
   -- TODO: Make all of these use existing errors
   show (UnificationError str) = "Unification error: " ++ str
   show UnreachableBranch = "Branch cannot be reached"
-  show (RemainingNatHopes hs) = unlines ("Expected to work out values for these holes:":indent (indent hs))
   show (ThunkLeftOvers overs) = "Expected function to address all inputs, but " ++ overs ++ " wasn't used"
   show (ThunkLeftUnders unders) = "Expected function to return additional values of type: " ++ unders
-
-indent = fmap ("  " ++)
+  show (BracketErr msg) = show msg
+  show (RemainingNatHopes hs) = unlines ("Expected to work out values for these holes:":(("    " ++) <$> hs))
 
 data Error = Err { fc  :: Maybe FC
                  , msg :: ErrorMsg

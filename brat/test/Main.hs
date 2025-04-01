@@ -18,7 +18,7 @@ import Test.TypeArith
 import Brat.Checker.Monad
 import Brat.Syntax.Common
 import Brat.Syntax.Value
-import Brat.UserName
+import Brat.QualName
 import Brat.Error
 import Control.Monad.Freer
 import qualified Data.Set as S

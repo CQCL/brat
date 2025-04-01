@@ -14,15 +14,15 @@ import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Simple
 import Brat.Syntax.Port (ToEnd(..))
 import Brat.Syntax.Value
-import Brat.UserName
 import Bwd
 import Hasochism
 import Util (log2)
 
 import Control.Monad.Freer
-import Data.Functor ((<&>))
+import Control.Monad.State.Lazy (StateT(..), runStateT)
 import Data.Bifunctor
-import Data.List (intercalate)
+import Data.Foldable (foldrM)
+import Data.List (partition)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -31,7 +31,10 @@ import Prelude hiding (last)
 simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Checking ()
 simpleCheck my ty tm = case (my, ty) of
   (Braty, VApp (VPar e) _) -> do
-    isHope <- req AskHopeSet <&> M.member e
+    hopes <- req AskHopes
+    let isHope = case e of
+                   InEnd i -> M.member i hopes
+                   ExEnd _ -> False
     if isHope then
       case tm of
         Float _ -> defineEnd e TFloat
@@ -102,43 +105,29 @@ pullPortsRow :: Show ty
              => [PortName]
              -> [(NamedPort e, ty)]
              -> Checking [(NamedPort e, ty)]
-pullPortsRow = pullPorts portName showRow
+pullPortsRow = pullPorts (portName . fst) showRow
 
 pullPortsSig :: Show ty
              => [PortName]
              -> [(PortName, ty)]
              -> Checking [(PortName, ty)]
-pullPortsSig = pullPorts id showSig
+pullPortsSig = pullPorts fst showSig
 
-pullPorts :: forall a ty. Show ty
-          => (a -> PortName) -- A way to get a port name for each element
-          -> ([(a, ty)] -> String) -- A way to print the list
+pullPorts :: forall a ty
+           . (a -> PortName) -- A way to get a port name for each element
+          -> ([a] -> String) -- A way to print the list
           -> [PortName] -- Things to pull to the front
-          -> [(a, ty)]  -- The list to rearrange
-          -> Checking [(a, ty)]
-pullPorts _ _ [] types = pure types
-pullPorts toPort showFn (p:ports) types = do
-  (x, types) <- pull1Port p types
-  (x:) <$> pullPorts toPort showFn ports types
+          -> [a]  -- The list to rearrange
+          -> Checking [a]
+pullPorts toPort showFn to_pull types =
+  -- the "state" here is the things still available to be pulled
+  uncurry (++) <$> runStateT (mapM pull1Port to_pull) types
  where
-  pull1Port :: PortName
-            -> [(a, ty)]
-            -> Checking ((a, ty), [(a, ty)])
-  pull1Port p [] = fail $ "Port not found: " ++ p ++ " in " ++ showFn types
-  pull1Port p (x@(a,_):xs)
-   | p == toPort a
-   = if p `elem` (toPort . fst <$> xs)
-     then err (AmbiguousPortPull p (showFn (x:xs)))
-     else pure (x, xs)
-   | otherwise = second (x:) <$> pull1Port p xs
-
-combineDisjointEnvs :: M.Map UserName v -> M.Map UserName v -> Checking (M.Map UserName v)
-combineDisjointEnvs l r =
-  let commonKeys = S.intersection (M.keysSet l) (M.keysSet r)
-  in if S.null commonKeys
-    then Ret $ M.union l r
-    else typeErr ("Variable(s) defined twice: " ++
-      intercalate "," (map show $ S.toList commonKeys))
+  pull1Port :: PortName -> StateT [a] Checking a
+  pull1Port p = StateT $ \available -> case partition ((== p) . toPort) available of
+      ([], _) -> err $ BadPortPull p (showFn available)
+      ([found], remaining) -> pure (found, remaining)
+      (_, _) -> err $ AmbiguousPortPull p (showFn available)
 
 ensureEmpty :: Show ty => String -> [(NamedPort e, ty)] -> Checking ()
 ensureEmpty _ [] = pure ()
@@ -268,111 +257,65 @@ getThunks :: Modey m
                       ,Overs m UVerb
                       )
 getThunks _ [] = pure ([], [], [])
-getThunks Braty row@((src, Right ty):rest) = req AskHopeSet >>= \h -> eval S0 ty >>= \case
-  VApp (VPar e) _ | M.member e h -> mkYield "getThunks" (S.singleton e) >> getThunks Braty row
+getThunks Braty row@((src, Right ty):rest) = req AskHopes >>= \h -> eval S0 ty >>= \case
+  VApp (VPar e@(InEnd i)) _ | M.member i h -> mkYield "getThunks" (S.singleton e) >> getThunks Braty row
   ty -> do
-    (src, VFun Braty (ss :->> ts)) <- vectorise (src, ty)
+    (src, ss :->> ts) <- vectorise Braty (src, ty)
     (node, unders, overs, _) <- let ?my = Braty in
-                                  anext "" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
+                                  anext "Eval" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
     (nodes, unders', overs') <- getThunks Braty rest
     pure (node:nodes, unders <> unders', overs <> overs')
--- TODO we probably want to check against the HopeSet here too, good to refactor+common-up somehow
-getThunks Kerny row@((src, Right ty):rest) = (eval S0 ty >>= vectorise . (src,)) >>= \case
-  (src, VFun Kerny (ss :->> ts)) -> do
-    (node, unders, overs, _) <- let ?my = Kerny in anext "" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
-    (nodes, unders', overs') <- getThunks Kerny rest
-    pure (node:nodes, unders <> unders', overs <> overs')
-  -- These shouldn't happen (as this is return value of vectorise - can we return something more specific?)
-  (_, VFun _ _) -> err $ ExpectedThunk (showMode Kerny) (showRow row)
-  v -> typeErr $ "Force called on non-(kernel)-thunk: " ++ show v
+getThunks Kerny ((src, Right ty):rest) = do
+  -- TODO we probably want to check against the HopeSet here too, good to refactor+common-up somehow
+  ty <- eval S0 ty
+  (src, ss :->> ts) <- vectorise Kerny (src,ty)
+  (node, unders, overs, _) <- let ?my = Kerny in anext "Splice" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
+  (nodes, unders', overs') <- getThunks Kerny rest
+  pure (node:nodes, unders <> unders', overs <> overs')
 getThunks Braty ((src, Left (Star args)):rest) = do
   (node, unders, overs) <- case bwdStack (B0 <>< args) of
     Some (_ :* stk) -> do
       let (ri,ro) = kindArgRows stk
-      (node, unders, overs, _) <- next "" (Eval (end src)) (S0, Some (Zy :* S0)) ri ro
+      (node, unders, overs, _) <- next "Eval" (Eval (end src)) (S0, Some (Zy :* S0)) ri ro
       pure (node, unders, overs)
   (nodes, unders', overs') <- getThunks Braty rest
   pure (node:nodes, unders <> unders', overs <> overs')
 getThunks m ro = err $ ExpectedThunk (showMode m) (showRow ro)
 
 -- The type given here should be normalised
-vecLayers :: Val Z -> Checking ([(Src, NumVal (VVar Z))] -- The sizes of the vector layers
-                               ,Some (Modey :* Flip CTy Z) -- The function type at the end
-                               )
-vecLayers (TVec ty (VNum n)) = do
-  src <- mkStaticNum n
-  (layers, fun) <- vecLayers ty
-  pure ((src, n):layers, fun)
-vecLayers (VFun my cty) = pure ([], Some (my :* Flip cty))
-vecLayers ty = typeErr $ "Expected a function or vector of functions, got " ++ show ty
+vecLayers :: Modey m -> Val Z -> Checking ([(Src, NumVal (VVar Z))] -- The sizes of the vector layers
+                                          ,CTy m Z -- The function type at the end
+                                          )
+vecLayers my (TVec ty (VNum n)) = do
+  src <- buildNatVal n
+  first ((src, n):) <$> vecLayers my ty
+vecLayers Braty (VFun Braty cty) = pure ([], cty)
+vecLayers Kerny (VFun Kerny cty) = pure ([], cty)
+vecLayers my ty = typeErr $ "Expected a " ++ showMode my ++ "function or vector of functions, got " ++ show ty
 
-mkStaticNum :: NumVal (VVar Z) -> Checking Src
-mkStaticNum n@(NumValue c gro) = do
-  (_, [], [(constSrc,_)], _) <- next "const" (Const (Num (fromIntegral c))) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
-  src <- case gro of
-    Constant0 -> pure constSrc
-    StrictMonoFun sm -> do
-      (_, [(lhs,_),(rhs,_)], [(src,_)], _) <- next "add_const" (ArithNode Add) (S0, Some (Zy :* S0))
-                                              (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0))
-                                              (RPr ("value", TNat) R0)
-      smSrc <- mkStrictMono sm
-      wire (constSrc, TNat, lhs)
-      wire (smSrc, TNat, rhs)
-      pure src
-  defineSrc src (VNum n)
-  pure src
+vectorise :: forall m. Modey m -> (Src, Val Z) -> Checking (Src, CTy m Z)
+vectorise my (src, ty) = do
+  (layers, cty) <- vecLayers my ty
+  modily my $ foldrM mkMapFun (src, cty) layers
  where
-  mkStrictMono :: StrictMono (VVar Z) -> Checking Src
-  mkStrictMono (StrictMono k mono) = do
-    (_, [], [(constSrc,_)], _) <- next "2^k" (Const (Num (2^k))) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
-    (_, [(lhs,_),(rhs,_)], [(src,_)], _) <- next "mult_const" (ArithNode Mul) (S0, Some (Zy :* S0))
-                                            (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0))
-                                            (RPr ("value", TNat) R0)
-    monoSrc <- mkMono mono
-    wire (constSrc, TNat, lhs)
-    wire (monoSrc, TNat, rhs)
-    pure src
-
-  mkMono :: Monotone (VVar Z) -> Checking Src
-  mkMono (Linear (VPar (ExEnd e))) = pure (NamedPort e "mono")
-  mkMono (Full sm) = do
-    (_, [], [(twoSrc,_)], _) <- next "2" (Const (Num 2)) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
-    (_, [(lhs,_),(rhs,_)], [(powSrc,_)], _) <- next "2^" (ArithNode Pow) (S0, Some (Zy :* S0))
-                                               (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0))
-                                               (RPr ("value", TNat) R0)
-    smSrc <- mkStrictMono sm
-    wire (twoSrc, TNat, lhs)
-    wire (smSrc, TNat, rhs)
-
-    (_, [], [(oneSrc,_)], _) <- next "1" (Const (Num 1)) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
-    (_, [(lhs,_),(rhs,_)], [(src,_)], _) <- next "n-1" (ArithNode Sub) (S0, Some (Zy :* S0))
-                                            (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0))
-                                            (RPr ("value", TNat) R0)
-    wire (powSrc, TNat, lhs)
-    wire (oneSrc, TNat, rhs)
-    pure src
-
-vectorise :: (Src, Val Z) -> Checking (Src, Val Z)
-vectorise (src, ty) = do
-  (layers, Some (my :* Flip cty)) <- vecLayers ty
-  modily my $ mkMapFuns (src, VFun my cty) layers
- where
-  mkMapFuns :: (Src, Val Z) -- The input to the mapfun
-            -> [(Src, NumVal (VVar Z))] -- Remaining layers
-            -> Checking (Src, Val Z)
-  mkMapFuns over [] = pure over
-  mkMapFuns (valSrc, ty) ((lenSrc, len):layers) = do
-    (valSrc, ty@(VFun my cty)) <- mkMapFuns (valSrc, ty) layers
+  mkMapFun :: (Src, NumVal (VVar Z)) -- Layer to apply
+            -> (Src, CTy m Z) -- The input to this level of mapfun
+            -> Checking (Src, CTy m Z)
+  mkMapFun (lenSrc, len) (valSrc, cty) = do
     let weak1 = changeVar (Thinning (ThDrop ThNull))
     vecFun <- vectorisedFun len my cty
-    (_, [(lenTgt,_), (valTgt, _)], [(vectorSrc, Right vecTy)], _) <-
-      next "" MapFun (S0, Some (Zy :* S0))
+    (_, [(lenTgt,_), (valTgt, _)], [(vectorSrc, Right (VFun my' cty))], _) <-
+      next "MapFun" MapFun (S0, Some (Zy :* S0))
       (REx ("len", Nat) (RPr ("value", weak1 ty) R0))
       (RPr ("vector", weak1 vecFun) R0)
     defineTgt lenTgt (VNum len)
     wire (lenSrc, kindType Nat, lenTgt)
     wire (valSrc, ty, valTgt)
-    pure (vectorSrc, vecTy)
+    let vecCTy = case (my,my',cty) of
+          (Braty,Braty,cty) -> cty
+          (Kerny,Kerny,cty) -> cty
+          _ -> error "next returned wrong mode of computation type to that passed in"
+    pure (vectorSrc, vecCTy)
 
   vectorisedFun :: NumVal (VVar Z) -> Modey m -> CTy m Z -> Checking (Val Z)
   vectorisedFun nv my (ss :->> ts) = do
@@ -402,10 +345,10 @@ valueToBinder Braty = Right
 valueToBinder Kerny = id
 
 defineSrc :: Src -> Val Z -> Checking ()
-defineSrc src v = defineEnd (ExEnd (end src)) v
+defineSrc src = defineEnd (ExEnd (end src))
 
 defineTgt :: Tgt -> Val Z -> Checking ()
-defineTgt tgt v = defineEnd (InEnd (end tgt)) v
+defineTgt tgt = defineEnd (InEnd (end tgt))
 
 declareTgt :: Tgt -> Modey m -> BinderType m -> Checking ()
 declareTgt tgt my ty = req (Declare (InEnd (end tgt)) my ty False)
@@ -518,10 +461,98 @@ runArith _ _ _ = Nothing
 
 buildArithOp :: ArithOp -> Checking ((Tgt, Tgt), Src)
 buildArithOp op = do
-  (_, [(lhs,_), (rhs,_)], [(out,_)], _) <- next "" (ArithNode op) (S0, Some (Zy :* S0)) (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0)) (RPr ("value", TNat) R0)
+  (_, [(lhs,_), (rhs,_)], [(out,_)], _) <- next (show op) (ArithNode op) (S0, Some (Zy :* S0)) (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0)) (RPr ("value", TNat) R0)
   pure ((lhs, rhs), out)
 
 buildConst :: SimpleTerm -> Val Z -> Checking Src
 buildConst tm ty = do
-  (_, _, [(out,_)], _) <- next "" (Const tm) (S0, Some (Zy :* S0)) R0 (RPr ("value", ty) R0)
+  (_, _, [(out,_)], _) <- next "buildConst" (Const tm) (S0, Some (Zy :* S0)) R0 (RPr ("value", ty) R0)
   pure out
+
+buildNum :: Integer -> Checking Src
+buildNum n = buildConst (Num (fromIntegral n)) TNat
+
+-- Generate wiring to produce a dynamic instance of the numval argument
+-- N.B. In these functions, we wire using Req, rather than the `wire` function
+-- because we don't want it to do any extra evaluation.
+buildNatVal :: NumVal (VVar Z) -> Checking Src
+buildNatVal nv@(NumValue n gro) = case n of
+  0 -> buildGro gro
+  n -> do
+    nDangling <- buildNum n
+    ((lhs,rhs),out) <- buildArithOp Add
+    src <- buildGro gro
+    req $ Wire (end nDangling, TNat, end lhs)
+    req $ Wire (end src, TNat, end rhs)
+    defineSrc out (VNum (nPlus n (nVar (VPar (toEnd src)))))
+    pure out
+ where
+  buildGro :: Fun00 (VVar Z) -> Checking Src
+  buildGro Constant0 = buildNum 0
+  buildGro (StrictMonoFun sm) = buildSM sm
+
+  buildSM :: StrictMono (VVar Z) -> Checking Src
+  buildSM (StrictMono k mono) = do
+    factor <- buildNum $ 2 ^ k
+    -- Multiply mono by 2^k; note we could avoid this if k==0
+    ((lhs,rhs),out) <- buildArithOp Mul
+    monoDangling <- buildMono mono
+    req $ Wire (end factor, TNat, end lhs)
+    req $ Wire (end monoDangling, TNat, end rhs)
+    defineSrc out (VNum (n2PowTimes k (nVar (VPar (toEnd monoDangling)))))
+    pure out
+
+  buildMono :: Monotone (VVar Z) -> Checking Src
+  buildMono (Linear (VPar (ExEnd e))) = pure $ NamedPort e "numval"
+  buildMono (Full sm) = do
+    -- Calculate 2^n as `outPlus1`
+    two <- buildNum 2
+    dangling <- buildSM sm
+    ((lhs,rhs),outPlus1) <- buildArithOp Pow
+    req $ Wire (end two, TNat, end lhs)
+    req $ Wire (end dangling, TNat, end rhs)
+    -- Then subtract 1
+    one <- buildNum 1
+    ((lhs,rhs),out) <- buildArithOp Sub
+    req $ Wire (end outPlus1, TNat, end lhs)
+    req $ Wire (end one, TNat, end rhs)
+    defineSrc out (VNum (nFull (nVar (VPar (toEnd dangling)))))
+    pure out
+  buildMono _ = err . InternalError $ "Trying to build a non-closed nat value: " ++ show nv
+
+invertNatVal :: NumVal (VVar Z) -> Checking Tgt
+invertNatVal (NumValue up gro) = case up of
+  0 -> invertGro gro
+  _ -> do
+    ((lhs,rhs),out) <- buildArithOp Sub
+    upSrc <- buildNum up
+    req $ Wire (end upSrc, TNat, end rhs)
+    tgt <- invertGro gro
+    req $ Wire (end out, TNat, end tgt)
+    defineTgt tgt (VNum (nVar (VPar (toEnd out))))
+    defineTgt lhs (VNum (nPlus up (nVar (VPar (toEnd tgt)))))
+    pure lhs
+ where
+  invertGro Constant0 = error "Invariant violated: the numval arg to invertNatVal should contain a variable"
+  invertGro (StrictMonoFun sm) = invertSM sm
+
+  invertSM (StrictMono k mono) = case k of
+    0 -> invertMono mono
+    _ -> do
+      divisor <- buildNum (2 ^ k)
+      ((lhs,rhs),out) <- buildArithOp Div
+      tgt <- invertMono mono
+      req $ Wire (end out, TNat, end tgt)
+      req $ Wire (end divisor, TNat, end rhs)
+      defineTgt tgt (VNum (nVar (VPar (toEnd out))))
+      defineTgt lhs (VNum (n2PowTimes k (nVar (VPar (toEnd tgt)))))
+      pure lhs
+
+  invertMono (Linear (VPar (InEnd e))) = pure (NamedPort e "numval")
+  invertMono (Full sm) = do
+    (_, [(llufTgt,_)], [(llufSrc,_)], _) <- next "luff" (Prim ("BRAT","lluf")) (S0, Some (Zy :* S0)) (REx ("n", Nat) R0) (REx ("n", Nat) R0)
+    tgt <- invertSM sm
+    req $ Wire (end llufSrc, TNat, end tgt)
+    defineTgt tgt (VNum (nVar (VPar (toEnd llufSrc))))
+    defineTgt llufTgt (VNum (nFull (nVar (VPar (toEnd tgt)))))
+    pure llufTgt

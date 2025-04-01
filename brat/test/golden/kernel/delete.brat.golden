@@ -1,6 +1,6 @@
 Error in test/golden/kernel/delete.brat on line 2:
 deleteFst = { q0, q1 => q1 }
-            ^^^^^^^^^^^^^^^^
+              ^^^^^^^^^^^^
 
   Type error: Variable(s) q0 haven't been used
 

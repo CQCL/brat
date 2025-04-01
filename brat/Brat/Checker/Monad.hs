@@ -7,9 +7,9 @@ import Brat.Error (Error(..), ErrorMsg(..), dumbErr)
 import Brat.FC (FC)
 import Brat.Graph
 import Brat.Naming (fresh, split, Name, Namespace, FreshMonad(..))
+import Brat.QualName (QualName)
 import Brat.Syntax.Common
 import Brat.Syntax.Value
-import Brat.UserName (UserName)
 import Hasochism
 import Util
 
@@ -54,7 +54,7 @@ data CtxEnv = CtxEnv
   , locals :: VEnv
   }
 
-type HopeSet = M.Map End FC
+type Hopes = M.Map InPort FC
 
 type CaptureSets = M.Map Name VEnv
 
@@ -62,10 +62,9 @@ data Context = Ctx { globalVEnv :: VEnv
                    , store :: Store
                    , constructors :: ConstructorMap Brat
                    , kconstructors :: ConstructorMap Kernel
-                   , typeConstructors :: M.Map (Mode, UserName) [(PortName, TypeKind)]
-                   , aliasTable :: M.Map UserName Alias
-                   -- All the ends here should be targets
-                   , hopeSet :: HopeSet
+                   , typeConstructors :: M.Map (Mode, QualName) [(PortName, TypeKind)]
+                   , aliasTable :: M.Map QualName Alias
+                   , hopes :: Hopes
                    , captureSets :: CaptureSets
                    }
 
@@ -82,33 +81,34 @@ data CheckingSig ty where
   Throw   :: Error  -> CheckingSig a
   LogHole :: TypedHole -> CheckingSig ()
   AskFC   :: CheckingSig FC
-  VLup    :: UserName -> CheckingSig (Maybe [(Src, BinderType Brat)])
-  KLup    :: UserName -> CheckingSig (Maybe (Src, BinderType Kernel))
+  VLup    :: QualName -> CheckingSig (Maybe [(Src, BinderType Brat)])
+  KLup    :: QualName -> CheckingSig (Maybe (Src, BinderType Kernel))
   -- Lookup type constructors
-  TLup    :: (Mode, UserName) -> CheckingSig (Maybe [(PortName, TypeKind)])
+  TLup    :: (Mode, QualName) -> CheckingSig (Maybe [(PortName, TypeKind)])
   -- Lookup term constructor - ask whether a constructor builds a certain type
   CLup    :: FC -- File context for error reporting
-          -> UserName -- Value constructor
-          -> UserName  -- Type constructor
+          -> QualName -- Value constructor
+          -> QualName  -- Type constructor
           -> CheckingSig (CtorArgs Brat)
   -- Lookup kernel constructors
   KCLup   :: FC -- File context for error reporting
-          -> UserName -- Value constructor
-          -> UserName  -- Type constructor
+          -> QualName -- Value constructor
+          -> QualName  -- Type constructor
           -> CheckingSig (CtorArgs Kernel)
   -- Lookup an end in the Store
   ELup    :: End -> CheckingSig (Maybe (Val Z))
   -- Lookup an alias in the table
-  ALup    :: UserName -> CheckingSig (Maybe Alias)
-  TypeOf  :: End -> CheckingSig (EndType, Bool)
+  ALup    :: QualName -> CheckingSig (Maybe Alias)
+  TypeOf  :: End -> CheckingSig (EndType, Bool) -- Bool = is-skolem
   AddNode :: Name -> Node -> CheckingSig ()
   Wire    :: Wire -> CheckingSig ()
   KDone   :: CheckingSig ()
   AskVEnv :: CheckingSig CtxEnv
-  Declare :: End -> Modey m -> BinderType m -> Bool -> CheckingSig () -- Bool = is-skole
-  ANewHope :: (End, FC) -> CheckingSig ()
-  AskHopeSet :: CheckingSig HopeSet
-  AddCapture :: Name -> (UserName, [(Src, BinderType Brat)]) -> CheckingSig ()
+  Declare :: End -> Modey m -> BinderType m -> Bool -> CheckingSig () -- Bool = is-skolem
+  ANewHope :: InPort -> FC -> CheckingSig ()
+  AskHopes :: CheckingSig Hopes
+  RemoveHope :: InPort -> CheckingSig () -- ALAN ?
+  AddCapture :: Name -> (QualName, [(Src, BinderType Brat)]) -> CheckingSig ()
 
 wrapper :: (forall a. CheckingSig a -> Checking (Maybe a)) -> Checking v -> Checking v
 wrapper _ (Ret v) = Ret v
@@ -122,7 +122,7 @@ wrapper f (Fork d par c) = Fork d (wrapper f par) (wrapper f c)
 wrapper2 :: (forall a. CheckingSig a -> Maybe a) -> Checking v -> Checking v
 wrapper2 f = wrapper (\s -> pure (f s))
 
-localAlias :: (UserName, Alias) -> Checking v -> Checking v
+localAlias :: (QualName, Alias) -> Checking v -> Checking v
 localAlias (name, alias) = wrapper2 (\case
     ALup u | u == name -> Just (Just alias)
     _ -> Nothing)
@@ -138,13 +138,13 @@ localEnv = case ?my of
   Braty -> localVEnv
   Kerny -> \env m -> localKVar env (m <* req KDone)
 
-localVEnv :: M.Map UserName [(Src, BinderType Brat)] -> Checking v -> Checking v
+localVEnv :: M.Map QualName [(Src, BinderType Brat)] -> Checking v -> Checking v
 localVEnv ext = wrapper (\case
   (VLup x) | j@(Just _) <- M.lookup x ext -> pure $ Just j -- invoke continuation with j
   AskVEnv -> do
     outerEnv <- req AskVEnv
     pure $ Just -- value to return to original continuation
-      (outerEnv { locals = M.union ext (locals outerEnv) })  -- ext shadows local vars                          
+      (outerEnv { locals = M.union ext (locals outerEnv) })  -- ext shadows local vars
   _ -> pure Nothing)
 
 -- runs a computation, but logs (via AddCapture, under the specified Name) uses of outer
@@ -168,27 +168,27 @@ throwLeft :: Either ErrorMsg a -> Checking a
 throwLeft (Right x) = pure x
 throwLeft (Left msg) = err msg
 
-vlup :: UserName -> Checking [(Src, BinderType Brat)]
+vlup :: QualName -> Checking [(Src, BinderType Brat)]
 vlup s = req (VLup s) >>= \case
     Just vty -> pure vty
     Nothing -> err $ VarNotFound (show s)
 
-alup :: UserName -> Checking Alias
+alup :: QualName -> Checking Alias
 alup s = req (ALup s) >>= \case
     Just vty -> pure vty
     Nothing -> err $ VarNotFound (show s)
 
-clup :: UserName -- Value constructor
-     -> UserName  -- Type constructor
+clup :: QualName -- Value constructor
+     -> QualName  -- Type constructor
      -> Checking (CtorArgs Brat)
 clup vcon tycon = req AskFC >>= \fc -> req (CLup fc vcon tycon)
 
-kclup :: UserName -- Value constructor
-      -> UserName  -- Type constructor
+kclup :: QualName -- Value constructor
+      -> QualName  -- Type constructor
       -> Checking (CtorArgs Kernel)
 kclup vcon tycon = req AskFC >>= \fc -> req (KCLup fc vcon tycon)
 
-tlup :: (Mode, UserName) -> Checking [(PortName, TypeKind)]
+tlup :: (Mode, QualName) -> Checking [(PortName, TypeKind)]
 tlup (m, c) = req (TLup (m, c)) >>= \case
   Nothing -> req (TLup (otherMode, c)) >>= \case
     Nothing -> err $ UnrecognisedTypeCon (show c)
@@ -199,7 +199,7 @@ tlup (m, c) = req (TLup (m, c)) >>= \case
     Brat -> Kernel
     Kernel -> Brat
 
-lookupAndUse :: UserName -> KEnv
+lookupAndUse :: QualName -> KEnv
              -> Either Error (Maybe ((Src, BinderType Kernel), KEnv))
 lookupAndUse x kenv = case M.lookup x kenv of
    Nothing -> Right Nothing
@@ -297,8 +297,15 @@ handler (Req s k) ctx g
                 M.lookup tycon tbl
         handler (k args) ctx g
 
-      ANewHope (e, fc) -> handler (k ()) (ctx { hopeSet = M.insert e fc (hopeSet ctx) }) g
-      AskHopeSet -> handler (k (hopeSet ctx)) ctx g
+      ANewHope e fc -> handler (k ()) (ctx { hopes = M.insert e fc (hopes ctx) }) g
+
+      AskHopes -> handler (k (hopes ctx)) ctx g
+
+      RemoveHope e -> let hset = hopes ctx in
+                        if M.member e hset
+                        then handler (k ()) (ctx { hopes = M.delete e hset }) g
+                        else Left (dumbErr (InternalError ("Trying to remove unknown Hope: " ++ show e)))
+
       AddCapture n (var, ends) ->
         handler (k ()) ctx {captureSets=M.insertWith M.union n (M.singleton var ends) (captureSets ctx)} g
 
@@ -318,12 +325,14 @@ handler (Define end v k) ctx g = let st@Store{typeMap=tm, valueMap=vm} = store c
         Just _ -> let news = News (M.singleton end Unstuck) in
           handler (k news)
             (ctx { store = st { valueMap = M.insert end v vm },
-                hopeSet = M.delete end (hopeSet ctx)
+                hopes = case end of
+                  InEnd e -> M.delete e (hopes ctx)
+                  ExEnd _ -> hopes ctx
             }) g
 handler (Yield Unstuck k) ctx g = handler (k mempty) ctx g
 handler (Yield (AwaitingAny ends) _k) ctx _ = Left $ dumbErr $ TypeErr $ unlines $
   ("Typechecking blocked on:":(show <$> S.toList ends))
-  ++ "":"Hopeset is":(show <$> M.keys (hopeSet ctx)) ++ ["Try writing more types! :-)"]
+  ++ "":"Hopeset is":(show <$> M.keys (hopes ctx)) ++ ["Try writing more types! :-)"]
 handler (Fork desc par c) ctx g = handler (thTrace ("Spawning " ++ desc) $ par *> c) ctx g
 
 type Checking = Free CheckingSig
@@ -364,9 +373,6 @@ suppressGraph = wrapper2 (\case
   (Wire _) -> Just ()
   _ -> Nothing)
 
-defineEnd :: End -> Val Z -> Checking ()
-defineEnd e v = Define e v (const (Ret ()))
-
 inLvl :: String -> Checking a -> Checking a
 inLvl prefix c = req (SplitNS prefix) >>= \prefixNamespace -> localNS prefixNamespace c
 
@@ -381,3 +387,6 @@ localNS ns (Define e v k) = Define e v (localNS ns . k)
 localNS ns (Yield st k) = Yield st (localNS ns . k)
 localNS ns (Fork desc par c) = let (subSpace, newRoot) = split desc ns in
                                  Fork desc (localNS subSpace par) (localNS newRoot c)
+
+defineEnd :: End -> Val Z -> Checking ()
+defineEnd e v = Define e v (const (Ret ()))

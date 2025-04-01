@@ -9,9 +9,9 @@ import Brat.Checker.SolveHoles
 import Brat.Checker.Types
 import Brat.Error
 import Brat.Naming
+import Brat.QualName
 import Brat.Syntax.Common
 import Brat.Syntax.Value
-import Brat.UserName
 import Bwd
 import Control.Monad.Freer
 import Hasochism

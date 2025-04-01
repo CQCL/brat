@@ -89,7 +89,7 @@ answer = energy(results)
 evaluate(obs :: Observable
         ,q :: Quantity
         ,a :: Ansatz
-        ,rs :: List Real
+        ,rs :: List(Real)
         ) -> Real
 evaluate = ?eval
 

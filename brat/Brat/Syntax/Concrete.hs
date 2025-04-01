@@ -3,11 +3,11 @@ module Brat.Syntax.Concrete where
 import Data.List.NonEmpty
 
 import Brat.FC
+import Brat.QualName
 import Brat.Syntax.Common
 import Brat.Syntax.FuncDecl (FuncDecl(..))
 import Brat.Syntax.Raw
 import Brat.Syntax.Simple
-import Brat.UserName
 
 data FBody
   = FClauses (NonEmpty (WC Abstractor, WC Flat))
@@ -21,7 +21,7 @@ type FEnv = ([FDecl], [RawAlias])
 
 
 data Flat
- = FVar UserName
+ = FVar QualName
  | FHope
  | FApp (WC Flat) (WC Flat)
  | FJuxt (WC Flat) (WC Flat)
@@ -36,7 +36,7 @@ data Flat
  | FLetIn (WC Abstractor) (WC Flat) (WC Flat)
  | FSimple SimpleTerm
  | FHole String
- | FCon UserName (WC Flat)
+ | FCon QualName (WC Flat)
  | FEmpty
  | FPull [PortName] (WC Flat)
  -- We can get away with not elaborating type signatures in the short term

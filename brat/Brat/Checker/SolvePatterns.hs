@@ -2,7 +2,6 @@ module Brat.Checker.SolvePatterns (argProblems, argProblemsWithLeftovers, solve)
 
 import Brat.Checker.Monad
 import Brat.Checker.Helpers
-import Brat.Checker.SolveHoles (buildNatVal, invertNatVal)
 import Brat.Checker.Types (EndType(..))
 import Brat.Constructors
 import Brat.Constructors.Patterns
@@ -13,7 +12,7 @@ import Brat.Syntax.Abstractor
 import Brat.Syntax.Common
 import Brat.Syntax.Simple
 import Brat.Syntax.Value
-import Brat.UserName
+import Brat.QualName
 import Bwd
 import Control.Monad.Freer
 import Hasochism
@@ -79,7 +78,7 @@ solve my ((src, Lit tm):p) = do
     (Braty, Left Nat)
       | Num n <- tm -> do
           unless (n >= 0) $ typeErr "Negative Nat kind"
-          unifyNum (nConstant (fromIntegral n)) (nVar (VPar (ExEnd (end src))))
+          unifyNum (nConstant (fromIntegral n)) (nVar (VPar (toEnd src)))
     (Braty, Right ty) -> do
       simpleCheck Braty ty tm
     _ -> typeErr $ "Literal " ++ show tm ++ " isn't valid at this type"
@@ -98,7 +97,7 @@ solve my ((src, PCon c abs):p) = do
       -- Special case for 0, so that we can call `unifyNum` instead of pattern
       -- matching using what's returned from `natConstructors`
       PrefixName [] "zero" -> do
-        unifyNum (nVar (VPar (ExEnd (end src)))) nZero
+        unifyNum (nVar (VPar (toEnd src))) nZero
         p <- argProblems [] (normaliseAbstractor abs) p
         (tests, sol) <- solve my p
         pure ((src, PrimLitTest (Num 0)):tests, sol)
@@ -110,7 +109,8 @@ solve my ((src, PCon c abs):p) = do
             (REx ("inner", Nat) R0)
           unifyNum
            (nVar (VPar (ExEnd (end src))))
-           (relationToInner (nVar (VPar (ExEnd (end dangling)))))
+           (relationToInner (nVar (VPar (toEnd dangling))))
+          -- TODO also do wiring corresponding to relationToInner
           p <- argProblems [dangling] (normaliseAbstractor abs) p
           (tests, sol) <- solve my p
           -- When we get @-patterns, we shouldn't drop this anymore
@@ -133,7 +133,7 @@ typeOfEnd my e = (req (TypeOf e) <&> fst) >>= \case
 solveConstructor :: EvMode m
                  => Modey m
                  -> Src
-                 -> (UserName, Abstractor)
+                 -> (QualName, Abstractor)
                  -> Val Z
                  -> Problem
                  -> Checking ([(Src, PrimTest (BinderType m))]
@@ -143,7 +143,7 @@ solveConstructor my src (c, abs) ty p = do
   (CArgs pats _ patRo argRo, (tycon, tyargs)) <- lookupConstructor my c ty
   -- Create a row of hypothetical kinds which contextualise the arguments to the
   -- constructor.
-  -- These need to be Tgts because we don't know how to compute them dynamically/
+  -- These need to be Tgts because we don't know how to compute them dynamically
   (_, _, _, stuff) <- next "type_args" Hypo (S0, Some (Zy :* S0)) patRo R0
   (node, _, patArgWires, _) <- let ?my = my in anext "val_args" Hypo stuff R0 argRo
   trackM ("Constructor " ++ show c ++ "; type " ++ show ty)
@@ -208,32 +208,31 @@ instantiateMeta e val = do
 solveNumMeta :: End -> NumVal (VVar Z) -> Checking ()
 solveNumMeta e nv = case (e, vars nv) of
  -- Compute the thing that the rhs should be based on the src, and instantiate src to that
- (ExEnd src,  [VPar (InEnd _)]) -> do
+ (ExEnd src,  [VPar (InEnd _tgt)]) -> do
    -- Compute the value of the `tgt` variable from the known `src` value by inverting nv
    tgtSrc <- invertNatVal nv
-   defineSrc (NamedPort src "") (VNum (nVar (VPar (toEnd tgtSrc))))
+   instantiateMeta (ExEnd src) (VNum (nVar (VPar (toEnd tgtSrc))))
    wire (NamedPort src "", TNat, tgtSrc)
 
- (ExEnd src, _) -> defineSrc (NamedPort src "") (VNum nv)
+ (ExEnd src, _) -> instantiateMeta (ExEnd src) (VNum nv)
 
  -- Both targets, we need to create the thing that they both derive from
  (InEnd bigTgt, [VPar (InEnd weeTgt)]) -> do
    (_, [(idTgt, _)], [(idSrc, _)], _) <- anext "numval id" Id (S0, Some (Zy :* S0))
                                          (REx ("n", Nat) R0) (REx ("n", Nat) R0)
    defineSrc idSrc (VNum (nVar (VPar (toEnd idTgt))))
-   defineTgt (NamedPort weeTgt "") (VNum (nVar (VPar (toEnd idSrc))))
+   instantiateMeta (InEnd weeTgt) (VNum (nVar (VPar (toEnd idSrc))))
    wire (idSrc, TNat, NamedPort weeTgt "")
-   let nv' = fmap (const (VPar (toEnd idSrc))) nv
+   let nv' = fmap (const (VPar (toEnd idSrc))) nv -- weeTgt is the only thing to replace
    bigSrc <- buildNatVal nv'
-   defineTgt (NamedPort bigTgt "") (VNum nv')
+   instantiateMeta (InEnd bigTgt) (VNum nv')
    wire (bigSrc, TNat, NamedPort bigTgt "")
 
  -- RHS is constant or Src, wire it into tgt
  (InEnd tgt,  _) -> do
    src <- buildNatVal nv
-   defineTgt (NamedPort tgt "") (VNum nv)
+   instantiateMeta (InEnd tgt) (VNum nv)
    wire (src, TNat, NamedPort tgt "")
-
  where
   vars :: NumVal a -> [a]
   vars = foldMap pure
@@ -280,18 +279,22 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   --   2^k * x
   -- = 2^k * (y + 1)
   -- = 2^k + 2^k * y
-  demandSucc (StrictMono _ (Linear (VPar (ExEnd _)))) = error "Todo..." {-do
-    -- This is sus because we don't have any tgt?
-    ySrc <- invertNatVal (NamedPort x "") (NumValue 1 (StrictMonoFun sm))
-    let y = nVar (VPar (toEnd ySrc))
-    solveNumMeta (ExEnd x) (nPlus 1 y)
-    pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k y
-  -}
+  demandSucc (StrictMono k (Linear (VPar (ExEnd x)))) = do
+    (_, [(yTgt, _)], [(ySrc, _)], _) <-
+      next "yId" Id (S0, Some (Zy :* S0)) (REx ("value", Nat) R0) (REx ("value", Nat) R0)
 
-  demandSucc sm@(StrictMono k (Linear (VPar (InEnd weeEnd)))) = do
-    bigEnd <- invertNatVal (NumValue 1 (StrictMonoFun sm))
-    solveNumMeta (toEnd bigEnd) (NumValue 0 (StrictMonoFun sm))
-    pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k (nVar (VPar (InEnd weeEnd)))
+    defineSrc ySrc (VNum (nVar (VPar (toEnd yTgt))))
+    instantiateMeta (ExEnd x) (VNum (nPlus 1 (nVar (VPar (toEnd yTgt)))))
+    pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k (nVar (VPar (toEnd ySrc)))
+  --   2^k * x
+  -- = 2^k * (y + 1)
+  -- = 2^k + 2^k * y
+  -- Hence, the predecessor is (2^k - 1) + (2^k * y)
+  demandSucc (StrictMono k (Linear (VPar (InEnd x)))) = do
+    (_, [(y,_)], _, _) <- anext "y" Hypo (S0, Some (Zy :* S0)) (REx ("", Nat) R0) R0
+    yPlus1 <- invertNatVal (nPlus 1 (nVar (VPar (toEnd y))))
+    solveNumMeta (InEnd x) (nVar (VPar (toEnd yPlus1)))
+    pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k (nVar (VPar (toEnd y)))
 
   --   2^k * full(n + 1)
   -- = 2^k * (1 + 2 * full(n))
@@ -325,7 +328,8 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     -- Check a numval is odd, and return its rounded down half
     oddGro :: Fun00 (VVar Z) -> Checking (NumVal (VVar Z))
     oddGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
-      Linear (VPar (ExEnd _)) -> do
+      -- TODO: Why aren't we using `out`??
+      Linear (VPar (ExEnd _out)) -> do
         -- compute (/2) . (-1)
         doubTgt <- invertNatVal (NumValue 1 (StrictMonoFun (StrictMono 1 mono)))
         let [VPar (InEnd halfTgt)] = foldMap pure mono
@@ -371,17 +375,17 @@ argProblems srcs na p = argProblemsWithLeftovers srcs na p >>= \case
   _ -> err $ UnificationError "Pattern doesn't match expected length for constructor args"
 
 argProblemsWithLeftovers :: [Src] -> NormalisedAbstractor -> Problem -> Checking (Problem, [Src])
-argProblemsWithLeftovers srcs (NA (APull ps abs)) p = pullPorts portName show ps (map (, ()) srcs) >>= \srcs -> argProblemsWithLeftovers (fst <$> srcs) (NA abs) p
+argProblemsWithLeftovers srcs (NA (APull ps abs)) p = pullPorts portName show ps srcs >>= \srcs -> argProblemsWithLeftovers srcs (NA abs) p
 argProblemsWithLeftovers (src:srcs) na p | Just (pat, na) <- unconsNA na = first ((src, pat):) <$> argProblemsWithLeftovers srcs na p
 argProblemsWithLeftovers srcs (NA AEmpty) p = pure (p, srcs)
 argProblemsWithLeftovers [] abst _ = err $ NothingToBind (show abst)
 
 lookupConstructor :: Modey m
-                  -> UserName -- A value constructor
+                  -> QualName -- A value constructor
                   -> Val Z    -- A corresponding type to normalise
                   -- TODO: Something with this m
                   -> Checking (CtorArgs m -- The needed args to the value constructor
-                              ,(UserName, [Val Z])  -- The type constructor we normalised and its args
+                              ,(QualName, [Val Z])  -- The type constructor we normalised and its args
                               )
 lookupConstructor my c ty = eval S0 ty >>= \case
   (VCon tycon args) -> (,(tycon, args)) <$> case my of

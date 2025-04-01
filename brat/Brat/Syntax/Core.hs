@@ -15,10 +15,10 @@ import Brat.Constructors.Patterns (pattern CCons,
                                    pattern CRiffle)
 import Brat.FC
 import Brat.Naming
+import Brat.QualName
 import Brat.Syntax.Common
 import Brat.Syntax.FuncDecl
 import Brat.Syntax.Simple
-import Brat.UserName
 
 import Data.Kind (Type)
 import Data.Maybe (fromJust)
@@ -47,9 +47,9 @@ data Term :: Dir -> Kind -> Type where
   Emb      :: WC (Term Syn k) -> Term Chk k
   Forget   :: WC (Term d KVerb) -> Term d UVerb
   Pull     :: [PortName] -> WC (Term Chk k) -> Term Chk k
-  Var      :: UserName -> Term Syn Noun  -- Look up in noun (value) env
-  Hope     :: Term Chk Noun
+  Var      :: QualName -> Term Syn Noun  -- Look up in noun (value) env
   Identity :: Term Syn UVerb
+  Hope     :: Term Chk Noun
   Arith    :: ArithOp -> WC (Term Chk Noun) -> WC (Term Chk Noun) -> Term Chk Noun
   Of       :: WC (Term Chk Noun) -> WC (Term d Noun) -> Term d Noun
 
@@ -65,7 +65,7 @@ data Term :: Dir -> Kind -> Type where
   -- In `Syn`, for now, the first clause provides the type.
   Lambda   :: (WC Abstractor, WC (Term d Noun)) -> [(WC Abstractor, WC (Term Chk Noun))] -> Term d UVerb
   -- Type constructors
-  Con      :: UserName -> WC (Term Chk Noun) -> Term Chk Noun
+  Con      :: QualName -> WC (Term Chk Noun) -> Term Chk Noun
   -- Brat function types
   C        :: CType' (PortName, KindOr (Term Chk Noun)) -> Term Chk Noun
   -- Kernel types
@@ -114,9 +114,10 @@ instance Show (Term d k) where
                           ,"of"
                           ,bracket POf e
                           ]
+
   show (Var x) = show x
-  show Hope = "!"
   show Identity = "|"
+  show Hope = "!"
   -- Nested applications should be bracketed too, hence 4 instead of 3
   show (fun :$: arg) = bracket PApp fun ++ ('(' : show arg ++ ")")
   show (tm ::: ty) = bracket PAnn tm ++ " :: " ++ show ty
