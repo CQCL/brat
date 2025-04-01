@@ -73,6 +73,8 @@ jobs:
     - name: Install rust
       if: ${{ steps.cached_validator.outputs.out != 'true' }}
       uses: dtolnay/rust-toolchain@stable
+    - name: Run hugr_extension tests
+      run: cd ../hugr_extension && cargo test
     - name: Install hugr_validator
       if: ${{ steps.cached_validator.outputs.out != 'true' }}
       run: cargo install --path ../hugr_validator
