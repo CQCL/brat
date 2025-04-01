@@ -104,7 +104,6 @@ solveHope k hope v = quote Zy v >>= \v -> case doesntOccur (InEnd hope) v of
       (Nat, _) -> err $ InternalError "Head of Nat wasn't a VNum"
       _ -> buildConst Unit TUnit
     req (Wire (end dangling, kindType k, hope))
-    req (RemoveHope hope)
   Left msg -> case v of
     VApp (VPar (InEnd end)) B0 | hope == end -> pure ()
     -- TODO: Not all occurrences are toxic. The end could be in an argument

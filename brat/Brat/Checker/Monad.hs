@@ -107,7 +107,6 @@ data CheckingSig ty where
   Declare :: End -> Modey m -> BinderType m -> Bool -> CheckingSig () -- Bool = is-skolem
   ANewHope :: InPort -> FC -> CheckingSig ()
   AskHopes :: CheckingSig Hopes
-  RemoveHope :: InPort -> CheckingSig () -- ALAN ?
   AddCapture :: Name -> (QualName, [(Src, BinderType Brat)]) -> CheckingSig ()
 
 wrapper :: (forall a. CheckingSig a -> Checking (Maybe a)) -> Checking v -> Checking v
@@ -300,11 +299,6 @@ handler (Req s k) ctx g
       ANewHope e fc -> handler (k ()) (ctx { hopes = M.insert e fc (hopes ctx) }) g
 
       AskHopes -> handler (k (hopes ctx)) ctx g
-
-      RemoveHope e -> let hset = hopes ctx in
-                        if M.member e hset
-                        then handler (k ()) (ctx { hopes = M.delete e hset }) g
-                        else Left (dumbErr (InternalError ("Trying to remove unknown Hope: " ++ show e)))
 
       AddCapture n (var, ends) ->
         handler (k ()) ctx {captureSets=M.insertWith M.union n (M.singleton var ends) (captureSets ctx)} g
