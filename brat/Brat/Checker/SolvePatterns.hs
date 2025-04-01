@@ -328,12 +328,11 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
     oddGro :: Fun00 (VVar Z) -> Checking (NumVal (VVar Z))
     oddGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
       -- TODO: Why aren't we using `out`??
-      Linear (VPar (ExEnd _out)) -> do
+      Linear (VPar (ExEnd bubble)) -> do
         -- compute (/2) . (-1)
-        doubTgt <- invertNatVal (NumValue 1 (StrictMonoFun (StrictMono 1 mono)))
-        let [VPar (InEnd halfTgt)] = foldMap pure mono
-        solveNumMeta (toEnd doubTgt) (nPlus 1 (n2PowTimes 1 (nVar (VPar (toEnd halfTgt)))))
-        pure (nVar (VPar (toEnd halfTgt)))
+        (_, [], [(halfSrc,_)], _) <- next "floorHalf" Hypo (S0, Some (Zy :* S0)) R0 (REx ("value", Nat) R0)
+        solveNumMeta (ExEnd bubble) (nPlus 1 (n2PowTimes 1 (nVar (VPar (toEnd halfSrc)))))
+        pure (nVar (VPar (toEnd halfSrc)))
       Linear (VPar (InEnd weeTgt)) -> do
         -- compute (/2) . (-1)
         bigTgt <- invertNatVal (NumValue 1 (StrictMonoFun (StrictMono 1 (Linear (VPar (toEnd weeTgt))))))
