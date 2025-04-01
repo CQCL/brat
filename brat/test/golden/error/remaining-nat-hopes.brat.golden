@@ -1,8 +1,8 @@
-Error in test/golden/error/remaining-nat-hopes.brat@FC {start = Pos {line = 8, col = 31}, end = Pos {line = 8, col = 34}}:
+Error in test/golden/error/remaining-nat-hopes.brat on line 8:
 bad = let _ = read([]) in show(!)
                               ^^^
 
   Expected to work out values for these holes:
-    In checking_check_defs_1_bad_2__2 0
+    In checking_check_defs_1_bad_5__2 0
 
 
