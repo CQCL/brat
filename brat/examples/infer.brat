@@ -12,7 +12,7 @@ isfull(0) = true
 isfull(_) = false
 
 hasfulllen(n :: #, Vec(Bool, n)) -> Bool
-hasfulllen(succ(n), x ,- (xs =,= ys)) = hasfulllen(n, xs)
+hasfulllen(n, x ,- (xs =,= ys)) = hasfulllen(!, xs)
 hasfulllen(_, []) = true
 hasfulllen(_, _) = false
 
