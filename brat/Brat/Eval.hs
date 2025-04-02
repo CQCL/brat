@@ -17,6 +17,7 @@ module Brat.Eval (EvMode(..)
                  ,kindType
                  ,numVal
                  ,quote
+		 ,quoteNum
                  ,getNumVar
 		 ,instantiateMeta
                  ) where
@@ -118,7 +119,7 @@ semLvl lvy = SApp (SLvl $ ny2int lvy) B0
 
 -- note that typeEq is a kind of quote but that also does eta-expansion
 quote :: Ny lv -> Sem -> Checking (Val lv)
-quote lvy (SNum num) = pure $ VNum (fmap (quoteVar lvy) num)
+quote lvy (SNum num) = pure $ VNum (quoteNum lvy num)
 quote lvy (SCon nm args) = VCon nm <$> traverse (quote lvy) args
 quote lvy (SLam stk body) = do
   body <- sem (stk :<< semLvl lvy) body
@@ -130,6 +131,9 @@ quoteCTy :: Ny lv -> Modey m -> Stack Z Sem n -> CTy m n -> Checking (CTy m lv)
 quoteCTy lvy my ga (ins :->> outs) = quoteRo my ga ins lvy >>= \case
   (ga', Some (ins' :* lvy')) -> quoteRo my ga' outs lvy' >>= \case
     (_, Some (outs' :* _)) -> pure (ins' :->> outs')
+
+quoteNum ::  Ny lv -> NumVal SVar -> NumVal (VVar lv)
+quoteNum lvy num = fmap (quoteVar lvy) num
 
 -- first number is next Lvl to use in Value
 --         require every Lvl in Sem is < n (converted by n - 1 - lvl), else must fail at runtime
