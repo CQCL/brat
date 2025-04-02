@@ -1,4 +1,4 @@
-module Brat.Checker.SolveNumbers (unifyNum) where
+module Brat.Checker.SolveNumbers (unifyNum, NumUnifyMode(..)) where
 
 import Brat.Checker.Monad
 import Brat.Checker.Helpers
@@ -9,6 +9,20 @@ import Brat.Error
 import Brat.Eval
 import Brat.Graph (NodeType(..))
 import Hasochism
+import Control.Monad.Freer
+
+import Debug.Trace
+import qualified Data.Map as M
+
+trail = trace
+
+-- This is currently lifted from SolvePatterns, which still imports it.
+-- It is also used in SolveHoles, where it does the right mathematics
+-- but the wrong wiring.
+
+data NumUnifyMode = NUGinger | NUFred deriving (Show, Eq)
+-- As Ginger Rogers said, "I do everything Fred does, only backwars in high heels.".
+
 
 -- Solve a Nat kinded metavariable. Unlike `instantiateMeta`, this function also
 -- makes the dynamic wiring for a metavariable. This only needs to happen for
@@ -50,8 +64,8 @@ solveNumMeta e nv = case (e, vars nv) of
 -- Need to keep track of which way we're solving - which side is known/unknown
 -- Things which are dynamically unknown must be Tgts - information flows from Srcs
 -- ...But we don't need to do any wiring here, right?
-unifyNum :: NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
-unifyNum (NumValue lup lgro) (NumValue rup rgro)
+unifyNum :: NumUnifyMode -> NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
+unifyNum numo (NumValue lup lgro) (NumValue rup rgro)
   | lup <= rup = lhsFun00 lgro (NumValue (rup - lup) rgro)
   | otherwise  = lhsFun00 rgro (NumValue (lup - rup) lgro)
  where
@@ -74,7 +88,7 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   lhsMono m@(Full _) (NumValue 0 gro) = lhsFun00 gro (NumValue 0 (StrictMonoFun (StrictMono 0 m)))
   lhsMono (Full sm) (NumValue up gro) = do
     smPred <- demandSucc sm
-    unifyNum (n2PowTimes 1 (nFull smPred)) (NumValue (up - 1) gro)
+    unifyNum numo (n2PowTimes 1 (nFull smPred)) (NumValue (up - 1) gro)
 
   demand0 :: NumVal (VVar Z) -> Checking ()
   demand0 (NumValue 0 Constant0) = pure ()
@@ -89,22 +103,29 @@ unifyNum (NumValue lup lgro) (NumValue rup rgro)
   --   2^k * x
   -- = 2^k * (y + 1)
   -- = 2^k + 2^k * y
+  demandSucc n | trail ("DEMANDSUCC " ++ show n) False = undefined
   demandSucc (StrictMono k (Linear (VPar (ExEnd x)))) = do
-    (_, [(yTgt, _)], [(ySrc, _)], _) <-
-      next "yId" Id (S0, Some (Zy :* S0)) (REx ("value", Nat) R0) (REx ("value", Nat) R0)
+      (_, [(yTgt, _)], [(ySrc, _)], _) <-
+	next "yId" Id (S0, Some (Zy :* S0)) (REx ("value", Nat) R0) (REx ("value", Nat) R0)
 
-    defineSrc ySrc (VNum (nVar (VPar (toEnd yTgt))))
-    instantiateMeta (ExEnd x) (VNum (nPlus 1 (nVar (VPar (toEnd yTgt)))))
-    pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k (nVar (VPar (toEnd ySrc)))
-  --   2^k * x
-  -- = 2^k * (y + 1)
-  -- = 2^k + 2^k * y
-  -- Hence, the predecessor is (2^k - 1) + (2^k * y)
-  demandSucc (StrictMono k (Linear (VPar (InEnd x)))) = do
-    (_, [(y,_)], _, _) <- anext "y" Hypo (S0, Some (Zy :* S0)) (REx ("", Nat) R0) R0
-    yPlus1 <- invertNatVal (nPlus 1 (nVar (VPar (toEnd y))))
-    solveNumMeta (InEnd x) (nVar (VPar (toEnd yPlus1)))
-    pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k (nVar (VPar (toEnd y)))
+      defineSrc ySrc (VNum (nVar (VPar (toEnd yTgt))))
+      instantiateMeta (ExEnd x) (VNum (nPlus 1 (nVar (VPar (toEnd yTgt)))))
+      pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k (nVar (VPar (toEnd ySrc)))
+      --   2^k * x
+      -- = 2^k * (y + 1)
+      -- = 2^k + 2^k * y
+      -- Hence, the predecessor is (2^k - 1) + (2^k * y)
+    
+  demandSucc (StrictMono k (Linear (VPar (InEnd x)))) = case numo of
+    NUGinger -> do
+      (_, [(y,_)], _, _) <- anext "y" Hypo (S0, Some (Zy :* S0)) (REx ("", Nat) R0) R0
+      yPlus1 <- invertNatVal (nPlus 1 (nVar (VPar (toEnd y))))
+      solveNumMeta (InEnd x) (nVar (VPar (toEnd yPlus1)))
+      pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k (nVar (VPar (toEnd y)))
+    NUFred -> do
+      hopes <- req AskHopes
+      if not $ M.member x hopes then typeErr $ "Goodbye Fred!" else do
+        typeErr $ "Hello Fred!"
 
   --   2^k * full(n + 1)
   -- = 2^k * (1 + 2 * full(n))

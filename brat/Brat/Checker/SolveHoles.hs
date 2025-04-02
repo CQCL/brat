@@ -22,10 +22,6 @@ import Data.Maybe (mapMaybe)
 import qualified Data.Map as M
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 
-import Debug.Trace
-
-trunk = trace
-
 -- Demand that two closed values are equal, we're allowed to solve variables in the
 -- hope set to make this true.
 -- Raises a user error if the vals cannot be made equal.
@@ -50,10 +46,6 @@ typeEq' str stuff@(_ny :* _ks :* sems) k exp act = do
   act <- sem sems act
   typeEqEta str stuff hopes k exp act
 
-
-
-
-
 -- Presumes that the hope set and the two `Sem`s are up to date.
 typeEqEta :: String -- String representation of the term for error reporting
           -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n
@@ -77,7 +69,7 @@ typeEqEta _tm (Zy :* _ks :* _sems) hopes k (SApp (SPar (InEnd e)) B0) act
 typeEqEta _tm (Zy :* _ks :* _sems) hopes k exp (SApp (SPar (InEnd e)) B0)
   | M.member e hopes = solveHope k e exp
 typeEqEta _ (Zy :* _ :* _) _ {-hopes-} Nat (SNum exp) (SNum act) = do
-  unifyNum (quoteNum Zy exp) (quoteNum Zy act)
+  unifyNum NUFred (quoteNum Zy exp) (quoteNum Zy act)
   {-
   | Just (SPar (InEnd e)) <- isNumVar exp, M.member e hopes = solveHope Nat e act
   | Just (SPar (InEnd e)) <- isNumVar act, M.member e hopes = solveHope Nat e exp
@@ -154,7 +146,7 @@ typeEqRigid tm (_ :* _ :* semz) Nat exp act = do
   act <- sem semz act
   if getNum exp == getNum act
   then pure ()
-  else trunk "HELLO TYPEEQRIGID TODO" $ err $ TypeMismatch tm ("TYPEEQRIGID " ++ show exp) ("TODO " ++ show act)
+  else err $ TypeMismatch tm ("TYPEEQRIGID " ++ show exp) ("TODO " ++ show act)
 typeEqRigid tm stuff@(_ :* kz :* _) (TypeFor m []) (VApp f args) (VApp f' args') | f == f' =
   svKind f >>= \case
     TypeFor m' ks | m == m' -> typeEqs tm stuff (snd <$> ks) (args <>> []) (args' <>> [])
