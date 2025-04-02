@@ -3,8 +3,12 @@ name: Brat CI
 on:
   push:
     branches: [ main ]
+    paths:
+      - "**.hs"
   pull_request:
     branches: [ main ]
+    paths:
+      - "**.hs"
 
 env:
   GHC_VERSION: 9.6.4
