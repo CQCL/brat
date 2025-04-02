@@ -18,6 +18,7 @@ module Brat.Eval (EvMode(..)
                  ,numVal
                  ,quote
                  ,getNumVar
+		 ,instantiateMeta
                  ) where
 
 import Brat.Checker.Monad
@@ -315,6 +316,11 @@ doesntOccur e (VLam body) = doesntOccur e body
 doesntOccur e (VFun my (ins :->> outs)) = case my of
   Braty -> doesntOccurRo my e ins *> doesntOccurRo my e outs
   Kerny -> doesntOccurRo my e ins *> doesntOccurRo my e outs
+
+instantiateMeta :: End -> Val Z -> Checking ()
+instantiateMeta e val = do
+  throwLeft (doesntOccur e val)
+  defineEnd e val
 
 collision :: End -> End -> Either ErrorMsg ()
 collision e v | e == v = Left . UnificationError $

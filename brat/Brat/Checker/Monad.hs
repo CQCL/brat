@@ -333,3 +333,4 @@ localNS ns (Req c k) = Req c (localNS ns . k)
 
 defineEnd :: End -> Val Z -> Checking ()
 defineEnd e v = req (Define e v)
+
