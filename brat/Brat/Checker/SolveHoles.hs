@@ -2,7 +2,7 @@ module Brat.Checker.SolveHoles (typeEq) where
 
 import Brat.Checker.Helpers (buildNatVal, buildConst)
 import Brat.Checker.Monad
-import Brat.Checker.Types (kindForMode)
+import Brat.Checker.Types (kindForMode, IsSkolem(..))
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval
 import Brat.Syntax.Common
@@ -82,7 +82,7 @@ typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
   let ends = mapMaybe getEnd [exp,act]
   -- sanity check: we've already dealt with either end being in the hopeset
   when (or [M.member ie hopes | InEnd ie <- ends]) $ typeErr "ends were in hopeset"
-  filterM (isSkolem >=> pure . not) ends >>= \case
+  filterM (isSkolem >=> pure . (== Definable)) ends >>= \case
     [] -> typeEqRigid tm stuff k exp act -- easyish, both rigid i.e. already defined
     [e1, e2] | e1 == e2 -> pure () -- trivially same, even if both still yet-to-be-defined
     es -> -- tricky: must wait for one or other to become more defined

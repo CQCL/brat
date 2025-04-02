@@ -99,12 +99,12 @@ data CheckingSig ty where
   ELup    :: End -> CheckingSig (Maybe (Val Z))
   -- Lookup an alias in the table
   ALup    :: QualName -> CheckingSig (Maybe Alias)
-  TypeOf  :: End -> CheckingSig (EndType, Bool) -- Bool = is-skolem
+  TypeOf  :: End -> CheckingSig (EndType, IsSkolem)
   AddNode :: Name -> Node -> CheckingSig ()
   Wire    :: Wire -> CheckingSig ()
   KDone   :: CheckingSig ()
   AskVEnv :: CheckingSig CtxEnv
-  Declare :: End -> Modey m -> BinderType m -> Bool -> CheckingSig () -- Bool = is-skolem
+  Declare :: End -> Modey m -> BinderType m -> IsSkolem -> CheckingSig ()
   ANewHope :: InPort -> FC -> CheckingSig ()
   AskHopes :: CheckingSig Hopes
   AddCapture :: Name -> (QualName, [(Src, BinderType Brat)]) -> CheckingSig ()
@@ -228,9 +228,9 @@ localKVar env (Fork desc par c) =
   -- can't send end both ways, so until we can join (TODO), restrict Forks to local scope
   thTrace ("Spawning(LKV) " ++ desc) $ localKVar env $ par *> c
 
--- Skolem constants are e.g. function parameters that are *not* going to be defined if we wait.
+-- SkolemConst constants are e.g. function parameters that are *not* going to be defined if we wait.
 -- (exception: clause inputs can sometimes be defined if there is exactly one possible value).
-isSkolem :: End -> Checking Bool
+isSkolem :: End -> Checking IsSkolem
 isSkolem e = req (TypeOf e) <&> snd
 
 catchErr :: Free CheckingSig a -> Free CheckingSig (Either Error a)
@@ -312,7 +312,7 @@ handler (Define end v k) ctx g = let st@Store{typeMap=tm, valueMap=vm} = store c
         -- TODO(1) can we check the value is of the kind declared?
         -- TODO(2) it'd be better to figure out if the end is really Unstuck,
         -- or just awaiting some other end, but that seems overly complex atm, as
-        -- (a) we must be "Unstuck" if the end is Defined to something Skolem *OR* in the HopeSet,
+        -- (a) we must be "Unstuck" if the end is Defined to something SkolemConst *OR* in the HopeSet,
         -- (b) Numbers are tricky, whether they are stuck or not depends upon the question
         -- (c) since there are no infinite end-creating loops, it's correct (merely inefficient)
         -- to just "have another go".

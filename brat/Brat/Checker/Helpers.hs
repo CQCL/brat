@@ -42,8 +42,8 @@ simpleCheck my ty tm = case (my, ty) of
         Num n | n < 0 -> defineEnd e TInt
         Num _ -> typeErr $ "Can't determine whether Int or Nat: " ++ show tm
     else isSkolem e >>= \case
-      True -> throwLeft $ helper Braty ty tm
-      False -> do
+      SkolemConst -> throwLeft $ helper Braty ty tm
+      Definable -> do
         mkYield "simpleCheck" (S.singleton e)
         ty <- eval S0 ty
         simpleCheck Braty ty tm
@@ -166,8 +166,8 @@ anext :: forall m i j k
       -> Ro m j k
       -> Checking (Name, Unders m Chk, Overs m UVerb, (Semz k, Some Endz))
 anext str th vals0 ins outs = anext' str th vals0 ins outs $ case th of
-  Source -> True
-  _ -> False
+  Source -> SkolemConst
+  _ -> Definable
 
 anext' :: forall m i j k
        . EvMode m
@@ -176,7 +176,7 @@ anext' :: forall m i j k
       -> (Semz i, Some Endz)
       -> Ro m i j -- Inputs and Outputs use de Bruijn indices
       -> Ro m j k
-      -> Bool -- whether outports are skolem consts (will never be defined), inports never are
+      -> IsSkolem -- inports are always Definable
       -> Checking (Name, Unders m Chk, Overs m UVerb, (Semz k, Some Endz))
 anext' str th vals0 ins outs skol = do
   node <- req (Fresh str) -- Pick a name for the thunk
@@ -351,7 +351,7 @@ defineTgt :: Tgt -> Val Z -> Checking ()
 defineTgt tgt = defineEnd (InEnd (end tgt))
 
 declareTgt :: Tgt -> Modey m -> BinderType m -> Checking ()
-declareTgt tgt my ty = req (Declare (InEnd (end tgt)) my ty False)
+declareTgt tgt my ty = req (Declare (InEnd (end tgt)) my ty Definable)
 
 -- listToRow :: [(PortName, BinderType m)] -> Ro m Z i
 -- listToRow [] = R0

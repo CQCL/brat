@@ -223,7 +223,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
       -- with the other clauses, as part of the body.
       (ins :->> outs) <- mkSig usedOvers unders
       (allFakeUnders, rightFakeUnders, tgtMap) <- suppressHoles $ suppressGraph $ do
-        (_, [], fakeOvers, fakeAcc) <- anext' "lambda_fake_source" Hypo (S0, Some (Zy :* S0)) R0 ins True
+        (_, [], fakeOvers, fakeAcc) <- anext' "lambda_fake_source" Hypo (S0, Some (Zy :* S0)) R0 ins SkolemConst
         -- Hypo `check` calls need an environment, even just to compute leftovers;
         -- we get that env by solving `problem` reformulated in terms of the `fakeOvers`
         let srcMap = fromJust $ zipSameLength (fst <$> usedOvers) (fst <$> fakeOvers)
@@ -968,7 +968,7 @@ kindCheckRow' :: forall m n
 kindCheckRow' _ ez env (_,i) [] = pure (i, env, Some (ez :* R0))
 kindCheckRow' Braty (ny :* s) env (name,i) ((p, Left k):rest) = do -- s is Stack Z n
   let dangling = Ex name (ny2int ny)
-  req (Declare (ExEnd dangling) Braty (Left k) False) -- assume none are Skolem consts??
+  req (Declare (ExEnd dangling) Braty (Left k) Definable) -- assume none are SkolemConst??
   env <- pure $ M.insert (plain p) [(NamedPort dangling p, Left k)] env
   (i, env, ser) <- kindCheckRow' Braty (Sy ny :* (s :<< ExEnd dangling)) env (name, i) rest
   case ser of
