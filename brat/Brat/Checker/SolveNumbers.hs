@@ -11,10 +11,10 @@ import Brat.Graph (NodeType(..))
 import Hasochism
 import Control.Monad.Freer
 
-import Debug.Trace
+--import Debug.Trace
 import qualified Data.Map as M
 
-trail = trace
+--trail = trace
 
 -- This is currently lifted from SolvePatterns, which still imports it.
 -- It is also used in SolveHoles, where it does the right mathematics
@@ -54,8 +54,10 @@ solveNumMeta e nv = case (e, vars nv) of
 
  -- RHS is constant or Src, wire it into tgt
  (InEnd tgt,  _) -> do
+   hopes <- req AskHopes
    src <- buildNatVal nv
    instantiateMeta (InEnd tgt) (VNum nv)
+   if M.member tgt hopes then req (RemoveHope tgt) else pure ()
    wire (src, TNat, NamedPort tgt "")
  where
   vars :: NumVal a -> [a]
@@ -103,7 +105,6 @@ unifyNum numo (NumValue lup lgro) (NumValue rup rgro)
   --   2^k * x
   -- = 2^k * (y + 1)
   -- = 2^k + 2^k * y
-  demandSucc n | trail ("DEMANDSUCC " ++ show n) False = undefined
   demandSucc (StrictMono k (Linear (VPar (ExEnd x)))) = do
       (_, [(yTgt, _)], [(ySrc, _)], _) <-
 	next "yId" Id (S0, Some (Zy :* S0)) (REx ("value", Nat) R0) (REx ("value", Nat) R0)
@@ -125,7 +126,11 @@ unifyNum numo (NumValue lup lgro) (NumValue rup rgro)
     NUFred -> do
       hopes <- req AskHopes
       if not $ M.member x hopes then typeErr $ "Goodbye Fred!" else do
-        typeErr $ "Hello Fred!"
+        (tgt, src) <- buildAdd 1
+	fc <- req AskFC
+	req (ANewHope (end tgt) fc)
+	solveHopeVal Nat x (VNum (nVar (VPar (toEnd src))))
+	pure (nVar (VPar (toEnd tgt)))
 
   --   2^k * full(n + 1)
   -- = 2^k * (1 + 2 * full(n))

@@ -1,13 +1,13 @@
 module Brat.Checker.SolveHoles (typeEq) where
 
-import Brat.Checker.Helpers (buildConst, buildNatVal)
+import Brat.Checker.Helpers (solveHopeSem)
 import Brat.Checker.Monad
 import Brat.Checker.Types (kindForMode)
 import Brat.Checker.SolveNumbers
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval
 import Brat.Syntax.Common
-import Brat.Syntax.Simple (SimpleTerm(..))
+-- import Brat.Syntax.Simple (SimpleTerm(..))
 import Brat.Syntax.Value
 import Control.Monad.Freer
 import Bwd
@@ -65,9 +65,9 @@ typeEqEta tm (lvy :* kz :* sems) hopes (TypeFor m ((_, k):ks)) exp act = do
 -- (We don't solve under binders for now, so we only consider Zy here)
 -- 1. "easy" flex cases
 typeEqEta _tm (Zy :* _ks :* _sems) hopes k (SApp (SPar (InEnd e)) B0) act
-  | M.member e hopes = solveHope k e act
+  | M.member e hopes = solveHopeSem k e act
 typeEqEta _tm (Zy :* _ks :* _sems) hopes k exp (SApp (SPar (InEnd e)) B0)
-  | M.member e hopes = solveHope k e exp
+  | M.member e hopes = solveHopeSem k e exp
 typeEqEta _ (Zy :* _ :* _) _ {-hopes-} Nat (SNum exp) (SNum act) = do
   unifyNum NUFred (quoteNum Zy exp) (quoteNum Zy act)
   {-
@@ -92,26 +92,6 @@ typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
   getEnd (VApp (VPar e) _) = Just e
   getEnd (VNum n) = getNumVar n
   getEnd _ = Nothing
-
--- This will update the `hopes`, potentially invalidating things that have
--- been eval'd.
--- The Sem is closed, for now.
-solveHope :: TypeKind -> InPort -> Sem -> Checking ()
-solveHope k hope v = quote Zy v >>= \v -> case doesntOccur (InEnd hope) v of
-  Right () -> do
-    defineEnd (InEnd hope) v
-    dangling <- case (k, v) of
-      (Nat, VNum v) -> buildNatVal v
-      (Nat, _) -> err $ InternalError "Head of Nat wasn't a VNum"
-      _ -> buildConst Unit TUnit
-    req (Wire (end dangling, kindType k, hope))
-    req (RemoveHope hope)
-  Left msg -> case v of
-    VApp (VPar (InEnd end)) B0 | hope == end -> pure ()
-    -- TODO: Not all occurrences are toxic. The end could be in an argument
-    -- to a hoping variable which isn't used.
-    -- E.g. h1 = h2 h1 - this is valid if h2 is the identity, or ignores h1.
-    _ -> err msg
 
 typeEqs :: String -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n -> [TypeKind] -> [Val n] -> [Val n] -> Checking ()
 typeEqs _ _ [] [] [] = pure ()

@@ -18,12 +18,13 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
                             ,uncons
                             ,evalBinder
                             ,evalSrcRow, evalTgtRow
+			    ,solveHopeVal, solveHopeSem
                             )-} where
 
 import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
-import Brat.Eval (eval, EvMode(..), kindType)
+import Brat.Eval (eval, EvMode(..), kindType, quote, doesntOccur)
 import Brat.FC (FC)
 import Brat.Graph (Node(..), NodeType(..))
 import Brat.Naming (Name, FreshMonad(..))
@@ -36,6 +37,7 @@ import Bwd
 import Hasochism
 import Util (log2)
 
+import Control.Monad ((>=>))
 import Control.Monad.State.Lazy (StateT(..), runStateT)
 import Control.Monad.Freer (req)
 import Data.Bifunctor
@@ -460,6 +462,14 @@ buildConst tm ty = do
 buildNum :: Integer -> Checking Src
 buildNum n = buildConst (Num (fromIntegral n)) TNat
 
+buildAdd :: Integer -> Checking (Tgt, Src)
+buildAdd n = do
+  nDangling <- buildNum n
+  ((lhs,rhs),out) <- buildArithOp Add
+  req $ Wire (end nDangling, TNat, end lhs)
+  defineSrc out (VNum (nPlus n (nVar (VPar (toEnd rhs)))))
+  pure (rhs, out)
+
 -- Generate wiring to produce a dynamic instance of the numval argument
 -- N.B. In these functions, we wire using Req, rather than the `wire` function
 -- because we don't want it to do any extra evaluation.
@@ -467,12 +477,10 @@ buildNatVal :: NumVal (VVar Z) -> Checking Src
 buildNatVal nv@(NumValue n gro) = case n of
   0 -> buildGro gro
   n -> do
-    nDangling <- buildNum n
-    ((lhs,rhs),out) <- buildArithOp Add
+    (inn, out) <- buildAdd n
     src <- buildGro gro
-    req $ Wire (end nDangling, TNat, end lhs)
-    req $ Wire (end src, TNat, end rhs)
-    defineSrc out (VNum (nPlus n (nVar (VPar (toEnd src)))))
+    req $ Wire (end src, TNat, end inn)
+    defineTgt inn (VNum (nVar (VPar (toEnd src))))
     pure out
  where
   buildGro :: Fun00 (VVar Z) -> Checking Src
@@ -544,3 +552,26 @@ invertNatVal (NumValue up gro) = case up of
     defineTgt tgt (VNum (nVar (VPar (toEnd llufSrc))))
     defineTgt llufTgt (VNum (nFull (nVar (VPar (toEnd tgt)))))
     pure llufTgt
+
+-- This will update the `hopes`, potentially invalidating things that have
+-- been eval'd.
+-- The Sem is closed, for now.
+solveHopeVal :: TypeKind -> InPort -> Val Z -> Checking ()
+solveHopeVal k hope v = case doesntOccur (InEnd hope) v of
+  Right () -> do
+    defineEnd (InEnd hope) v
+    dangling <- case (k, v) of
+      (Nat, VNum v) -> buildNatVal v
+      (Nat, _) -> err $ InternalError "Head of Nat wasn't a VNum"
+      _ -> buildConst Unit TUnit
+    req (Wire (end dangling, kindType k, hope))
+    req (RemoveHope hope)
+  Left msg -> case v of
+    VApp (VPar (InEnd end)) B0 | hope == end -> pure ()
+    -- TODO: Not all occurrences are toxic. The end could be in an argument
+    -- to a hoping variable which isn't used.
+    -- E.g. h1 = h2 h1 - this is valid if h2 is the identity, or ignores h1.
+    _ -> err msg
+
+solveHopeSem :: TypeKind -> InPort -> Sem -> Checking ()
+solveHopeSem k hope = quote Zy >=> solveHopeVal k hope
