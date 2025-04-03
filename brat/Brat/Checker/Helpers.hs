@@ -575,3 +575,22 @@ solveHopeVal k hope v = case doesntOccur (InEnd hope) v of
 
 solveHopeSem :: TypeKind -> InPort -> Sem -> Checking ()
 solveHopeSem k hope = quote Zy >=> solveHopeVal k hope
+
+-- Convert a pattern into a value for the purposes of solving it with unification
+-- for pattern matching. This is used for checking type constructors - we're only
+-- dealing in static information.
+valPat2Val :: -> KindType
+              -> ValPat
+              -> Checking (Either ErrorMsg (Bwd (Val Z) -- Values of the pattern vars
+                                           ,Val Z  -- The value of the whole pattern
+                                           )
+                        )
+valPat2Val my k VPVar = do
+  (_, [(idTgt, _)], [_], _) <- anext "" Id (S0, Some (Zy :* S0)) (REx ("", Left k) R0) (REx ("", Left k) R0)
+  let val = VApp (VPar (end idTgt)) B0
+  -- TODO: Make the FC optional in ANewHope
+  let dummyFC = FC (Pos 0 0) (Pos 0 0)
+  req (ANewHope inTgt dummyFC)
+  pure (Right (B0 :< val, val))
+valPat2Val my ty (VPCon u args) = _
+valPat2Val my ty (VPNum n) = _
