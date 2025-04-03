@@ -9,7 +9,8 @@ module Data.Hugr where
 
 import Data.Aeson
 import qualified Data.Aeson.KeyMap as KeyMap
-import qualified  Data.Set as S
+import qualified Data.Map as M
+import qualified Data.Set as S
 import Data.Text (Text, pack)
 
 import Brat.Syntax.Simple
@@ -286,16 +287,18 @@ instance ToJSON node => ToJSON (ConstOp node) where
 data InputNode node = InputNode
  { parent :: node
  , types  :: [HugrType]
+ , metadata :: [(String, String)]
  } deriving (Eq, Functor, Show)
 
 instance Eq a => Ord (InputNode a) where
   compare _ _ = EQ
 
 instance ToJSON node => ToJSON (InputNode node) where
-  toJSON (InputNode parent types) = object ["parent" .= parent
-                                           ,"op" .= ("Input" :: Text)
-                                           ,"types" .= types
-                                           ]
+  toJSON (InputNode { .. }) = object ["parent" .= parent
+                                     ,"op" .= ("Input" :: Text)
+                                     ,"types" .= types
+                                     ,"metadata" .= M.fromList metadata
+                                     ]
 
 data OutputNode node = OutputNode
  { parent :: node
@@ -356,6 +359,7 @@ data Const = Const
 data DFG node = DFG
  { parent :: node
  , signature_ :: FunctionType
+ , metadata :: [(String, String)]
  } deriving (Eq, Functor, Show)
 
 instance Eq node => Ord (DFG node) where
@@ -365,6 +369,7 @@ instance ToJSON node => ToJSON (DFG node) where
   toJSON (DFG { .. }) = object ["op" .= ("DFG" :: Text)
                                ,"parent" .= parent
                                ,"signature" .= signature_
+                               ,"metadata" .= M.fromList metadata
                                ]
 
 data TagOp node = TagOp

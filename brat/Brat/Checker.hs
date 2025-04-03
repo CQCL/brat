@@ -48,6 +48,8 @@ import Bwd
 import Hasochism
 import Util (zipSameLength)
 
+import Debug.Trace
+
 -- Put things into a standard form in a kind-directed manner, such that it is
 -- meaningful to do case analysis on them
 standardise :: TypeKind -> Val Z -> Checking (Val Z)
@@ -695,7 +697,7 @@ checkClause my fnName cty clause = modily my $ do
 
   -- First, we check the patterns on the LHS. This requires some overs,
   -- so we make a box, however this box will be skipped during compilation.
-  (vars, match, rhsCty) <- suppressHoles . fmap snd $
+  (vars, match, rhsCty, patEnds) <- suppressHoles . fmap snd $
                      let ?my = my in makeBox (clauseName ++ "_setup") cty $
                      \(overs, unders) -> do
     -- Make a problem to solve based on the lhs and the overs
@@ -704,14 +706,24 @@ checkClause my fnName cty clause = modily my $ do
     -- The solution gives us the variables bound by the patterns.
     -- We turn them into a row
     Some (patEz :* patRo) <- mkArgRo my S0 ((\(n, (src, ty)) -> (NamedPort (toEnd src) n, ty)) <$> sol)
+    let patEnds = snd <$> sol
     -- Also make a row for the refined outputs (shifted by the pattern environment)
     Some (_ :* outRo) <- mkArgRo my patEz (first (fmap toEnd) <$> unders)
     let match = TestMatchData my $ MatchSequence overs tests (snd <$> sol)
     let vars = fst <$> sol
-    pure (vars, match, patRo :->> outRo)
+    pure (vars, match, patRo :->> outRo, patEnds)
+
+  traceM $ "Check this out: " ++ show rhsCty
 
   -- Now actually make a box for the RHS and check it
   ((boxPort, _ty), _) <- let ?my = my in makeBox (clauseName ++ "_rhs") rhsCty $ \(rhsOvers, rhsUnders) -> do
+    -- Cheeky plumbing
+    case (?my, my) of
+      (Braty, Braty) -> for_ (fromJust $ zipSameLength patEnds rhsOvers) $ \((oldSrc, _), (newSrc, ty)) -> case ty of
+        Left k -> eval (endVal k (toEnd oldSrc)) defineSrc oldSrc (endVal k (toEnd newSrc))
+        _ -> pure ()
+      _ -> pure ()
+
     let abstractor = foldr ((:||:) . APat . Bind) AEmpty vars
     let ?my = my in do
       env <- abstractAll rhsOvers abstractor

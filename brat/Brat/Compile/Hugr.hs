@@ -43,6 +43,8 @@ import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import GHC.Base (NonEmpty(..))
 import Data.Tuple (swap)
 
+import Debug.Trace
+
 {-
 For each top level function definition or value in BRAT: we should have a FuncDef node in
 hugr, whose child graph is the body of the function
@@ -70,6 +72,12 @@ data CompilationState = CompilationState
  -- of the decl (e.g. `x :: Int` `x = 1+2` requires calling the FuncDefn to calculate 1+2).
  -- Note that in the future this could be extended to allow top-level Consts too.
  , decls :: M.Map Name (NodeId, Bool)
+ -- Edges to get resolved later
+ -- Specifically, if a box references a Source from another box, but the other
+ -- box isn't compiled yet, we don't have a NodeId for the Source, so we need to
+ -- defer.
+ -- This is the only use case so far, hence the types
+ , deferredEdges :: [(PortId Name, PortId NodeId)]
  }
 
 emptyCS g ns store = CompilationState
@@ -82,6 +90,7 @@ emptyCS g ns store = CompilationState
   , liftedOutPorts = M.empty
   , store = store
   , decls = M.empty
+  , deferredEdges = []
   }
 
 registerFuncDef :: Name -> (NodeId, Bool) -> Compile ()
@@ -103,6 +112,10 @@ addEdge e = do
   st <- get
   let es = edges st
   put (st { edges = e:es })
+
+addDeferredEdge :: (PortId Name, PortId NodeId) -> Compile ()
+addDeferredEdge e | trace ("Deferred " ++ show e) False = undefined
+addDeferredEdge e = modify (\st -> st { deferredEdges = e:deferredEdges st })
 
 addNode :: String -> HugrOp NodeId -> Compile NodeId
 addNode name op = do
@@ -297,29 +310,41 @@ compileClauses parent ins ((matchData, rhs) :| clauses) = do
   didMatch :: [HugrType] -> NodeId -> [TypedPort] -> Compile [TypedPort]
   didMatch outTys parent ins = gets bratGraph >>= \(ns,_) -> case ns M.! rhs of
     BratNode (Box _venv src tgt) _ _ -> do
-      dfgId <- addNode "DidMatch_DFG" (OpDFG (DFG parent (FunctionType (snd <$> ins) outTys bratExts)))
+      dfgId <- addNode "DidMatch_DFG" (OpDFG (DFG parent (FunctionType (snd <$> ins) outTys bratExts) [("patternMatch", "didMatchCase")]))
       compileBox (src, tgt) dfgId
       for_ (zip (fst <$> ins) (Port dfgId <$> [0..])) addEdge
       pure $ zip (Port dfgId <$> [0..]) outTys
     _ -> error "RHS should be a box node"
 
 compileBox :: (Name, Name) -> NodeId -> Compile ()
--- note: we used to compile only KernelNode's here, this may not be right
+-- note: we used to compile only KernelNode's here, this may not be right (it's not!)
+compileBox stuff parent | trace ("compileBox " ++ show stuff ++ " " ++ show parent) False = undefined
 compileBox (src, tgt) parent = for_ [src, tgt] (compileWithInputs parent)
 
 compileWithInputs :: NodeId -> Name -> Compile (Maybe NodeId)
-compileWithInputs parent name = gets compiled >>= (\case
+compileWithInputs parent name | trace ("compileWithInputs " ++ show parent ++ " " ++ show name) False = undefined
+compileWithInputs parent name = gets (M.lookup name . compiled) >>= \case
   Just nid -> pure (Just nid)
   Nothing -> do
-    (_, es) <- gets bratGraph
-    let in_edges = [((src, ty), portNum) | (src, ty, In edgTgt portNum) <- es, edgTgt == name]
-    compileNode in_edges >>= \case
+    (ns, es) <- gets bratGraph
+    let in_edges' = [((src, ty), portNum) | (src, ty, In edgTgt portNum) <- es, edgTgt == name]
+    let (inEdges, otherEdges) = partition (\((Ex src _, _), _) -> not (isSource ns src)) in_edges'
+    traceM $ "Other edges: " ++ show otherEdges
+    compileNode inEdges >>= \case
       Nothing -> pure Nothing
       Just (tgtNodeId, edges) -> do
         registerCompiled name tgtNodeId
         for_ edges (\(src, tgtPort) -> addEdge (src, Port tgtNodeId tgtPort))
-        pure $ Just tgtNodeId) . M.lookup name
+        for otherEdges (\((Ex srcName srcPort, _), tgtPort) -> addDeferredEdge (Port srcName srcPort, Port tgtNodeId tgtPort))
+        pure $ Just tgtNodeId
  where
+  isSource :: M.Map Name Node -> Name -> Bool
+  isSource ns n = case M.lookup n ns of
+    Just (BratNode Source _ _) -> True
+    Just (KernelNode Source _ _) -> True
+    Nothing -> error "oh no!"
+    _ -> False
+
   -- If we only care about the node for typechecking, then drop it and return `Nothing`.
   -- Otherwise, NodeId of compiled node, and list of Hugr in-edges (source and target-port)
   compileNode :: [((OutPort, Val Z), Int)] -> Compile (Maybe (NodeId, [(PortId NodeId, Int)]))
@@ -400,7 +425,7 @@ compileWithInputs parent name = gets compiled >>= (\case
       boxSig@(inputTys, outputTys) <- compileSig Braty cty
       let boxFunTy = FunctionType inputTys outputTys bratExts
       ((Port loadConst _, _ty), ()) <- compileConstDfg parent n boxSig $ \dfgId -> do
-        ins <- addNodeWithInputs ("Inputs" ++ n) (OpIn (InputNode dfgId inputTys)) [] inputTys
+        ins <- addNodeWithInputs ("Inputs" ++ n) (OpIn (InputNode dfgId inputTys [("context", "Prim")])) [] inputTys
         outs <- addNodeWithInputs n (OpCustom (CustomOp dfgId ext op boxFunTy [])) ins outputTys
         addNodeWithInputs ("Outputs" ++ n) (OpOut (OutputNode dfgId outputTys)) outs []
         pure ()
@@ -450,7 +475,7 @@ compileWithInputs parent name = gets compiled >>= (\case
 
     Source -> default_edges <$> do
       outs <- compilePorts outs
-      addNode "Input" (OpIn (InputNode parent outs))
+      addNode "Input" (OpIn (InputNode parent outs [("context", "Source")]))
     Target -> default_edges <$> do
       ins <- compilePorts ins
       addNode "Output" (OpOut (OutputNode parent ins))
@@ -469,8 +494,8 @@ compileWithInputs parent name = gets compiled >>= (\case
     PatternMatch cs -> default_edges <$> do
       ins <- compilePorts ins
       outs <- compilePorts outs
-      dfgId <- addNode "DidMatch_DFG" (OpDFG (DFG parent (FunctionType ins outs bratExts)))
-      inputNode <- addNode "PatternMatch.Input" (OpIn (InputNode dfgId ins))
+      dfgId <- addNode "DidMatch_DFG" (OpDFG (DFG parent (FunctionType ins outs bratExts) [("patternMatch", "DFG")]))
+      inputNode <- addNode "PatternMatch.Input" (OpIn (InputNode dfgId ins [("context", "PatternMatch")]))
       ccOuts <- compileClauses dfgId (zip (Port inputNode <$> [0..]) ins) cs
       addNodeWithInputs "PatternMatch.Output" (OpOut (OutputNode dfgId (snd <$> ccOuts))) ccOuts []
       pure dfgId
@@ -526,7 +551,7 @@ compileConstDfg parent desc (inTys, outTys) contents = do
       dfg_id <- freshNode ("Box_" ++ show desc)
       a <- contents dfg_id
       let funTy = FunctionType inTys outTys bratExts
-      addOp (OpDFG $ DFG dfg_id funTy) dfg_id
+      addOp (OpDFG $ DFG dfg_id funTy [("const", show dfg_id)]) dfg_id
       pure (funTy, a)
   let nestedHugr = renameAndSortHugr (nodes cs) (edges cs)
   let ht = HTFunc $ PolyFuncType [] funTy
@@ -553,7 +578,14 @@ compileBratBox parent name (venv, src, tgt) cty = do
   let boxInnerSig = FunctionType allInputTys outputTys bratExts
 
   (templatePort, _) <- compileConstDfg parent ("BB" ++ show name) (allInputTys, outputTys) $ \dfgId -> do
-    src_id <- addNode ("LiftedCapturesInputs" ++ show name) (OpIn (InputNode dfgId allInputTys))
+    let inputOp = OpIn (InputNode dfgId allInputTys [("context", "ConstDFG")])
+    src_id <- gets (M.lookup src . compiled) >>= \case
+      Just src_id -> do
+        st <- get
+        let newNodes = M.alter (\_ -> Just inputOp) src_id (nodes st)
+        put (st { nodes = newNodes })
+        pure src_id
+      Nothing -> addNode ("LiftedCapturesInputs" ++ show name) inputOp
     -- Now map ports in the BRAT Graph to their Hugr equivalents.
           -- Each captured value is read from an element of src_id, starting from 0
     let lifted = [(src, Port src_id i) | ((src, _ty), i) <- zip params [0..]]
@@ -731,7 +763,7 @@ makeConditional parent discrim otherInputs cases = do
   makeCase :: NodeId -> String -> Int -> [HugrType] -> (NodeId -> [TypedPort] -> Compile [TypedPort]) -> Compile [HugrType]
   makeCase parent name ix tys f = do
     caseId <- freshNode name
-    inpId <- addNode ("Input_" ++ name) (OpIn (InputNode caseId tys))
+    inpId <- addNode ("Input_" ++ name) (OpIn (InputNode caseId tys [("context", "Case")]))
     outs <- f caseId (zipWith (\offset ty -> (Port inpId offset, ty)) [0..] tys)
     let outTys = snd <$> outs
 
@@ -818,7 +850,17 @@ compileModule venv = do
     -- their own LoadConstant/extra-Call/etc. *within each function*.
     put st { compiled = M.empty }
     body)
+  addDeferredEdges
+
  where
+  addDeferredEdges :: Compile ()
+  addDeferredEdges = do
+    es <- gets deferredEdges
+    for_ es $ \(Port srcName srcPort, tgt) -> do
+      gets ((M.lookup srcName) . compiled) >>= \case
+        Nothing -> error (show srcName ++ " not in map??")
+        Just srcNodeId -> addEdge (Port srcNodeId srcPort, tgt)
+
   -- Given the Brat-Graph Id node for the decl, work out how to compile it (later);
   -- return the type of the Hugr FuncDefn, whether said FuncDefn requires an extra Call,
   -- and the procedure for compiling the contents of the FuncDefn for execution later,
@@ -851,7 +893,7 @@ compileModule venv = do
 
   withIO :: NodeId -> HugrType -> Compile TypedPort -> Compile ()
   withIO parent output c = do
-    addNode "input" (OpIn (InputNode parent []))
+    addNode "input" (OpIn (InputNode parent [] [("context", "withIO")]))
     output <- addNode "output" (OpOut (OutputNode parent [output]))
     wire <- c
     addEdge (fst wire, Port output 0)
@@ -876,7 +918,7 @@ compileModule venv = do
 
 compileNoun :: [HugrType] -> [OutPort] -> NodeId -> Compile ()
 compileNoun outs srcPorts parent = do
-  addNode "input" (OpIn (InputNode parent []))
+  addNode "input" (OpIn (InputNode parent [] [("context", "compileNoun")]))
   output <- addNode "output" (OpOut (OutputNode parent outs))
   for_ (zip [0..] srcPorts) (\(outport, Ex src srcPort) ->
     compileWithInputs parent src >>= \case
