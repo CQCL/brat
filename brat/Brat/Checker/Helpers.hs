@@ -21,7 +21,7 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
 			    ,solveHopeVal, solveHopeSem
                             )-} where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd)
+import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd, tlup)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (eval, EvMode(..), kindType, quote, doesntOccur)
@@ -46,6 +46,8 @@ import Data.List (partition)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
 import Prelude hiding (last)
+
+import Debug.Trace
 
 simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Either ErrorMsg ()
 simpleCheck Braty TNat (Num n) | n >= 0 = pure ()
@@ -470,6 +472,66 @@ buildAdd n = do
   defineSrc out (VNum (nPlus n (nVar (VPar (toEnd rhs)))))
   pure (rhs, out)
 
+buildSub :: Integer -> Checking (Tgt, Src)
+buildSub n = do
+  nDangling <- buildNum n
+  ((lhs,rhs),out) <- buildArithOp Sub
+  req $ Wire (end nDangling, TNat, end lhs)
+  defineTgt rhs (VNum (nPlus n (nVar (VPar (toEnd out)))))
+  pure (rhs, out)
+
+buildDoub :: Checking (Tgt, Src)
+buildDoub = do
+  nDangling <- buildNum 2
+  ((lhs,rhs),out) <- buildArithOp Mul
+  req $ Wire (end nDangling, TNat, end lhs)
+  defineSrc out (VNum (n2PowTimes 1 (nVar (VPar (toEnd rhs)))))
+  pure (rhs, out)
+
+buildHalve :: Checking (Tgt, Src)
+buildHalve = do
+  nDangling <- buildNum 2
+  ((lhs,rhs),out) <- buildArithOp Div
+  req $ Wire (end nDangling, TNat, end lhs)
+  defineTgt rhs (VNum (n2PowTimes 1 (nVar (VPar (toEnd out)))))
+  pure (rhs, out)
+
+replaceHope :: InPort -> InPort -> Checking ()
+replaceHope old new = do
+  hs <- req AskHopes
+  case M.lookup old hs of
+    Nothing -> pure ()
+    Just fc -> do
+      req (RemoveHope old)
+      req (ANewHope new fc)
+
+-- Return an End with the same polarity whose value is half that of the input End
+makeHalf :: End -> Checking End
+makeHalf (InEnd e) = do
+  (doubIn, doubOut) <- buildDoub
+  req (Wire (end doubOut, TNat, e))
+  defineTgt (NamedPort e "") (VNum (nVar (VPar (toEnd doubOut))))
+  replaceHope e (end doubIn)
+  pure (InEnd (end doubIn))
+makeHalf (ExEnd e) = do
+  (halveIn, halveOut) <- buildHalve
+  req (Wire (e, TNat, end halveIn))
+  defineTgt halveIn (VNum (nVar (VPar (toEnd e))))
+  pure (toEnd halveOut)
+
+makePred :: End -> Checking End
+makePred (InEnd e) = do
+  (succIn, succOut) <- buildAdd 1
+  req (Wire (end succOut, TNat, e))
+  defineTgt (NamedPort e "") (VNum (nVar (VPar (toEnd succIn))))
+  replaceHope e (end succIn)
+  pure (toEnd succIn)
+makePred (ExEnd e) = do
+  (predIn, predOut) <- buildSub 1
+  req (Wire (e, TNat, end predIn))
+  defineTgt predIn (VNum (nVar (VPar (toEnd e))))
+  pure (toEnd predOut)
+
 -- Generate wiring to produce a dynamic instance of the numval argument
 -- N.B. In these functions, we wire using Req, rather than the `wire` function
 -- because we don't want it to do any extra evaluation.
@@ -579,18 +641,51 @@ solveHopeSem k hope = quote Zy >=> solveHopeVal k hope
 -- Convert a pattern into a value for the purposes of solving it with unification
 -- for pattern matching. This is used for checking type constructors - we're only
 -- dealing in static information.
-valPat2Val :: -> KindType
-              -> ValPat
-              -> Checking (Either ErrorMsg (Bwd (Val Z) -- Values of the pattern vars
-                                           ,Val Z  -- The value of the whole pattern
-                                           )
-                        )
-valPat2Val my k VPVar = do
-  (_, [(idTgt, _)], [_], _) <- anext "" Id (S0, Some (Zy :* S0)) (REx ("", Left k) R0) (REx ("", Left k) R0)
-  let val = VApp (VPar (end idTgt)) B0
+valPat2Val :: TypeKind
+           -> ValPat
+           -> Checking (Bwd (Val Z) -- Values of the pattern vars
+                       ,Val Z  -- The value of the whole pattern
+                       )
+valPat2Val k VPVar = do
+  (_, [(idTgt, _)], [_], _) <- anext "pat2val" Id (S0, Some (Zy :* S0)) (REx ("", k) R0) (REx ("", k) R0)
+  let val = VApp (VPar (toEnd idTgt)) B0
   -- TODO: Make the FC optional in ANewHope
-  let dummyFC = FC (Pos 0 0) (Pos 0 0)
-  req (ANewHope inTgt dummyFC)
-  pure (Right (B0 :< val, val))
-valPat2Val my ty (VPCon u args) = _
-valPat2Val my ty (VPNum n) = _
+  fc <- req AskFC
+  req (ANewHope (end idTgt) fc)
+  pure (B0 :< val, val)
+valPat2Val (TypeFor m _) (VPCon con args) = do
+  ks <- fmap snd <$> tlup (m, con)
+  (stk, args) <- valPats2Val ks args
+  let val = VCon con args
+  pure (stk, val)
+valPat2Val Nat (VPNum n) = numPat2Val n >>= \(stk, nv) -> pure (stk, VNum nv)
+ where
+  numPat2Val :: NumPat -> Checking (Bwd (Val Z), NumVal (VVar Z))
+  numPat2Val NP0 = pure (B0, nZero)
+  numPat2Val (NP1Plus np) = second (nPlus 1) <$> numPat2Val np
+  numPat2Val (NP2Times np) = second (n2PowTimes 1) <$> numPat2Val np
+  numPat2Val NPVar = do
+    (_, [(idTgt, _)], [_], _) <- anext "numpat2val" Id (S0, Some (Zy :* S0)) (REx ("", Nat) R0) (REx ("", Nat) R0)
+    fc <- req AskFC
+    req (ANewHope (end idTgt) fc)
+    let var = endVal Nat (toEnd idTgt)
+    pure (B0 :< var, nVar (VPar (toEnd idTgt)))
+
+valPats2Val :: [TypeKind]
+            -> [ValPat]
+            -> Checking (Bwd (Val Z) -- Values of the pattern vars
+                        ,[Val Z]  -- The value of the whole pattern
+                        )
+valPats2Val (k:ks) (v:vs) = do
+  (stk, v) <- valPat2Val k v
+  (stk', vs) <- valPats2Val ks vs
+  pure (stk <+ stk', v:vs)
+valPats2Val [] [] = pure (B0, [])
+valPats2Val _ _ = err $ InternalError "Type args didn't match expected - kindCheck should've sorted it"
+
+traceChecking :: (Show a, Show b) => String -> (a -> Checking b) -> (a -> Checking b)
+traceChecking lbl m a = do
+  traceM ("Enter " ++ lbl ++ ": " ++ show a)
+  b <- m a
+  traceM ("Exit  " ++ lbl ++ ": " ++ show b)
+  pure b

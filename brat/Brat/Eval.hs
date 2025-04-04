@@ -2,6 +2,7 @@
 
 module Brat.Eval (EvMode(..)
                  ,ValPat(..)
+                 ,NumEval(..)
                  ,NumPat(..)
                  ,apply
                  ,applySem

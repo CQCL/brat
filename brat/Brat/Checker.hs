@@ -48,6 +48,8 @@ import Bwd
 import Hasochism
 import Util (zipSameLength)
 
+import Debug.Trace
+
 -- Put things into a standard form in a kind-directed manner, such that it is
 -- meaningful to do case analysis on them
 standardise :: TypeKind -> Val Z -> Checking (Val Z)
@@ -456,11 +458,23 @@ check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = case (?my, ty) of
  where
   aux :: Modey m -> (QualName -> QualName -> Checking (CtorArgs m)) -> Val Z -> Checking ()
   aux my lup ty = do
+    -- TODO: Use concurrency to avoid strictness - we don't have to work out that
+    -- this is a VCon immediately.
     VCon tycon tyargs <- eval S0 ty
+    traceM $ "checking constructor of type: " ++ show tycon ++ " " ++ show tyargs
     (CArgs pats nFree _ argTypeRo) <- lup vcon tycon
     -- Look for vectors to produce better error messages for mismatched lengths
-    wrap <- detectVecErrors vcon tycon tyargs pats ty (Left tm)
-    Some (ny :* env) <- throwLeft $ valMatches tyargs pats
+    -- wrap <- detectVecErrors vcon tycon tyargs pats ty (Left tm)
+    -- Get the kinds of type args
+    let m = deModey my -- TODO: remember what this is
+    (_, ks) <- unzip <$> tlup (m, tycon)
+    -- Turn `pats` into values for unification
+    (varz, patVals) <- valPats2Val ks pats
+    traceM $ "problem: " ++ show tyargs ++ " =?= " ++ show patVals
+    -- Create a unification problem between tyargs and the value versions of pats
+    typeEq (show tycon) (TypeFor m []) (VCon tycon tyargs) (VCon tycon patVals)
+    traceM "Made it past unification"
+    Some (ny :* env) <- pure $ bwdStack varz
     -- Make sure env is the correct length for args
     Refl <- throwLeft $ natEqOrBust ny nFree
     let topy = roTopM my ny argTypeRo
@@ -471,7 +485,7 @@ check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = case (?my, ty) of
     (_, argUnders, [(dangling, _)], _) <- anext (show vcon) (Constructor vcon)
                                           (env, Some (Zy :* S0))
                                           argTypeRo (RPr ("value", ty') R0)
-    (((), ()), ((), leftUnders)) <- wrapError wrap $ check vargs ((), argUnders)
+    (((), ()), ((), leftUnders)) <- {- wrapError wrap $ -} check vargs ((), argUnders)
     ensureEmpty "con unders" leftUnders
     wire (dangling, ty, hungry)
 

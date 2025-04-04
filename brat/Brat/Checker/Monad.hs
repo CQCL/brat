@@ -167,6 +167,9 @@ kclup :: QualName -- Value constructor
       -> Checking (CtorArgs Kernel)
 kclup vcon tycon = req AskFC >>= \fc -> req (KCLup fc vcon tycon)
 
+-- TODO: Future proof this by taking a TypeKind argument instead of a mode.
+-- Currently we have kinds `Nat` for `TypeFor m`, where we don't lookup `Nat`
+-- with tlup, but this will change!
 tlup :: (Mode, QualName) -> Checking [(PortName, TypeKind)]
 tlup (m, c) = req (TLup (m, c)) >>= \case
   Nothing -> req (TLup (otherMode, c)) >>= \case
@@ -333,4 +336,3 @@ localNS ns (Req c k) = Req c (localNS ns . k)
 
 defineEnd :: End -> Val Z -> Checking ()
 defineEnd e v = req (Define e v)
-
