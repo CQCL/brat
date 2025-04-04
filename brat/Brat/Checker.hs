@@ -482,6 +482,7 @@ check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = case (?my, ty) of
     -- in the kernel case the bottom and top of the row are the same
     let ty' = weaken topy ty
     env <- traverseStack (sem S0) env
+    traceM $ "Matchenv: " ++ show env
     (_, argUnders, [(dangling, _)], _) <- anext (show vcon) (Constructor vcon)
                                           (env, Some (Zy :* S0))
                                           argTypeRo (RPr ("value", ty') R0)

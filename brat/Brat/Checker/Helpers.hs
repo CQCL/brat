@@ -476,9 +476,9 @@ buildSub :: Integer -> Checking (Tgt, Src)
 buildSub n = do
   nDangling <- buildNum n
   ((lhs,rhs),out) <- buildArithOp Sub
-  req $ Wire (end nDangling, TNat, end lhs)
-  defineTgt rhs (VNum (nPlus n (nVar (VPar (toEnd out)))))
-  pure (rhs, out)
+  req $ Wire (end nDangling, TNat, end rhs)
+  defineTgt lhs (VNum (nPlus n (nVar (VPar (toEnd out)))))
+  pure (lhs, out)
 
 buildDoub :: Checking (Tgt, Src)
 buildDoub = do
@@ -492,9 +492,9 @@ buildHalve :: Checking (Tgt, Src)
 buildHalve = do
   nDangling <- buildNum 2
   ((lhs,rhs),out) <- buildArithOp Div
-  req $ Wire (end nDangling, TNat, end lhs)
-  defineTgt rhs (VNum (n2PowTimes 1 (nVar (VPar (toEnd out)))))
-  pure (rhs, out)
+  req $ Wire (end nDangling, TNat, end rhs)
+  defineTgt lhs (VNum (n2PowTimes 1 (nVar (VPar (toEnd out)))))
+  pure (lhs, out)
 
 replaceHope :: InPort -> InPort -> Checking ()
 replaceHope old new = do
@@ -523,7 +523,7 @@ makePred :: End -> Checking End
 makePred (InEnd e) = do
   (succIn, succOut) <- buildAdd 1
   req (Wire (end succOut, TNat, e))
-  defineTgt (NamedPort e "") (VNum (nVar (VPar (toEnd succIn))))
+  defineTgt (NamedPort e "") (VNum (nVar (VPar (toEnd succOut))))
   replaceHope e (end succIn)
   pure (toEnd succIn)
 makePred (ExEnd e) = do

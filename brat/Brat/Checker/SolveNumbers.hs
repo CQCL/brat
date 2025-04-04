@@ -30,6 +30,7 @@ data NumUnifyMode = NUGinger | NUFred deriving (Show, Eq)
 --
 -- We assume that the caller has done the occurs check and rules out trivial equations.
 solveNumMeta :: End -> NumVal (VVar Z) -> Checking ()
+solveNumMeta e nv | trace ("solveNumMeta " ++ show e ++ " " ++ show nv) False = undefined
 solveNumMeta e nv = case (e, vars nv) of
  -- Compute the thing that the rhs should be based on the src, and instantiate src to that
  (ExEnd src,  [VPar (InEnd _tgt)]) -> do
@@ -67,11 +68,14 @@ solveNumMeta e nv = case (e, vars nv) of
   vars = foldMap pure
 
 unifyNum :: NumUnifyMode -> NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
-unifyNum numo a b | trace ("unifyNum\n  " ++ show a ++ "\n  " ++ show b) False = undefined
 unifyNum numo nv0 nv1 = do
+  traceM $ ("unifyNum In\n  " ++ show nv0 ++ "\n  " ++ show nv1)
   nv0 <- numEval S0 nv0
   nv1 <- numEval S0 nv1
   unifyNum' numo (quoteNum Zy nv0) (quoteNum Zy nv1)
+  nv0 <- numEval S0 (quoteNum Zy nv0)
+  nv1 <- numEval S0 (quoteNum Zy nv1)
+  traceM $ ("unifyNum Out\n  " ++ show (quoteNum Zy nv0) ++ "\n  " ++ show (quoteNum Zy nv1)) 
 
 -- Need to keep track of which way we're solving - which side is known/unknown
 -- Things which are dynamically unknown must be Tgts - information flows from Srcs
@@ -89,7 +93,7 @@ unifyNum' numo (NumValue lup lgro) (NumValue rup rgro)
   lhsStrictMono :: StrictMono (VVar Z) -> NumVal (VVar Z) -> Checking ()
   lhsStrictMono (StrictMono 0 mono) num = lhsMono mono num
   lhsStrictMono (StrictMono n mono) num = do
-    num <- traceChecking "demandEven" demandEven num
+    num <- traceChecking "lhsSM demandEven" demandEven num
     lhsStrictMono (StrictMono (n - 1) mono) num
 
   lhsMono :: Monotone (VVar Z) -> NumVal (VVar Z) -> Checking ()
@@ -100,7 +104,9 @@ unifyNum' numo (NumValue lup lgro) (NumValue rup rgro)
     = lhsStrictMono sm (NumValue 0 (StrictMonoFun sm'))
   lhsMono m@(Full _) (NumValue 0 gro) = lhsFun00 gro (NumValue 0 (StrictMonoFun (StrictMono 0 m)))
   lhsMono (Full sm) (NumValue up gro) = do
-    smPred <- traceChecking "demandSucc" demandSucc sm
+    smPred <- traceChecking "lhsMono demandSucc" demandSucc sm
+    sm <- numEval S0 sm
+    traceM $ "succ now " ++ show (quoteNum Zy sm)
     unifyNum numo (n2PowTimes 1 (nFull smPred)) (NumValue (up - 1) gro)
 
   demand0 :: NumVal (VVar Z) -> Checking ()
@@ -132,7 +138,7 @@ unifyNum' numo (NumValue lup lgro) (NumValue rup rgro)
 
   demandSucc (StrictMono k (Linear (VPar e))) = do
     pred <- traceChecking "makePred" makePred e
-    pure (nPlus (2^k - 1) (nVar (VPar pred)))
+    pure (nPlus ((2^k) - 1) (nVar (VPar pred)))
 {-
   demandSucc (StrictMono k (Linear (VPar (InEnd x)))) = case numo of
     NUGinger -> do
@@ -153,16 +159,18 @@ unifyNum' numo (NumValue lup lgro) (NumValue rup rgro)
   --   2^k * full(n + 1)
   -- = 2^k * (1 + 2 * full(n))
   -- = 2^k + 2^(k + 1) * full(n)
-  demandSucc (StrictMono k (Full nPlus1)) = do
+  demandSucc x@(StrictMono k (Full nPlus1)) = do
     n <- traceChecking "demandSucc" demandSucc nPlus1
+    foo <- numEval S0 x
+    traceM $ "ds: " ++ show x ++ " -> " ++ show (quoteNum Zy foo)
     pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes (k + 1) $ nFull n
   demandSucc n = err . UnificationError $ "Couldn't force " ++ show n ++ " to be a successor"
 
   -- Complain if a number isn't even, otherwise return half
   demandEven :: NumVal (VVar Z) -> Checking (NumVal (VVar Z))
   demandEven n@(NumValue up gro) = case up `divMod` 2 of
-    (up, 0) -> NumValue up <$> evenGro gro
-    (up, 1) -> nPlus (up + 1) <$> oddGro gro
+    (up, 0) -> NumValue up <$> traceChecking "evenGro" evenGro gro
+    (up, 1) -> nPlus (up + 1) <$> traceChecking "oddGro" oddGro gro
    where
     evenGro :: Fun00 (VVar Z) -> Checking (Fun00 (VVar Z))
     evenGro Constant0 = pure Constant0
@@ -189,7 +197,7 @@ unifyNum' numo (NumValue lup lgro) (NumValue rup rgro)
 
     -- Check a numval is odd, and return its rounded down half
     oddGro :: Fun00 (VVar Z) -> Checking (NumVal (VVar Z))
-    oddGro (StrictMonoFun (StrictMono 0 mono)) = case trace "got to oddGro " mono of
+    oddGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
       Linear (VPar e) -> do
         pred <- traceChecking "makePred" makePred e
         half <- traceChecking "makeHalf" makeHalf pred
