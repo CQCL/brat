@@ -347,7 +347,7 @@ instance NumFun Monotone where
   calculate (Linear n) = n
   calculate (Full sm) = full (calculate sm)
    where
-    full n = 2 ^ n - 1
+    full n = (2 ^ n) - 1
 
   numValue = numValue . StrictMono 0
 
