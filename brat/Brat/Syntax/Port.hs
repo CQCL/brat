@@ -41,6 +41,7 @@ instance ToEnd InPort where
 instance ToEnd OutPort where
   toEnd = ExEnd
 
+-- N.B. Ord is derived with In < Ex
 data End = InEnd InPort | ExEnd OutPort
  deriving (Eq, Ord)
 

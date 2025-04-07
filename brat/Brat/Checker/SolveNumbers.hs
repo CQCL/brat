@@ -84,20 +84,51 @@ unifyNum' (NumValue lup lgro) (NumValue rup rgro)
  where
   lhsFun00 :: Fun00 (VVar Z) -> NumVal (VVar Z) -> Checking ()
   lhsFun00 Constant0 num = demand0 num
+  -- Both sides are variables
+  lhsFun00 (StrictMonoFun (StrictMono 0 (Linear v))) (NumValue 0 (StrictMonoFun (StrictMono 0 (Linear v')))) = flexFlex v v'
+  -- There's just a variable on the right - move it to the left
+  lhsFun00 sm (NumValue 0 (StrictMonoFun smv@(StrictMono 0 (Linear _)))) = lhsStrictMono smv (NumValue 0 sm)
   lhsFun00 (StrictMonoFun sm) num = lhsStrictMono sm num
+
+  flexFlex :: VVar Z -> VVar Z -> Checking ()
+  flexFlex v v' = case compare v v' of
+    GT -> flexFlex v' v
+    EQ -> pure ()
+    LT -> case (v, v') of
+      (VPar (ExEnd e), v@(VPar (ExEnd _))) -> defineSrc (NamedPort e "") (VNum (nVar v))
+      (VPar (InEnd e), v@(VPar (ExEnd dangling))) -> do
+        req (Wire (dangling, TNat, e))
+        defineTgt (NamedPort e "") (VNum (nVar v))
+        (M.member e <$> req AskHopes) >>= \case
+          True -> req (RemoveHope e)
+          False -> pure ()
+      (v@(VPar (InEnd e)), v'@(VPar (InEnd e'))) -> do
+        hs <- req AskHopes
+        case (M.lookup e hs, M.lookup e' hs) of
+          (Nothing, Just _) -> do
+            defineTgt (NamedPort e' "") (VNum (nVar v))
+            req (RemoveHope e')
+          (Just _, Nothing) -> do
+            defineTgt (NamedPort e "") (VNum (nVar v'))
+            req (RemoveHope e)
+          (Nothing, Nothing) -> error "Two non-hopes in unifyNum"
+          (Just hd, Just hd') -> if hopeDynamic hd
+                                 then do defineTgt (NamedPort e' "") (VNum (nVar v))
+                                         req (RemoveHope e')
+                                 else do defineTgt (NamedPort e "") (VNum (nVar v'))
+                                         req (RemoveHope e)
 
   lhsStrictMono :: StrictMono (VVar Z) -> NumVal (VVar Z) -> Checking ()
   lhsStrictMono (StrictMono 0 mono) num = lhsMono mono num
   lhsStrictMono (StrictMono n mono) num = do
     num <- traceChecking "lhsSM demandEven" demandEven num
-    lhsStrictMono (StrictMono (n - 1) mono) num
+    lhsFun00 (StrictMonoFun (StrictMono (n - 1) mono)) num
 
   lhsMono :: Monotone (VVar Z) -> NumVal (VVar Z) -> Checking ()
-  lhsMono (Linear v) (NumValue 0 (StrictMonoFun (StrictMono 0 (Linear v')))) | v == v' = pure ()
   lhsMono (Linear (VPar e)) num = throwLeft (doesntOccur e (VNum num)) *>
                                   solveNumMeta e num
   lhsMono (Full sm) (NumValue 0 (StrictMonoFun (StrictMono 0 (Full sm'))))
-    = lhsStrictMono sm (NumValue 0 (StrictMonoFun sm'))
+    = lhsFun00 (StrictMonoFun sm) (NumValue 0 (StrictMonoFun sm'))
   lhsMono m@(Full _) (NumValue 0 gro) = lhsFun00 gro (NumValue 0 (StrictMonoFun (StrictMono 0 m)))
   lhsMono (Full sm) (NumValue up gro) = do
     smPred <- traceChecking "lhsMono demandSucc" demandSucc sm
