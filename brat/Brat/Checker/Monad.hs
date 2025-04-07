@@ -50,7 +50,12 @@ data CtxEnv = CtxEnv
   , locals :: VEnv
   }
 
-type Hopes = M.Map InPort FC
+data HopeData = HopeData
+  { hopeFC :: Maybe FC
+  , hopeDynamic :: Bool
+  } deriving (Eq, Ord, Show)
+
+type Hopes = M.Map InPort HopeData
 
 data Context = Ctx { globalVEnv :: VEnv
                    , store :: Store
@@ -92,7 +97,7 @@ data CheckingSig ty where
   AskVEnv :: CheckingSig CtxEnv
   Declare :: End -> Modey m -> BinderType m -> CheckingSig ()
   Define  :: End -> Val Z -> CheckingSig ()
-  ANewHope :: InPort -> FC -> CheckingSig ()
+  ANewHope :: InPort -> HopeData -> CheckingSig ()
   AskHopes :: CheckingSig Hopes
   RemoveHope :: InPort -> CheckingSig ()
 
@@ -167,6 +172,9 @@ kclup :: QualName -- Value constructor
       -> Checking (CtorArgs Kernel)
 kclup vcon tycon = req AskFC >>= \fc -> req (KCLup fc vcon tycon)
 
+-- TODO: Future proof this by taking a TypeKind argument instead of a mode.
+-- Currently we have kinds `Nat` for `TypeFor m`, where we don't lookup `Nat`
+-- with tlup, but this will change!
 tlup :: (Mode, QualName) -> Checking [(PortName, TypeKind)]
 tlup (m, c) = req (TLup (m, c)) >>= \case
   Nothing -> req (TLup (otherMode, c)) >>= \case
@@ -273,7 +281,7 @@ handler (Req s k) ctx g
                 M.lookup tycon tbl
         handler (k args) ctx g
 
-      ANewHope e fc -> handler (k ()) (ctx { hopes = M.insert e fc (hopes ctx) }) g
+      ANewHope e hd -> handler (k ()) (ctx { hopes = M.insert e hd (hopes ctx) }) g
 
       AskHopes -> handler (k (hopes ctx)) ctx g
 

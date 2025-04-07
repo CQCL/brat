@@ -53,6 +53,7 @@ data Inx :: N -> Type where
   VS :: Inx n -> Inx (S n)
 
 deriving instance Eq (Inx n)
+deriving instance Ord (Inx n)
 
 instance Show (Inx n) where
   show = show . toNat
@@ -143,6 +144,7 @@ data VVar :: N -> Type where
   VPar :: End -> VVar n  -- Has to be declared in the Store (for equality testing)
   VInx :: Inx n -> VVar n
 
+deriving instance Ord (VVar n)
 deriving instance Show (VVar n)
 
 instance Eq (VVar n) where
@@ -347,7 +349,7 @@ instance NumFun Monotone where
   calculate (Linear n) = n
   calculate (Full sm) = full (calculate sm)
    where
-    full n = 2 ^ n - 1
+    full n = (2 ^ n) - 1
 
   numValue = numValue . StrictMono 0
 

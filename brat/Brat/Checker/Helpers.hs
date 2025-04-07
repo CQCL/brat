@@ -18,12 +18,13 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
                             ,uncons
                             ,evalBinder
                             ,evalSrcRow, evalTgtRow
+			    ,solveHopeVal, solveHopeSem
                             )-} where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd)
+import Brat.Checker.Monad (Checking, CheckingSig(..), HopeData(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd, tlup)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
-import Brat.Eval (eval, EvMode(..), kindType)
+import Brat.Eval (eval, EvMode(..), kindType, quote, doesntOccur)
 import Brat.FC (FC)
 import Brat.Graph (Node(..), NodeType(..))
 import Brat.Naming (Name, FreshMonad(..))
@@ -36,6 +37,7 @@ import Bwd
 import Hasochism
 import Util (log2)
 
+import Control.Monad ((>=>))
 import Control.Monad.State.Lazy (StateT(..), runStateT)
 import Control.Monad.Freer (req)
 import Data.Bifunctor
@@ -44,6 +46,8 @@ import Data.List (partition)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
 import Prelude hiding (last)
+
+-- import Debug.Trace
 
 simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Either ErrorMsg ()
 simpleCheck Braty TNat (Num n) | n >= 0 = pure ()
@@ -272,57 +276,11 @@ vecLayers :: Modey m -> Val Z -> Checking ([(Src, NumVal (VVar Z))] -- The sizes
                                           ,CTy m Z -- The function type at the end
                                           )
 vecLayers my (TVec ty (VNum n)) = do
-  src <- mkStaticNum n
+  src <- buildNatVal n
   first ((src, n):) <$> vecLayers my ty
 vecLayers Braty (VFun Braty cty) = pure ([], cty)
 vecLayers Kerny (VFun Kerny cty) = pure ([], cty)
 vecLayers my ty = typeErr $ "Expected a " ++ showMode my ++ "function or vector of functions, got " ++ show ty
-
-mkStaticNum :: NumVal (VVar Z) -> Checking Src
-mkStaticNum n@(NumValue c gro) = do
-  (_, [], [(constSrc,_)], _) <- next "const" (Const (Num (fromIntegral c))) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
-  src <- case gro of
-    Constant0 -> pure constSrc
-    StrictMonoFun sm -> do
-      (_, [(lhs,_),(rhs,_)], [(src,_)], _) <- next "add_const" (ArithNode Add) (S0, Some (Zy :* S0))
-                                              (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0))
-                                              (RPr ("value", TNat) R0)
-      smSrc <- mkStrictMono sm
-      wire (constSrc, TNat, lhs)
-      wire (smSrc, TNat, rhs)
-      pure src
-  defineSrc src (VNum n)
-  pure src
- where
-  mkStrictMono :: StrictMono (VVar Z) -> Checking Src
-  mkStrictMono (StrictMono k mono) = do
-    (_, [], [(constSrc,_)], _) <- next "2^k" (Const (Num (2^k))) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
-    (_, [(lhs,_),(rhs,_)], [(src,_)], _) <- next "mult_const" (ArithNode Mul) (S0, Some (Zy :* S0))
-                                            (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0))
-                                            (RPr ("value", TNat) R0)
-    monoSrc <- mkMono mono
-    wire (constSrc, TNat, lhs)
-    wire (monoSrc, TNat, rhs)
-    pure src
-
-  mkMono :: Monotone (VVar Z) -> Checking Src
-  mkMono (Linear (VPar (ExEnd e))) = pure (NamedPort e "mono")
-  mkMono (Full sm) = do
-    (_, [], [(twoSrc,_)], _) <- next "2" (Const (Num 2)) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
-    (_, [(lhs,_),(rhs,_)], [(powSrc,_)], _) <- next "2^" (ArithNode Pow) (S0, Some (Zy :* S0))
-                                               (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0))
-                                               (RPr ("value", TNat) R0)
-    smSrc <- mkStrictMono sm
-    wire (twoSrc, TNat, lhs)
-    wire (smSrc, TNat, rhs)
-
-    (_, [], [(oneSrc,_)], _) <- next "1" (Const (Num 1)) (S0, Some (Zy :* S0)) R0 (RPr ("value", TNat) R0)
-    (_, [(lhs,_),(rhs,_)], [(src,_)], _) <- next "n-1" (ArithNode Sub) (S0, Some (Zy :* S0))
-                                            (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0))
-                                            (RPr ("value", TNat) R0)
-    wire (powSrc, TNat, lhs)
-    wire (oneSrc, TNat, rhs)
-    pure src
 
 vectorise :: forall m. Modey m -> (Src, Val Z) -> Checking (Src, CTy m Z)
 vectorise my (src, ty) = do
@@ -493,7 +451,242 @@ runArith (NumValue upl grol) Pow (NumValue upr gror)
  = pure $ NumValue (upl ^ upr) (StrictMonoFun (StrictMono (l * upr) (Full (StrictMono (k + k') mono))))
 runArith _ _ _ = Nothing
 
+buildArithOp :: ArithOp -> Checking ((Tgt, Tgt), Src)
+buildArithOp op = do
+  (_, [(lhs,_), (rhs,_)], [(out,_)], _) <- next (show op) (ArithNode op) (S0, Some (Zy :* S0)) (RPr ("lhs", TNat) (RPr ("rhs", TNat) R0)) (RPr ("value", TNat) R0)
+  pure ((lhs, rhs), out)
+
 buildConst :: SimpleTerm -> Val Z -> Checking Src
 buildConst tm ty = do
   (_, _, [(out,_)], _) <- next "buildConst" (Const tm) (S0, Some (Zy :* S0)) R0 (RPr ("value", ty) R0)
   pure out
+
+buildNum :: Integer -> Checking Src
+buildNum n = buildConst (Num (fromIntegral n)) TNat
+
+buildAdd :: Integer -> Checking (Tgt, Src)
+buildAdd n = do
+  nDangling <- buildNum n
+  ((lhs,rhs),out) <- buildArithOp Add
+  req $ Wire (end nDangling, TNat, end lhs)
+  defineSrc out (VNum (nPlus n (nVar (VPar (toEnd rhs)))))
+  pure (rhs, out)
+
+buildSub :: Integer -> Checking (Tgt, Src)
+buildSub n = do
+  nDangling <- buildNum n
+  ((lhs,rhs),out) <- buildArithOp Sub
+  req $ Wire (end nDangling, TNat, end rhs)
+  defineTgt lhs (VNum (nPlus n (nVar (VPar (toEnd out)))))
+  pure (lhs, out)
+
+buildDoub :: Checking (Tgt, Src)
+buildDoub = do
+  nDangling <- buildNum 2
+  ((lhs,rhs),out) <- buildArithOp Mul
+  req $ Wire (end nDangling, TNat, end lhs)
+  defineSrc out (VNum (n2PowTimes 1 (nVar (VPar (toEnd rhs)))))
+  pure (rhs, out)
+
+buildHalve :: Checking (Tgt, Src)
+buildHalve = do
+  nDangling <- buildNum 2
+  ((lhs,rhs),out) <- buildArithOp Div
+  req $ Wire (end nDangling, TNat, end rhs)
+  defineTgt lhs (VNum (n2PowTimes 1 (nVar (VPar (toEnd out)))))
+  pure (lhs, out)
+
+replaceHope :: InPort -> InPort -> Checking ()
+replaceHope old new = do
+  hs <- req AskHopes
+  case M.lookup old hs of
+    Nothing -> pure ()
+    Just hd -> do
+      req (RemoveHope old)
+      req (ANewHope new (HopeData Nothing (hopeDynamic hd)))
+
+-- Return an End with the same polarity whose value is half that of the input End
+makeHalf :: End -> Checking End
+makeHalf (InEnd e) = do
+  (doubIn, doubOut) <- buildDoub
+  req (Wire (end doubOut, TNat, e))
+  defineTgt (NamedPort e "") (VNum (nVar (VPar (toEnd doubOut))))
+  replaceHope e (end doubIn)
+  pure (InEnd (end doubIn))
+makeHalf (ExEnd e) = do
+  (halveIn, halveOut) <- buildHalve
+  req (Wire (e, TNat, end halveIn))
+  defineSrc (NamedPort e "") (VNum (nVar (VPar (toEnd halveIn))))
+  pure (toEnd halveOut)
+
+makePred :: End -> Checking End
+makePred (InEnd e) = do
+  (succIn, succOut) <- buildAdd 1
+  req (Wire (end succOut, TNat, e))
+  defineTgt (NamedPort e "") (VNum (nVar (VPar (toEnd succOut))))
+  replaceHope e (end succIn)
+  pure (toEnd succIn)
+makePred (ExEnd e) = do
+  (predIn, predOut) <- buildSub 1
+  req (Wire (e, TNat, end predIn))
+  defineSrc (NamedPort e "") (VNum (nVar (VPar (toEnd predIn))))
+  pure (toEnd predOut)
+
+-- Generate wiring to produce a dynamic instance of the numval argument
+-- N.B. In these functions, we wire using Req, rather than the `wire` function
+-- because we don't want it to do any extra evaluation.
+buildNatVal :: NumVal (VVar Z) -> Checking Src
+buildNatVal nv@(NumValue n gro) = case n of
+  0 -> buildGro gro
+  n -> do
+    (inn, out) <- buildAdd n
+    src <- buildGro gro
+    req $ Wire (end src, TNat, end inn)
+    defineTgt inn (VNum (nVar (VPar (toEnd src))))
+    pure out
+ where
+  buildGro :: Fun00 (VVar Z) -> Checking Src
+  buildGro Constant0 = buildNum 0
+  buildGro (StrictMonoFun sm) = buildSM sm
+
+  buildSM :: StrictMono (VVar Z) -> Checking Src
+  buildSM (StrictMono k mono) = do
+    factor <- buildNum $ 2 ^ k
+    -- Multiply mono by 2^k; note we could avoid this if k==0
+    ((lhs,rhs),out) <- buildArithOp Mul
+    monoDangling <- buildMono mono
+    req $ Wire (end factor, TNat, end lhs)
+    req $ Wire (end monoDangling, TNat, end rhs)
+    defineSrc out (VNum (n2PowTimes k (nVar (VPar (toEnd monoDangling)))))
+    pure out
+
+  buildMono :: Monotone (VVar Z) -> Checking Src
+  buildMono (Linear (VPar (ExEnd e))) = pure $ NamedPort e "numval"
+  buildMono (Full sm) = do
+    -- Calculate 2^n as `outPlus1`
+    two <- buildNum 2
+    dangling <- buildSM sm
+    ((lhs,rhs),outPlus1) <- buildArithOp Pow
+    req $ Wire (end two, TNat, end lhs)
+    req $ Wire (end dangling, TNat, end rhs)
+    -- Then subtract 1
+    one <- buildNum 1
+    ((lhs,rhs),out) <- buildArithOp Sub
+    req $ Wire (end outPlus1, TNat, end lhs)
+    req $ Wire (end one, TNat, end rhs)
+    defineSrc out (VNum (nFull (nVar (VPar (toEnd dangling)))))
+    pure out
+  buildMono _ = err . InternalError $ "Trying to build a non-closed nat value: " ++ show nv
+
+invertNatVal :: NumVal (VVar Z) -> Checking Tgt
+invertNatVal (NumValue up gro) = case up of
+  0 -> invertGro gro
+  _ -> do
+    ((lhs,rhs),out) <- buildArithOp Sub
+    upSrc <- buildNum up
+    req $ Wire (end upSrc, TNat, end rhs)
+    tgt <- invertGro gro
+    req $ Wire (end out, TNat, end tgt)
+    defineTgt tgt (VNum (nVar (VPar (toEnd out))))
+    defineTgt lhs (VNum (nPlus up (nVar (VPar (toEnd tgt)))))
+    pure lhs
+ where
+  invertGro Constant0 = error "Invariant violated: the numval arg to invertNatVal should contain a variable"
+  invertGro (StrictMonoFun sm) = invertSM sm
+
+  invertSM (StrictMono k mono) = case k of
+    0 -> invertMono mono
+    _ -> do
+      divisor <- buildNum (2 ^ k)
+      ((lhs,rhs),out) <- buildArithOp Div
+      tgt <- invertMono mono
+      req $ Wire (end out, TNat, end tgt)
+      req $ Wire (end divisor, TNat, end rhs)
+      defineTgt tgt (VNum (nVar (VPar (toEnd out))))
+      defineTgt lhs (VNum (n2PowTimes k (nVar (VPar (toEnd tgt)))))
+      pure lhs
+
+  invertMono (Linear (VPar (InEnd e))) = pure (NamedPort e "numval")
+  invertMono (Full sm) = do
+    (_, [(llufTgt,_)], [(llufSrc,_)], _) <- next "luff" (Prim ("BRAT","lluf")) (S0, Some (Zy :* S0)) (REx ("n", Nat) R0) (REx ("n", Nat) R0)
+    tgt <- invertSM sm
+    req $ Wire (end llufSrc, TNat, end tgt)
+    defineTgt tgt (VNum (nVar (VPar (toEnd llufSrc))))
+    defineTgt llufTgt (VNum (nFull (nVar (VPar (toEnd tgt)))))
+    pure llufTgt
+
+-- This will update the `hopes`, potentially invalidating things that have
+-- been eval'd.
+-- The Sem is closed, for now.
+solveHopeVal :: TypeKind -> InPort -> Val Z -> Checking ()
+solveHopeVal k hope v = case doesntOccur (InEnd hope) v of
+  Right () -> do
+    defineEnd (InEnd hope) v
+    dangling <- case (k, v) of
+      (Nat, VNum v) -> buildNatVal v
+      (Nat, _) -> err $ InternalError "Head of Nat wasn't a VNum"
+      _ -> buildConst Unit TUnit
+    req (Wire (end dangling, kindType k, hope))
+    req (RemoveHope hope)
+  Left msg -> case v of
+    VApp (VPar (InEnd end)) B0 | hope == end -> pure ()
+    -- TODO: Not all occurrences are toxic. The end could be in an argument
+    -- to a hoping variable which isn't used.
+    -- E.g. h1 = h2 h1 - this is valid if h2 is the identity, or ignores h1.
+    _ -> err msg
+
+solveHopeSem :: TypeKind -> InPort -> Sem -> Checking ()
+solveHopeSem k hope = quote Zy >=> solveHopeVal k hope
+
+-- Convert a pattern into a value for the purposes of solving it with unification
+-- for pattern matching. This is used for checking type constructors - we're only
+-- dealing in static information.
+valPat2Val :: TypeKind
+           -> ValPat
+           -> Checking (Bwd (Val Z) -- Values of the pattern vars
+                       ,Val Z  -- The value of the whole pattern
+                       )
+valPat2Val k VPVar = do
+  (_, [(idTgt, _)], [_], _) <- anext "pat2val" Id (S0, Some (Zy :* S0)) (REx ("", k) R0) (REx ("", k) R0)
+  let val = VApp (VPar (toEnd idTgt)) B0
+  req (ANewHope (end idTgt) (HopeData Nothing False))
+  pure (B0 :< val, val)
+valPat2Val (TypeFor m _) (VPCon con args) = do
+  ks <- fmap snd <$> tlup (m, con)
+  (stk, args) <- valPats2Val ks args
+  let val = VCon con args
+  pure (stk, val)
+valPat2Val Nat (VPNum n) = numPat2Val n >>= \(stk, nv) -> pure (stk, VNum nv)
+ where
+  numPat2Val :: NumPat -> Checking (Bwd (Val Z), NumVal (VVar Z))
+  numPat2Val NP0 = pure (B0, nZero)
+  numPat2Val (NP1Plus np) = second (nPlus 1) <$> numPat2Val np
+  numPat2Val (NP2Times np) = second (n2PowTimes 1) <$> numPat2Val np
+  numPat2Val NPVar = do
+    (_, [(idTgt, _)], [_], _) <- anext "numpat2val" Id (S0, Some (Zy :* S0)) (REx ("", Nat) R0) (REx ("", Nat) R0)
+    req (ANewHope (end idTgt) (HopeData Nothing False))
+    let var = endVal Nat (toEnd idTgt)
+    pure (B0 :< var, nVar (VPar (toEnd idTgt)))
+
+valPats2Val :: [TypeKind]
+            -> [ValPat]
+            -> Checking (Bwd (Val Z) -- Values of the pattern vars
+                        ,[Val Z]  -- The value of the whole pattern
+                        )
+valPats2Val (k:ks) (v:vs) = do
+  (stk, v) <- valPat2Val k v
+  (stk', vs) <- valPats2Val ks vs
+  pure (stk <+ stk', v:vs)
+valPats2Val [] [] = pure (B0, [])
+valPats2Val _ _ = err $ InternalError "Type args didn't match expected - kindCheck should've sorted it"
+
+{-
+traceChecking :: (Show a, Show b) => String -> (a -> Checking b) -> (a -> Checking b)
+traceChecking lbl m a = do
+  traceM ("Enter " ++ lbl ++ ": " ++ show a)
+  b <- m a
+  traceM ("Exit  " ++ lbl ++ ": " ++ show b)
+  pure b
+-}
+
+traceChecking = const id

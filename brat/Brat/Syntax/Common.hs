@@ -34,6 +34,7 @@ module Brat.Syntax.Common (PortName,
                            KINDY(..),
                            DIRY(..),
                            modily,
+                           deModey,
                            ArithOp(..),
                            pattern Dollar,
                            pattern Star,
@@ -83,6 +84,10 @@ instance KINDY KVerb where
 modily :: Modey m -> (MODEY m => t) -> t
 modily Braty t = t
 modily Kerny t = t
+
+deModey :: Modey m -> Mode
+deModey Braty = Brat
+deModey Kerny = Kernel
 
 instance TestEquality Modey where
   testEquality Braty Braty = Just Refl

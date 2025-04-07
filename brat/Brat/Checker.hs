@@ -48,6 +48,8 @@ import Bwd
 import Hasochism
 import Util (zipSameLength)
 
+-- import Debug.Trace
+
 -- Put things into a standard form in a kind-directed manner, such that it is
 -- meaningful to do case analysis on them
 standardise :: TypeKind -> Val Z -> Checking (Val Z)
@@ -456,11 +458,23 @@ check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = case (?my, ty) of
  where
   aux :: Modey m -> (QualName -> QualName -> Checking (CtorArgs m)) -> Val Z -> Checking ()
   aux my lup ty = do
+    -- TODO: Use concurrency to avoid strictness - we don't have to work out that
+    -- this is a VCon immediately.
     VCon tycon tyargs <- eval S0 ty
+    -- traceM $ "checking constructor of type: " ++ show tycon ++ " " ++ show tyargs
     (CArgs pats nFree _ argTypeRo) <- lup vcon tycon
     -- Look for vectors to produce better error messages for mismatched lengths
-    wrap <- detectVecErrors vcon tycon tyargs pats ty (Left tm)
-    Some (ny :* env) <- throwLeft $ valMatches tyargs pats
+    -- wrap <- detectVecErrors vcon tycon tyargs pats ty (Left tm)
+    -- Get the kinds of type args
+    let m = deModey my -- TODO: remember what this is
+    (_, ks) <- unzip <$> tlup (m, tycon)
+    -- Turn `pats` into values for unification
+    (varz, patVals) <- valPats2Val ks pats
+    -- traceM $ "problem: " ++ show tyargs ++ " =?= " ++ show patVals
+    -- Create a unification problem between tyargs and the value versions of pats
+    typeEq (show tycon) (TypeFor m []) (VCon tycon tyargs) (VCon tycon patVals)
+    -- traceM "Made it past unification"
+    Some (ny :* env) <- pure $ bwdStack varz
     -- Make sure env is the correct length for args
     Refl <- throwLeft $ natEqOrBust ny nFree
     let topy = roTopM my ny argTypeRo
@@ -468,10 +482,11 @@ check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = case (?my, ty) of
     -- in the kernel case the bottom and top of the row are the same
     let ty' = weaken topy ty
     env <- traverseStack (sem S0) env
+    -- traceM $ "Matchenv: " ++ show env
     (_, argUnders, [(dangling, _)], _) <- anext (show vcon) (Constructor vcon)
                                           (env, Some (Zy :* S0))
                                           argTypeRo (RPr ("value", ty') R0)
-    (((), ()), ((), leftUnders)) <- wrapError wrap $ check vargs ((), argUnders)
+    (((), ()), ((), leftUnders)) <- {- wrapError wrap $ -} check vargs ((), argUnders)
     ensureEmpty "con unders" leftUnders
     wire (dangling, ty, hungry)
 
@@ -663,7 +678,7 @@ check' (Of n e) ((), unders) = case ?my of
 check' Hope ((), (NamedPort hope _, ty):unders) = case (?my, ty) of
   (Braty, Left _k) -> do
     fc <- req AskFC
-    req (ANewHope hope fc)
+    req (ANewHope hope (HopeData (Just fc) True))
     pure (((), ()), ((), unders))
   (Braty, Right _ty) -> typeErr "Can only infer kinded things with !"
   (Kerny, _) -> typeErr "Won't infer kernel typed !"
@@ -1146,11 +1161,11 @@ run ve initStore ns m = do
   -- If the `hopes` set has any remaining holes with kind Nat, we need to abort.
   -- Even though we didn't need them for typechecking problems, our runtime
   -- behaviour depends on the values of the holes, which we can't account for.
-  case M.toList $ M.filterWithKey (\e _ -> isNatKinded tyMap (InEnd e)) (hopes ctx) of
+  case M.toList $ M.filterWithKey (\e hd -> isNatKinded tyMap (InEnd e) && hopeDynamic hd) (hopes ctx) of
     [] -> pure (a, (holes, store ctx, graph))
     -- Just use the FC of the first hole while we don't have the capacity to
     -- show multiple error locations
-    hs@((_,fc):_) -> Left $ Err (Just fc) (RemainingNatHopes (show . fst <$> hs))
+    hs@((_,hd):_) -> Left $ Err (hopeFC hd) (RemainingNatHopes (show . fst <$> hs))
  where
   isNatKinded tyMap e = case tyMap M.! e of
     EndType Braty (Left Nat) -> True
