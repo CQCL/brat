@@ -11,10 +11,10 @@ import Brat.Graph (NodeType(..))
 import Hasochism
 import Control.Monad.Freer
 
-import Debug.Trace
+-- import Debug.Trace
 import qualified Data.Map as M
 
---trail = trace
+-- trail = trace
 
 -- This is currently lifted from SolvePatterns, which still imports it.
 -- It is also used in SolveHoles, where it does the right mathematics
@@ -30,7 +30,7 @@ data NumUnifyMode = NUGinger | NUFred deriving (Show, Eq)
 --
 -- We assume that the caller has done the occurs check and rules out trivial equations.
 solveNumMeta :: End -> NumVal (VVar Z) -> Checking ()
-solveNumMeta e nv | trace ("solveNumMeta " ++ show e ++ " " ++ show nv) False = undefined
+-- solveNumMeta e nv | trace ("solveNumMeta " ++ show e ++ " " ++ show nv) False = undefined
 solveNumMeta e nv = case (e, vars nv) of
  -- Compute the thing that the rhs should be based on the src, and instantiate src to that
  (ExEnd src,  [VPar (InEnd _tgt)]) -> do
@@ -69,19 +69,19 @@ solveNumMeta e nv = case (e, vars nv) of
 
 unifyNum :: NumUnifyMode -> NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
 unifyNum numo nv0 nv1 = do
-  traceM $ ("unifyNum In\n  " ++ show nv0 ++ "\n  " ++ show nv1)
+  -- traceM $ ("unifyNum In\n  " ++ show nv0 ++ "\n  " ++ show nv1)
   nv0 <- numEval S0 nv0
   nv1 <- numEval S0 nv1
   unifyNum' numo (quoteNum Zy nv0) (quoteNum Zy nv1)
-  nv0 <- numEval S0 (quoteNum Zy nv0)
-  nv1 <- numEval S0 (quoteNum Zy nv1)
-  traceM $ ("unifyNum Out\n  " ++ show (quoteNum Zy nv0) ++ "\n  " ++ show (quoteNum Zy nv1)) 
+  -- nv0 <- numEval S0 (quoteNum Zy nv0)
+  -- nv1 <- numEval S0 (quoteNum Zy nv1)
+  -- traceM $ ("unifyNum Out\n  " ++ show (quoteNum Zy nv0) ++ "\n  " ++ show (quoteNum Zy nv1)) 
 
 -- Need to keep track of which way we're solving - which side is known/unknown
 -- Things which are dynamically unknown must be Tgts - information flows from Srcs
 -- ...But we don't need to do any wiring here, right?
 unifyNum' :: NumUnifyMode -> NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
-unifyNum' _ a b | trace ("unifyNum'\n  " ++ show a ++ "\n  " ++ show b) False = undefined
+-- unifyNum' _ a b | trace ("unifyNum'\n  " ++ show a ++ "\n  " ++ show b) False = undefined
 unifyNum' numo (NumValue lup lgro) (NumValue rup rgro)
   | lup <= rup = lhsFun00 lgro (NumValue (rup - lup) rgro)
   | otherwise  = lhsFun00 rgro (NumValue (lup - rup) lgro)
@@ -106,7 +106,7 @@ unifyNum' numo (NumValue lup lgro) (NumValue rup rgro)
   lhsMono (Full sm) (NumValue up gro) = do
     smPred <- traceChecking "lhsMono demandSucc" demandSucc sm
     sm <- numEval S0 sm
-    traceM $ "succ now " ++ show (quoteNum Zy sm)
+    -- traceM $ "succ now " ++ show (quoteNum Zy sm)
     unifyNum numo (n2PowTimes 1 (nFull smPred)) (NumValue (up - 1) gro)
 
   demand0 :: NumVal (VVar Z) -> Checking ()
@@ -161,8 +161,8 @@ unifyNum' numo (NumValue lup lgro) (NumValue rup rgro)
   -- = 2^k + 2^(k + 1) * full(n)
   demandSucc x@(StrictMono k (Full nPlus1)) = do
     n <- traceChecking "demandSucc" demandSucc nPlus1
-    foo <- numEval S0 x
-    traceM $ "ds: " ++ show x ++ " -> " ++ show (quoteNum Zy foo)
+    -- foo <- numEval S0 x
+    -- traceM $ "ds: " ++ show x ++ " -> " ++ show (quoteNum Zy foo)
     pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes (k + 1) $ nFull n
   demandSucc n = err . UnificationError $ "Couldn't force " ++ show n ++ " to be a successor"
 
@@ -176,7 +176,7 @@ unifyNum' numo (NumValue lup lgro) (NumValue rup rgro)
     evenGro Constant0 = pure Constant0
     evenGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
       Linear (VPar e) -> do
-        traceM $ "Calling makeHalf (" ++ show e ++ ")"
+        -- traceM $ "Calling makeHalf (" ++ show e ++ ")"
         half <- traceChecking "makeHalf" makeHalf e
         pure (StrictMonoFun (StrictMono 0 (Linear (VPar half))))
 {-

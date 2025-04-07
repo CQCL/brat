@@ -48,7 +48,7 @@ import Bwd
 import Hasochism
 import Util (zipSameLength)
 
-import Debug.Trace
+-- import Debug.Trace
 
 -- Put things into a standard form in a kind-directed manner, such that it is
 -- meaningful to do case analysis on them
@@ -461,7 +461,7 @@ check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = case (?my, ty) of
     -- TODO: Use concurrency to avoid strictness - we don't have to work out that
     -- this is a VCon immediately.
     VCon tycon tyargs <- eval S0 ty
-    traceM $ "checking constructor of type: " ++ show tycon ++ " " ++ show tyargs
+    -- traceM $ "checking constructor of type: " ++ show tycon ++ " " ++ show tyargs
     (CArgs pats nFree _ argTypeRo) <- lup vcon tycon
     -- Look for vectors to produce better error messages for mismatched lengths
     -- wrap <- detectVecErrors vcon tycon tyargs pats ty (Left tm)
@@ -470,10 +470,10 @@ check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = case (?my, ty) of
     (_, ks) <- unzip <$> tlup (m, tycon)
     -- Turn `pats` into values for unification
     (varz, patVals) <- valPats2Val ks pats
-    traceM $ "problem: " ++ show tyargs ++ " =?= " ++ show patVals
+    -- traceM $ "problem: " ++ show tyargs ++ " =?= " ++ show patVals
     -- Create a unification problem between tyargs and the value versions of pats
     typeEq (show tycon) (TypeFor m []) (VCon tycon tyargs) (VCon tycon patVals)
-    traceM "Made it past unification"
+    -- traceM "Made it past unification"
     Some (ny :* env) <- pure $ bwdStack varz
     -- Make sure env is the correct length for args
     Refl <- throwLeft $ natEqOrBust ny nFree
@@ -482,7 +482,7 @@ check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = case (?my, ty) of
     -- in the kernel case the bottom and top of the row are the same
     let ty' = weaken topy ty
     env <- traverseStack (sem S0) env
-    traceM $ "Matchenv: " ++ show env
+    -- traceM $ "Matchenv: " ++ show env
     (_, argUnders, [(dangling, _)], _) <- anext (show vcon) (Constructor vcon)
                                           (env, Some (Zy :* S0))
                                           argTypeRo (RPr ("value", ty') R0)

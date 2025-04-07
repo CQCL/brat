@@ -47,7 +47,7 @@ import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
 import Prelude hiding (last)
 
-import Debug.Trace
+-- import Debug.Trace
 
 simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Either ErrorMsg ()
 simpleCheck Braty TNat (Num n) | n >= 0 = pure ()
@@ -683,9 +683,13 @@ valPats2Val (k:ks) (v:vs) = do
 valPats2Val [] [] = pure (B0, [])
 valPats2Val _ _ = err $ InternalError "Type args didn't match expected - kindCheck should've sorted it"
 
+{-
 traceChecking :: (Show a, Show b) => String -> (a -> Checking b) -> (a -> Checking b)
 traceChecking lbl m a = do
   traceM ("Enter " ++ lbl ++ ": " ++ show a)
   b <- m a
   traceM ("Exit  " ++ lbl ++ ": " ++ show b)
   pure b
+-}
+
+traceChecking = const id
