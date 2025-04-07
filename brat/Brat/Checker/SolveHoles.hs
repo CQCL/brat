@@ -69,7 +69,7 @@ typeEqEta _tm (Zy :* _ks :* _sems) hopes k (SApp (SPar (InEnd e)) B0) act
 typeEqEta _tm (Zy :* _ks :* _sems) hopes k exp (SApp (SPar (InEnd e)) B0)
   | M.member e hopes = solveHopeSem k e exp
 typeEqEta _ (Zy :* _ :* _) _ {-hopes-} Nat (SNum exp) (SNum act) = do
-  unifyNum NUFred (quoteNum Zy exp) (quoteNum Zy act)
+  unifyNum (quoteNum Zy exp) (quoteNum Zy act)
   {-
   | Just (SPar (InEnd e)) <- isNumVar exp, M.member e hopes = solveHope Nat e act
   | Just (SPar (InEnd e)) <- isNumVar act, M.member e hopes = solveHope Nat e exp

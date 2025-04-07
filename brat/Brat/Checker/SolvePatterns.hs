@@ -78,7 +78,7 @@ solve my ((src, Lit tm):p) = do
     (Braty, Left Nat)
       | Num n <- tm -> do
           unless (n >= 0) $ typeErr "Negative Nat kind"
-          unifyNum NUGinger (nConstant (fromIntegral n)) (nVar (VPar (toEnd src)))
+          unifyNum (nConstant (fromIntegral n)) (nVar (VPar (toEnd src)))
     (Braty, Right ty) -> do
       throwLeft (simpleCheck Braty ty tm)
     _ -> typeErr $ "Literal " ++ show tm ++ " isn't valid at this type"
@@ -97,7 +97,7 @@ solve my ((src, PCon c abs):p) = do
       -- Special case for 0, so that we can call `unifyNum` instead of pattern
       -- matching using what's returned from `natConstructors`
       PrefixName [] "zero" -> do
-        unifyNum NUGinger (nVar (VPar (toEnd src))) nZero
+        unifyNum (nVar (VPar (toEnd src))) nZero
         p <- argProblems [] (normaliseAbstractor abs) p
         (tests, sol) <- solve my p
         pure ((src, PrimLitTest (Num 0)):tests, sol)
@@ -106,7 +106,7 @@ solve my ((src, PCon c abs):p) = do
           (node, [], kids@[(dangling, _)], _) <- next "unpacked_nat" Hypo (S0, Some (Zy :* S0))
             R0 -- we don't need to wire the src in; we just need the inner stuff
             (REx ("inner", Nat) R0)
-          unifyNum NUGinger
+          unifyNum
            (nVar (VPar (ExEnd (end src))))
            (relationToInner (nVar (VPar (toEnd dangling))))
           -- TODO also do wiring corresponding to relationToInner
@@ -183,7 +183,7 @@ unify l k r = do
         | c == c' -> do
             ks <- tlup (Kernel, c)
             unifys args (snd <$> ks) args'
-      (VNum l, VNum r, Nat) -> unifyNum NUGinger l r
+      (VNum l, VNum r, Nat) -> unifyNum l r
       (VApp (VPar x) B0, v, _) -> instantiateMeta x v
       (v, VApp (VPar x) B0, _) -> instantiateMeta x v
       -- TODO: Handle function types

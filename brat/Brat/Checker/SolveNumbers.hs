@@ -1,4 +1,4 @@
-module Brat.Checker.SolveNumbers (unifyNum, NumUnifyMode(..)) where
+module Brat.Checker.SolveNumbers (unifyNum) where
 
 import Brat.Checker.Monad
 import Brat.Checker.Helpers
@@ -19,10 +19,6 @@ import qualified Data.Map as M
 -- This is currently lifted from SolvePatterns, which still imports it.
 -- It is also used in SolveHoles, where it does the right mathematics
 -- but the wrong wiring.
-
-data NumUnifyMode = NUGinger | NUFred deriving (Show, Eq)
--- As Ginger Rogers said, "I do everything Fred does, only backwars in high heels.".
-
 
 -- Solve a Nat kinded metavariable. Unlike `instantiateMeta`, this function also
 -- makes the dynamic wiring for a metavariable. This only needs to happen for
@@ -67,12 +63,12 @@ solveNumMeta e nv = case (e, vars nv) of
   vars :: NumVal a -> [a]
   vars = foldMap pure
 
-unifyNum :: NumUnifyMode -> NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
-unifyNum numo nv0 nv1 = do
+unifyNum :: NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
+unifyNum nv0 nv1 = do
   -- traceM $ ("unifyNum In\n  " ++ show nv0 ++ "\n  " ++ show nv1)
   nv0 <- numEval S0 nv0
   nv1 <- numEval S0 nv1
-  unifyNum' numo (quoteNum Zy nv0) (quoteNum Zy nv1)
+  unifyNum' (quoteNum Zy nv0) (quoteNum Zy nv1)
   -- nv0 <- numEval S0 (quoteNum Zy nv0)
   -- nv1 <- numEval S0 (quoteNum Zy nv1)
   -- traceM $ ("unifyNum Out\n  " ++ show (quoteNum Zy nv0) ++ "\n  " ++ show (quoteNum Zy nv1)) 
@@ -80,9 +76,9 @@ unifyNum numo nv0 nv1 = do
 -- Need to keep track of which way we're solving - which side is known/unknown
 -- Things which are dynamically unknown must be Tgts - information flows from Srcs
 -- ...But we don't need to do any wiring here, right?
-unifyNum' :: NumUnifyMode -> NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
--- unifyNum' _ a b | trace ("unifyNum'\n  " ++ show a ++ "\n  " ++ show b) False = undefined
-unifyNum' numo (NumValue lup lgro) (NumValue rup rgro)
+unifyNum' :: NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
+-- unifyNum' a b | trace ("unifyNum'\n  " ++ show a ++ "\n  " ++ show b) False = undefined
+unifyNum' (NumValue lup lgro) (NumValue rup rgro)
   | lup <= rup = lhsFun00 lgro (NumValue (rup - lup) rgro)
   | otherwise  = lhsFun00 rgro (NumValue (lup - rup) lgro)
  where
@@ -107,7 +103,7 @@ unifyNum' numo (NumValue lup lgro) (NumValue rup rgro)
     smPred <- traceChecking "lhsMono demandSucc" demandSucc sm
     sm <- numEval S0 sm
     -- traceM $ "succ now " ++ show (quoteNum Zy sm)
-    unifyNum numo (n2PowTimes 1 (nFull smPred)) (NumValue (up - 1) gro)
+    unifyNum (n2PowTimes 1 (nFull smPred)) (NumValue (up - 1) gro)
 
   demand0 :: NumVal (VVar Z) -> Checking ()
   demand0 (NumValue 0 Constant0) = pure ()
@@ -119,42 +115,13 @@ unifyNum' numo (NumValue lup lgro) (NumValue rup rgro)
 
   -- Complain if a number isn't a successor, else return its predecessor
   demandSucc :: StrictMono (VVar Z) -> Checking (NumVal (VVar Z))
-{-
-  --   2^k * x
-  -- = 2^k * (y + 1)
-  -- = 2^k + 2^k * y
-  demandSucc (StrictMono k (Linear (VPar (ExEnd x)))) = do
-      (_, [(yTgt, _)], [(ySrc, _)], _) <-
-	next "yId" Id (S0, Some (Zy :* S0)) (REx ("value", Nat) R0) (REx ("value", Nat) R0)
-
-      defineSrc ySrc (VNum (nVar (VPar (toEnd yTgt))))
-      instantiateMeta (ExEnd x) (VNum (nPlus 1 (nVar (VPar (toEnd yTgt)))))
-      pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k (nVar (VPar (toEnd ySrc)))
       --   2^k * x
       -- = 2^k * (y + 1)
       -- = 2^k + 2^k * y
       -- Hence, the predecessor is (2^k - 1) + (2^k * y)
--}
-
   demandSucc (StrictMono k (Linear (VPar e))) = do
     pred <- traceChecking "makePred" makePred e
     pure (nPlus ((2^k) - 1) (nVar (VPar pred)))
-{-
-  demandSucc (StrictMono k (Linear (VPar (InEnd x)))) = case numo of
-    NUGinger -> do
-      (_, [(y,_)], _, _) <- anext "y" Hypo (S0, Some (Zy :* S0)) (REx ("", Nat) R0) R0
-      yPlus1 <- invertNatVal (nPlus 1 (nVar (VPar (toEnd y))))
-      solveNumMeta (InEnd x) (nVar (VPar (toEnd yPlus1)))
-      pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes k (nVar (VPar (toEnd y)))
-    NUFred -> do
-      hopes <- req AskHopes
-      if not $ M.member x hopes then typeErr $ "Goodbye Fred!" else do
-        (tgt, src) <- buildAdd 1
-	fc <- req AskFC
-	req (ANewHope (end tgt) fc)
-	solveHopeVal Nat x (VNum (nVar (VPar (toEnd src))))
-	pure (nVar (VPar (toEnd tgt)))
--}
 
   --   2^k * full(n + 1)
   -- = 2^k * (1 + 2 * full(n))
@@ -179,19 +146,6 @@ unifyNum' numo (NumValue lup lgro) (NumValue rup rgro)
         -- traceM $ "Calling makeHalf (" ++ show e ++ ")"
         half <- traceChecking "makeHalf" makeHalf e
         pure (StrictMonoFun (StrictMono 0 (Linear (VPar half))))
-{-
-
-        (_, [], [(halfSrc, _)], _) <-
-          next "half" Hypo (S0, Some (Zy :* S0)) R0 (REx ("value", Nat) R0)
-        solveNumMeta (ExEnd out) (n2PowTimes 1 (nVar (VPar (toEnd halfSrc))))
-        pure (StrictMonoFun (StrictMono 0 (Linear (VPar (toEnd halfSrc)))))
-      Linear (VPar (InEnd tgt)) -> do
-        traceM "Halving in demandEven"
-        halfTgt <- invertNatVal (NumValue 0 (StrictMonoFun (StrictMono 1 mono)))
-        let half = nVar (VPar (toEnd halfTgt))
-        solveNumMeta (InEnd tgt) (n2PowTimes 1 half)
-        pure (StrictMonoFun (StrictMono 0 (Linear (VPar (toEnd halfTgt)))))
--}
       Full sm -> StrictMonoFun sm <$ demand0 (NumValue 0 (StrictMonoFun sm))
     evenGro (StrictMonoFun (StrictMono n mono)) = pure (StrictMonoFun (StrictMono (n - 1) mono))
 
@@ -202,21 +156,6 @@ unifyNum' numo (NumValue lup lgro) (NumValue rup rgro)
         pred <- traceChecking "makePred" makePred e
         half <- traceChecking "makeHalf" makeHalf pred
         pure (nVar (VPar half))
-{-
-      -- TODO: Why aren't we using `out`??
-      Linear (VPar (ExEnd bubble)) -> do
-        -- compute (/2) . (-1)
-        (_, [], [(halfSrc,_)], _) <- next "floorHalf" Hypo (S0, Some (Zy :* S0)) R0 (REx ("value", Nat) R0)
-        solveNumMeta (ExEnd bubble) (nPlus 1 (n2PowTimes 1 (nVar (VPar (toEnd halfSrc)))))
-        pure (nVar (VPar (toEnd halfSrc)))
-      Linear (VPar (InEnd weeTgt)) -> do
-        -- compute (/2) . (-1)
-        bigTgt <- invertNatVal (NumValue 1 (StrictMonoFun (StrictMono 1 (Linear (VPar (toEnd weeTgt))))))
-        let flooredHalf = nVar (VPar (toEnd weeTgt))
-        solveNumMeta (toEnd bigTgt) (nPlus 1 (n2PowTimes 1 flooredHalf))
-        pure flooredHalf
-
--}
       -- full(n + 1) = 1 + 2 * full(n)
       -- hence, full(n) is the rounded down half
       Full sm -> nFull <$> traceChecking "demandSucc" demandSucc sm
