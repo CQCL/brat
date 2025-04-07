@@ -516,7 +516,7 @@ makeHalf (InEnd e) = do
 makeHalf (ExEnd e) = do
   (halveIn, halveOut) <- buildHalve
   req (Wire (e, TNat, end halveIn))
-  defineTgt halveIn (VNum (nVar (VPar (toEnd e))))
+  defineSrc (NamedPort e "") (VNum (nVar (VPar (toEnd halveIn))))
   pure (toEnd halveOut)
 
 makePred :: End -> Checking End
@@ -529,7 +529,7 @@ makePred (InEnd e) = do
 makePred (ExEnd e) = do
   (predIn, predOut) <- buildSub 1
   req (Wire (e, TNat, end predIn))
-  defineTgt predIn (VNum (nVar (VPar (toEnd e))))
+  defineSrc (NamedPort e "") (VNum (nVar (VPar (toEnd predIn))))
   pure (toEnd predOut)
 
 -- Generate wiring to produce a dynamic instance of the numval argument
