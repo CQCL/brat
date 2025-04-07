@@ -21,7 +21,7 @@ module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
 			    ,solveHopeVal, solveHopeSem
                             )-} where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd, tlup)
+import Brat.Checker.Monad (Checking, CheckingSig(..), HopeData(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd, tlup)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (eval, EvMode(..), kindType, quote, doesntOccur)
@@ -501,9 +501,9 @@ replaceHope old new = do
   hs <- req AskHopes
   case M.lookup old hs of
     Nothing -> pure ()
-    Just fc -> do
+    Just hd -> do
       req (RemoveHope old)
-      req (ANewHope new fc)
+      req (ANewHope new (HopeData Nothing (hopeDynamic hd)))
 
 -- Return an End with the same polarity whose value is half that of the input End
 makeHalf :: End -> Checking End
@@ -649,9 +649,7 @@ valPat2Val :: TypeKind
 valPat2Val k VPVar = do
   (_, [(idTgt, _)], [_], _) <- anext "pat2val" Id (S0, Some (Zy :* S0)) (REx ("", k) R0) (REx ("", k) R0)
   let val = VApp (VPar (toEnd idTgt)) B0
-  -- TODO: Make the FC optional in ANewHope
-  fc <- req AskFC
-  req (ANewHope (end idTgt) fc)
+  req (ANewHope (end idTgt) (HopeData Nothing False))
   pure (B0 :< val, val)
 valPat2Val (TypeFor m _) (VPCon con args) = do
   ks <- fmap snd <$> tlup (m, con)
@@ -666,8 +664,7 @@ valPat2Val Nat (VPNum n) = numPat2Val n >>= \(stk, nv) -> pure (stk, VNum nv)
   numPat2Val (NP2Times np) = second (n2PowTimes 1) <$> numPat2Val np
   numPat2Val NPVar = do
     (_, [(idTgt, _)], [_], _) <- anext "numpat2val" Id (S0, Some (Zy :* S0)) (REx ("", Nat) R0) (REx ("", Nat) R0)
-    fc <- req AskFC
-    req (ANewHope (end idTgt) fc)
+    req (ANewHope (end idTgt) (HopeData Nothing False))
     let var = endVal Nat (toEnd idTgt)
     pure (B0 :< var, nVar (VPar (toEnd idTgt)))
 
