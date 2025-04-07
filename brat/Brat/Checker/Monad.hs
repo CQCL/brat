@@ -21,16 +21,18 @@ import Data.List (intercalate)
 import qualified Data.Map as M
 import qualified Data.Set as S
 
+import Debug.Trace
+
 -- Used for messages about thread forking / spawning
-thTrace = const id
---thTrace = trace
+--thTrace = const id
+thTrace = trace
 
 trackM :: Monad m => String -> m ()
-trackM = const (pure ())
--- trackM = traceM
+--trackM = const (pure ())
+trackM = traceM
 
-track = const id
--- track = trace
+-- track = const id
+track = trace
 trackShowId x = track (show x) x
 
 -- Data for using a type alias. E.g.
@@ -54,7 +56,12 @@ data CtxEnv = CtxEnv
   , locals :: VEnv
   }
 
-type Hopes = M.Map InPort FC
+data HopeData = HopeData
+  { hopeFC :: Maybe FC
+  , hopeDynamic :: Bool
+  } deriving (Eq, Ord, Show)
+
+type Hopes = M.Map InPort HopeData
 
 type CaptureSets = M.Map Name VEnv
 
@@ -105,7 +112,7 @@ data CheckingSig ty where
   KDone   :: CheckingSig ()
   AskVEnv :: CheckingSig CtxEnv
   Declare :: End -> Modey m -> BinderType m -> IsSkolem -> CheckingSig ()
-  ANewHope :: InPort -> FC -> CheckingSig ()
+  ANewHope :: InPort -> HopeData -> CheckingSig ()
   AskHopes :: CheckingSig Hopes
   AddCapture :: Name -> (QualName, [(Src, BinderType Brat)]) -> CheckingSig ()
 
@@ -187,6 +194,9 @@ kclup :: QualName -- Value constructor
       -> Checking (CtorArgs Kernel)
 kclup vcon tycon = req AskFC >>= \fc -> req (KCLup fc vcon tycon)
 
+-- TODO: Future proof this by taking a TypeKind argument instead of a mode.
+-- Currently we have kinds `Nat` for `TypeFor m`, where we don't lookup `Nat`
+-- with tlup, but this will change!
 tlup :: (Mode, QualName) -> Checking [(PortName, TypeKind)]
 tlup (m, c) = req (TLup (m, c)) >>= \case
   Nothing -> req (TLup (otherMode, c)) >>= \case
@@ -296,7 +306,7 @@ handler (Req s k) ctx g
                 M.lookup tycon tbl
         handler (k args) ctx g
 
-      ANewHope e fc -> handler (k ()) (ctx { hopes = M.insert e fc (hopes ctx) }) g
+      ANewHope e hd -> handler (k ()) (ctx { hopes = M.insert e hd (hopes ctx) }) g
 
       AskHopes -> handler (k (hopes ctx)) ctx g
 

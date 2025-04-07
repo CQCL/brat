@@ -166,9 +166,6 @@ compileType ty@(TCons _ _) = htTuple (tuple ty)
   tuple TNil = []
   tuple ty = error $ "Found " ++ show ty  ++ " in supposed tuple type"
 compileType TNil = htTuple []
-compileType (VSum my ros) = case my of
-  Braty -> error "Todo: compileTypeWorker for BRAT"
-  Kerny -> HTSum (SG (GeneralSum $ map (\(Some ro) -> compileRo ro) ros))
 compileType (TVec el _) = hugrList (compileType el)
 compileType (TList el)  = hugrList (compileType el)
 -- All variables are of kind `TypeFor m xs`, we already checked in `kindCheckRow`

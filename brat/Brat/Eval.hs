@@ -2,6 +2,7 @@
 
 module Brat.Eval (EvMode(..)
                  ,ValPat(..)
+                 ,NumEval(..)
                  ,NumPat(..)
                  ,apply
                  ,applySem
@@ -17,7 +18,9 @@ module Brat.Eval (EvMode(..)
                  ,kindType
                  ,numVal
                  ,quote
+		 ,quoteNum
                  ,getNumVar
+		 ,instantiateMeta
                  ) where
 
 import Brat.Checker.Monad
@@ -88,7 +91,6 @@ sem ga (VApp f vz) = do
     f <- semVar ga f
     vz <- traverse (sem ga) vz
     applySem f vz
-sem ga (VSum my ts) = pure $ SSum my ga ts
 
 semVar :: Stack Z Sem n -> VVar n -> Checking Sem
 semVar vz (VInx inx) = pure $ proj vz inx
@@ -118,22 +120,21 @@ semLvl lvy = SApp (SLvl $ ny2int lvy) B0
 
 -- note that typeEq is a kind of quote but that also does eta-expansion
 quote :: Ny lv -> Sem -> Checking (Val lv)
-quote lvy (SNum num) = pure $ VNum (fmap (quoteVar lvy) num)
+quote lvy (SNum num) = pure $ VNum (quoteNum lvy num)
 quote lvy (SCon nm args) = VCon nm <$> traverse (quote lvy) args
 quote lvy (SLam stk body) = do
   body <- sem (stk :<< semLvl lvy) body
   VLam <$> quote (Sy lvy) body
 quote lvy (SFun my ga cty) = VFun my <$> quoteCTy lvy my ga cty
 quote lvy (SApp f vz) = VApp (quoteVar lvy f) <$> traverse (quote lvy) vz
-quote lvy (SSum my ga ts) = VSum my <$> traverse quoteVariant ts
-  where
-  quoteVariant (Some ro) = quoteRo my ga ro lvy >>= \case
-    (_, Some (ro :* _)) -> pure (Some ro)
 
 quoteCTy :: Ny lv -> Modey m -> Stack Z Sem n -> CTy m n -> Checking (CTy m lv)
 quoteCTy lvy my ga (ins :->> outs) = quoteRo my ga ins lvy >>= \case
   (ga', Some (ins' :* lvy')) -> quoteRo my ga' outs lvy' >>= \case
     (_, Some (outs' :* _)) -> pure (ins' :->> outs')
+
+quoteNum ::  Ny lv -> NumVal SVar -> NumVal (VVar lv)
+quoteNum lvy num = fmap (quoteVar lvy) num
 
 -- first number is next Lvl to use in Value
 --         require every Lvl in Sem is < n (converted by n - 1 - lvl), else must fail at runtime
@@ -321,7 +322,11 @@ doesntOccur e (VLam body) = doesntOccur e body
 doesntOccur e (VFun my (ins :->> outs)) = case my of
   Braty -> doesntOccurRo my e ins *> doesntOccurRo my e outs
   Kerny -> doesntOccurRo my e ins *> doesntOccurRo my e outs
-doesntOccur e (VSum my rows) = traverse_ (\(Some ro) -> doesntOccurRo my e ro) rows
+
+instantiateMeta :: End -> Val Z -> Checking ()
+instantiateMeta e val = do
+  throwLeft (doesntOccur e val)
+  defineEnd e val
 
 collision :: End -> End -> Either ErrorMsg ()
 collision e v | e == v = Left . UnificationError $

@@ -1,0 +1,6 @@
+Error in test/golden/error/vec_length.brat on line 2:
+f(_, _, xs) = xs
+              ^^
+
+  Unification error: Ex checking_check_defs_1_f_f.box_2_lambda_fake_source 1 is cyclic
+

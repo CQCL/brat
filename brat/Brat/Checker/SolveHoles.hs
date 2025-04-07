@@ -1,17 +1,18 @@
 module Brat.Checker.SolveHoles (typeEq) where
 
-import Brat.Checker.Helpers (buildNatVal, buildConst)
+import Brat.Checker.Helpers (buildNatVal, buildConst, solveHopeSem)
 import Brat.Checker.Monad
+import Brat.Checker.SolveNumbers
 import Brat.Checker.Types (kindForMode, IsSkolem(..))
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval
 import Brat.Syntax.Common
-import Brat.Syntax.Simple (SimpleTerm(..))
+-- import Brat.Syntax.Simple (SimpleTerm(..))
 import Brat.Syntax.Value
 import Control.Monad.Freer
 import Bwd
 import Hasochism
-import Util (zipSameLength)
+-- import Brat.Syntax.Port (toEnd)
 
 import Control.Monad (when, filterM, (>=>))
 import Data.Bifunctor (second)
@@ -46,10 +47,6 @@ typeEq' str stuff@(_ny :* _ks :* sems) k exp act = do
   act <- sem sems act
   typeEqEta str stuff hopes k exp act
 
-isNumVar :: Sem -> Maybe SVar
-isNumVar (SNum (NumValue 0 (StrictMonoFun (StrictMono 0 (Linear v))))) = Just v
-isNumVar _ = Nothing
-
 -- Presumes that the hope set and the two `Sem`s are up to date.
 typeEqEta :: String -- String representation of the term for error reporting
           -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n
@@ -69,12 +66,11 @@ typeEqEta tm (lvy :* kz :* sems) hopes (TypeFor m ((_, k):ks)) exp act = do
 -- (We don't solve under binders for now, so we only consider Zy here)
 -- 1. "easy" flex cases
 typeEqEta _tm (Zy :* _ks :* _sems) hopes k (SApp (SPar (InEnd e)) B0) act
-  | M.member e hopes = solveHope k e act
+  | M.member e hopes = solveHopeSem k e act
 typeEqEta _tm (Zy :* _ks :* _sems) hopes k exp (SApp (SPar (InEnd e)) B0)
-  | M.member e hopes = solveHope k e exp
-typeEqEta _ (Zy :* _ :* _) hopes Nat exp act
-  | Just (SPar (InEnd e)) <- isNumVar exp, M.member e hopes = solveHope Nat e act
-  | Just (SPar (InEnd e)) <- isNumVar act, M.member e hopes = solveHope Nat e exp
+  | M.member e hopes = solveHopeSem k e exp
+typeEqEta _ (Zy :* _ :* _) _ {-hopes-} Nat (SNum exp) (SNum act) = do
+  unifyNum (quoteNum Zy exp) (quoteNum Zy act)
 -- 2. harder cases, neither is in the hope set, so we can't define it ourselves
 typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
   exp <- quote ny exp
@@ -91,25 +87,6 @@ typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
   getEnd (VApp (VPar e) _) = Just e
   getEnd (VNum n) = getNumVar n
   getEnd _ = Nothing
-
--- This will update the `hopes`, potentially invalidating things that have
--- been eval'd.
--- The Sem is closed, for now.
-solveHope :: TypeKind -> InPort -> Sem -> Checking ()
-solveHope k hope v = quote Zy v >>= \v -> case doesntOccur (InEnd hope) v of
-  Right () -> do
-    defineEnd (InEnd hope) v
-    dangling <- case (k, v) of
-      (Nat, VNum v) -> buildNatVal v
-      (Nat, _) -> err $ InternalError "Head of Nat wasn't a VNum"
-      _ -> buildConst Unit TUnit
-    req (Wire (end dangling, kindType k, hope))
-  Left msg -> case v of
-    VApp (VPar (InEnd end)) B0 | hope == end -> pure ()
-    -- TODO: Not all occurrences are toxic. The end could be in an argument
-    -- to a hoping variable which isn't used.
-    -- E.g. h1 = h2 h1 - this is valid if h2 is the identity, or ignores h1.
-    _ -> err msg
 
 typeEqs :: String -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n -> [TypeKind] -> [Val n] -> [Val n] -> Checking ()
 typeEqs _ _ [] [] [] = pure ()
@@ -144,7 +121,7 @@ typeEqRigid tm (_ :* _ :* semz) Nat exp act = do
   act <- sem semz act
   if getNum exp == getNum act
   then pure ()
-  else err $ TypeMismatch tm (show exp) (show act)
+  else err $ TypeMismatch tm ("TYPEEQRIGID " ++ show exp) ("TODO " ++ show act)
 typeEqRigid tm stuff@(_ :* kz :* _) (TypeFor m []) (VApp f args) (VApp f' args') | f == f' =
   svKind f >>= \case
     TypeFor m' ks | m == m' -> typeEqs tm stuff (snd <$> ks) (args <>> []) (args' <>> [])
@@ -162,10 +139,4 @@ typeEqRigid tm lvkz (Star []) (VFun m0 (ins0 :->> outs0)) (VFun m1 (ins1 :->> ou
   probs :: [Checking ()] <- throwLeft $ typeEqRow m0 tm lvkz ins0 ins1 >>= \case -- this is in Either ErrorMsg
         (Some (lvkz :* (Refl :* Refl)), ps1) -> typeEqRow m0 tm lvkz outs0 outs1 <&> (ps1++) . snd
   sequenceA_ probs -- uses Applicative (unlike sequence_ which uses Monad), hence parallelized
-typeEqRigid tm lvkz (TypeFor _ []) (VSum m0 rs0) (VSum m1 rs1)
-  | Just Refl <- testEquality m0 m1 = case zipSameLength rs0 rs1 of
-      Nothing -> typeErr "Mismatched sum lengths"
-      Just rs -> traverse eqVariant rs >>= (sequenceA_ . concat)
- where
-  eqVariant (Some r0, Some r1) = throwLeft (snd <$> typeEqRow m0 tm lvkz r0 r1)
 typeEqRigid tm _ _ v0 v1 = err $ TypeMismatch tm (show v0) (show v1)
