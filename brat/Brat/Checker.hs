@@ -746,10 +746,17 @@ checkClause my fnName cty clause = modily my $ do
   ((boxPort, _ty), _) <- let ?my = my in makeBox (clauseName ++ "_rhs") rhsCty $ \(rhsOvers, rhsUnders) -> do
     let abstractor = foldr ((:||:) . APat . Bind) AEmpty vars
     let ?my = my in do
-      env <- abstractAll rhsOvers abstractor
+      env <- mkEnv vars rhsOvers
       localEnv env $ check @m (rhs clause) ((), rhsUnders)
   let NamedPort {end=Ex rhsNode _} = boxPort
   pure (match, rhsNode)
+ where
+  mkEnv :: (?my :: Modey m) => [String] -> [(Src, BinderType m)] -> Checking (Env (EnvData m))
+  mkEnv (x:xs) (src:srcs) = do
+    e1 <- singletonEnv x src
+    e2 <- mkEnv xs srcs
+    mergeEnvs [e1, e2]
+  mkEnv [] [] = pure emptyEnv
 
 -- Top level function for type checking function definitions
 -- Will make a top-level box for the function, then type check the definition
