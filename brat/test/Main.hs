@@ -34,7 +34,7 @@ coroT1 = do
   req $ Declare e Braty (Left $ Star []) Definable
   mkFork "t1" (req (ELup e) >>= \case
           Just _ -> err $ InternalError "already defined"
-          Nothing -> defineEnd e (VCon (PrefixName [] "nil") [])
+          Nothing -> defineEnd "test" e (VCon (PrefixName [] "nil") [])
       )
   mkYield "coroT1" (S.singleton e) >> pure ()
   traceM "Yield continued"
@@ -52,7 +52,7 @@ coroT2 = do
     mkYield "coroT2" (S.singleton e)
     req $ ELup e
   -- No way to execute this without a 'v'
-  mkFork "t2" $ defineEnd e (VCon (PrefixName [] "nil") [])
+  mkFork "t2" $ defineEnd "test" e (VCon (PrefixName [] "nil") [])
   err $ InternalError $ case v of
     Nothing -> "ELup performed without waiting for Yield" -- true in next case too
     Just _ -> "ELup returned value before being Defined"
