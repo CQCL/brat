@@ -192,7 +192,7 @@ kindEq (TypeFor m xs) (TypeFor m' ys) | m == m' = kindListEq xs ys
 kindEq k k' = Left . TypeErr $ "Unequal kinds " ++ show k ++ " and " ++ show k'
 
 kindOf :: VVar Z -> Checking TypeKind
-kindOf (VPar e) = req (TypeOf e) >>= \case
+kindOf (VPar e) = (req (TypeOf e) <&> fst) >>= \case
   EndType Braty (Left k) -> pure k
   EndType my ty -> typeErr $ "End " ++ show e ++ " isn't a kind, it's type is " ++ case my of
     Braty -> show ty
@@ -312,6 +312,7 @@ getNumVar _ = Nothing
 -- We can have bogus failures here because we're not normalising under lambdas
 -- N.B. the value argument is normalised.
 doesntOccur :: End -> Val n -> Either ErrorMsg ()
+-- ALAN merge could have been: doesntOccur e (VNum nv) = for_ (getNumVar nv) (collision e)
 doesntOccur e (VNum nv) = traverse_ (collision e) (getNumVar nv)
 doesntOccur e (VApp var args) = case var of
   VPar e' -> collision e e' *> traverse_ (doesntOccur e) args
@@ -325,7 +326,7 @@ doesntOccur e (VFun my (ins :->> outs)) = case my of
 instantiateMeta :: End -> Val Z -> Checking ()
 instantiateMeta e val = do
   throwLeft (doesntOccur e val)
-  defineEnd e val
+  defineEnd "instantiateMeta" e val
 
 collision :: End -> End -> Either ErrorMsg ()
 collision e v | e == v = Left . UnificationError $

@@ -1,9 +1,9 @@
 module Brat.Checker.SolveHoles (typeEq) where
 
-import Brat.Checker.Helpers (solveHopeSem)
+import Brat.Checker.Helpers (buildNatVal, buildConst, solveHopeSem)
 import Brat.Checker.Monad
-import Brat.Checker.Types (kindForMode)
 import Brat.Checker.SolveNumbers
+import Brat.Checker.Types (kindForMode, IsSkolem(..))
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval
 import Brat.Syntax.Common
@@ -14,13 +14,16 @@ import Bwd
 import Hasochism
 -- import Brat.Syntax.Port (toEnd)
 
-import Control.Monad (when)
+import Control.Monad (when, filterM, (>=>))
 import Data.Bifunctor (second)
 import Data.Foldable (sequenceA_)
 import Data.Functor
 import Data.Maybe (mapMaybe)
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
+
+import Debug.Trace
 
 -- Demand that two closed values are equal, we're allowed to solve variables in the
 -- hope set to make this true.
@@ -44,6 +47,10 @@ typeEq' str stuff@(_ny :* _ks :* sems) k exp act = do
   hopes <- req AskHopes
   exp <- sem sems exp
   act <- sem sems act
+  qexp <- (quote Zy exp)
+  qact <- (quote Zy act)
+  traceM ("typeEq' exp: " ++ show qexp)
+  traceM ("typeEq' act: " ++ show qact)
   typeEqEta str stuff hopes k exp act
 
 -- Presumes that the hope set and the two `Sem`s are up to date.
@@ -68,12 +75,7 @@ typeEqEta _tm (Zy :* _ks :* _sems) hopes k (SApp (SPar (InEnd e)) B0) act
   | M.member e hopes = solveHopeSem k e act
 typeEqEta _tm (Zy :* _ks :* _sems) hopes k exp (SApp (SPar (InEnd e)) B0)
   | M.member e hopes = solveHopeSem k e exp
-typeEqEta _ (Zy :* _ :* _) _ {-hopes-} Nat (SNum exp) (SNum act) = do
-  unifyNum (quoteNum Zy exp) (quoteNum Zy act)
-  {-
-  | Just (SPar (InEnd e)) <- isNumVar exp, M.member e hopes = solveHope Nat e act
-  | Just (SPar (InEnd e)) <- isNumVar act, M.member e hopes = solveHope Nat e exp
-  -}
+typeEqEta _ (Zy :* _ :* _) _ {-hopes-} Nat (SNum exp) (SNum act) = unifyNum (quoteNum Zy exp) (quoteNum Zy act)
 -- 2. harder cases, neither is in the hope set, so we can't define it ourselves
 typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
   exp <- quote ny exp
@@ -81,13 +83,11 @@ typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
   let ends = mapMaybe getEnd [exp,act]
   -- sanity check: we've already dealt with either end being in the hopeset
   when (or [M.member ie hopes | InEnd ie <- ends]) $ typeErr "ends were in hopeset"
-  case ends of
+  filterM (isSkolem >=> pure . (== Definable)) ends >>= \case
     [] -> typeEqRigid tm stuff k exp act -- easyish, both rigid i.e. already defined
-    -- variables are trivially the same, even if undefined, but the values may
-    -- be different! E.g. X =? 1 + X
-    [_, _] | exp == act -> pure ()
-    -- TODO: Once we have scheduling, we must wait for one or the other to become more defined, rather than failing
-    _  -> err (TypeMismatch tm (show exp) (show act))
+    [e1, e2] | e1 == e2 -> pure () -- trivially same, even if both still yet-to-be-defined
+    es -> -- tricky: must wait for one or other to become more defined
+      mkYield "typeEqEta" (S.fromList es) >> typeEq' tm stuff k exp act
  where
   getEnd (VApp (VPar e) _) = Just e
   getEnd (VNum n) = getNumVar n
@@ -95,7 +95,9 @@ typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
 
 typeEqs :: String -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n -> [TypeKind] -> [Val n] -> [Val n] -> Checking ()
 typeEqs _ _ [] [] [] = pure ()
-typeEqs tm stuff (k:ks) (exp:exps) (act:acts) = typeEqs tm stuff ks exps acts <* typeEq' tm stuff k exp act
+typeEqs tm stuff (k:ks) (exp:exps) (act:acts) = do
+  mkFork "typeEqsTail" $ typeEqs tm stuff ks exps acts
+  typeEq' tm stuff k exp act
 typeEqs _ _ _ _ _ = typeErr "arity mismatch"
 
 typeEqRow :: Modey m

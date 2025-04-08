@@ -10,7 +10,7 @@
 module Brat.Compile.Hugr (compile) where
 
 import Brat.Constructors.Patterns (pattern CFalse, pattern CTrue)
-import Brat.Checker.Monad (track, trackM, CheckingSig(..))
+import Brat.Checker.Monad (track, trackM, CheckingSig(..), CaptureSets)
 import Brat.Checker.Helpers (binderToValue)
 import Brat.Checker.Types (Store(..), VEnv)
 import Brat.Eval (eval, evalCTy, kindType)
@@ -54,6 +54,7 @@ type TypedPort = (PortId NodeId, HugrType)
 
 data CompilationState = CompilationState
  { bratGraph :: Graph -- the input BRAT Graph; should not be written
+ , capSets :: CaptureSets -- environments captured by Box nodes in previous
  , nameSupply :: Namespace
  , nodes :: M.Map NodeId (HugrOp NodeId) -- this node's id => HugrOp containing parent id
  , edges :: [(PortId NodeId, PortId NodeId)]
@@ -72,8 +73,9 @@ data CompilationState = CompilationState
  , decls :: M.Map Name (NodeId, Bool)
  }
 
-emptyCS g ns store = CompilationState
+emptyCS g cs ns store = CompilationState
   { bratGraph = g
+  , capSets = cs
   , nameSupply = ns
   , nodes = M.empty
   , edges = []
@@ -296,7 +298,7 @@ compileClauses parent ins ((matchData, rhs) :| clauses) = do
 
   didMatch :: [HugrType] -> NodeId -> [TypedPort] -> Compile [TypedPort]
   didMatch outTys parent ins = gets bratGraph >>= \(ns,_) -> case ns M.! rhs of
-    BratNode (Box _venv src tgt) _ _ -> do
+    BratNode (Box src tgt) _ _ -> do
       dfgId <- addNode "DidMatch_DFG" (OpDFG (DFG parent (FunctionType (snd <$> ins) outTys bratExts)))
       compileBox (src, tgt) dfgId
       for_ (zip (fst <$> ins) (Port dfgId <$> [0..])) addEdge
@@ -441,11 +443,13 @@ compileWithInputs parent name = gets compiled >>= (\case
             Nothing -> error "Callee has been erased"
 
     -- We need to figure out if this thunk contains a brat- or a kernel-computation
-    (Box venv src tgt) -> case outs of
+    (Box src tgt) -> case outs of
       [(_, VFun Kerny cty)] -> default_edges . nodeId . fst <$>
-           compileKernBox parent name (assert (M.null venv) $ compileBox (src, tgt)) cty
-      [(_, VFun Braty cty)] -> compileBratBox parent name (venv, src, tgt) cty <&>
-          (\(partialNode, captures) -> Just (partialNode, 1, captures)) -- 1 is arbitrary, Box has no real inputs
+           compileKernBox parent name (compileBox (src, tgt)) cty
+      [(_, VFun Braty cty)] -> do
+        cs <- gets (M.findWithDefault M.empty name . capSets)
+        (partialNode, captures) <- compileBratBox parent name (cs, src, tgt) cty
+        pure $ Just (partialNode, 1, captures) -- 1 is arbitrary, Box has no real inputs
       outs -> error $ "Unexpected outs of box: " ++ show outs
 
     Source -> default_edges <$> do
@@ -517,10 +521,11 @@ compileConstDfg :: NodeId -> String -> ([HugrType], [HugrType]) -> (NodeId -> Co
 compileConstDfg parent desc (inTys, outTys) contents = do
   st <- gets store
   g <- gets bratGraph
+  cs <- gets capSets
   -- First, we fork off a new namespace
   ((funTy, a), cs) <- desc -! do
     ns <- gets nameSupply
-    pure $ flip runState (emptyCS g ns st) $ do
+    pure $ flip runState (emptyCS g cs ns st) $ do
       -- make a DFG node at the root. We can't use `addNode` since the
       -- DFG needs itself as parent
       dfg_id <- freshNode ("Box_" ++ show desc)
@@ -829,7 +834,7 @@ compileModule venv = do
     let srcPortTys = [(srcPort, ty) | (srcPort, ty, In tgt _) <- es, tgt == idNode ]
     case srcPortTys of
       -- All top-level functions are compiled into Box-es, which should look like this:
-      [(Ex input 0, _)] | Just (BratNode (Box _ src tgt) _ outs) <- M.lookup input ns ->
+      [(Ex input 0, _)] | Just (BratNode (Box src tgt) _ outs) <- M.lookup input ns ->
         case outs of
           [(_, VFun Braty cty)] -> do
             (inTys, outTys) <- compileSig Braty cty
@@ -887,13 +892,14 @@ compileNoun outs srcPorts parent = do
 compile :: Store
         -> Namespace
         -> Graph
+        -> CaptureSets
         -> VEnv
         -> BS.ByteString
-compile store ns g venv
+compile store ns g capSets venv
   = evalState
     (trackM "compileFunctions" *>
      compileModule venv *>
      trackM "dumpJSON" *>
      dumpJSON
     )
-    (emptyCS g ns store)
+    (emptyCS g capSets ns store)

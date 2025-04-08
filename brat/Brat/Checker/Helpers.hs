@@ -1,33 +1,14 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
-module Brat.Checker.Helpers {-(pullPortsRow, pullPortsSig
-                            ,simpleCheck
-                            ,combineDisjointEnvs
-                            ,ensureEmpty, noUnders
-                            ,rowToSig
-                            ,showMode, getVec
-                            ,mkThunkTy
-                            ,wire
-                            ,next, knext, anext
-                            ,kindType, getThunks
-                            ,binderToValue, valueToBinder
-                            ,kConFields
-                            ,defineSrc, defineTgt
-                            ,declareSrc, declareTgt
-                            ,makeBox
-                            ,uncons
-                            ,evalBinder
-                            ,evalSrcRow, evalTgtRow
-			    ,solveHopeVal, solveHopeSem
-                            )-} where
+module Brat.Checker.Helpers where
 
-import Brat.Checker.Monad (Checking, CheckingSig(..), HopeData(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd, tlup)
+import Brat.Checker.Monad (Checking, CheckingSig(..), HopeData(..), captureOuterLocals, err, typeErr, kindArgRows, defineEnd, tlup, isSkolem, mkYield, throwLeft)
 import Brat.Checker.Types
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval (eval, EvMode(..), kindType, quote, doesntOccur)
 import Brat.FC (FC)
 import Brat.Graph (Node(..), NodeType(..))
-import Brat.Naming (Name, FreshMonad(..))
+import Brat.Naming (Name)
 import Brat.Syntax.Common
 import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Simple
@@ -38,23 +19,45 @@ import Hasochism
 import Util (log2)
 
 import Control.Monad ((>=>))
+import Control.Monad.Freer
 import Control.Monad.State.Lazy (StateT(..), runStateT)
-import Control.Monad.Freer (req)
 import Data.Bifunctor
 import Data.Foldable (foldrM)
 import Data.List (partition)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Prelude hiding (last)
 
--- import Debug.Trace
+import Debug.Trace
 
-simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Either ErrorMsg ()
-simpleCheck Braty TNat (Num n) | n >= 0 = pure ()
-simpleCheck Braty TInt (Num _) = pure ()
-simpleCheck Braty TFloat (Float _) = pure ()
-simpleCheck Braty TText (Text _) = pure ()
-simpleCheck _ ty tm = Left $ TypeErr $ unwords
+simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Checking ()
+simpleCheck my ty tm = case (my, ty) of
+  (Braty, VApp (VPar e) _) -> do
+    hopes <- req AskHopes
+    let isHope = case e of
+                   InEnd i -> M.member i hopes
+                   ExEnd _ -> False
+    if isHope then
+      case tm of
+        Float _ -> defineEnd "simpleCheck" e TFloat
+        Text _ -> defineEnd "simpleCheck" e TText
+        Num n | n < 0 -> defineEnd "simpleCheck" e TInt
+        Num _ -> typeErr $ "Can't determine whether Int or Nat: " ++ show tm
+    else isSkolem e >>= \case
+      SkolemConst -> throwLeft $ helper Braty ty tm
+      Definable -> do
+        mkYield "simpleCheck" (S.singleton e)
+        ty <- eval S0 ty
+        simpleCheck Braty ty tm
+  _ -> throwLeft $ helper my ty tm
+ where
+  helper :: Modey m -> Val Z -> SimpleTerm -> Either ErrorMsg ()
+  helper Braty TNat (Num n) | n >= 0 = pure ()
+  helper Braty TInt (Num _) = pure ()
+  helper Braty TFloat (Float _) = pure ()
+  helper Braty TText (Text _) = pure ()
+  helper _ ty tm = Left $ TypeErr $ unwords
                       ["Expected something of type"
                       ,"`" ++ show ty ++ "`"
                       ,"but got"
@@ -133,11 +136,6 @@ ensureEmpty :: Show ty => String -> [(NamedPort e, ty)] -> Checking ()
 ensureEmpty _ [] = pure ()
 ensureEmpty str xs = err $ InternalError $ "Expected empty " ++ str ++ ", got:\n  " ++ showSig (rowToSig xs)
 
-noUnders m = do
-  ((outs, ()), (overs, unders)) <- m
-  ensureEmpty "unders" unders
-  pure (outs, overs)
-
 rowToSig :: Traversable t => t (NamedPort e, ty) -> t (PortName, ty)
 rowToSig = fmap $ first portName
 
@@ -170,26 +168,40 @@ anext :: forall m i j k
       -> Ro m i j -- Inputs and Outputs use de Bruijn indices
       -> Ro m j k
       -> Checking (Name, Unders m Chk, Overs m UVerb, (Semz k, Some Endz))
-anext str th vals0 ins outs = do
+anext str th vals0 ins outs = anext' str th vals0 ins outs $ case th of
+  Source -> SkolemConst
+  _ -> Definable
+
+anext' :: forall m i j k
+       . EvMode m
+      => String
+      -> NodeType m
+      -> (Semz i, Some Endz)
+      -> Ro m i j -- Inputs and Outputs use de Bruijn indices
+      -> Ro m j k
+      -> IsSkolem -- inports are always Definable
+      -> Checking (Name, Unders m Chk, Overs m UVerb, (Semz k, Some Endz))
+anext' str th vals0 ins outs skol = do
   node <- req (Fresh str) -- Pick a name for the thunk
   -- Use the new name to generate Ends with which to instantiate types
   (unders, vals1) <- endPorts node InEnd In 0 vals0 ins
   (overs, vals2)  <- endPorts node ExEnd Ex 0 vals1 outs
   () <- sequence_ $
         [ declareTgt tgt (modey @m) ty | (tgt, ty) <- unders ] ++
-        [ declareSrc src (modey @m) ty | (src, ty) <- overs ]
+        [ req (Declare (ExEnd (end src)) (modey @m) ty skol) | (src, ty) <- overs ]
+
   let inputs  = [ (portName p, biType @m ty) | (p, ty) <- unders ]
   let outputs = [ (portName p, biType @m ty) | (p, ty) <- overs  ]
 
   () <- req (AddNode node (mkNode (modey @m) th inputs outputs))
   pure (node, unders, overs, vals2)
- where
-  mkNode :: forall m. Modey m -> NodeType m
-         -> [(PortName, Val Z)]
-         -> [(PortName, Val Z)]
-         -> Node
-  mkNode Braty = BratNode
-  mkNode Kerny = KernelNode
+
+mkNode :: forall m. Modey m -> NodeType m
+        -> [(PortName, Val Z)]
+        -> [(PortName, Val Z)]
+        -> Node
+mkNode Braty = BratNode
+mkNode Kerny = KernelNode
 
 type Endz = Ny :* Stack Z End
 
@@ -248,14 +260,16 @@ getThunks :: Modey m
                       ,Overs m UVerb
                       )
 getThunks _ [] = pure ([], [], [])
-getThunks Braty ((src, Right ty):rest) = do
-  ty <- eval S0 ty
-  (src, ss :->> ts) <- vectorise Braty (src, ty)
-  (node, unders, overs, _) <- let ?my = Braty in
-                                anext "Eval" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
-  (nodes, unders', overs') <- getThunks Braty rest
-  pure (node:nodes, unders <> unders', overs <> overs')
+getThunks Braty row@((src, Right ty):rest) = req AskHopes >>= \h -> eval S0 ty >>= \case
+  VApp (VPar e@(InEnd i)) _ | M.member i h -> mkYield "getThunks" (S.singleton e) >> getThunks Braty row
+  ty -> do
+    (src, ss :->> ts) <- vectorise Braty (src, ty)
+    (node, unders, overs, _) <- let ?my = Braty in
+                                  anext "Eval" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
+    (nodes, unders', overs') <- getThunks Braty rest
+    pure (node:nodes, unders <> unders', overs <> overs')
 getThunks Kerny ((src, Right ty):rest) = do
+  -- TODO we probably want to check against the HopeSet here too, good to refactor+common-up somehow
   ty <- eval S0 ty
   (src, ss :->> ts) <- vectorise Kerny (src,ty)
   (node, unders, overs, _) <- let ?my = Kerny in anext "Splice" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
@@ -297,7 +311,7 @@ vectorise my (src, ty) = do
       next "MapFun" MapFun (S0, Some (Zy :* S0))
       (REx ("len", Nat) (RPr ("value", weak1 ty) R0))
       (RPr ("vector", weak1 vecFun) R0)
-    defineTgt lenTgt (VNum len)
+    defineTgt' "vectorise" lenTgt (VNum len)
     wire (lenSrc, kindType Nat, lenTgt)
     wire (valSrc, ty, valTgt)
     let vecCTy = case (my,my',cty) of
@@ -334,16 +348,19 @@ valueToBinder Braty = Right
 valueToBinder Kerny = id
 
 defineSrc :: Src -> Val Z -> Checking ()
-defineSrc src = defineEnd (ExEnd (end src))
+defineSrc src = defineEnd "" (ExEnd (end src))
 
 defineTgt :: Tgt -> Val Z -> Checking ()
-defineTgt tgt = defineEnd (InEnd (end tgt))
+defineTgt tgt = defineEnd "" (InEnd (end tgt))
 
-declareSrc :: Src -> Modey m -> BinderType m -> Checking ()
-declareSrc src my ty = req (Declare (ExEnd (end src)) my ty)
+defineSrc' :: String -> Src -> Val Z -> Checking ()
+defineSrc' lbl src = defineEnd lbl (ExEnd (end src))
+
+defineTgt' :: String -> Tgt -> Val Z -> Checking ()
+defineTgt' lbl tgt = defineEnd lbl (InEnd (end tgt))
 
 declareTgt :: Tgt -> Modey m -> BinderType m -> Checking ()
-declareTgt tgt my ty = req (Declare (InEnd (end tgt)) my ty)
+declareTgt tgt my ty = req (Declare (InEnd (end tgt)) my ty Definable)
 
 -- listToRow :: [(PortName, BinderType m)] -> Ro m Z i
 -- listToRow [] = R0
@@ -360,14 +377,14 @@ makeBox name cty@(ss :->> ts) body = do
   (tgt, unders, _, _) <- anext (name ++ "/out") Target ctx ts R0
   case (?my, body) of
     (Kerny, _) -> do
-      (_,_,[thunk],_) <- next (name ++ "_thunk") (Box M.empty src tgt) (S0, Some (Zy :* S0))
+      (_,_,[thunk],_) <- next (name ++ "_thunk") (Box src tgt) (S0, Some (Zy :* S0))
                                 R0 (RPr ("thunk", VFun Kerny cty) R0)
-      bres <- name -! body (overs, unders)
+      bres <- body (overs, unders)
       pure (thunk, bres)
     (Braty, body) -> do
-      (bres, captures) <- name -! captureOuterLocals (body (overs, unders))
-      (_, [], [thunk], _) <- next (name ++ "_thunk") (Box captures src tgt) (S0, Some (Zy :* S0))
+      (node, [], [thunk], _) <- next (name ++ "_thunk") (Box src tgt) (S0, Some (Zy :* S0))
                                      R0 (RPr ("thunk", VFun ?my cty) R0)
+      bres <- captureOuterLocals node (body (overs, unders))
       pure (thunk, bres)
 
 -- Evaluate either mode's BinderType
@@ -477,7 +494,7 @@ buildSub n = do
   nDangling <- buildNum n
   ((lhs,rhs),out) <- buildArithOp Sub
   req $ Wire (end nDangling, TNat, end rhs)
-  defineTgt lhs (VNum (nPlus n (nVar (VPar (toEnd out)))))
+  defineTgt' "Sub" lhs (VNum (nPlus n (nVar (VPar (toEnd out)))))
   pure (lhs, out)
 
 buildDoub :: Checking (Tgt, Src)
@@ -493,7 +510,7 @@ buildHalve = do
   nDangling <- buildNum 2
   ((lhs,rhs),out) <- buildArithOp Div
   req $ Wire (end nDangling, TNat, end rhs)
-  defineTgt lhs (VNum (n2PowTimes 1 (nVar (VPar (toEnd out)))))
+  defineTgt' "Helpers"lhs (VNum (n2PowTimes 1 (nVar (VPar (toEnd out)))))
   pure (lhs, out)
 
 replaceHope :: InPort -> InPort -> Checking ()
@@ -501,16 +518,14 @@ replaceHope old new = do
   hs <- req AskHopes
   case M.lookup old hs of
     Nothing -> pure ()
-    Just hd -> do
-      req (RemoveHope old)
-      req (ANewHope new (HopeData Nothing (hopeDynamic hd)))
+    Just hd -> req (ANewHope new (HopeData Nothing (hopeDynamic hd)))
 
 -- Return an End with the same polarity whose value is half that of the input End
 makeHalf :: End -> Checking End
 makeHalf (InEnd e) = do
   (doubIn, doubOut) <- buildDoub
   req (Wire (end doubOut, TNat, e))
-  defineTgt (NamedPort e "") (VNum (nVar (VPar (toEnd doubOut))))
+  defineTgt' "Helpers"(NamedPort e "") (VNum (nVar (VPar (toEnd doubOut))))
   replaceHope e (end doubIn)
   pure (InEnd (end doubIn))
 makeHalf (ExEnd e) = do
@@ -523,7 +538,7 @@ makePred :: End -> Checking End
 makePred (InEnd e) = do
   (succIn, succOut) <- buildAdd 1
   req (Wire (end succOut, TNat, e))
-  defineTgt (NamedPort e "") (VNum (nVar (VPar (toEnd succOut))))
+  defineTgt' "Helpers"(NamedPort e "") (VNum (nVar (VPar (toEnd succOut))))
   replaceHope e (end succIn)
   pure (toEnd succIn)
 makePred (ExEnd e) = do
@@ -542,7 +557,8 @@ buildNatVal nv@(NumValue n gro) = case n of
     (inn, out) <- buildAdd n
     src <- buildGro gro
     req $ Wire (end src, TNat, end inn)
-    defineTgt inn (VNum (nVar (VPar (toEnd src))))
+    traceM $ "buildNatVal " ++ show inn
+    defineTgt' "Helpers"inn (VNum (nVar (VPar (toEnd src))))
     pure out
  where
   buildGro :: Fun00 (VVar Z) -> Checking Src
@@ -587,8 +603,8 @@ invertNatVal (NumValue up gro) = case up of
     req $ Wire (end upSrc, TNat, end rhs)
     tgt <- invertGro gro
     req $ Wire (end out, TNat, end tgt)
-    defineTgt tgt (VNum (nVar (VPar (toEnd out))))
-    defineTgt lhs (VNum (nPlus up (nVar (VPar (toEnd tgt)))))
+    defineTgt' "Helpers"tgt (VNum (nVar (VPar (toEnd out))))
+    defineTgt' "Helpers"lhs (VNum (nPlus up (nVar (VPar (toEnd tgt)))))
     pure lhs
  where
   invertGro Constant0 = error "Invariant violated: the numval arg to invertNatVal should contain a variable"
@@ -602,8 +618,8 @@ invertNatVal (NumValue up gro) = case up of
       tgt <- invertMono mono
       req $ Wire (end out, TNat, end tgt)
       req $ Wire (end divisor, TNat, end rhs)
-      defineTgt tgt (VNum (nVar (VPar (toEnd out))))
-      defineTgt lhs (VNum (n2PowTimes k (nVar (VPar (toEnd tgt)))))
+      defineTgt' "Helpers"tgt (VNum (nVar (VPar (toEnd out))))
+      defineTgt' "Helpers"lhs (VNum (n2PowTimes k (nVar (VPar (toEnd tgt)))))
       pure lhs
 
   invertMono (Linear (VPar (InEnd e))) = pure (NamedPort e "numval")
@@ -611,8 +627,8 @@ invertNatVal (NumValue up gro) = case up of
     (_, [(llufTgt,_)], [(llufSrc,_)], _) <- next "luff" (Prim ("BRAT","lluf")) (S0, Some (Zy :* S0)) (REx ("n", Nat) R0) (REx ("n", Nat) R0)
     tgt <- invertSM sm
     req $ Wire (end llufSrc, TNat, end tgt)
-    defineTgt tgt (VNum (nVar (VPar (toEnd llufSrc))))
-    defineTgt llufTgt (VNum (nFull (nVar (VPar (toEnd tgt)))))
+    defineTgt' "Helpers"tgt (VNum (nVar (VPar (toEnd llufSrc))))
+    defineTgt' "Helpers"llufTgt (VNum (nFull (nVar (VPar (toEnd tgt)))))
     pure llufTgt
 
 -- This will update the `hopes`, potentially invalidating things that have
@@ -621,13 +637,12 @@ invertNatVal (NumValue up gro) = case up of
 solveHopeVal :: TypeKind -> InPort -> Val Z -> Checking ()
 solveHopeVal k hope v = case doesntOccur (InEnd hope) v of
   Right () -> do
-    defineEnd (InEnd hope) v
+    defineEnd "solveHopeVal" (InEnd hope) v
     dangling <- case (k, v) of
       (Nat, VNum v) -> buildNatVal v
       (Nat, _) -> err $ InternalError "Head of Nat wasn't a VNum"
       _ -> buildConst Unit TUnit
     req (Wire (end dangling, kindType k, hope))
-    req (RemoveHope hope)
   Left msg -> case v of
     VApp (VPar (InEnd end)) B0 | hope == end -> pure ()
     -- TODO: Not all occurrences are toxic. The end could be in an argument
@@ -680,13 +695,11 @@ valPats2Val (k:ks) (v:vs) = do
 valPats2Val [] [] = pure (B0, [])
 valPats2Val _ _ = err $ InternalError "Type args didn't match expected - kindCheck should've sorted it"
 
-{-
 traceChecking :: (Show a, Show b) => String -> (a -> Checking b) -> (a -> Checking b)
 traceChecking lbl m a = do
   traceM ("Enter " ++ lbl ++ ": " ++ show a)
   b <- m a
   traceM ("Exit  " ++ lbl ++ ": " ++ show b)
   pure b
--}
 
-traceChecking = const id
+-- traceChecking = const id

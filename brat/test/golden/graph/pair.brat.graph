@@ -1,4 +1,11 @@
 Nodes:
+<<<<<<< HEAD
+(check_defs_1_xs_check'Con_check'Con_2_check'Con_1_true,BratNode (Constructor true) [] [("value",Bool)])
+(check_defs_1_xs_check'Con_check'Con_2_check'Con_2_nil,BratNode (Constructor nil) [] [("value",[])])
+(check_defs_1_xs_check'Con_check'Con_2_cons,BratNode (Constructor cons) [("head",Bool),("tail",[])] [("value",[Bool])])
+(check_defs_1_xs_check'Con_cons,BratNode (Constructor cons) [("head",Int),("tail",[Bool])] [("value",[Int,Bool])])
+(check_defs_1_xs_check'Con_const_1,BratNode (Const 1) [] [("value",Int)])
+=======
 (check_defs_1_xs_buildConst_2,BratNode (Const []) [] [("value",[])])
 (check_defs_1_xs_buildConst_3,BratNode (Const []) [] [("value",[])])
 (check_defs_1_xs_buildConst_8,BratNode (Const []) [] [("value",[])])
@@ -12,6 +19,7 @@ Nodes:
 (check_defs_1_xs_pat2val_6,BratNode Id [("",[])] [("",[])])
 (check_defs_1_xs_pat2val_7,BratNode Id [("",[])] [("",[])])
 (check_defs_1_xs_true_11,BratNode (Constructor true) [] [("value",Bool)])
+>>>>>>> origin/just-nat-solving
 (globals_Bool_4,BratNode (Constructor Bool) [] [("value",[])])
 (globals_Int_2,BratNode (Constructor Int) [] [("value",[])])
 (globals_cons_1,BratNode (Constructor cons) [("head",[]),("tail",[])] [("value",[])])
@@ -20,6 +28,13 @@ Nodes:
 (globals_nil_5,BratNode (Constructor nil) [] [("value",[])])
 
 Wires:
+<<<<<<< HEAD
+(Ex check_defs_1_xs_check'Con_check'Con_2_check'Con_1_true 0,Bool,In check_defs_1_xs_check'Con_check'Con_2_cons 0)
+(Ex check_defs_1_xs_check'Con_check'Con_2_check'Con_2_nil 0,[],In check_defs_1_xs_check'Con_check'Con_2_cons 1)
+(Ex check_defs_1_xs_check'Con_check'Con_2_cons 0,[Bool],In check_defs_1_xs_check'Con_cons 1)
+(Ex check_defs_1_xs_check'Con_cons 0,[Int,Bool],In globals_decl_6_xs 0)
+(Ex check_defs_1_xs_check'Con_const_1 0,Int,In check_defs_1_xs_check'Con_cons 0)
+=======
 (Ex check_defs_1_xs_buildConst_2 0,[],In check_defs_1_xs_pat2val_1 0)
 (Ex check_defs_1_xs_buildConst_3 0,[],In check_defs_1_xs_pat2val 0)
 (Ex check_defs_1_xs_buildConst_8 0,[],In check_defs_1_xs_pat2val_7 0)
@@ -29,6 +44,7 @@ Wires:
 (Ex check_defs_1_xs_const_5 0,Int,In check_defs_1_xs_cons_4 0)
 (Ex check_defs_1_xs_nil_12 0,[],In check_defs_1_xs_cons_10 1)
 (Ex check_defs_1_xs_true_11 0,Bool,In check_defs_1_xs_cons_10 0)
+>>>>>>> origin/just-nat-solving
 (Ex globals_Bool_4 0,[],In globals_cons_3 0)
 (Ex globals_Int_2 0,[],In globals_cons_1 0)
 (Ex globals_cons_1 0,[],In globals___kca_xs 0)

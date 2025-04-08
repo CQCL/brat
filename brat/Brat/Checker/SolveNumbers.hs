@@ -11,7 +11,7 @@ import Brat.Graph (NodeType(..))
 import Hasochism
 import Control.Monad.Freer
 
--- import Debug.Trace
+import Debug.Trace
 import qualified Data.Map as M
 
 -- trail = trace
@@ -42,22 +42,17 @@ solveNumMeta e nv = case (e, vars nv) of
    (_, [(idTgt, _)], [(idSrc, _)], _) <- anext "numval id" Id (S0, Some (Zy :* S0))
                                          (REx ("n", Nat) R0) (REx ("n", Nat) R0)
    defineSrc idSrc (VNum (nVar (VPar (toEnd idTgt))))
-   hopes <- req AskHopes
    instantiateMeta (InEnd weeTgt) (VNum (nVar (VPar (toEnd idSrc))))
-   if M.member weeTgt hopes then req (RemoveHope weeTgt) else pure ()
    wire (idSrc, TNat, NamedPort weeTgt "")
    let nv' = fmap (const (VPar (toEnd idSrc))) nv -- weeTgt is the only thing to replace
    bigSrc <- buildNatVal nv'
    instantiateMeta (InEnd bigTgt) (VNum nv')
-   if M.member bigTgt hopes then req (RemoveHope bigTgt) else pure ()
    wire (bigSrc, TNat, NamedPort bigTgt "")
 
  -- RHS is constant or Src, wire it into tgt
  (InEnd tgt,  _) -> do
    src <- buildNatVal nv
    instantiateMeta (InEnd tgt) (VNum nv)
-   hopes <- req AskHopes
-   if M.member tgt hopes then req (RemoveHope tgt) else pure ()
    wire (src, TNat, NamedPort tgt "")
  where
   vars :: NumVal a -> [a]
@@ -65,13 +60,13 @@ solveNumMeta e nv = case (e, vars nv) of
 
 unifyNum :: NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
 unifyNum nv0 nv1 = do
-  -- traceM $ ("unifyNum In\n  " ++ show nv0 ++ "\n  " ++ show nv1)
+  traceM $ ("unifyNum In\n  " ++ show nv0 ++ "\n  " ++ show nv1)
   nv0 <- numEval S0 nv0
   nv1 <- numEval S0 nv1
   unifyNum' (quoteNum Zy nv0) (quoteNum Zy nv1)
-  -- nv0 <- numEval S0 (quoteNum Zy nv0)
-  -- nv1 <- numEval S0 (quoteNum Zy nv1)
-  -- traceM $ ("unifyNum Out\n  " ++ show (quoteNum Zy nv0) ++ "\n  " ++ show (quoteNum Zy nv1)) 
+  nv0 <- numEval S0 (quoteNum Zy nv0)
+  nv1 <- numEval S0 (quoteNum Zy nv1)
+  traceM $ ("unifyNum Out\n  " ++ show (quoteNum Zy nv0) ++ "\n  " ++ show (quoteNum Zy nv1))
 
 -- Need to keep track of which way we're solving - which side is known/unknown
 -- Things which are dynamically unknown must be Tgts - information flows from Srcs
@@ -98,25 +93,17 @@ unifyNum' (NumValue lup lgro) (NumValue rup rgro)
       (VPar (ExEnd e), v@(VPar (ExEnd _))) -> defineSrc (NamedPort e "") (VNum (nVar v))
       (VPar (InEnd e), v@(VPar (ExEnd dangling))) -> do
         req (Wire (dangling, TNat, e))
-        defineTgt (NamedPort e "") (VNum (nVar v))
-        (M.member e <$> req AskHopes) >>= \case
-          True -> req (RemoveHope e)
-          False -> pure ()
+        hs <- req AskHopes
+        defineTgt' ("flex-flex In Ex " ++ show (M.member e hs)) (NamedPort e "") (VNum (nVar v))
       (v@(VPar (InEnd e)), v'@(VPar (InEnd e'))) -> do
         hs <- req AskHopes
         case (M.lookup e hs, M.lookup e' hs) of
-          (Nothing, Just _) -> do
-            defineTgt (NamedPort e' "") (VNum (nVar v))
-            req (RemoveHope e')
-          (Just _, Nothing) -> do
-            defineTgt (NamedPort e "") (VNum (nVar v'))
-            req (RemoveHope e)
+          (Nothing, Just _) -> defineTgt' "flex-flex In In0"(NamedPort e' "") (VNum (nVar v))
+          (Just _, Nothing) -> defineTgt' "flex-flex In In1"(NamedPort e "") (VNum (nVar v'))
           (Nothing, Nothing) -> error "Two non-hopes in unifyNum"
           (Just hd, Just hd') -> if hopeDynamic hd
-                                 then do defineTgt (NamedPort e' "") (VNum (nVar v))
-                                         req (RemoveHope e')
-                                 else do defineTgt (NamedPort e "") (VNum (nVar v'))
-                                         req (RemoveHope e)
+                                 then defineTgt' "flex-flex In In2"(NamedPort e' "") (VNum (nVar v))
+                                 else defineTgt' "flex-flex In In3"(NamedPort e "") (VNum (nVar v'))
 
   lhsStrictMono :: StrictMono (VVar Z) -> NumVal (VVar Z) -> Checking ()
   lhsStrictMono (StrictMono 0 mono) num = lhsMono mono num

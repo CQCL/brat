@@ -16,17 +16,23 @@ import Util
 import Control.Monad.Freer
 
 import Control.Monad.Fail ()
+import Data.Functor ((<&>))
 import Data.List (intercalate)
 import qualified Data.Map as M
+import qualified Data.Set as S
 
--- import Debug.Trace
+import Debug.Trace
+
+-- Used for messages about thread forking / spawning
+--thTrace = const id
+thTrace = trace
 
 trackM :: Monad m => String -> m ()
-trackM = const (pure ())
--- trackM = traceM
+--trackM = const (pure ())
+trackM = traceM
 
-track = const id
--- track = trace
+-- track = const id
+track = trace
 trackShowId x = track (show x) x
 
 -- Data for using a type alias. E.g.
@@ -57,6 +63,8 @@ data HopeData = HopeData
 
 type Hopes = M.Map InPort HopeData
 
+type CaptureSets = M.Map Name VEnv
+
 data Context = Ctx { globalVEnv :: VEnv
                    , store :: Store
                    , constructors :: ConstructorMap Brat
@@ -64,8 +72,16 @@ data Context = Ctx { globalVEnv :: VEnv
                    , typeConstructors :: M.Map (Mode, QualName) [(PortName, TypeKind)]
                    , aliasTable :: M.Map QualName Alias
                    , hopes :: Hopes
+                   , captureSets :: CaptureSets
                    }
 
+mkFork :: String -> Free sig () -> Free sig ()
+mkFork d par = thTrace ("Forking " ++ d) $ Fork d par $ pure ()
+
+mkYield :: String -> S.Set End -> Free sig ()
+mkYield desc es = thTrace ("Yielding in " ++ desc ++ "\n  " ++ show es) $ Yield (AwaitingAny es) (\_ -> Ret ())
+
+-- Commands for synchronous operations
 data CheckingSig ty where
   Fresh   :: String -> CheckingSig Name
   SplitNS :: String -> CheckingSig Namespace
@@ -90,75 +106,81 @@ data CheckingSig ty where
   ELup    :: End -> CheckingSig (Maybe (Val Z))
   -- Lookup an alias in the table
   ALup    :: QualName -> CheckingSig (Maybe Alias)
-  TypeOf  :: End -> CheckingSig EndType
+  TypeOf  :: End -> CheckingSig (EndType, IsSkolem)
   AddNode :: Name -> Node -> CheckingSig ()
   Wire    :: Wire -> CheckingSig ()
   KDone   :: CheckingSig ()
   AskVEnv :: CheckingSig CtxEnv
-  Declare :: End -> Modey m -> BinderType m -> CheckingSig ()
-  Define  :: End -> Val Z -> CheckingSig ()
+  Declare :: End -> Modey m -> BinderType m -> IsSkolem -> CheckingSig ()
   ANewHope :: InPort -> HopeData -> CheckingSig ()
   AskHopes :: CheckingSig Hopes
-  RemoveHope :: InPort -> CheckingSig ()
+  AddCapture :: Name -> (QualName, [(Src, BinderType Brat)]) -> CheckingSig ()
+
+wrapper :: (forall a. CheckingSig a -> Checking (Maybe a)) -> Checking v -> Checking v
+wrapper _ (Ret v) = Ret v
+wrapper f (Req s k) = f s >>= \case
+  Just v -> wrapper f (k v)
+  Nothing -> Req s (wrapper f . k)
+wrapper f (Define lbl v e k) = Define lbl v e (wrapper f . k)
+wrapper f (Yield st k) = Yield st (wrapper f . k)
+wrapper f (Fork d par c) = Fork d (wrapper f par) (wrapper f c)
+
+wrapper2 :: (forall a. CheckingSig a -> Maybe a) -> Checking v -> Checking v
+wrapper2 f = wrapper (\s -> pure (f s))
 
 localAlias :: (QualName, Alias) -> Checking v -> Checking v
-localAlias _ (Ret v) = Ret v
-localAlias con@(name, alias) (Req (ALup u) k)
-  | u == name = localAlias con $ k (Just alias)
-localAlias con (Req r k) = Req r (localAlias con . k)
+localAlias (name, alias) = wrapper2 (\case
+    ALup u | u == name -> Just (Just alias)
+    _ -> Nothing)
 
 localFC :: FC -> Checking v -> Checking v
-localFC _ (Ret v) = Ret v
-localFC f (Req AskFC k) = localFC f (k f)
-localFC f (Req (Throw e@Err{fc=Nothing}) k) = localFC f (Req (Throw (e{fc=Just f})) k)
-localFC f (Req r k) = Req r (localFC f . k)
+localFC f = wrapper (\case
+  AskFC -> pure $ Just f
+  (Throw e@Err{fc=Nothing}) -> req (Throw (e{fc=Just f})) >> error "Throw returned"
+  _ -> pure $ Nothing)
 
 localEnv :: (?my :: Modey m) => Env (EnvData m) -> Checking v -> Checking v
 localEnv = case ?my of
   Braty -> localVEnv
   Kerny -> \env m -> localKVar env (m <* req KDone)
 
-localVEnv :: VEnv -> Checking v -> Checking v
-localVEnv _   (Ret v) = Ret v
-localVEnv ext (Req (VLup x) k) | Just x <- M.lookup x ext = localVEnv ext (k (Just x))
-localVEnv ext (Req AskVEnv k) = do env <- req AskVEnv
-                                   -- ext shadows local vars
-                                   localVEnv ext (k (env { locals = M.union ext (locals env) }))
-localVEnv ext (Req r k) = Req r (localVEnv ext . k)
+localVEnv :: M.Map QualName [(Src, BinderType Brat)] -> Checking v -> Checking v
+localVEnv ext = wrapper (\case
+  (VLup x) | j@(Just _) <- M.lookup x ext -> pure $ Just j -- invoke continuation with j
+  AskVEnv -> do
+    outerEnv <- req AskVEnv
+    pure $ Just -- value to return to original continuation
+      (outerEnv { locals = M.union ext (locals outerEnv) })  -- ext shadows local vars
+  _ -> pure Nothing)
 
--- runs a computation, but intercepts uses of outer *locals* variables and redirects
--- them to use new outports of the specified node (expected to be a Source).
--- Returns a list of captured variables and their generated (Source-node) outports
-captureOuterLocals :: Checking v -> Checking (v, VEnv)
-captureOuterLocals c = do
+-- runs a computation, but logs (via AddCapture, under the specified Name) uses of outer
+-- *local* variables
+captureOuterLocals :: Name -> Checking v -> Checking v
+captureOuterLocals n c = do
   outerLocals <- locals <$> req AskVEnv
-  helper (outerLocals, M.empty) c
+  wrapper (helper outerLocals) c
  where
-  helper :: (VEnv, VEnv) -> Checking v
-         -> Checking (v, M.Map QualName [(Src, BinderType Brat)])
-  helper (_, captured) (Ret v) = Ret (v, captured)
-  helper (avail, captured) (Req (VLup x) k) | j@(Just new) <- M.lookup x avail =
-    helper (avail, M.insert x new captured) (k j)
-  helper state (Req r k) = Req r (helper state . k)
+  helper :: VEnv -> forall a. CheckingSig a -> Checking (Maybe a)
+  helper avail (VLup x) | j@(Just new) <- M.lookup x avail =
+    (req $ AddCapture n (x,new)) >> (pure $ Just j)
+  helper _ _ = pure Nothing
 
 wrapError :: (Error -> Error) -> Checking v -> Checking v
-wrapError _ (Ret v) = Ret v
-wrapError f (Req (Throw e) k) = Req (Throw (f e)) k
-wrapError f (Req r k) = Req r (wrapError f . k)
+wrapError f = wrapper (\case
+  (Throw e) -> req (Throw (f e)) -- do not return value from outer Throw!
+  _ -> pure Nothing)
 
 throwLeft :: Either ErrorMsg a -> Checking a
 throwLeft (Right x) = pure x
 throwLeft (Left msg) = err msg
 
 vlup :: QualName -> Checking [(Src, BinderType Brat)]
-vlup s = do
-  req (VLup s) >>= \case
+vlup s = req (VLup s) >>= \case
     Just vty -> pure vty
     Nothing -> err $ VarNotFound (show s)
 
 alup :: QualName -> Checking Alias
-alup s = do
-  req (ALup s) >>= \case
+alup s = req (ALup s) >>= \case
     Just vty -> pure vty
     Nothing -> err $ VarNotFound (show s)
 
@@ -195,6 +217,7 @@ lookupAndUse x kenv = case M.lookup x kenv of
    Just (Tons, rest) -> Right $ Just (rest, M.insert x (Tons, rest) kenv)
 
 localKVar :: KEnv -> Checking v -> Checking v
+-- Doesn't fit the wrapper pattern because the `env` mutates
 localKVar _   (Ret v) = Ret v
 localKVar env (Req (KLup x) k) = case lookupAndUse x env of
                                    Left err@(Err (Just _) _) -> req $ Throw err
@@ -209,11 +232,24 @@ localKVar env (Req KDone k) = case [ x | (x,(One,_)) <- M.assocs env ] of
                                               ,"haven't been used"
                                               ]
 localKVar env (Req r k) = Req r (localKVar env . k)
+localKVar env (Define lbl e v k) = Define lbl e v (localKVar env . k)
+localKVar env (Yield st k) = Yield st (localKVar env . k)
+localKVar env (Fork desc par c) =
+  -- can't send end both ways, so until we can join (TODO), restrict Forks to local scope
+  thTrace ("Spawning(LKV) " ++ desc) $ localKVar env $ par *> c
+
+-- SkolemConst constants are e.g. function parameters that are *not* going to be defined if we wait.
+-- (exception: clause inputs can sometimes be defined if there is exactly one possible value).
+isSkolem :: End -> Checking IsSkolem
+isSkolem e = req (TypeOf e) <&> snd
 
 catchErr :: Free CheckingSig a -> Free CheckingSig (Either Error a)
 catchErr (Ret t) = Ret (Right t)
 catchErr (Req (Throw e) _) = pure $ Left e
 catchErr (Req r k) = Req r (catchErr . k)
+catchErr (Define lbl e v k) = Define lbl e v (catchErr . k)
+catchErr (Yield st k) = Yield st (catchErr . k)
+catchErr (Fork desc par c) = thTrace ("Spawning(catch) " ++ desc) $ catchErr $ par *> c
 
 handler :: Free CheckingSig v
         -> Context
@@ -241,7 +277,7 @@ handler (Req s k) ctx g
       TypeOf end -> case M.lookup end . typeMap . store $ ctx of
         Just et -> handler (k et) ctx g
         Nothing -> Left (dumbErr . InternalError $ "End " ++ show end ++ " isn't Declared")
-      Declare end my bty ->
+      Declare end my bty skol ->
         let st@Store{typeMap=m} = store ctx
         in case M.lookup end m of
           Just _ -> Left $ dumbErr (InternalError $ "Redeclaring " ++ show end)
@@ -249,19 +285,8 @@ handler (Req s k) ctx g
                        track ("Declared " ++ show end ++ " :: " ++ bty_str) $
                        handler (k ())
                        (ctx { store =
-                              st { typeMap = M.insert end (EndType my bty) m }
+                              st { typeMap = M.insert end (EndType my bty, skol) m }
                             }) g
-      Define end v ->
-        let st@Store{typeMap=tm, valueMap=vm} = store ctx
-        in case track ("Define " ++ show end ++ " = " ++ show v) $ M.lookup end vm of
-          Just _ -> Left $ dumbErr (InternalError $ "Redefining " ++ show end)
-          Nothing -> case M.lookup end tm of
-            Nothing -> Left $ dumbErr (InternalError $ "Defining un-Declared " ++ show end ++ " in \n" ++ show tm)
-            Just _ -> -- TODO can we check the value is of the kind declared?
-              handler (k ())
-                (ctx { store =
-                    st { valueMap = M.insert end v vm }
-                }) g
       -- TODO: Use the kind argument for partially applied constructors
       TLup key -> do
         let args = M.lookup key (typeConstructors ctx)
@@ -285,10 +310,34 @@ handler (Req s k) ctx g
 
       AskHopes -> handler (k (hopes ctx)) ctx g
 
-      RemoveHope e -> let hset = hopes ctx in
-                        if M.member e hset
-                        then handler (k ()) (ctx { hopes = M.delete e hset }) g
-                        else Left (dumbErr (InternalError ("Trying to remove unknown Hope: " ++ show e)))
+      AddCapture n (var, ends) ->
+        handler (k ()) ctx {captureSets=M.insertWith M.union n (M.singleton var ends) (captureSets ctx)} g
+
+handler (Define lbl end v k) ctx g = let st@Store{typeMap=tm, valueMap=vm} = store ctx in
+  case track ("Define( " ++ lbl ++ ")" ++ show end ++ " = " ++ show v) $ M.lookup end vm of
+      Just _ -> Left $ dumbErr (InternalError $ "Redefining " ++ show end)
+      Nothing -> case M.lookup end tm of
+        Nothing -> Left $ dumbErr (InternalError $ "Defining un-Declared " ++ show end ++ " in \n" ++ show tm)
+        -- Allow even Skolems to be defined (e.g. clauses with unique soln)
+        -- TODO(1) can we check the value is of the kind declared?
+        -- TODO(2) it'd be better to figure out if the end is really Unstuck,
+        -- or just awaiting some other end, but that seems overly complex atm, as
+        -- (a) we must be "Unstuck" if the end is Defined to something SkolemConst *OR* in the HopeSet,
+        -- (b) Numbers are tricky, whether they are stuck or not depends upon the question
+        -- (c) since there are no infinite end-creating loops, it's correct (merely inefficient)
+        -- to just "have another go".
+        Just _ -> let news = News (M.singleton end Unstuck) in
+          handler (k news)
+            (ctx { store = st { valueMap = M.insert end v vm },
+                hopes = case end of
+                  InEnd e -> M.delete e (hopes ctx)
+                  ExEnd _ -> hopes ctx
+            }) g
+handler (Yield Unstuck k) ctx g = handler (k mempty) ctx g
+handler (Yield (AwaitingAny ends) _k) ctx _ = Left $ dumbErr $ TypeErr $ unlines $
+  ("Typechecking blocked on:":(show <$> S.toList ends))
+  ++ "":"Hopeset is":(show <$> M.keys (hopes ctx)) ++ ["Try writing more types! :-)"]
+handler (Fork desc par c) ctx g = handler (thTrace ("Spawning " ++ desc) $ par *> c) ctx g
 
 type Checking = Free CheckingSig
 
@@ -317,16 +366,16 @@ instance MonadFail Checking where
 
 -- Run a computation without logging any holes
 suppressHoles :: Checking a -> Checking a
-suppressHoles (Ret x) = Ret x
-suppressHoles (Req (LogHole _) k) = suppressHoles (k ())
-suppressHoles (Req c k) = Req c (suppressHoles . k)
+suppressHoles = wrapper2 (\case
+  (LogHole _) -> Just ()
+  _ -> Nothing)
 
 -- Run a computation without doing any graph generation
 suppressGraph :: Checking a -> Checking a
-suppressGraph (Ret x) = Ret x
-suppressGraph (Req (AddNode _ _) k) = suppressGraph (k ())
-suppressGraph (Req (Wire _) k) = suppressGraph (k ())
-suppressGraph (Req c k) = Req c (suppressGraph . k)
+suppressGraph = wrapper2 (\case
+  (AddNode _ _) -> Just ()
+  (Wire _) -> Just ()
+  _ -> Nothing)
 
 inLvl :: String -> Checking a -> Checking a
 inLvl prefix c = req (SplitNS prefix) >>= \prefixNamespace -> localNS prefixNamespace c
@@ -338,6 +387,10 @@ localNS ns (Req (Fresh str) k) = let (name, root) = fresh str ns in
 localNS ns (Req (SplitNS str) k) = let (subSpace, newRoot) = split str ns in
                                       localNS newRoot (k subSpace)
 localNS ns (Req c k) = Req c (localNS ns . k)
+localNS ns (Define lbl e v k) = Define lbl e v (localNS ns . k)
+localNS ns (Yield st k) = Yield st (localNS ns . k)
+localNS ns (Fork desc par c) = let (subSpace, newRoot) = split desc ns in
+                                 Fork desc (localNS subSpace par) (localNS newRoot c)
 
-defineEnd :: End -> Val Z -> Checking ()
-defineEnd e v = req (Define e v)
+defineEnd :: String -> End -> Val Z -> Checking ()
+defineEnd lbl e v = Define lbl e v (const (Ret ()))

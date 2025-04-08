@@ -62,6 +62,7 @@ instance Show (Inx n) where
     toNat VZ = 0
     toNat (VS n) = 1 + toNat n
 
+
 data AddR :: N -> N -> N -> Type where
   AddZ :: Ny out -> AddR out Z out
   AddS :: AddR out inn tot -> AddR out (S inn) (S tot)

@@ -1,4 +1,13 @@
 Nodes:
+<<<<<<< HEAD
+(check_defs_1_xs_check'Con_check'Con_2_check'Con_2_check'Con_2_nil,BratNode (Constructor nil) [] [("value",Vec(Int, 0))])
+(check_defs_1_xs_check'Con_check'Con_2_check'Con_2_cons,BratNode (Constructor cons) [("head",Int),("tail",Vec(Int, 0))] [("value",Vec(Int, 1))])
+(check_defs_1_xs_check'Con_check'Con_2_check'Con_2_const_1,BratNode (Const 2) [] [("value",Int)])
+(check_defs_1_xs_check'Con_check'Con_2_cons,BratNode (Constructor cons) [("head",Int),("tail",Vec(Int, 1))] [("value",Vec(Int, 2))])
+(check_defs_1_xs_check'Con_check'Con_2_const_1,BratNode (Const 1) [] [("value",Int)])
+(check_defs_1_xs_check'Con_cons,BratNode (Constructor cons) [("head",Int),("tail",Vec(Int, 2))] [("value",Vec(Int, 3))])
+(check_defs_1_xs_check'Con_const_1,BratNode (Const 0) [] [("value",Int)])
+=======
 (check_defs_1_xs_Add_3,BratNode (ArithNode Add) [("lhs",Nat),("rhs",Nat)] [("value",Nat)])
 (check_defs_1_xs_Add_11,BratNode (ArithNode Add) [("lhs",Nat),("rhs",Nat)] [("value",Nat)])
 (check_defs_1_xs_buildConst_2,BratNode (Const 2) [] [("value",Nat)])
@@ -24,12 +33,22 @@ Nodes:
 (check_defs_1_xs_pat2val_8,BratNode Id [("",[])] [("",[])])
 (check_defs_1_xs_pat2val_16,BratNode Id [("",[])] [("",[])])
 (check_defs_1_xs_pat2val_22,BratNode Id [("",[])] [("",[])])
+>>>>>>> origin/just-nat-solving
 (globals_Int_2,BratNode (Constructor Int) [] [("value",[])])
 (globals_Vec_1,BratNode (Constructor Vec) [("X",[]),("n",Nat)] [("value",[])])
 (globals_const_3,BratNode (Const 3) [] [("value",Nat)])
 (globals_decl_4_xs,BratNode Id [("a1",Vec(Int, 3))] [("a1",Vec(Int, 3))])
 
 Wires:
+<<<<<<< HEAD
+(Ex check_defs_1_xs_check'Con_check'Con_2_check'Con_2_check'Con_2_nil 0,Vec(Int, 0),In check_defs_1_xs_check'Con_check'Con_2_check'Con_2_cons 1)
+(Ex check_defs_1_xs_check'Con_check'Con_2_check'Con_2_cons 0,Vec(Int, 1),In check_defs_1_xs_check'Con_check'Con_2_cons 1)
+(Ex check_defs_1_xs_check'Con_check'Con_2_check'Con_2_const_1 0,Int,In check_defs_1_xs_check'Con_check'Con_2_check'Con_2_cons 0)
+(Ex check_defs_1_xs_check'Con_check'Con_2_cons 0,Vec(Int, 2),In check_defs_1_xs_check'Con_cons 1)
+(Ex check_defs_1_xs_check'Con_check'Con_2_const_1 0,Int,In check_defs_1_xs_check'Con_check'Con_2_cons 0)
+(Ex check_defs_1_xs_check'Con_cons 0,Vec(Int, 3),In globals_decl_4_xs 0)
+(Ex check_defs_1_xs_check'Con_const_1 0,Int,In check_defs_1_xs_check'Con_cons 0)
+=======
 (Ex check_defs_1_xs_Add_11 0,Nat,In check_defs_1_xs_numpat2val_9 0)
 (Ex check_defs_1_xs_Add_3 0,Nat,In check_defs_1_xs_numpat2val_1 0)
 (Ex check_defs_1_xs_buildConst_10 0,Nat,In check_defs_1_xs_Add_11 0)
@@ -48,6 +67,7 @@ Wires:
 (Ex check_defs_1_xs_const_21 0,Int,In check_defs_1_xs_cons_20 0)
 (Ex check_defs_1_xs_const_7 0,Int,In check_defs_1_xs_cons_6 0)
 (Ex check_defs_1_xs_nil_24 0,Vec(Int, 0),In check_defs_1_xs_cons_20 1)
+>>>>>>> origin/just-nat-solving
 (Ex globals_Int_2 0,[],In globals_Vec_1 0)
 (Ex globals_Vec_1 0,[],In globals___kca_xs 0)
 (Ex globals_const_3 0,Nat,In globals_Vec_1 1)
