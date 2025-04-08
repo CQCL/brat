@@ -621,3 +621,14 @@ stkLen (zx :<< _) = Sy (stkLen zx)
 numValIsConstant :: NumVal (VVar Z) -> Maybe Integer
 numValIsConstant (NumValue up Constant0) = pure up
 numValIsConstant _ = Nothing
+
+flexes :: Val n -> [End]
+flexes (VApp (VPar e) _) = [e]
+flexes (VNum (NumValue 0 (StrictMonoFun (StrictMono 0 (Linear (VPar e)))))) = [e]
+flexes _ = []
+
+numVars :: NumVal (VVar Z) -> [End]
+numVars nv = [e | v@(VPar e) <- vvars nv]
+ where
+  vvars :: NumVal a -> [a]
+  vvars = foldMap pure

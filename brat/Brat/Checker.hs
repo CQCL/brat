@@ -121,19 +121,25 @@ checkWire :: Modey m
           -> (Tgt, BinderType m)
           -> Checking ()
 checkWire Braty _ outputs (dangling, Left ok) (hungry, Left uk) = do
+  prefix <- whoAmI
+  traceM ("Who am I: checkWire: " ++ show prefix)
   throwLeft $ if outputs
     then kindEq ok uk
     else kindEq uk ok
   defineTgt' "checkWire" hungry (endVal ok (ExEnd (end dangling)))
   wire (dangling, kindType ok, hungry)
-checkWire Braty (WC fc tm) outputs (dangling, o) (hungry, u) = localFC fc $ do
+checkWire Braty (WC fc tm) outputs (dangling, o) (hungry, u) = localFC fc $ "$checkWire" -! do
+  prefix <- whoAmI
+  traceM ("Who am I: checkWire: " ++ show prefix)
   let ot = binderToValue Braty o
   let ut = binderToValue Braty u
   if outputs
     then typeEq (show tm) (Star []) ot ut
     else typeEq (show tm) (Star []) ut ot
   wire (dangling, ot, hungry)
-checkWire Kerny (WC fc tm) outputs (dangling, ot) (hungry, ut) = localFC fc $ do
+checkWire Kerny (WC fc tm) outputs (dangling, ot) (hungry, ut) = localFC fc $ "checkWire" -! do
+  prefix <- whoAmI
+  traceM ("Who am I: checkWire: " ++ show prefix)
   if outputs
     then typeEq (show tm) (Dollar []) ot ut
     else typeEq (show tm) (Dollar []) ut ot
@@ -484,10 +490,10 @@ check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = do
     let m = deModey my -- TODO: remember what this is
     (_, ks) <- unzip <$> tlup (m, tycon)
     -- Turn `pats` into values for unification
-    (varz, patVals) <- valPats2Val ks pats
+    (varz, patVals) <- "$vp2v" -! valPats2Val ks pats
     traceM $ "problem: " ++ show tyargs ++ " =?= " ++ show patVals
     -- Create a unification problem between tyargs and the value versions of pats
-    typeEq (show tycon) (TypeFor m []) (VCon tycon tyargs) (VCon tycon patVals)
+    "$unifyTypeArgs" -! typeEq (show tycon) (TypeFor m []) (VCon tycon tyargs) (VCon tycon patVals)
     ty <- eval S0 ty
     traceM $ "Made it past unification for ty =  " ++ show ty
     Some (ny :* env) <- pure $ bwdStack varz
@@ -583,7 +589,7 @@ check' FanIn (overs, (tgt, ty):unders) = do
     wire (dangling, binderToValue my ty, tgt)
     pure (Just overs)
   faninNodes _ _ _ _ [] = pure Nothing
-  faninNodes my n (hungry, ty) elTy ((over, overTy):overs) = do
+  faninNodes my n (hungry, ty) elTy ((over, overTy):overs) = "$fanin" -! do
     let k = case my of
           Kerny -> Dollar []
           Braty -> Star []
@@ -691,10 +697,14 @@ check' (Of n e) ((), unders) = case ?my of
       (elems, unders, rightUnders) <- getVecs len unders
       pure ((tgt, el):elems, (tgt, ty):unders, rightUnders)
   getVecs _ unders = pure ([], [], unders)
-check' Hope ((), (NamedPort hope _, ty):unders) = case (?my, ty) of
-  (Braty, Left _k) -> do
+check' Hope ((), (tgt@(NamedPort bang _), ty):unders) = case (?my, ty) of
+  (Braty, Left k) -> do
+    (_, [(hungry, _)], [(dangling, _)], _) <- anext "$!" Id (S0, Some (Zy :* S0))
+                                              (REx ("hope", k) R0) (REx ("hope", k) R0)
     fc <- req AskFC
-    req (ANewHope hope (HopeData (Just fc) True))
+    req (ANewHope (end hungry) fc)
+    wire (dangling, kindType k, NamedPort bang "")
+    defineTgt tgt (endVal k (toEnd hungry))
     pure (((), ()), ((), unders))
   (Braty, Right _ty) -> typeErr "Can only infer kinded things with !"
   (Kerny, _) -> typeErr "Won't infer kernel typed !"
@@ -731,7 +741,7 @@ checkClause my fnName cty clause = modily my $ do
                      \(overs, unders) -> do
     -- Make a problem to solve based on the lhs and the overs
     problem <- argProblems (fst <$> overs) (unWC $ lhs clause) []
-    (tests, sol) <- localFC (fcOf (lhs clause)) $ solve my problem
+    (tests, sol) <- localFC (fcOf (lhs clause)) $ "$lhs" -! solve my problem
     -- The solution gives us the variables bound by the patterns.
     -- We turn them into a row
     mkArgRo my S0 ((\(n, (src, ty)) -> (NamedPort (toEnd src) n, ty)) <$> sol) >>= \case
@@ -747,7 +757,7 @@ checkClause my fnName cty clause = modily my $ do
     let abstractor = foldr ((:||:) . APat . Bind) AEmpty vars
     let ?my = my in do
       env <- mkEnv vars rhsOvers
-      localEnv env $ check @m (rhs clause) ((), rhsUnders)
+      localEnv env $ "$rhs" -! check @m (rhs clause) ((), rhsUnders)
   let NamedPort {end=Ex rhsNode _} = boxPort
   pure (match, rhsNode)
  where

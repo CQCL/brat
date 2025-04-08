@@ -48,3 +48,7 @@ data End = InEnd InPort | ExEnd OutPort
 instance Show End where
   show (InEnd e) = show e
   show (ExEnd e) = show e
+
+endName :: End -> Name
+endName (InEnd (In n _)) = n
+endName (ExEnd (Ex n _)) = n

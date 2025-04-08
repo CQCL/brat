@@ -129,6 +129,7 @@ instance FreshMonad Compile where
     put (s { nameSupply = nsNew })
     pure v
 
+  whoAmI = gets (fst . nameSupply)
 
 runCheckingInCompile :: Free CheckingSig t -> Compile t
 runCheckingInCompile (Ret t) = pure t

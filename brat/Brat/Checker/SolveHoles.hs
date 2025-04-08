@@ -6,6 +6,7 @@ import Brat.Checker.SolveNumbers
 import Brat.Checker.Types (kindForMode, IsSkolem(..))
 import Brat.Error (ErrorMsg(..))
 import Brat.Eval
+import Brat.Naming (FreshMonad(..))
 import Brat.Syntax.Common
 -- import Brat.Syntax.Simple (SimpleTerm(..))
 import Brat.Syntax.Value
@@ -33,7 +34,10 @@ typeEq :: String -- String representation of the term for error reporting
        -> Val Z -- Expected
        -> Val Z -- Actual
        -> Checking ()
-typeEq str = typeEq' str (Zy :* S0 :* S0)
+typeEq str k exp act = do
+  prefix <- whoAmI
+  traceM ("typeEq: Who am I: " ++ show prefix)
+  typeEq' str (Zy :* S0 :* S0) k exp act
 
 
 -- Internal version of typeEq with environment for non-closed values
@@ -44,50 +48,46 @@ typeEq' :: String -- String representation of the term for error reporting
         -> Val n -- Actual
         -> Checking ()
 typeEq' str stuff@(_ny :* _ks :* sems) k exp act = do
-  hopes <- req AskHopes
+  mine <- mineToSolve
   exp <- sem sems exp
   act <- sem sems act
   qexp <- (quote Zy exp)
   qact <- (quote Zy act)
   traceM ("typeEq' exp: " ++ show qexp)
   traceM ("typeEq' act: " ++ show qact)
-  typeEqEta str stuff hopes k exp act
+  typeEqEta str stuff mine k exp act
 
 -- Presumes that the hope set and the two `Sem`s are up to date.
 typeEqEta :: String -- String representation of the term for error reporting
           -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n
-          -> Hopes -- A map from the hope set to corresponding FCs
+          -> (End -> Bool) -- Tells us if we can solve a given End
           -> TypeKind -- The kind we're comparing at
           -> Sem -- Expected
           -> Sem -- Actual
           -> Checking ()
-typeEqEta tm (lvy :* kz :* sems) hopes (TypeFor m ((_, k):ks)) exp act = do
+typeEqEta tm (lvy :* kz :* sems) mine (TypeFor m ((_, k):ks)) exp act = do
   -- Higher kinded things
   let nextSem = semLvl lvy
   let xz = B0 :< nextSem
   exp <- applySem exp xz
   act <- applySem act xz
-  typeEqEta tm (Sy lvy :* (kz :<< k) :* (sems :<< nextSem)) hopes (TypeFor m ks) exp act
+  typeEqEta tm (Sy lvy :* (kz :<< k) :* (sems :<< nextSem)) mine (TypeFor m ks) exp act
 -- Not higher kinded - check for flex terms
 -- (We don't solve under binders for now, so we only consider Zy here)
 -- 1. "easy" flex cases
-typeEqEta _tm (Zy :* _ks :* _sems) hopes k (SApp (SPar (InEnd e)) B0) act
-  | M.member e hopes = solveHopeSem k e act
-typeEqEta _tm (Zy :* _ks :* _sems) hopes k exp (SApp (SPar (InEnd e)) B0)
-  | M.member e hopes = solveHopeSem k e exp
-typeEqEta _ (Zy :* _ :* _) _ {-hopes-} Nat (SNum exp) (SNum act) = unifyNum (quoteNum Zy exp) (quoteNum Zy act)
+typeEqEta _tm (Zy :* _ks :* _sems) mine k (SApp (SPar e) B0) act
+  | mine e = solveHopeSem k e act
+typeEqEta _tm (Zy :* _ks :* _sems) mine k exp (SApp (SPar e) B0)
+  | mine e = solveHopeSem k e exp
+typeEqEta _ (Zy :* _ :* _) mine Nat (SNum exp) (SNum act) = unifyNum mine (quoteNum Zy exp) (quoteNum Zy act)
 -- 2. harder cases, neither is in the hope set, so we can't define it ourselves
-typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
+typeEqEta tm stuff@(ny :* _ks :* _sems) _ k exp act = do
   exp <- quote ny exp
   act <- quote ny act
-  let ends = mapMaybe getEnd [exp,act]
-  -- sanity check: we've already dealt with either end being in the hopeset
-  when (or [M.member ie hopes | InEnd ie <- ends]) $ typeErr "ends were in hopeset"
-  filterM (isSkolem >=> pure . (== Definable)) ends >>= \case
+  unless (exp == act) $ case flexes act ++ flexes exp of
     [] -> typeEqRigid tm stuff k exp act -- easyish, both rigid i.e. already defined
-    [e1, e2] | e1 == e2 -> pure () -- trivially same, even if both still yet-to-be-defined
-    es -> -- tricky: must wait for one or other to become more defined
-      mkYield "typeEqEta" (S.fromList es) >> typeEq' tm stuff k exp act
+    -- tricky: must wait for one or other to become more defined
+    es -> mkYield "typeEqEta" (S.fromList es) >> typeEq' tm stuff k exp act
  where
   getEnd (VApp (VPar e) _) = Just e
   getEnd (VNum n) = getNumVar n

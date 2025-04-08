@@ -8,11 +8,11 @@ import Brat.Error (ErrorMsg(..))
 import Brat.Eval (eval, EvMode(..), kindType, quote, doesntOccur)
 import Brat.FC (FC)
 import Brat.Graph (Node(..), NodeType(..))
-import Brat.Naming (Name)
+import Brat.Naming (FreshMonad(..), Name(..))
 import Brat.Syntax.Common
 import Brat.Syntax.Core (Term(..))
 import Brat.Syntax.Simple
-import Brat.Syntax.Port (ToEnd(..))
+import Brat.Syntax.Port (ToEnd(..), endName)
 import Brat.Syntax.Value
 import Bwd
 import Hasochism
@@ -34,11 +34,8 @@ import Debug.Trace
 simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Checking ()
 simpleCheck my ty tm = case (my, ty) of
   (Braty, VApp (VPar e) _) -> do
-    hopes <- req AskHopes
-    let isHope = case e of
-                   InEnd i -> M.member i hopes
-                   ExEnd _ -> False
-    if isHope then
+    mine <- mineToSolve
+    if mine e then
       case tm of
         Float _ -> defineEnd "simpleCheck" e TFloat
         Text _ -> defineEnd "simpleCheck" e TText
@@ -350,6 +347,7 @@ valueToBinder Kerny = id
 defineSrc :: Src -> Val Z -> Checking ()
 defineSrc src = defineEnd "" (ExEnd (end src))
 
+-- TODO: Do the work of checking if there's a dynamic hope here
 defineTgt :: Tgt -> Val Z -> Checking ()
 defineTgt tgt = defineEnd "" (InEnd (end tgt))
 
@@ -513,20 +511,12 @@ buildHalve = do
   defineTgt' "Helpers"lhs (VNum (n2PowTimes 1 (nVar (VPar (toEnd out)))))
   pure (lhs, out)
 
-replaceHope :: InPort -> InPort -> Checking ()
-replaceHope old new = do
-  hs <- req AskHopes
-  case M.lookup old hs of
-    Nothing -> pure ()
-    Just hd -> req (ANewHope new (HopeData Nothing (hopeDynamic hd)))
-
 -- Return an End with the same polarity whose value is half that of the input End
 makeHalf :: End -> Checking End
 makeHalf (InEnd e) = do
   (doubIn, doubOut) <- buildDoub
   req (Wire (end doubOut, TNat, e))
   defineTgt' "Helpers"(NamedPort e "") (VNum (nVar (VPar (toEnd doubOut))))
-  replaceHope e (end doubIn)
   pure (InEnd (end doubIn))
 makeHalf (ExEnd e) = do
   (halveIn, halveOut) <- buildHalve
@@ -539,7 +529,6 @@ makePred (InEnd e) = do
   (succIn, succOut) <- buildAdd 1
   req (Wire (end succOut, TNat, e))
   defineTgt' "Helpers"(NamedPort e "") (VNum (nVar (VPar (toEnd succOut))))
-  replaceHope e (end succIn)
   pure (toEnd succIn)
 makePred (ExEnd e) = do
   (predIn, predOut) <- buildSub 1
@@ -664,7 +653,6 @@ valPat2Val :: TypeKind
 valPat2Val k VPVar = do
   (_, [(idTgt, _)], [_], _) <- anext "pat2val" Id (S0, Some (Zy :* S0)) (REx ("", k) R0) (REx ("", k) R0)
   let val = VApp (VPar (toEnd idTgt)) B0
-  req (ANewHope (end idTgt) (HopeData Nothing False))
   pure (B0 :< val, val)
 valPat2Val (TypeFor m _) (VPCon con args) = do
   ks <- fmap snd <$> tlup (m, con)
@@ -679,7 +667,6 @@ valPat2Val Nat (VPNum n) = numPat2Val n >>= \(stk, nv) -> pure (stk, VNum nv)
   numPat2Val (NP2Times np) = second (n2PowTimes 1) <$> numPat2Val np
   numPat2Val NPVar = do
     (_, [(idTgt, _)], [_], _) <- anext "numpat2val" Id (S0, Some (Zy :* S0)) (REx ("", Nat) R0) (REx ("", Nat) R0)
-    req (ANewHope (end idTgt) (HopeData Nothing False))
     let var = endVal Nat (toEnd idTgt)
     pure (B0 :< var, nVar (VPar (toEnd idTgt)))
 
@@ -703,3 +690,24 @@ traceChecking lbl m a = do
   pure b
 
 -- traceChecking = const id
+
+allowedToSolve :: Bwd (String, Int) -> End -> Bool
+allowedToSolve prefix e =
+  let whoAreWe = lastDollar prefix
+      MkName ePrefix = endName e
+      whoCanSolve = lastDollar (B0 <>< ePrefix)
+  in  case (e, whoAreWe, whoCanSolve) of
+        -- Solving a hope
+        -- TODO: Check that the ! is in the same region of code as we are!
+        -- (by checking we have a common prefix before the $rhs)
+        (InEnd _, _, Just "!") -> True
+        -- We can only solve dangling wires when doing pattern matching in `solve`
+        (ExEnd _, Just "lhs", _) -> True
+        _ -> False
+ where
+  lastDollar B0 = Nothing
+  lastDollar (zx :< ('$':str, _)) = Just str
+  lastDollar (zx :< x) = lastDollar zx
+
+mineToSolve :: Checking (End -> Bool)
+mineToSolve = allowedToSolve <$> whoAmI

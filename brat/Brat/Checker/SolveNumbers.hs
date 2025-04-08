@@ -13,6 +13,7 @@ import Control.Monad.Freer
 
 import Debug.Trace
 import qualified Data.Map as M
+import qualified Data.Set as S
 
 -- trail = trace
 
@@ -27,7 +28,7 @@ import qualified Data.Map as M
 -- We assume that the caller has done the occurs check and rules out trivial equations.
 solveNumMeta :: End -> NumVal (VVar Z) -> Checking ()
 -- solveNumMeta e nv | trace ("solveNumMeta " ++ show e ++ " " ++ show nv) False = undefined
-solveNumMeta e nv = case (e, vars nv) of
+solveNumMeta e nv = case (e, numVars nv) of
  -- Compute the thing that the rhs should be based on the src, and instantiate src to that
  (ExEnd src,  [VPar (InEnd _tgt)]) -> do
    -- Compute the value of the `tgt` variable from the known `src` value by inverting nv
@@ -54,16 +55,13 @@ solveNumMeta e nv = case (e, vars nv) of
    src <- buildNatVal nv
    instantiateMeta (InEnd tgt) (VNum nv)
    wire (src, TNat, NamedPort tgt "")
- where
-  vars :: NumVal a -> [a]
-  vars = foldMap pure
 
-unifyNum :: NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
-unifyNum nv0 nv1 = do
+unifyNum :: (End -> Bool) -> NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
+unifyNum mine nv0 nv1 = do
   traceM $ ("unifyNum In\n  " ++ show nv0 ++ "\n  " ++ show nv1)
   nv0 <- numEval S0 nv0
   nv1 <- numEval S0 nv1
-  unifyNum' (quoteNum Zy nv0) (quoteNum Zy nv1)
+  unifyNum' mine (quoteNum Zy nv0) (quoteNum Zy nv1)
   nv0 <- numEval S0 (quoteNum Zy nv0)
   nv1 <- numEval S0 (quoteNum Zy nv1)
   traceM $ ("unifyNum Out\n  " ++ show (quoteNum Zy nv0) ++ "\n  " ++ show (quoteNum Zy nv1))
@@ -71,9 +69,9 @@ unifyNum nv0 nv1 = do
 -- Need to keep track of which way we're solving - which side is known/unknown
 -- Things which are dynamically unknown must be Tgts - information flows from Srcs
 -- ...But we don't need to do any wiring here, right?
-unifyNum' :: NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
+unifyNum' :: (End -> Bool) -> NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
 -- unifyNum' a b | trace ("unifyNum'\n  " ++ show a ++ "\n  " ++ show b) False = undefined
-unifyNum' (NumValue lup lgro) (NumValue rup rgro)
+unifyNum' mine (NumValue lup lgro) (NumValue rup rgro)
   | lup <= rup = lhsFun00 lgro (NumValue (rup - lup) rgro)
   | otherwise  = lhsFun00 rgro (NumValue (lup - rup) lgro)
  where
@@ -90,20 +88,19 @@ unifyNum' (NumValue lup lgro) (NumValue rup rgro)
     GT -> flexFlex v' v
     EQ -> pure ()
     LT -> case (v, v') of
-      (VPar (ExEnd e), v@(VPar (ExEnd _))) -> defineSrc (NamedPort e "") (VNum (nVar v))
-      (VPar (InEnd e), v@(VPar (ExEnd dangling))) -> do
-        req (Wire (dangling, TNat, e))
-        hs <- req AskHopes
-        defineTgt' ("flex-flex In Ex " ++ show (M.member e hs)) (NamedPort e "") (VNum (nVar v))
-      (v@(VPar (InEnd e)), v'@(VPar (InEnd e'))) -> do
-        hs <- req AskHopes
-        case (M.lookup e hs, M.lookup e' hs) of
-          (Nothing, Just _) -> defineTgt' "flex-flex In In0"(NamedPort e' "") (VNum (nVar v))
-          (Just _, Nothing) -> defineTgt' "flex-flex In In1"(NamedPort e "") (VNum (nVar v'))
-          (Nothing, Nothing) -> error "Two non-hopes in unifyNum"
-          (Just hd, Just hd') -> if hopeDynamic hd
-                                 then defineTgt' "flex-flex In In2"(NamedPort e' "") (VNum (nVar v))
-                                 else defineTgt' "flex-flex In In3"(NamedPort e "") (VNum (nVar v'))
+      (v@(VPar e@(ExEnd p)), v'@(VPar e'@(ExEnd p')))
+       | mine e -> defineSrc (NamedPort p "") (VNum (nVar v'))
+       | mine e' -> defineSrc (NamedPort p' "") (VNum (nVar v))
+       | otherwise -> typeErr $ "Can't force " ++ show v ++ " to be " ++ show v'
+      (VPar e@(InEnd p), v@(VPar (ExEnd dangling)))
+       | mine e -> do
+          req (Wire (dangling, TNat, p))
+          defineTgt' ("flex-flex In Ex") (NamedPort p "") (VNum (nVar v))
+       | otherwise -> mkYield "flexFlex" (S.singleton e) >> unifyNum mine (VNum (nVar v)) (VNum (nVar v'))
+      (v@(VPar e@(InEnd p)), v'@(VPar e'@(InEnd p')))
+       | mine e -> defineTgt' "flex-flex In In1" (NamedPort p "") (VNum (nVar v'))
+       | mine e' -> defineTgt' "flex-flex In In0"(NamedPort p' "") (VNum (nVar v))
+       | otherwise -> mkYield "flexFlex" (S.fromList [e, e']) >> unifyNum mine (VNum (nVar v)) (VNum (nVar v'))
 
   lhsStrictMono :: StrictMono (VVar Z) -> NumVal (VVar Z) -> Checking ()
   lhsStrictMono (StrictMono 0 mono) num = lhsMono mono num

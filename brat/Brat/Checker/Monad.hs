@@ -1,5 +1,6 @@
 module Brat.Checker.Monad where
 
+import Bwd
 import Brat.Checker.Quantity (Quantity(..))
 import Brat.Checker.Types hiding (HoleData(..))
 import Brat.Constructors (ConstructorMap, CtorArgs)
@@ -71,7 +72,10 @@ data Context = Ctx { globalVEnv :: VEnv
                    , kconstructors :: ConstructorMap Kernel
                    , typeConstructors :: M.Map (Mode, QualName) [(PortName, TypeKind)]
                    , aliasTable :: M.Map QualName Alias
+                   -- On the chopping block
                    , hopes :: Hopes
+                   -- Ends which need to be solved because they affect runtime behaviour
+                   , dynamicSet :: M.Map End FC
                    , captureSets :: CaptureSets
                    }
 
@@ -85,6 +89,7 @@ mkYield desc es = thTrace ("Yielding in " ++ desc ++ "\n  " ++ show es) $ Yield 
 data CheckingSig ty where
   Fresh   :: String -> CheckingSig Name
   SplitNS :: String -> CheckingSig Namespace
+  AskNS   :: CheckingSig (Bwd (String, Int))
   Throw   :: Error  -> CheckingSig a
   LogHole :: TypedHole -> CheckingSig ()
   AskFC   :: CheckingSig FC
@@ -112,8 +117,8 @@ data CheckingSig ty where
   KDone   :: CheckingSig ()
   AskVEnv :: CheckingSig CtxEnv
   Declare :: End -> Modey m -> BinderType m -> IsSkolem -> CheckingSig ()
-  ANewHope :: InPort -> HopeData -> CheckingSig ()
-  AskHopes :: CheckingSig Hopes
+  ANewDynamic :: End -> FC -> CheckingSig ()
+  AskDynamics :: CheckingSig (M.Map End FC)
   AddCapture :: Name -> (QualName, [(Src, BinderType Brat)]) -> CheckingSig ()
 
 wrapper :: (forall a. CheckingSig a -> Checking (Maybe a)) -> Checking v -> Checking v
@@ -260,6 +265,7 @@ handler (Req s k) ctx g
   = case s of
       Fresh _ -> error "Fresh in handler, should only happen under `-!`"
       SplitNS _ -> error "SplitNS in handler, should only happen under `-!`"
+      AskNS -> error "AskNS in handler, should only happen under `-!`"
       Throw err -> Left err
       LogHole hole -> do (v,ctx,(holes,g)) <- handler (k ()) ctx g
                          return (v,ctx,(hole:holes,g))
@@ -306,9 +312,9 @@ handler (Req s k) ctx g
                 M.lookup tycon tbl
         handler (k args) ctx g
 
-      ANewHope e hd -> handler (k ()) (ctx { hopes = M.insert e hd (hopes ctx) }) g
+      ANewDynamic e fc -> handler (k ()) (ctx { dynamicSet = M.insert e fc (dynamicSet ctx) }) g
 
-      AskHopes -> handler (k (hopes ctx)) ctx g
+      AskDynamics -> handler (k (dynamicSet ctx)) ctx g
 
       AddCapture n (var, ends) ->
         handler (k ()) ctx {captureSets=M.insertWith M.union n (M.singleton var ends) (captureSets ctx)} g
@@ -326,13 +332,18 @@ handler (Define lbl end v k) ctx g = let st@Store{typeMap=tm, valueMap=vm} = sto
         -- (b) Numbers are tricky, whether they are stuck or not depends upon the question
         -- (c) since there are no infinite end-creating loops, it's correct (merely inefficient)
         -- to just "have another go".
-        Just _ -> let news = News (M.singleton end Unstuck) in
-          handler (k news)
-            (ctx { store = st { valueMap = M.insert end v vm },
-                hopes = case end of
-                  InEnd e -> M.delete e (hopes ctx)
-                  ExEnd _ -> hopes ctx
-            }) g
+        Just _ -> let news = News (M.singleton end Unstuck)
+                      newDynamics = case v of
+                        VNum nv -> numVars nv
+                        _ -> []
+                  in handler (k news)
+                     (ctx { store = st { valueMap = M.insert end v vm },
+                                    dynamicSet = case M.lookup end (dynamicSet ctx) of
+                                      Just fc -> M.union
+                                                 (M.fromList (zip newDynamics (repeat fc)))
+                                                 (M.delete end (dynamicSet ctx))
+                                      Nothing -> dynamicSet ctx
+                          }) g
 handler (Yield Unstuck k) ctx g = handler (k mempty) ctx g
 handler (Yield (AwaitingAny ends) _k) ctx _ = Left $ dumbErr $ TypeErr $ unlines $
   ("Typechecking blocked on:":(show <$> S.toList ends))
@@ -359,6 +370,7 @@ typeErr = err . TypeErr
 instance FreshMonad Checking where
   freshName x = req $ Fresh x
   str -! c = inLvl str c
+  whoAmI = req AskNS
 
 -- This way we get file contexts when pattern matching fails
 instance MonadFail Checking where
@@ -386,6 +398,7 @@ localNS ns (Req (Fresh str) k) = let (name, root) = fresh str ns in
   localNS root (k name)
 localNS ns (Req (SplitNS str) k) = let (subSpace, newRoot) = split str ns in
                                       localNS newRoot (k subSpace)
+localNS ns (Req AskNS k) = localNS ns (k (fst ns))
 localNS ns (Req c k) = Req c (localNS ns . k)
 localNS ns (Define lbl e v k) = Define lbl e v (localNS ns . k)
 localNS ns (Yield st k) = Yield st (localNS ns . k)
