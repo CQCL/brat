@@ -95,7 +95,9 @@ typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
 
 typeEqs :: String -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n -> [TypeKind] -> [Val n] -> [Val n] -> Checking ()
 typeEqs _ _ [] [] [] = pure ()
-typeEqs tm stuff (k:ks) (exp:exps) (act:acts) = typeEqs tm stuff ks exps acts <* typeEq' tm stuff k exp act
+typeEqs tm stuff (k:ks) (exp:exps) (act:acts) = do
+  mkFork "typeEqsTail" $ typeEqs tm stuff ks exps acts
+  typeEq' tm stuff k exp act
 typeEqs _ _ _ _ _ = typeErr "arity mismatch"
 
 typeEqRow :: Modey m
