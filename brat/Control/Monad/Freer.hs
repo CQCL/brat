@@ -43,14 +43,14 @@ instance Monoid Stuck where
 data Free (sig :: Type -> Type) (v :: Type) where
   Ret :: v -> Free sig v
   Req ::  sig t -> (t -> Free sig v) -> Free sig v
-  Define :: End -> Val Z -> (News -> Free sig v) -> Free sig v
+  Define :: String -> End -> Val Z -> (News -> Free sig v) -> Free sig v
   Yield :: Stuck -> (News -> Free sig v) -> Free sig v
   Fork :: String -> Free sig () -> Free sig v -> Free sig v
 
 instance Functor (Free sig) where
   fmap f (Ret v) = Ret (f v)
   fmap f (Req sig k) = Req sig (fmap f . k)
-  fmap f (Define e v k) = Define e v (fmap f . k)
+  fmap f (Define lbl e v k) = Define lbl e v (fmap f . k)
   fmap f (Yield st k) = Yield st (fmap f . k)
   fmap f (Fork d par c) = Fork d par (fmap f c)
 
@@ -67,7 +67,7 @@ instance NewsWatcher (News -> t) where
 instance NewsWatcher (Free sig v) where
   Ret v /// _ = Ret v
   Req sig k /// n = Req sig $ \v -> k v /// n
-  Define e v k /// n = Define e v (k /// n)
+  Define lbl e v k /// n = Define lbl e v (k /// n)
   Yield st k /// n = Yield (st /// n) (k /// n)
   Fork d par c /// n = Fork d (par /// n) (c /// n)
 
@@ -86,19 +86,19 @@ instance Applicative (Free sig) where
   -- Make progress on the left
   Ret f <*> ma = fmap f ma
   Req sig k <*> ma = Req sig ((<*> ma) . k)
-  Define e v k1 <*> ma = Define e v $ \n -> (k1 n) <*> (ma /// n)
+  Define lbl e v k1 <*> ma = Define lbl e v $ \n -> (k1 n) <*> (ma /// n)
 
   -- What happens when Yield is on the left
   y <*> Ret v = fmap ($ v) y
   y <*> Req sig k = Req sig $ \v -> y <*> k v
   y1@(Yield st1 _) <*> y2@(Yield st2 _) = Yield (st1 <> st2) $
     \n -> (y1 /// n) <*> (y2 /// n)
-  y <*> Define e v k = Define e v $ \n -> (y /// n) <*> k n
+  y <*> Define lbl e v k = Define lbl e v $ \n -> (y /// n) <*> k n
 
 instance Monad (Free sig) where
   Ret v >>= k = k v
   Req r j >>= k = Req r (j >=> k)
-  Define e v k1 >>= k2 = Define e v (k1 >=> k2)
+  Define lbl e v k1 >>= k2 = Define lbl e v (k1 >=> k2)
   Yield st k1 >>= k2 = Yield st (k1 >=> k2)
   --- equivalent to
   -- Yield st k1 >>= k2 = Yield st (\n -> (k1 n) >>= k2)

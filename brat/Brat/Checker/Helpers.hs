@@ -40,9 +40,9 @@ simpleCheck my ty tm = case (my, ty) of
                    ExEnd _ -> False
     if isHope then
       case tm of
-        Float _ -> defineEnd e TFloat
-        Text _ -> defineEnd e TText
-        Num n | n < 0 -> defineEnd e TInt
+        Float _ -> defineEnd "simpleCheck" e TFloat
+        Text _ -> defineEnd "simpleCheck" e TText
+        Num n | n < 0 -> defineEnd "simpleCheck" e TInt
         Num _ -> typeErr $ "Can't determine whether Int or Nat: " ++ show tm
     else isSkolem e >>= \case
       SkolemConst -> throwLeft $ helper Braty ty tm
@@ -311,7 +311,7 @@ vectorise my (src, ty) = do
       next "MapFun" MapFun (S0, Some (Zy :* S0))
       (REx ("len", Nat) (RPr ("value", weak1 ty) R0))
       (RPr ("vector", weak1 vecFun) R0)
-    defineTgt lenTgt (VNum len)
+    defineTgt' "vectorise" lenTgt (VNum len)
     wire (lenSrc, kindType Nat, lenTgt)
     wire (valSrc, ty, valTgt)
     let vecCTy = case (my,my',cty) of
@@ -348,10 +348,16 @@ valueToBinder Braty = Right
 valueToBinder Kerny = id
 
 defineSrc :: Src -> Val Z -> Checking ()
-defineSrc src = defineEnd (ExEnd (end src))
+defineSrc src = defineEnd "" (ExEnd (end src))
 
 defineTgt :: Tgt -> Val Z -> Checking ()
-defineTgt tgt = defineEnd (InEnd (end tgt))
+defineTgt tgt = defineEnd "" (InEnd (end tgt))
+
+defineSrc' :: String -> Src -> Val Z -> Checking ()
+defineSrc' lbl src = defineEnd lbl (ExEnd (end src))
+
+defineTgt' :: String -> Tgt -> Val Z -> Checking ()
+defineTgt' lbl tgt = defineEnd lbl (InEnd (end tgt))
 
 declareTgt :: Tgt -> Modey m -> BinderType m -> Checking ()
 declareTgt tgt my ty = req (Declare (InEnd (end tgt)) my ty Definable)
@@ -488,7 +494,7 @@ buildSub n = do
   nDangling <- buildNum n
   ((lhs,rhs),out) <- buildArithOp Sub
   req $ Wire (end nDangling, TNat, end rhs)
-  defineTgt lhs (VNum (nPlus n (nVar (VPar (toEnd out)))))
+  defineTgt' "Sub" lhs (VNum (nPlus n (nVar (VPar (toEnd out)))))
   pure (lhs, out)
 
 buildDoub :: Checking (Tgt, Src)
@@ -504,7 +510,7 @@ buildHalve = do
   nDangling <- buildNum 2
   ((lhs,rhs),out) <- buildArithOp Div
   req $ Wire (end nDangling, TNat, end rhs)
-  defineTgt lhs (VNum (n2PowTimes 1 (nVar (VPar (toEnd out)))))
+  defineTgt' "Helpers"lhs (VNum (n2PowTimes 1 (nVar (VPar (toEnd out)))))
   pure (lhs, out)
 
 replaceHope :: InPort -> InPort -> Checking ()
@@ -519,7 +525,7 @@ makeHalf :: End -> Checking End
 makeHalf (InEnd e) = do
   (doubIn, doubOut) <- buildDoub
   req (Wire (end doubOut, TNat, e))
-  defineTgt (NamedPort e "") (VNum (nVar (VPar (toEnd doubOut))))
+  defineTgt' "Helpers"(NamedPort e "") (VNum (nVar (VPar (toEnd doubOut))))
   replaceHope e (end doubIn)
   pure (InEnd (end doubIn))
 makeHalf (ExEnd e) = do
@@ -532,7 +538,7 @@ makePred :: End -> Checking End
 makePred (InEnd e) = do
   (succIn, succOut) <- buildAdd 1
   req (Wire (end succOut, TNat, e))
-  defineTgt (NamedPort e "") (VNum (nVar (VPar (toEnd succOut))))
+  defineTgt' "Helpers"(NamedPort e "") (VNum (nVar (VPar (toEnd succOut))))
   replaceHope e (end succIn)
   pure (toEnd succIn)
 makePred (ExEnd e) = do
@@ -551,7 +557,8 @@ buildNatVal nv@(NumValue n gro) = case n of
     (inn, out) <- buildAdd n
     src <- buildGro gro
     req $ Wire (end src, TNat, end inn)
-    defineTgt inn (VNum (nVar (VPar (toEnd src))))
+    traceM $ "buildNatVal " ++ show inn
+    defineTgt' "Helpers"inn (VNum (nVar (VPar (toEnd src))))
     pure out
  where
   buildGro :: Fun00 (VVar Z) -> Checking Src
@@ -596,8 +603,8 @@ invertNatVal (NumValue up gro) = case up of
     req $ Wire (end upSrc, TNat, end rhs)
     tgt <- invertGro gro
     req $ Wire (end out, TNat, end tgt)
-    defineTgt tgt (VNum (nVar (VPar (toEnd out))))
-    defineTgt lhs (VNum (nPlus up (nVar (VPar (toEnd tgt)))))
+    defineTgt' "Helpers"tgt (VNum (nVar (VPar (toEnd out))))
+    defineTgt' "Helpers"lhs (VNum (nPlus up (nVar (VPar (toEnd tgt)))))
     pure lhs
  where
   invertGro Constant0 = error "Invariant violated: the numval arg to invertNatVal should contain a variable"
@@ -611,8 +618,8 @@ invertNatVal (NumValue up gro) = case up of
       tgt <- invertMono mono
       req $ Wire (end out, TNat, end tgt)
       req $ Wire (end divisor, TNat, end rhs)
-      defineTgt tgt (VNum (nVar (VPar (toEnd out))))
-      defineTgt lhs (VNum (n2PowTimes k (nVar (VPar (toEnd tgt)))))
+      defineTgt' "Helpers"tgt (VNum (nVar (VPar (toEnd out))))
+      defineTgt' "Helpers"lhs (VNum (n2PowTimes k (nVar (VPar (toEnd tgt)))))
       pure lhs
 
   invertMono (Linear (VPar (InEnd e))) = pure (NamedPort e "numval")
@@ -620,8 +627,8 @@ invertNatVal (NumValue up gro) = case up of
     (_, [(llufTgt,_)], [(llufSrc,_)], _) <- next "luff" (Prim ("BRAT","lluf")) (S0, Some (Zy :* S0)) (REx ("n", Nat) R0) (REx ("n", Nat) R0)
     tgt <- invertSM sm
     req $ Wire (end llufSrc, TNat, end tgt)
-    defineTgt tgt (VNum (nVar (VPar (toEnd llufSrc))))
-    defineTgt llufTgt (VNum (nFull (nVar (VPar (toEnd tgt)))))
+    defineTgt' "Helpers"tgt (VNum (nVar (VPar (toEnd llufSrc))))
+    defineTgt' "Helpers"llufTgt (VNum (nFull (nVar (VPar (toEnd tgt)))))
     pure llufTgt
 
 -- This will update the `hopes`, potentially invalidating things that have
@@ -630,7 +637,7 @@ invertNatVal (NumValue up gro) = case up of
 solveHopeVal :: TypeKind -> InPort -> Val Z -> Checking ()
 solveHopeVal k hope v = case doesntOccur (InEnd hope) v of
   Right () -> do
-    defineEnd (InEnd hope) v
+    defineEnd "solveHopeVal" (InEnd hope) v
     dangling <- case (k, v) of
       (Nat, VNum v) -> buildNatVal v
       (Nat, _) -> err $ InternalError "Head of Nat wasn't a VNum"

@@ -11,7 +11,7 @@ import Brat.Graph (NodeType(..))
 import Hasochism
 import Control.Monad.Freer
 
--- import Debug.Trace
+import Debug.Trace
 import qualified Data.Map as M
 
 -- trail = trace
@@ -60,13 +60,13 @@ solveNumMeta e nv = case (e, vars nv) of
 
 unifyNum :: NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
 unifyNum nv0 nv1 = do
-  -- traceM $ ("unifyNum In\n  " ++ show nv0 ++ "\n  " ++ show nv1)
+  traceM $ ("unifyNum In\n  " ++ show nv0 ++ "\n  " ++ show nv1)
   nv0 <- numEval S0 nv0
   nv1 <- numEval S0 nv1
   unifyNum' (quoteNum Zy nv0) (quoteNum Zy nv1)
-  -- nv0 <- numEval S0 (quoteNum Zy nv0)
-  -- nv1 <- numEval S0 (quoteNum Zy nv1)
-  -- traceM $ ("unifyNum Out\n  " ++ show (quoteNum Zy nv0) ++ "\n  " ++ show (quoteNum Zy nv1))
+  nv0 <- numEval S0 (quoteNum Zy nv0)
+  nv1 <- numEval S0 (quoteNum Zy nv1)
+  traceM $ ("unifyNum Out\n  " ++ show (quoteNum Zy nv0) ++ "\n  " ++ show (quoteNum Zy nv1))
 
 -- Need to keep track of which way we're solving - which side is known/unknown
 -- Things which are dynamically unknown must be Tgts - information flows from Srcs
@@ -93,16 +93,17 @@ unifyNum' (NumValue lup lgro) (NumValue rup rgro)
       (VPar (ExEnd e), v@(VPar (ExEnd _))) -> defineSrc (NamedPort e "") (VNum (nVar v))
       (VPar (InEnd e), v@(VPar (ExEnd dangling))) -> do
         req (Wire (dangling, TNat, e))
-        defineTgt (NamedPort e "") (VNum (nVar v))
+        hs <- req AskHopes
+        defineTgt' ("flex-flex In Ex " ++ show (M.member e hs)) (NamedPort e "") (VNum (nVar v))
       (v@(VPar (InEnd e)), v'@(VPar (InEnd e'))) -> do
         hs <- req AskHopes
         case (M.lookup e hs, M.lookup e' hs) of
-          (Nothing, Just _) -> defineTgt (NamedPort e' "") (VNum (nVar v))
-          (Just _, Nothing) -> defineTgt (NamedPort e "") (VNum (nVar v'))
+          (Nothing, Just _) -> defineTgt' "flex-flex In In0"(NamedPort e' "") (VNum (nVar v))
+          (Just _, Nothing) -> defineTgt' "flex-flex In In1"(NamedPort e "") (VNum (nVar v'))
           (Nothing, Nothing) -> error "Two non-hopes in unifyNum"
           (Just hd, Just hd') -> if hopeDynamic hd
-                                 then defineTgt (NamedPort e' "") (VNum (nVar v))
-                                 else defineTgt (NamedPort e "") (VNum (nVar v'))
+                                 then defineTgt' "flex-flex In In2"(NamedPort e' "") (VNum (nVar v))
+                                 else defineTgt' "flex-flex In In3"(NamedPort e "") (VNum (nVar v'))
 
   lhsStrictMono :: StrictMono (VVar Z) -> NumVal (VVar Z) -> Checking ()
   lhsStrictMono (StrictMono 0 mono) num = lhsMono mono num

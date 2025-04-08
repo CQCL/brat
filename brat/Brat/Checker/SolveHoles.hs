@@ -23,6 +23,8 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 
+import Debug.Trace
+
 -- Demand that two closed values are equal, we're allowed to solve variables in the
 -- hope set to make this true.
 -- Raises a user error if the vals cannot be made equal.
@@ -45,6 +47,10 @@ typeEq' str stuff@(_ny :* _ks :* sems) k exp act = do
   hopes <- req AskHopes
   exp <- sem sems exp
   act <- sem sems act
+  qexp <- (quote Zy exp)
+  qact <- (quote Zy act)
+  traceM ("typeEq' exp: " ++ show qexp)
+  traceM ("typeEq' act: " ++ show qact)
   typeEqEta str stuff hopes k exp act
 
 -- Presumes that the hope set and the two `Sem`s are up to date.
@@ -69,8 +75,7 @@ typeEqEta _tm (Zy :* _ks :* _sems) hopes k (SApp (SPar (InEnd e)) B0) act
   | M.member e hopes = solveHopeSem k e act
 typeEqEta _tm (Zy :* _ks :* _sems) hopes k exp (SApp (SPar (InEnd e)) B0)
   | M.member e hopes = solveHopeSem k e exp
-typeEqEta _ (Zy :* _ :* _) _ {-hopes-} Nat (SNum exp) (SNum act) = do
-  unifyNum (quoteNum Zy exp) (quoteNum Zy act)
+typeEqEta _ (Zy :* _ :* _) _ {-hopes-} Nat (SNum exp) (SNum act) = unifyNum (quoteNum Zy exp) (quoteNum Zy act)
 -- 2. harder cases, neither is in the hope set, so we can't define it ourselves
 typeEqEta tm stuff@(ny :* _ks :* _sems) hopes k exp act = do
   exp <- quote ny exp

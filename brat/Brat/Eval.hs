@@ -326,7 +326,7 @@ doesntOccur e (VFun my (ins :->> outs)) = case my of
 instantiateMeta :: End -> Val Z -> Checking ()
 instantiateMeta e val = do
   throwLeft (doesntOccur e val)
-  defineEnd e val
+  defineEnd "instantiateMeta" e val
 
 collision :: End -> End -> Either ErrorMsg ()
 collision e v | e == v = Left . UnificationError $

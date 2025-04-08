@@ -79,7 +79,7 @@ mkFork :: String -> Free sig () -> Free sig ()
 mkFork d par = thTrace ("Forking " ++ d) $ Fork d par $ pure ()
 
 mkYield :: String -> S.Set End -> Free sig ()
-mkYield desc es = thTrace ("Yielding in " ++ desc) $ Yield (AwaitingAny es) (\_ -> Ret ())
+mkYield desc es = thTrace ("Yielding in " ++ desc ++ "\n  " ++ show es) $ Yield (AwaitingAny es) (\_ -> Ret ())
 
 -- Commands for synchronous operations
 data CheckingSig ty where
@@ -121,7 +121,7 @@ wrapper _ (Ret v) = Ret v
 wrapper f (Req s k) = f s >>= \case
   Just v -> wrapper f (k v)
   Nothing -> Req s (wrapper f . k)
-wrapper f (Define v e k) = Define v e (wrapper f . k)
+wrapper f (Define lbl v e k) = Define lbl v e (wrapper f . k)
 wrapper f (Yield st k) = Yield st (wrapper f . k)
 wrapper f (Fork d par c) = Fork d (wrapper f par) (wrapper f c)
 
@@ -232,7 +232,7 @@ localKVar env (Req KDone k) = case [ x | (x,(One,_)) <- M.assocs env ] of
                                               ,"haven't been used"
                                               ]
 localKVar env (Req r k) = Req r (localKVar env . k)
-localKVar env (Define e v k) = Define e v (localKVar env . k)
+localKVar env (Define lbl e v k) = Define lbl e v (localKVar env . k)
 localKVar env (Yield st k) = Yield st (localKVar env . k)
 localKVar env (Fork desc par c) =
   -- can't send end both ways, so until we can join (TODO), restrict Forks to local scope
@@ -247,7 +247,7 @@ catchErr :: Free CheckingSig a -> Free CheckingSig (Either Error a)
 catchErr (Ret t) = Ret (Right t)
 catchErr (Req (Throw e) _) = pure $ Left e
 catchErr (Req r k) = Req r (catchErr . k)
-catchErr (Define e v k) = Define e v (catchErr . k)
+catchErr (Define lbl e v k) = Define lbl e v (catchErr . k)
 catchErr (Yield st k) = Yield st (catchErr . k)
 catchErr (Fork desc par c) = thTrace ("Spawning(catch) " ++ desc) $ catchErr $ par *> c
 
@@ -313,8 +313,8 @@ handler (Req s k) ctx g
       AddCapture n (var, ends) ->
         handler (k ()) ctx {captureSets=M.insertWith M.union n (M.singleton var ends) (captureSets ctx)} g
 
-handler (Define end v k) ctx g = let st@Store{typeMap=tm, valueMap=vm} = store ctx in
-  case track ("Define " ++ show end ++ " = " ++ show v) $ M.lookup end vm of
+handler (Define lbl end v k) ctx g = let st@Store{typeMap=tm, valueMap=vm} = store ctx in
+  case track ("Define( " ++ lbl ++ ")" ++ show end ++ " = " ++ show v) $ M.lookup end vm of
       Just _ -> Left $ dumbErr (InternalError $ "Redefining " ++ show end)
       Nothing -> case M.lookup end tm of
         Nothing -> Left $ dumbErr (InternalError $ "Defining un-Declared " ++ show end ++ " in \n" ++ show tm)
@@ -387,10 +387,10 @@ localNS ns (Req (Fresh str) k) = let (name, root) = fresh str ns in
 localNS ns (Req (SplitNS str) k) = let (subSpace, newRoot) = split str ns in
                                       localNS newRoot (k subSpace)
 localNS ns (Req c k) = Req c (localNS ns . k)
-localNS ns (Define e v k) = Define e v (localNS ns . k)
+localNS ns (Define lbl e v k) = Define lbl e v (localNS ns . k)
 localNS ns (Yield st k) = Yield st (localNS ns . k)
 localNS ns (Fork desc par c) = let (subSpace, newRoot) = split desc ns in
                                  Fork desc (localNS subSpace par) (localNS newRoot c)
 
-defineEnd :: End -> Val Z -> Checking ()
-defineEnd e v = Define e v (const (Ret ()))
+defineEnd :: String -> End -> Val Z -> Checking ()
+defineEnd lbl e v = Define lbl e v (const (Ret ()))

@@ -51,7 +51,7 @@ import Bwd
 import Hasochism
 import Util (zipSameLength)
 
--- import Debug.Trace
+import Debug.Trace
 
 -- Put things into a standard form in a kind-directed manner, such that it is
 -- meaningful to do case analysis on them
@@ -124,7 +124,7 @@ checkWire Braty _ outputs (dangling, Left ok) (hungry, Left uk) = do
   throwLeft $ if outputs
     then kindEq ok uk
     else kindEq uk ok
-  defineTgt hungry (endVal ok (ExEnd (end dangling)))
+  defineTgt' "checkWire" hungry (endVal ok (ExEnd (end dangling)))
   wire (dangling, kindType ok, hungry)
 checkWire Braty (WC fc tm) outputs (dangling, o) (hungry, u) = localFC fc $ do
   let ot = binderToValue Braty o
@@ -173,6 +173,7 @@ checkOutputs :: forall m k . (CheckConstraints m k, ?my :: Modey m)
              -> [(Tgt, BinderType m)] -- Expected
              -> [(Src, BinderType m)] -- Actual
              -> Checking [(Tgt, BinderType m)]
+checkOutputs tm unders overs | trace ("checkOutputs\n  " ++ show unders ++ "\n  " ++ show overs) False = undefined
 checkOutputs tm unders overs = checkIO tm unders overs (flip $ checkWire ?my tm True) "No unders but overs: "
 
 check :: (CheckConstraints m k
@@ -184,7 +185,11 @@ check :: (CheckConstraints m k
       -> ChkConnectors m d k
       -> Checking (SynConnectors m d k
                   ,ChkConnectors m d k)
-check (WC fc tm) conn = track ("Beginning check of " ++ show tm) $ localFC fc (check' tm conn)
+check (WC fc tm) conn = do
+  trackM ("Beginning check of " ++ show tm)
+  x <- localFC fc (check' tm conn)
+  trackM ("End check of " ++ show tm)
+  pure x
 
 check' :: forall m d k
         . (CheckConstraints m k
@@ -480,10 +485,11 @@ check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = do
     (_, ks) <- unzip <$> tlup (m, tycon)
     -- Turn `pats` into values for unification
     (varz, patVals) <- valPats2Val ks pats
-    -- traceM $ "problem: " ++ show tyargs ++ " =?= " ++ show patVals
+    traceM $ "problem: " ++ show tyargs ++ " =?= " ++ show patVals
     -- Create a unification problem between tyargs and the value versions of pats
     typeEq (show tycon) (TypeFor m []) (VCon tycon tyargs) (VCon tycon patVals)
-    -- traceM "Made it past unification"
+    ty <- eval S0 ty
+    traceM $ "Made it past unification for ty =  " ++ show ty
     Some (ny :* env) <- pure $ bwdStack varz
     -- Make sure env is the correct length for args
     Refl <- throwLeft $ natEqOrBust ny nFree
@@ -515,7 +521,7 @@ check' (Simple tm) ((), (hungry, ty):unders) = do
                                     R0 (REx ("value", Nat) R0)
       let val = VNum (nConstant (fromIntegral n))
       defineSrc dangling val
-      defineTgt hungry val
+      defineTgt' "check.simple" hungry val
       wire (dangling, kindType Nat, hungry)
       pure (((), ()), ((), unders))
     -- No defining needed, so everything else can be unified
@@ -616,7 +622,7 @@ check' (Of n e) ((), unders) = case ?my of
               -- Wire the length into all the replicate nodes
               for_ lenIns $ \(tgt, _) -> do
                 wire (natOver, kindType Nat, tgt)
-                defineTgt tgt n
+                defineTgt' "Of" tgt n
               (((), ()), ((), elemRightUnders)) <- check e ((), repUnders)
               -- If `elemRightUnders` isn't empty, it means we were too greedy
               -- in the call to getVecs, so we should work out which elements of
@@ -644,7 +650,7 @@ check' (Of n e) ((), unders) = case ?my of
             let (lenIns, elemIns, vecOuts) = unzip3 conns
             for_ lenIns $ \(tgt,_) -> do
               wire (natOver, kindType Nat, tgt)
-              defineTgt tgt n
+              defineTgt' "Of syn" tgt n
             zipWithM_ (\(dangling, ty) (hungry, _) -> wire (dangling, ty, hungry)) outputs elemIns
             pure (((), vecOuts), ((), ()))
           _ -> localFC (fcOf e) $ typeErr "No type dependency allowed when using `of`"
@@ -818,7 +824,7 @@ kindCheck ((hungry, k@(TypeFor m [])):unders) (Con c arg) = req (TLup (m, c)) >>
       ensureEmpty "kindCheck unders" emptyUnders
       -- now evVa can pick up the definitions
       value <- eval S0 $ VCon c [ endVal k (InEnd (end tgt)) | (tgt, k) <- kindArgs ]
-      defineTgt hungry value
+      defineTgt' "kind0" hungry value
       defineSrc dangling value
       wire (dangling, kindType k, hungry)
       pure ([value],unders)
@@ -838,7 +844,7 @@ kindCheck ((hungry, k@(TypeFor m [])):unders) (Con c arg) = req (TLup (m, c)) >>
         ensureEmpty "alias args" emptyUnders
         val <- apply aliasLam args
         defineSrc kindOut val
-        defineTgt hungry val
+        defineTgt' "kind1" hungry val
         wire (kindOut, kindType k, hungry)
         pure ([val], unders)
     Nothing -> typeErr $ "Can't find type constructor or type alias " ++ show c
@@ -849,7 +855,7 @@ kindCheck ((hungry, Star []):unders) (C (ss :-> ts)) = do
     (i, env, Some (ez :* inRo)) -> kindCheckRow' Braty ez env (name, i) ts >>= \case
       (_, _, Some (_ :* outRo)) -> do
         let val = VFun Braty (inRo :->> outRo)
-        defineTgt hungry val
+        defineTgt' "kind2" hungry val
         pure ([val], unders)
 kindCheck ((hungry, Star []):unders) (K (ss :-> ts)) = do
   -- N.B. Kernels can't bind so we don't need to pass around a stack of ends
@@ -859,7 +865,7 @@ kindCheck ((hungry, Star []):unders) (K (ss :-> ts)) = do
     (Some ss, Some ts) -> case kernelNoBind ss of
       Refl -> do
         let val = VFun Kerny (ss :->> ts)
-        defineTgt hungry val
+        defineTgt' "kind3" hungry val
         pure ([val], unders)
 
 -- N.B. This code is currently only called for checking the validity of type aliases
@@ -879,7 +885,7 @@ kindCheck ((hungry, TypeFor m args):unders) (Th (WC _ (Lambda (xs, WC fc body) [
     vbody <- eval S0 vbody
     let vlam = case endz of
           Some (ny :* endz) -> lambdify endz (changeVar (ParToInx (AddZ ny) endz) vbody)
-    defineTgt hungry vlam
+    defineTgt' "kind4" hungry vlam
     pure ([vlam], unders)
  where
   lambdify :: Stack Z End i -> Val i -> Val Z
@@ -896,7 +902,7 @@ kindCheck unders (Emb (WC fc (Var v))) = localFC fc $ vlup v >>= f unders
     throwLeft $ kindEq k k'
     wire (dangling, kindType k, hungry)
     value <- eval S0 (endVal k (ExEnd (end dangling)))
-    defineTgt hungry value
+    defineTgt' "kind5" hungry value
     (vs, leftUnders) <- f us xs
     pure (value:vs, leftUnders)
   f _ (x:_) = err $ InternalError $ "Kindchecking a row which contains " ++ show x
@@ -904,7 +910,7 @@ kindCheck unders (Emb (WC fc (Var v))) = localFC fc $ vlup v >>= f unders
 kindCheck ((hungry, Nat):unders) (Simple (Num n)) | n >= 0 = do
   (_, _, [(dangling, _)], _) <- next "const" (Const (Num n)) (S0,Some (Zy :* S0)) R0 (REx ("value", Nat) R0)
   let value = VNum (nConstant (fromIntegral n))
-  defineTgt hungry value
+  defineTgt' "kind6" hungry value
   defineSrc dangling value
   wire (dangling, TNat, hungry)
   pure ([value], unders)
@@ -919,7 +925,7 @@ kindCheck ((hungry, Nat):unders) (Arith op lhs rhs) = do
       case runArith lhs op rhs of
         Nothing -> typeErr "Type level arithmetic too confusing"
         Just result -> do
-          defineTgt hungry (VNum result)
+          defineTgt' "kind7" hungry (VNum result)
           defineSrc dangling (VNum result)
           wire (dangling, kindType Nat, hungry)
           pure ([VNum result], unders)
@@ -937,7 +943,7 @@ kindCheck ((hungry, Nat):unders) (Con c arg)
      ensureEmpty "kindCheck unders" us
      v <- eval S0 (VNum (f nv))
      defineSrc cdangling v
-     defineTgt hungry v
+     defineTgt' "kind8" hungry v
      pure ([v], unders)
 
 kindCheck ((_, k):_) tm = typeErr $ "Expected " ++ show tm ++ " to have kind " ++ show k
