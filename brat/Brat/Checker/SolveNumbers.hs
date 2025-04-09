@@ -8,6 +8,7 @@ import Brat.Syntax.Port
 import Brat.Error
 import Brat.Eval
 import Brat.Graph (NodeType(..))
+import Brat.Naming
 import Hasochism
 import Control.Monad.Freer
 
@@ -59,7 +60,7 @@ solveNumMeta e nv = case (e, numVars nv) of
    instantiateMeta (InEnd tgt) (VNum nv)
    wire (src, TNat, NamedPort tgt "")
 
-unifyNum :: (End -> Bool) -> NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
+unifyNum :: (End -> Maybe String) -> NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
 unifyNum mine nv0 nv1 = do
   trailM $ ("unifyNum In\n  " ++ show nv0 ++ "\n  " ++ show nv1)
   nv0 <- numEval S0 nv0
@@ -72,7 +73,7 @@ unifyNum mine nv0 nv1 = do
 -- Need to keep track of which way we're solving - which side is known/unknown
 -- Things which are dynamically unknown must be Tgts - information flows from Srcs
 -- ...But we don't need to do any wiring here, right?
-unifyNum' :: (End -> Bool) -> NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
+unifyNum' :: (End -> Maybe String) -> NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
 -- unifyNum' a b | trace ("unifyNum'\n  " ++ show a ++ "\n  " ++ show b) False = undefined
 unifyNum' mine (NumValue lup lgro) (NumValue rup rgro)
   | lup <= rup = lhsFun00 lgro (NumValue (rup - lup) rgro)
@@ -92,17 +93,17 @@ unifyNum' mine (NumValue lup lgro) (NumValue rup rgro)
     EQ -> pure ()
     LT -> case (v, v') of
       (v@(VPar e@(ExEnd p)), v'@(VPar e'@(ExEnd p')))
-       | mine e -> defineSrc (NamedPort p "") (VNum (nVar v'))
-       | mine e' -> defineSrc (NamedPort p' "") (VNum (nVar v))
+       | Just _ <- mine e -> defineSrc (NamedPort p "") (VNum (nVar v'))
+       | Just _ <- mine e' -> defineSrc (NamedPort p' "") (VNum (nVar v))
        | otherwise -> typeErr $ "Can't force " ++ show v ++ " to be " ++ show v'
       (VPar e@(InEnd p), v@(VPar (ExEnd dangling)))
-       | mine e -> do
+       | Just _ <- mine e -> do
           req (Wire (dangling, TNat, p))
           defineTgt' ("flex-flex In Ex") (NamedPort p "") (VNum (nVar v))
        | otherwise -> mkYield "flexFlex" (S.singleton e) >> unifyNum mine (nVar v) (nVar v')
       (v@(VPar e@(InEnd p)), v'@(VPar e'@(InEnd p')))
-       | mine e -> defineTgt' "flex-flex In In1" (NamedPort p "") (VNum (nVar v'))
-       | mine e' -> defineTgt' "flex-flex In In0"(NamedPort p' "") (VNum (nVar v))
+       | Just _ <- mine e -> defineTgt' "flex-flex In In1" (NamedPort p "") (VNum (nVar v'))
+       | Just _ <- mine e' -> defineTgt' "flex-flex In In0"(NamedPort p' "") (VNum (nVar v))
        | otherwise -> mkYield "flexFlex" (S.fromList [e, e']) >> unifyNum mine (nVar v) (nVar v')
 
   lhsStrictMono :: StrictMono (VVar Z) -> NumVal (VVar Z) -> Checking ()
@@ -112,8 +113,12 @@ unifyNum' mine (NumValue lup lgro) (NumValue rup rgro)
     lhsFun00 (StrictMonoFun (StrictMono (n - 1) mono)) num
 
   lhsMono :: Monotone (VVar Z) -> NumVal (VVar Z) -> Checking ()
-  lhsMono (Linear (VPar e)) num = throwLeft (doesntOccur e (VNum num)) *>
-                                  solveNumMeta e num
+  lhsMono (Linear (VPar e)) num = case mine e of
+    Just _ -> do
+      throwLeft (doesntOccur e (VNum num))  -- too much?
+      solveNumMeta e num -- really?
+    _ -> mkYield "lhsMono" (S.singleton e) >>
+         unifyNum mine (nVar (VPar e)) num
   lhsMono (Full sm) (NumValue 0 (StrictMonoFun (StrictMono 0 (Full sm'))))
     = lhsFun00 (StrictMonoFun sm) (NumValue 0 (StrictMonoFun sm'))
   lhsMono m@(Full _) (NumValue 0 gro) = lhsFun00 gro (NumValue 0 (StrictMonoFun (StrictMono 0 m)))
@@ -137,13 +142,15 @@ unifyNum' mine (NumValue lup lgro) (NumValue rup rgro)
       -- = 2^k * (y + 1)
       -- = 2^k + 2^k * y
       -- Hence, the predecessor is (2^k - 1) + (2^k * y)
-  demandSucc (StrictMono k (Linear (VPar e))) = do
-    pred <- traceChecking "makePred" makePred e
+  demandSucc (StrictMono k (Linear (VPar e))) | Just loc <- mine e = do
+    pred <- loc -! traceChecking "makePred" makePred e
     pure (nPlus ((2^k) - 1) (nVar (VPar pred)))
 
   --   2^k * full(n + 1)
   -- = 2^k * (1 + 2 * full(n))
   -- = 2^k + 2^(k + 1) * full(n)
+
+  -- if it's not "mine" should we wait?
   demandSucc x@(StrictMono k (Full nPlus1)) = do
     n <- traceChecking "demandSucc" demandSucc nPlus1
     -- foo <- numEval S0 x
@@ -160,7 +167,7 @@ unifyNum' mine (NumValue lup lgro) (NumValue rup rgro)
     evenGro :: Fun00 (VVar Z) -> Checking (Fun00 (VVar Z))
     evenGro Constant0 = pure Constant0
     evenGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
-      Linear (VPar e) -> do
+      Linear (VPar e) | Just loc <- mine e -> loc -! do
         -- traceM $ "Calling makeHalf (" ++ show e ++ ")"
         half <- traceChecking "makeHalf" makeHalf e
         pure (StrictMonoFun (StrictMono 0 (Linear (VPar half))))
@@ -170,7 +177,7 @@ unifyNum' mine (NumValue lup lgro) (NumValue rup rgro)
     -- Check a numval is odd, and return its rounded down half
     oddGro :: Fun00 (VVar Z) -> Checking (NumVal (VVar Z))
     oddGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
-      Linear (VPar e) -> do
+      Linear (VPar e) | Just loc <- mine e -> loc -! do
         pred <- traceChecking "makePred" makePred e
         half <- traceChecking "makeHalf" makeHalf pred
         pure (nVar (VPar half))

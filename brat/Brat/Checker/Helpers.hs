@@ -24,6 +24,7 @@ import Control.Monad.State.Lazy (StateT(..), runStateT)
 import Data.Bifunctor
 import Data.Foldable (foldrM)
 import Data.List (partition)
+import Data.Maybe (isJust)
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -37,7 +38,7 @@ simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Checking ()
 simpleCheck my ty tm = case (my, ty) of
   (Braty, VApp (VPar e) _) -> do
     mine <- mineToSolve
-    if mine e then
+    if isJust (mine e) then
       case tm of
         Float _ -> defineEnd "simpleCheck" e TFloat
         Text _ -> defineEnd "simpleCheck" e TText
@@ -623,24 +624,22 @@ invertNatVal (NumValue up gro) = case up of
 -- This will update the `hopes`, potentially invalidating things that have
 -- been eval'd.
 -- The Sem is closed, for now.
-solveHopeVal :: TypeKind -> InPort -> Val Z -> Checking ()
-solveHopeVal k hope v = case doesntOccur (InEnd hope) v of
-  Right () -> do
-    defineEnd "solveHopeVal" (InEnd hope) v
-    dangling <- case (k, v) of
-      (Nat, VNum v) -> buildNatVal v
-      (Nat, _) -> err $ InternalError "Head of Nat wasn't a VNum"
-      _ -> buildConst Unit TUnit
-    req (Wire (end dangling, kindType k, hope))
-  Left msg -> case v of
-    VApp (VPar (InEnd end)) B0 | hope == end -> pure ()
+solveVal :: TypeKind -> End -> Val Z -> Checking ()
+solveVal _ it (VApp (VPar e) B0) | it == e = pure ()
+solveVal k it v | Left msg <- doesntOccur it v =
     -- TODO: Not all occurrences are toxic. The end could be in an argument
     -- to a hoping variable which isn't used.
     -- E.g. h1 = h2 h1 - this is valid if h2 is the identity, or ignores h1.
-    _ -> err msg
+    err msg
+solveVal Nat it@(InEnd inn) v@(VNum nv) = do
+  dangling <- buildNatVal nv
+  req (Wire (end dangling, TNat, inn))
+  defineEnd "solveValNat" it v
+solveVal _ it v = defineEnd "solveVal" it v
+  -- Do we also need dummy wiring here?
 
-solveHopeSem :: TypeKind -> InPort -> Sem -> Checking ()
-solveHopeSem k hope = quote Zy >=> solveHopeVal k hope
+solveSem :: TypeKind -> End -> Sem -> Checking ()
+solveSem k hope = quote Zy >=> solveVal k hope
 
 -- Convert a pattern into a value for the purposes of solving it with unification
 -- for pattern matching. This is used for checking type constructors - we're only
@@ -691,26 +690,41 @@ traceChecking lbl m a = do
 
 -- traceChecking = const id
 
-allowedToSolve :: Bwd (String, Int) -> End -> Bool
-allowedToSolve prefix e =
-  let whoAreWe = lastDollar prefix
-      MkName ePrefix = endName e
-      whoCanSolve = lastDollar (B0 <>< ePrefix)
-  in  case (e, whoAreWe, whoCanSolve) of
+dollarAndItsPrefix :: Bwd (String, Int) -> Maybe (Bwd (String, Int), String)
+dollarAndItsPrefix B0 = Nothing
+dollarAndItsPrefix (siz :< ('$':doll, _)) = Just (siz, doll)
+dollarAndItsPrefix (siz :< _) = dollarAndItsPrefix siz
+
+prefixLeftOf :: Bwd (String, Int) -> String -> Maybe (Bwd (String, Int))
+prefixLeftOf B0 _ = Nothing
+prefixLeftOf (siz :< (s, _)) key
+  | s == key = Just siz
+  | otherwise = prefixLeftOf siz key
+
+allowedToSolve :: Bwd (String, Int) -> End -> Maybe String
+allowedToSolve me it =
+  let MkName itFwd = endName it
+      itBwd = (B0 <>< itFwd)
+  in  case (it, dollarAndItsPrefix me, dollarAndItsPrefix itBwd) of
         -- Solving a hope
-        -- TODO: Check that the ! is in the same region of code as we are!
-        -- (by checking we have a common prefix before the $rhs)
-        (InEnd _, _, Just "!") -> trackPermission ("Allowed to solve hope:\n  " ++ show prefix) True
+        (InEnd _, Just (region, "rhs"), Just (maker, "!"))
+	  | Just region == prefixLeftOf maker "$rhs"
+	   ->
+	  trackPermission ("Allowed to solve:\n  " ++ show me ++ " / " ++ show it)
+	  $ Just "$!"
         -- We can only solve dangling wires when doing pattern matching in `solve`
-        (ExEnd _, Just "lhs", _) -> trackPermission ("Allowed to solve Src:\n  " ++ show prefix ++ "\n  " ++ show e) True
-        (InEnd _, Just "unifyTypeArgs", Just "vp2v") -> trackPermission ("Allowed to solve Tgt:\n  " ++ show prefix ++ "\n  " ++ show e) True
-        _ -> trackPermission ("Not allowed to solve:\n  " ++ show prefix ++ "\n  " ++ show e) False
+        (ExEnd _, Just (region, "lhs"), Just (region', "lhs"))
+	  | region == region'
+	  -> trackPermission ("Allowed to solve:\n  " ++ show me ++ " / " ++ show it)
+	  $ Just "gen"
+        _ -> trackPermission ("Forbidden to solve:\n  " ++ show me ++ " / " ++ show it)
+	  Nothing
  where
   lastDollar B0 = Nothing
   lastDollar (zx :< ('$':str, _)) = Just str
   lastDollar (zx :< x) = lastDollar zx
 
-mineToSolve :: Checking (End -> Bool)
+mineToSolve :: Checking (End -> Maybe String)
 mineToSolve = allowedToSolve <$> whoAmI
 
 -- Don't call this on kinds

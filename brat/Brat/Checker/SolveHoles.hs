@@ -1,6 +1,6 @@
 module Brat.Checker.SolveHoles (typeEq) where
 
-import Brat.Checker.Helpers (buildNatVal, buildConst, mineToSolve, solveHopeSem)
+import Brat.Checker.Helpers (buildNatVal, buildConst, mineToSolve, solveSem)
 import Brat.Checker.Monad
 import Brat.Checker.SolveNumbers
 import Brat.Checker.Types (kindForMode, IsSkolem(..))
@@ -58,7 +58,7 @@ typeEq' str stuff@(_ny :* _ks :* sems) k exp act = do
 -- Presumes that the hope set and the two `Sem`s are up to date.
 typeEqEta :: String -- String representation of the term for error reporting
           -> (Ny :* Stack Z TypeKind :* Stack Z Sem) n
-          -> (End -> Bool) -- Tells us if we can solve a given End
+          -> (End -> Maybe String) -- Tells us if we can solve a given End
           -> TypeKind -- The kind we're comparing at
           -> Sem -- Expected
           -> Sem -- Actual
@@ -74,13 +74,9 @@ typeEqEta tm (lvy :* kz :* sems) mine (TypeFor m ((_, k):ks)) exp act = do
 -- (We don't solve under binders for now, so we only consider Zy here)
 -- 1. "easy" flex cases
 typeEqEta _tm (Zy :* _ks :* _sems) mine k (SApp (SPar e) B0) act
-  | mine e = case e of
-    InEnd e -> solveHopeSem k e act
-    ExEnd _ -> quote Zy act >>= instantiateMeta e
+  | Just _ <- mine e = solveSem k e act
 typeEqEta _tm (Zy :* _ks :* _sems) mine k exp (SApp (SPar e) B0)
-  | mine e = case e of
-    InEnd e -> solveHopeSem k e exp
-    ExEnd _ -> quote Zy exp >>= instantiateMeta e
+  | Just _ <- mine e = solveSem k e exp
 typeEqEta _ (Zy :* _ :* _) mine Nat (SNum exp) (SNum act) = unifyNum mine (quoteNum Zy exp) (quoteNum Zy act)
 -- 2. harder cases, neither is in the hope set, so we can't define it ourselves
 typeEqEta tm stuff@(ny :* _ks :* _sems) _ k exp act = do

@@ -490,10 +490,10 @@ check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = do
     let m = deModey my -- TODO: remember what this is
     (_, ks) <- unzip <$> tlup (m, tycon)
     -- Turn `pats` into values for unification
-    (varz, patVals) <- "$vp2v" -! valPats2Val ks pats
+    (varz, patVals) <- "$!" -! valPats2Val ks pats
     trackM $ "problem: " ++ show tyargs ++ " =?= " ++ show patVals
     -- Create a unification problem between tyargs and the value versions of pats
-    "$unifyTypeArgs" -! typeEq (show tycon) (TypeFor m []) (VCon tycon tyargs) (VCon tycon patVals)
+    typeEq (show tycon) (TypeFor m []) (VCon tycon tyargs) (VCon tycon patVals)
     ty <- eval S0 ty
     trackM $ "Made it past unification for ty =  " ++ show ty
     Some (ny :* env) <- pure $ bwdStack varz
@@ -735,11 +735,11 @@ checkClause my fnName cty clause = modily my $ do
   -- First, we check the patterns on the LHS. This requires some overs,
   -- so we make a box, however this box will be skipped during compilation.
   (vars, match, rhsCty) <- suppressHoles . fmap snd $
-                     let ?my = my in makeBox (clauseName ++ "_setup") cty $
+       let ?my = my in ("$lhs" -!) $ makeBox (clauseName ++ "_setup") cty $
                      \(overs, unders) -> do
     -- Make a problem to solve based on the lhs and the overs
     problem <- argProblems (fst <$> overs) (unWC $ lhs clause) []
-    (tests, sol) <- localFC (fcOf (lhs clause)) $ "$lhs" -! solve my problem
+    (tests, sol) <- localFC (fcOf (lhs clause)) $ solve my problem
     -- The solution gives us the variables bound by the patterns.
     -- We turn them into a row
     mkArgRo my S0 ((\(n, (src, ty)) -> (NamedPort (toEnd src) n, ty)) <$> sol) >>= \case
