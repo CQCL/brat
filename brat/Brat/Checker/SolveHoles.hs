@@ -1,4 +1,4 @@
-module Brat.Checker.SolveHoles (typeEq) where
+module Brat.Checker.SolveHoles (typeEq, typesEq) where
 
 import Brat.Checker.Helpers (buildNatVal, buildConst, mineToSolve, solveSem)
 import Brat.Checker.Monad
@@ -36,6 +36,16 @@ typeEq str k exp act = do
   prefix <- whoAmI
   trackM ("typeEq: Who am I: " ++ show prefix)
   typeEq' str (Zy :* S0 :* S0) k exp act
+
+typesEq :: String -- String representation of the term for error reporting
+        -> [TypeKind] -- The kinds we're comparing at
+        -> [Val Z] -- Expected
+        -> [Val Z] -- Actual
+        -> Checking ()
+typesEq str k exp act = do
+  prefix <- whoAmI
+  trackM ("typesEq: Who am I: " ++ show prefix)
+  typeEqs str (Zy :* S0 :* S0) k exp act
 
 
 -- Internal version of typeEq with environment for non-closed values

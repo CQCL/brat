@@ -121,25 +121,19 @@ checkWire :: Modey m
           -> (Tgt, BinderType m)
           -> Checking ()
 checkWire Braty _ outputs (dangling, Left ok) (hungry, Left uk) = do
-  prefix <- whoAmI
-  trackM ("Who am I: checkWire: " ++ show prefix)
   throwLeft $ if outputs
     then kindEq ok uk
     else kindEq uk ok
   defineTgt' "checkWire" hungry (endVal ok (ExEnd (end dangling)))
   wire (dangling, kindType ok, hungry)
-checkWire Braty (WC fc tm) outputs (dangling, o) (hungry, u) = localFC fc $ "$checkWire" -! do
-  prefix <- whoAmI
-  trackM ("Who am I: checkWire: " ++ show prefix)
+checkWire Braty (WC fc tm) outputs (dangling, o) (hungry, u) = localFC fc $ do
   let ot = binderToValue Braty o
   let ut = binderToValue Braty u
   if outputs
     then typeEq (show tm) (Star []) ot ut
     else typeEq (show tm) (Star []) ut ot
   wire (dangling, ot, hungry)
-checkWire Kerny (WC fc tm) outputs (dangling, ot) (hungry, ut) = localFC fc $ "checkWire" -! do
-  prefix <- whoAmI
-  trackM ("Who am I: checkWire: " ++ show prefix)
+checkWire Kerny (WC fc tm) outputs (dangling, ot) (hungry, ut) = localFC fc $ do
   if outputs
     then typeEq (show tm) (Dollar []) ot ut
     else typeEq (show tm) (Dollar []) ut ot
@@ -236,12 +230,14 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
       -- with the other clauses, as part of the body.
       (ins :->> outs) <- mkSig usedOvers unders
       (allFakeUnders, rightFakeUnders, tgtMap) <- suppressHoles $ suppressGraph $ do
-        (_, [], fakeOvers, fakeAcc) <- anext' "lambda_fake_source" Hypo (S0, Some (Zy :* S0)) R0 ins SkolemConst
-        -- Hypo `check` calls need an environment, even just to compute leftovers;
-        -- we get that env by solving `problem` reformulated in terms of the `fakeOvers`
-        let srcMap = fromJust $ zipSameLength (fst <$> usedOvers) (fst <$> fakeOvers)
-        let fakeProblem = [ (fromJust (lookup src srcMap), pat) | (src, pat) <- problem ]
-        fakeEnv <- localFC abstFC $ solve ?my fakeProblem >>= (solToEnv . snd)
+        (fakeEnv, fakeAcc) <- "$lhs" -! do
+	  (_, [], fakeOvers, fakeAcc) <- anext' "lambda_fake_source" Hypo (S0, Some (Zy :* S0)) R0 ins SkolemConst
+	  -- Hypo `check` calls need an environment, even just to compute leftovers;
+	  -- we get that env by solving `problem` reformulated in terms of the `fakeOvers`
+	  let srcMap = fromJust $ zipSameLength (fst <$> usedOvers) (fst <$> fakeOvers)
+	  let fakeProblem = [ (fromJust (lookup src srcMap), pat) | (src, pat) <- problem ]
+	  fakeEnv <- localFC abstFC $ solve ?my fakeProblem >>= (solToEnv . snd)
+	  pure (fakeEnv, fakeAcc)
         localEnv fakeEnv $ do
           (_, fakeUnders, [], _) <- anext "lambda_fake_target" Hypo fakeAcc outs R0
           Just tgtMap <- pure $ zipSameLength (fst <$> fakeUnders) unders

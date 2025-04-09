@@ -4,6 +4,7 @@ import Brat.Checker.Monad
 import Brat.Checker.Helpers
 import Brat.Checker.Types (EndType(..))
 import Brat.Checker.SolveNumbers
+import Brat.Checker.SolveHoles
 import Brat.Constructors
 import Brat.Constructors.Patterns
 import Brat.Error
@@ -162,7 +163,8 @@ solveConstructor my src (c, abs) ty p = do
       tyArgKinds <- tlup (Brat, tycon)
       -- Constrain tyargs to match pats
       trackM $ unlines ["unifys",show lhss,show tyArgKinds, show tyargs]
-      unifys lhss (snd <$> tyArgKinds) tyargs
+      typesEq "pretending to be unifys" (snd <$> tyArgKinds) lhss tyargs
+      -- unifys lhss (snd <$> tyArgKinds) tyargs
       p <- argProblems (fst <$> patArgWires) (normaliseAbstractor abs) p
       (tests, sol) <- solve my p
       pure ((src, PrimCtorTest c tycon node patArgWires) : tests, sol)
