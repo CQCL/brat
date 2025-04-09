@@ -32,7 +32,8 @@ import Prelude hiding (last)
 
 import Debug.Trace
 
-trackPermission = const id
+--trackPermission = const id
+trackPermission = trace
 
 simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Checking ()
 simpleCheck my ty tm = case (my, ty) of

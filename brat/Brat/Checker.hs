@@ -245,7 +245,7 @@ check' (Lambda c@(WC abstFC abst,  body) cs) (overs, unders) = do
         localEnv fakeEnv $ do
           (_, fakeUnders, [], _) <- anext "lambda_fake_target" Hypo fakeAcc outs R0
           Just tgtMap <- pure $ zipSameLength (fst <$> fakeUnders) unders
-          (((), ()), ((), rightFakeUnders)) <- check body ((), fakeUnders)
+          (((), ()), ((), rightFakeUnders)) <- "$rhs" -! check body ((), fakeUnders)
           pure (fakeUnders, rightFakeUnders, tgtMap)
 
       let usedFakeUnders = (fst <$> allFakeUnders) \\ (fst <$> rightFakeUnders)
