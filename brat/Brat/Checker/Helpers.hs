@@ -31,7 +31,7 @@ import Prelude hiding (last)
 
 import Debug.Trace
 
-
+trackPermission = const id
 
 simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Checking ()
 simpleCheck my ty tm = case (my, ty) of
@@ -700,10 +700,10 @@ allowedToSolve prefix e =
         -- Solving a hope
         -- TODO: Check that the ! is in the same region of code as we are!
         -- (by checking we have a common prefix before the $rhs)
-        (InEnd _, _, Just "!") -> True
+        (InEnd _, _, Just "!") -> trackPermission ("Allowed to solve hope:\n  " ++ show prefix) True
         -- We can only solve dangling wires when doing pattern matching in `solve`
-        (ExEnd _, Just "lhs", _) -> True
-        _ -> False
+        (ExEnd _, Just "lhs", _) -> trackPermission ("Allowed to solve Src:\n  " ++ show prefix ++ "\n  " ++ show e) True
+        _ -> trackPermission ("Not allowed to solve:\n  " ++ show prefix ++ "\n  " ++ show e) False
  where
   lastDollar B0 = Nothing
   lastDollar (zx :< ('$':str, _)) = Just str

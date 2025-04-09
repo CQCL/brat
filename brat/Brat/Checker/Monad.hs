@@ -312,7 +312,7 @@ handler (Req s k) ctx g
                 M.lookup tycon tbl
         handler (k args) ctx g
 
-      ANewDynamic e fc -> handler (k ()) (ctx { dynamicSet = M.insert e fc (dynamicSet ctx) }) g
+      ANewDynamic e fc -> trackM ("ANewDynamic " ++ show e) *> handler (k ()) (ctx { dynamicSet = M.insert e fc (dynamicSet ctx) }) g
 
       AskDynamics -> handler (k (dynamicSet ctx)) ctx g
 
