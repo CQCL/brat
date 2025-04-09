@@ -703,6 +703,7 @@ allowedToSolve prefix e =
         (InEnd _, _, Just "!") -> trackPermission ("Allowed to solve hope:\n  " ++ show prefix) True
         -- We can only solve dangling wires when doing pattern matching in `solve`
         (ExEnd _, Just "lhs", _) -> trackPermission ("Allowed to solve Src:\n  " ++ show prefix ++ "\n  " ++ show e) True
+        (InEnd _, Just "unifyTypeArgs", Just "vp2v") -> trackPermission ("Allowed to solve Tgt:\n  " ++ show prefix ++ "\n  " ++ show e) True
         _ -> trackPermission ("Not allowed to solve:\n  " ++ show prefix ++ "\n  " ++ show e) False
  where
   lastDollar B0 = Nothing
