@@ -92,16 +92,19 @@ unifyNum' mine (NumValue lup lgro) (NumValue rup rgro)
     GT -> flexFlex v' v
     EQ -> pure ()
     LT -> case (v, v') of
-      (v@(VPar e@(ExEnd p)), v'@(VPar e'@(ExEnd p')))
+      (VPar e@(ExEnd p), VPar e'@(ExEnd p'))
        | Just _ <- mine e -> defineSrc (NamedPort p "") (VNum (nVar v'))
        | Just _ <- mine e' -> defineSrc (NamedPort p' "") (VNum (nVar v))
        | otherwise -> typeErr $ "Can't force " ++ show v ++ " to be " ++ show v'
-      (VPar e@(InEnd p), v@(VPar (ExEnd dangling)))
+      (VPar e@(InEnd p), VPar e'@(ExEnd dangling))
        | Just _ <- mine e -> do
           req (Wire (dangling, TNat, p))
-          defineTgt' ("flex-flex In Ex") (NamedPort p "") (VNum (nVar v))
+          defineTgt' ("flex-flex In Ex") (NamedPort p "") (VNum (nVar v'))
+       | Just _ <- mine e' -> do
+          req (Wire (dangling, TNat, p))
+          defineSrc' ("flex-flex In Ex") (NamedPort dangling "") (VNum (nVar v))
        | otherwise -> mkYield "flexFlex" (S.singleton e) >> unifyNum mine (nVar v) (nVar v')
-      (v@(VPar e@(InEnd p)), v'@(VPar e'@(InEnd p')))
+      (VPar e@(InEnd p), VPar e'@(InEnd p'))
        | Just _ <- mine e -> defineTgt' "flex-flex In In1" (NamedPort p "") (VNum (nVar v'))
        | Just _ <- mine e' -> defineTgt' "flex-flex In In0"(NamedPort p' "") (VNum (nVar v))
        | otherwise -> mkYield "flexFlex" (S.fromList [e, e']) >> unifyNum mine (nVar v) (nVar v')
@@ -114,9 +117,9 @@ unifyNum' mine (NumValue lup lgro) (NumValue rup rgro)
 
   lhsMono :: Monotone (VVar Z) -> NumVal (VVar Z) -> Checking ()
   lhsMono (Linear (VPar e)) num = case mine e of
-    Just _ -> do
+    Just loc -> do
       throwLeft (doesntOccur e (VNum num))  -- too much?
-      solveNumMeta e num -- really?
+      loc -! solveNumMeta e num -- really?
     _ -> mkYield "lhsMono" (S.singleton e) >>
          unifyNum mine (nVar (VPar e)) num
   lhsMono (Full sm) (NumValue 0 (StrictMonoFun (StrictMono 0 (Full sm'))))
@@ -131,7 +134,7 @@ unifyNum' mine (NumValue lup lgro) (NumValue rup rgro)
   demand0 :: NumVal (VVar Z) -> Checking ()
   demand0 (NumValue 0 Constant0) = pure ()
   demand0 n@(NumValue 0 (StrictMonoFun (StrictMono _ mono))) = case mono of
-    Linear (VPar e) -> solveNumMeta e (nConstant 0)
+    Linear (VPar e) | Just _ <- mine e -> solveNumMeta e (nConstant 0)
     Full sm -> demand0 (NumValue 0 (StrictMonoFun sm))
     _ -> err . UnificationError $ "Couldn't force " ++ show n ++ " to be 0"
   demand0 n = err . UnificationError $ "Couldn't force " ++ show n ++ " to be 0"

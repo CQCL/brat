@@ -69,7 +69,7 @@ checkDecl pre (VDecl FuncDecl{..}) to_define = (fnName -!) $ localFC fnLoc $ do
     -- We must have a row of nouns as the definition
     Nothing -> case fnBody of
       NoLhs body -> do
-        (((), ()), ((), rightUnders)) <- let ?my = Braty in check body ((), to_define)
+        (((), ()), ((), rightUnders)) <- let ?my = Braty in "$rhs" -! check body ((), to_define)
         case rightUnders of
           [] -> pure ()
           _ -> localFC (fcOf body) $
@@ -94,7 +94,7 @@ checkDecl pre (VDecl FuncDecl{..}) to_define = (fnName -!) $ localFC fnLoc $ do
             Kerny -> wire (box_out, VFun my cty, thunk_in)
           [] -> err $ ExpectedThunk (showMode my) "No body"
           row -> err $ ExpectedThunk (showMode my) (showRow row)
-      Left body -> let ?my = Braty in check body ((), to_define) $> ()
+      Left body -> let ?my = Braty in "$rhs" -! check body ((), to_define) $> ()
  where
   getClauses :: FunBody Term Noun
              -> (Modey m, CTy m Z)

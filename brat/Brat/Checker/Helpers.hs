@@ -714,7 +714,7 @@ allowedToSolve me it =
 	  trackPermission ("Allowed to solve:\n  " ++ show me ++ " / " ++ show it)
 	  $ Just "$!"
         -- We can only solve dangling wires when doing pattern matching in `solve`
-        (ExEnd _, Just (region, "lhs"), Just (region', "lhs"))
+        (_, Just (region, "lhs"), Just (region', "lhs"))
 	  | region == region'
 	  -> trackPermission ("Allowed to solve:\n  " ++ show me ++ " / " ++ show it)
 	  $ Just "gen"
