@@ -15,7 +15,10 @@ import Debug.Trace
 import qualified Data.Map as M
 import qualified Data.Set as S
 
--- trail = trace
+trailM :: Applicative f => String -> f ()
+trailM = const (pure ())
+trail = const id
+--trail = trace
 
 -- This is currently lifted from SolvePatterns, which still imports it.
 -- It is also used in SolveHoles, where it does the right mathematics
@@ -30,7 +33,7 @@ solveNumMeta :: End -> NumVal (VVar Z) -> Checking ()
 -- solveNumMeta e nv | trace ("solveNumMeta " ++ show e ++ " " ++ show nv) False = undefined
 solveNumMeta e nv = case (e, numVars nv) of
  -- Compute the thing that the rhs should be based on the src, and instantiate src to that
- (ExEnd src,  [VPar (InEnd _tgt)]) -> do
+ (ExEnd src,  [InEnd _tgt]) -> do
    -- Compute the value of the `tgt` variable from the known `src` value by inverting nv
    tgtSrc <- invertNatVal nv
    instantiateMeta (ExEnd src) (VNum (nVar (VPar (toEnd tgtSrc))))
@@ -39,7 +42,7 @@ solveNumMeta e nv = case (e, numVars nv) of
  (ExEnd src, _) -> instantiateMeta (ExEnd src) (VNum nv)
 
  -- Both targets, we need to create the thing that they both derive from
- (InEnd bigTgt, [VPar (InEnd weeTgt)]) -> do
+ (InEnd bigTgt, [InEnd weeTgt]) -> do
    (_, [(idTgt, _)], [(idSrc, _)], _) <- anext "numval id" Id (S0, Some (Zy :* S0))
                                          (REx ("n", Nat) R0) (REx ("n", Nat) R0)
    defineSrc idSrc (VNum (nVar (VPar (toEnd idTgt))))
@@ -58,13 +61,13 @@ solveNumMeta e nv = case (e, numVars nv) of
 
 unifyNum :: (End -> Bool) -> NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
 unifyNum mine nv0 nv1 = do
-  traceM $ ("unifyNum In\n  " ++ show nv0 ++ "\n  " ++ show nv1)
+  trailM $ ("unifyNum In\n  " ++ show nv0 ++ "\n  " ++ show nv1)
   nv0 <- numEval S0 nv0
   nv1 <- numEval S0 nv1
   unifyNum' mine (quoteNum Zy nv0) (quoteNum Zy nv1)
   nv0 <- numEval S0 (quoteNum Zy nv0)
   nv1 <- numEval S0 (quoteNum Zy nv1)
-  traceM $ ("unifyNum Out\n  " ++ show (quoteNum Zy nv0) ++ "\n  " ++ show (quoteNum Zy nv1))
+  trailM $ ("unifyNum Out\n  " ++ show (quoteNum Zy nv0) ++ "\n  " ++ show (quoteNum Zy nv1))
 
 -- Need to keep track of which way we're solving - which side is known/unknown
 -- Things which are dynamically unknown must be Tgts - information flows from Srcs
@@ -96,11 +99,11 @@ unifyNum' mine (NumValue lup lgro) (NumValue rup rgro)
        | mine e -> do
           req (Wire (dangling, TNat, p))
           defineTgt' ("flex-flex In Ex") (NamedPort p "") (VNum (nVar v))
-       | otherwise -> mkYield "flexFlex" (S.singleton e) >> unifyNum mine (VNum (nVar v)) (VNum (nVar v'))
+       | otherwise -> mkYield "flexFlex" (S.singleton e) >> unifyNum mine (nVar v) (nVar v')
       (v@(VPar e@(InEnd p)), v'@(VPar e'@(InEnd p')))
        | mine e -> defineTgt' "flex-flex In In1" (NamedPort p "") (VNum (nVar v'))
        | mine e' -> defineTgt' "flex-flex In In0"(NamedPort p' "") (VNum (nVar v))
-       | otherwise -> mkYield "flexFlex" (S.fromList [e, e']) >> unifyNum mine (VNum (nVar v)) (VNum (nVar v'))
+       | otherwise -> mkYield "flexFlex" (S.fromList [e, e']) >> unifyNum mine (nVar v) (nVar v')
 
   lhsStrictMono :: StrictMono (VVar Z) -> NumVal (VVar Z) -> Checking ()
   lhsStrictMono (StrictMono 0 mono) num = lhsMono mono num
@@ -118,7 +121,7 @@ unifyNum' mine (NumValue lup lgro) (NumValue rup rgro)
     smPred <- traceChecking "lhsMono demandSucc" demandSucc sm
     sm <- numEval S0 sm
     -- traceM $ "succ now " ++ show (quoteNum Zy sm)
-    unifyNum (n2PowTimes 1 (nFull smPred)) (NumValue (up - 1) gro)
+    unifyNum mine (n2PowTimes 1 (nFull smPred)) (NumValue (up - 1) gro)
 
   demand0 :: NumVal (VVar Z) -> Checking ()
   demand0 (NumValue 0 Constant0) = pure ()

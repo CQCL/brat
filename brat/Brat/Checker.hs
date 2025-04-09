@@ -122,7 +122,7 @@ checkWire :: Modey m
           -> Checking ()
 checkWire Braty _ outputs (dangling, Left ok) (hungry, Left uk) = do
   prefix <- whoAmI
-  traceM ("Who am I: checkWire: " ++ show prefix)
+  trackM ("Who am I: checkWire: " ++ show prefix)
   throwLeft $ if outputs
     then kindEq ok uk
     else kindEq uk ok
@@ -130,7 +130,7 @@ checkWire Braty _ outputs (dangling, Left ok) (hungry, Left uk) = do
   wire (dangling, kindType ok, hungry)
 checkWire Braty (WC fc tm) outputs (dangling, o) (hungry, u) = localFC fc $ "$checkWire" -! do
   prefix <- whoAmI
-  traceM ("Who am I: checkWire: " ++ show prefix)
+  trackM ("Who am I: checkWire: " ++ show prefix)
   let ot = binderToValue Braty o
   let ut = binderToValue Braty u
   if outputs
@@ -139,7 +139,7 @@ checkWire Braty (WC fc tm) outputs (dangling, o) (hungry, u) = localFC fc $ "$ch
   wire (dangling, ot, hungry)
 checkWire Kerny (WC fc tm) outputs (dangling, ot) (hungry, ut) = localFC fc $ "checkWire" -! do
   prefix <- whoAmI
-  traceM ("Who am I: checkWire: " ++ show prefix)
+  trackM ("Who am I: checkWire: " ++ show prefix)
   if outputs
     then typeEq (show tm) (Dollar []) ot ut
     else typeEq (show tm) (Dollar []) ut ot
@@ -179,7 +179,7 @@ checkOutputs :: forall m k . (CheckConstraints m k, ?my :: Modey m)
              -> [(Tgt, BinderType m)] -- Expected
              -> [(Src, BinderType m)] -- Actual
              -> Checking [(Tgt, BinderType m)]
-checkOutputs tm unders overs | trace ("checkOutputs\n  " ++ show unders ++ "\n  " ++ show overs) False = undefined
+checkOutputs tm unders overs | track ("checkOutputs\n  " ++ show unders ++ "\n  " ++ show overs) False = undefined
 checkOutputs tm unders overs = checkIO tm unders overs (flip $ checkWire ?my tm True) "No unders but overs: "
 
 check :: (CheckConstraints m k
@@ -491,11 +491,11 @@ check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = do
     (_, ks) <- unzip <$> tlup (m, tycon)
     -- Turn `pats` into values for unification
     (varz, patVals) <- "$vp2v" -! valPats2Val ks pats
-    traceM $ "problem: " ++ show tyargs ++ " =?= " ++ show patVals
+    trackM $ "problem: " ++ show tyargs ++ " =?= " ++ show patVals
     -- Create a unification problem between tyargs and the value versions of pats
     "$unifyTypeArgs" -! typeEq (show tycon) (TypeFor m []) (VCon tycon tyargs) (VCon tycon patVals)
     ty <- eval S0 ty
-    traceM $ "Made it past unification for ty =  " ++ show ty
+    trackM $ "Made it past unification for ty =  " ++ show ty
     Some (ny :* env) <- pure $ bwdStack varz
     -- Make sure env is the correct length for args
     Refl <- throwLeft $ natEqOrBust ny nFree
@@ -504,7 +504,6 @@ check' tm@(Con vcon vargs) ((), (hungry, ty):unders) = do
     -- in the kernel case the bottom and top of the row are the same
     let ty' = weaken topy ty
     env <- traverseStack (sem S0) env
-    -- traceM $ "Matchenv: " ++ show env
     (_, argUnders, [(dangling, _)], _) <- anext (show vcon) (Constructor vcon)
                                           (env, Some (Zy :* S0))
                                           argTypeRo (RPr ("value", ty') R0)
@@ -702,7 +701,6 @@ check' Hope ((), (tgt@(NamedPort bang _), ty):unders) = case (?my, ty) of
     (_, [(hungry, _)], [(dangling, _)], _) <- anext "$!" Id (S0, Some (Zy :* S0))
                                               (REx ("hope", k) R0) (REx ("hope", k) R0)
     fc <- req AskFC
-    req (ANewHope (end hungry) fc)
     wire (dangling, kindType k, NamedPort bang "")
     defineTgt tgt (endVal k (toEnd hungry))
     pure (((), ()), ((), unders))
@@ -1189,6 +1187,7 @@ run ve initStore ns m = do
                 , typeConstructors = defaultTypeConstructors
                 , aliasTable = M.empty
                 , hopes = M.empty
+                , dynamicSet = M.empty
                 , captureSets = M.empty
                 }
   (a,ctx,(holes, graph)) <- handler (localNS ns m) ctx mempty
@@ -1196,11 +1195,11 @@ run ve initStore ns m = do
   -- If the `hopes` set has any remaining holes with kind Nat, we need to abort.
   -- Even though we didn't need them for typechecking problems, our runtime
   -- behaviour depends on the values of the holes, which we can't account for.
-  case M.toList $ M.filterWithKey (\e hd -> isNatKinded tyMap (InEnd e) && hopeDynamic hd) (hopes ctx) of
+  case M.toList $ M.filterWithKey (\e _ -> isNatKinded tyMap e) (dynamicSet ctx) of
     [] -> pure (a, (holes, store ctx, graph, captureSets ctx))
     -- Just use the FC of the first hole while we don't have the capacity to
     -- show multiple error locations
-    hs@((_,hd):_) -> Left $ Err (hopeFC hd) (RemainingNatHopes (show . fst <$> hs))
+    hs@((_,fc):_) -> Left $ Err (Just fc) (RemainingNatHopes (show . fst <$> hs))
  where
   isNatKinded tyMap e = case tyMap M.! e of
     (EndType Braty (Left Nat), _) -> True

@@ -25,15 +25,15 @@ import qualified Data.Set as S
 import Debug.Trace
 
 -- Used for messages about thread forking / spawning
---thTrace = const id
-thTrace = trace
+thTrace = const id
+--thTrace = trace
 
 trackM :: Monad m => String -> m ()
---trackM = const (pure ())
-trackM = traceM
+trackM = const (pure ())
+--trackM = traceM
 
--- track = const id
-track = trace
+track = const id
+--track = trace
 trackShowId x = track (show x) x
 
 -- Data for using a type alias. E.g.
@@ -320,7 +320,7 @@ handler (Req s k) ctx g
         handler (k ()) ctx {captureSets=M.insertWith M.union n (M.singleton var ends) (captureSets ctx)} g
 
 handler (Define lbl end v k) ctx g = let st@Store{typeMap=tm, valueMap=vm} = store ctx in
-  case track ("Define( " ++ lbl ++ ")" ++ show end ++ " = " ++ show v) $ M.lookup end vm of
+  case track ("Define(" ++ lbl ++ ")" ++ show end ++ " = " ++ show v) $ M.lookup end vm of
       Just _ -> Left $ dumbErr (InternalError $ "Redefining " ++ show end)
       Nothing -> case M.lookup end tm of
         Nothing -> Left $ dumbErr (InternalError $ "Defining un-Declared " ++ show end ++ " in \n" ++ show tm)
@@ -347,7 +347,7 @@ handler (Define lbl end v k) ctx g = let st@Store{typeMap=tm, valueMap=vm} = sto
 handler (Yield Unstuck k) ctx g = handler (k mempty) ctx g
 handler (Yield (AwaitingAny ends) _k) ctx _ = Left $ dumbErr $ TypeErr $ unlines $
   ("Typechecking blocked on:":(show <$> S.toList ends))
-  ++ "":"Hopeset is":(show <$> M.keys (hopes ctx)) ++ ["Try writing more types! :-)"]
+  ++ "":"Dynamic set is":(show <$> M.keys (dynamicSet ctx)) ++ ["Try writing more types! :-)"]
 handler (Fork desc par c) ctx g = handler (thTrace ("Spawning " ++ desc) $ par *> c) ctx g
 
 type Checking = Free CheckingSig

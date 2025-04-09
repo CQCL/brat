@@ -31,6 +31,8 @@ import Prelude hiding (last)
 
 import Debug.Trace
 
+
+
 simpleCheck :: Modey m -> Val Z -> SimpleTerm -> Checking ()
 simpleCheck my ty tm = case (my, ty) of
   (Braty, VApp (VPar e) _) -> do
@@ -257,17 +259,15 @@ getThunks :: Modey m
                       ,Overs m UVerb
                       )
 getThunks _ [] = pure ([], [], [])
-getThunks Braty row@((src, Right ty):rest) = req AskHopes >>= \h -> eval S0 ty >>= \case
-  VApp (VPar e@(InEnd i)) _ | M.member i h -> mkYield "getThunks" (S.singleton e) >> getThunks Braty row
-  ty -> do
-    (src, ss :->> ts) <- vectorise Braty (src, ty)
-    (node, unders, overs, _) <- let ?my = Braty in
-                                  anext "Eval" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
-    (nodes, unders', overs') <- getThunks Braty rest
-    pure (node:nodes, unders <> unders', overs <> overs')
+getThunks Braty row@((src, Right ty):rest) = do
+  ty <- awaitTypeDefinition ty
+  (src, ss :->> ts) <- vectorise Braty (src, ty)
+  (node, unders, overs, _) <- let ?my = Braty in
+                                anext "Eval" (Eval (end src)) (S0, Some (Zy :* S0)) ss ts
+  (nodes, unders', overs') <- getThunks Braty rest
+  pure (node:nodes, unders <> unders', overs <> overs')
 getThunks Kerny ((src, Right ty):rest) = do
-  -- TODO we probably want to check against the HopeSet here too, good to refactor+common-up somehow
-  ty <- eval S0 ty
+  ty <- awaitTypeDefinition ty
   (src, ss :->> ts) <- vectorise Kerny (src,ty)
   (node, unders, overs, _) <- let ?my = Kerny in anext "Splice" (Splice (end src)) (S0, Some (Zy :* S0)) ss ts
   (nodes, unders', overs') <- getThunks Kerny rest
@@ -546,7 +546,7 @@ buildNatVal nv@(NumValue n gro) = case n of
     (inn, out) <- buildAdd n
     src <- buildGro gro
     req $ Wire (end src, TNat, end inn)
-    traceM $ "buildNatVal " ++ show inn
+    --traceM $ "buildNatVal " ++ show inn
     defineTgt' "Helpers"inn (VNum (nVar (VPar (toEnd src))))
     pure out
  where
@@ -684,9 +684,9 @@ valPats2Val _ _ = err $ InternalError "Type args didn't match expected - kindChe
 
 traceChecking :: (Show a, Show b) => String -> (a -> Checking b) -> (a -> Checking b)
 traceChecking lbl m a = do
-  traceM ("Enter " ++ lbl ++ ": " ++ show a)
+  --traceM ("Enter " ++ lbl ++ ": " ++ show a)
   b <- m a
-  traceM ("Exit  " ++ lbl ++ ": " ++ show b)
+  --traceM ("Exit  " ++ lbl ++ ": " ++ show b)
   pure b
 
 -- traceChecking = const id
@@ -711,3 +711,9 @@ allowedToSolve prefix e =
 
 mineToSolve :: Checking (End -> Bool)
 mineToSolve = allowedToSolve <$> whoAmI
+
+-- Don't call this on kinds
+awaitTypeDefinition :: Val Z -> Checking (Val Z)
+awaitTypeDefinition ty = eval S0 ty >>= \case
+  VApp (VPar e) _ -> mkYield "awaitTypeDefinition" (S.singleton e) >> awaitTypeDefinition ty
+  ty -> pure ty

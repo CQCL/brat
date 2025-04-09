@@ -1,6 +1,6 @@
 module Brat.Checker.SolveHoles (typeEq) where
 
-import Brat.Checker.Helpers (buildNatVal, buildConst, solveHopeSem)
+import Brat.Checker.Helpers (buildNatVal, buildConst, mineToSolve, solveHopeSem)
 import Brat.Checker.Monad
 import Brat.Checker.SolveNumbers
 import Brat.Checker.Types (kindForMode, IsSkolem(..))
@@ -15,7 +15,7 @@ import Bwd
 import Hasochism
 -- import Brat.Syntax.Port (toEnd)
 
-import Control.Monad (when, filterM, (>=>))
+import Control.Monad (unless, when, filterM, (>=>))
 import Data.Bifunctor (second)
 import Data.Foldable (sequenceA_)
 import Data.Functor
@@ -23,8 +23,6 @@ import Data.Maybe (mapMaybe)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Type.Equality (TestEquality(..), (:~:)(..))
-
-import Debug.Trace
 
 -- Demand that two closed values are equal, we're allowed to solve variables in the
 -- hope set to make this true.
@@ -36,7 +34,7 @@ typeEq :: String -- String representation of the term for error reporting
        -> Checking ()
 typeEq str k exp act = do
   prefix <- whoAmI
-  traceM ("typeEq: Who am I: " ++ show prefix)
+  trackM ("typeEq: Who am I: " ++ show prefix)
   typeEq' str (Zy :* S0 :* S0) k exp act
 
 
@@ -53,8 +51,8 @@ typeEq' str stuff@(_ny :* _ks :* sems) k exp act = do
   act <- sem sems act
   qexp <- (quote Zy exp)
   qact <- (quote Zy act)
-  traceM ("typeEq' exp: " ++ show qexp)
-  traceM ("typeEq' act: " ++ show qact)
+  trackM ("typeEq' exp: " ++ show qexp)
+  trackM ("typeEq' act: " ++ show qact)
   typeEqEta str stuff mine k exp act
 
 -- Presumes that the hope set and the two `Sem`s are up to date.
@@ -76,9 +74,13 @@ typeEqEta tm (lvy :* kz :* sems) mine (TypeFor m ((_, k):ks)) exp act = do
 -- (We don't solve under binders for now, so we only consider Zy here)
 -- 1. "easy" flex cases
 typeEqEta _tm (Zy :* _ks :* _sems) mine k (SApp (SPar e) B0) act
-  | mine e = solveHopeSem k e act
+  | mine e = case e of
+    InEnd e -> solveHopeSem k e act
+    ExEnd _ -> quote Zy act >>= instantiateMeta e
 typeEqEta _tm (Zy :* _ks :* _sems) mine k exp (SApp (SPar e) B0)
-  | mine e = solveHopeSem k e exp
+  | mine e = case e of
+    InEnd e -> solveHopeSem k e exp
+    ExEnd _ -> quote Zy exp >>= instantiateMeta e
 typeEqEta _ (Zy :* _ :* _) mine Nat (SNum exp) (SNum act) = unifyNum mine (quoteNum Zy exp) (quoteNum Zy act)
 -- 2. harder cases, neither is in the hope set, so we can't define it ourselves
 typeEqEta tm stuff@(ny :* _ks :* _sems) _ k exp act = do

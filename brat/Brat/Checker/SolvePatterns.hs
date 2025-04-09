@@ -79,7 +79,8 @@ solve my ((src, Lit tm):p) = do
     (Braty, Left Nat)
       | Num n <- tm -> do
           unless (n >= 0) $ typeErr "Negative Nat kind"
-          unifyNum (nConstant (fromIntegral n)) (nVar (VPar (toEnd src)))
+          mine <- mineToSolve
+          unifyNum mine (nConstant (fromIntegral n)) (nVar (VPar (toEnd src)))
     (Braty, Right ty) -> do
       simpleCheck Braty ty tm
     _ -> typeErr $ "Literal " ++ show tm ++ " isn't valid at this type"
@@ -87,6 +88,7 @@ solve my ((src, Lit tm):p) = do
   pure ((src, PrimLitTest tm):tests, sol)
 solve my ((src, PCon c abs):p) = do
   ty <- typeOfSrc my src
+  mine <- mineToSolve
   case (my, ty) of
     -- TODO: When solving constructors, we need to provide actual wiring to get
     -- from the fully applied constructor to the bound pattern variables.
@@ -98,7 +100,7 @@ solve my ((src, PCon c abs):p) = do
       -- Special case for 0, so that we can call `unifyNum` instead of pattern
       -- matching using what's returned from `natConstructors`
       PrefixName [] "zero" -> do
-        unifyNum (nVar (VPar (toEnd src))) nZero
+        unifyNum mine (nVar (VPar (toEnd src))) nZero
         p <- argProblems [] (normaliseAbstractor abs) p
         (tests, sol) <- solve my p
         pure ((src, PrimLitTest (Num 0)):tests, sol)
@@ -109,6 +111,7 @@ solve my ((src, PCon c abs):p) = do
             R0 -- we don't need to wire the src in; we just need the inner stuff
             (REx ("inner", Nat) R0)
           unifyNum
+           mine
            (nVar (VPar (ExEnd (end src))))
            (relationToInner (nVar (VPar (toEnd dangling))))
           -- TODO also do wiring corresponding to relationToInner
@@ -172,6 +175,7 @@ unifys _ _ _ = error "jagged unifyArgs lists"
 -- Unify two Braty types
 unify :: Val Z -> TypeKind -> Val Z -> Checking ()
 unify l k r = do
+  mine <- mineToSolve
   -- Only complain normalised terms
   (l, r) <- (,) <$> eval S0 l <*> eval S0 r
   eqTest "unify" k l r >>= \case
@@ -185,7 +189,7 @@ unify l k r = do
         | c == c' -> do
             ks <- tlup (Kernel, c)
             unifys args (snd <$> ks) args'
-      (VNum l, VNum r, Nat) -> unifyNum l r
+      (VNum l, VNum r, Nat) -> unifyNum mine l r
       (VApp (VPar x) B0, v, _) -> instantiateMeta x v
       (v, VApp (VPar x) B0, _) -> instantiateMeta x v
       -- TODO: Handle function types
