@@ -169,40 +169,6 @@ solveConstructor my src (c, abs) ty p = do
       (tests, sol) <- solve my p
       pure ((src, PrimCtorTest c tycon node patArgWires) : tests, sol)
 
-unifys :: [Val Z] -> [TypeKind] -> [Val Z] -> Checking ()
-unifys [] [] [] = pure ()
-unifys (l:ls) (k:ks) (r:rs) = unify l k r *> unifys ls ks rs
-unifys _ _ _ = error "jagged unifyArgs lists"
-
--- Unify two Braty types
-unify :: Val Z -> TypeKind -> Val Z -> Checking ()
-unify l k r = do
-  mine <- mineToSolve
-  -- Only complain normalised terms
-  (l, r) <- (,) <$> eval S0 l <*> eval S0 r
-  eqTest "unify" k l r >>= \case
-    Right () -> pure ()
-    Left _ -> case (l, r, k) of
-      (VCon c args, VCon c' args', Star [])
-        | c == c' -> do
-            ks <- tlup (Brat, c)
-            unifys args (snd <$> ks) args'
-      (VCon c args, VCon c' args', Dollar [])
-        | c == c' -> do
-            ks <- tlup (Kernel, c)
-            unifys args (snd <$> ks) args'
-      (VNum l, VNum r, Nat) -> unifyNum mine l r
-      (VApp (VPar x) B0, v, _) -> instantiateMeta x v
-      (v, VApp (VPar x) B0, _) -> instantiateMeta x v
-      -- TODO: Handle function types
-      -- TODO: Postpone this problem instead of giving up. Stick it an a list of
-      --       equations that we hope are true and check them once we've processed
-      --       the whole `Problem`.
-      (l, r, _) -> err . UnificationError $ "Can't unify " ++ show l ++ " with " ++ show r
-
--- Solve a metavariable statically - don't do anything dynamic
--- Once a metavariable is solved, we expect to not see it again in a normal form.
-
 -- The variable must be a non-zero nat!!
 patVal :: ValPat -> [End] -> (Val Z, [End])
 -- Nat variables will only be found in a `NumPat`, not a `ValPat`
