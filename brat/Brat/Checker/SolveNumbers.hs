@@ -30,6 +30,7 @@ trail = const id
 -- numbers because they have nontrivial runtime behaviour.
 --
 -- We assume that the caller has done the occurs check and rules out trivial equations.
+-- The caller also must check we have the right to solve the End
 solveNumMeta :: End -> NumVal (VVar Z) -> Checking ()
 -- solveNumMeta e nv | trace ("solveNumMeta " ++ show e ++ " " ++ show nv) False = undefined
 solveNumMeta e nv = case (e, numVars nv) of
@@ -47,7 +48,7 @@ solveNumMeta e nv = case (e, numVars nv) of
    (_, [(idTgt, _)], [(idSrc, _)], _) <- anext "numval id" Id (S0, Some (Zy :* S0))
                                          (REx ("n", Nat) R0) (REx ("n", Nat) R0)
    defineSrc idSrc (VNum (nVar (VPar (toEnd idTgt))))
-   instantiateMeta (InEnd weeTgt) (VNum (nVar (VPar (toEnd idSrc))))
+   instantiateMeta (InEnd bigTgt) (VNum (nVar (VPar (toEnd idSrc))))
    wire (idSrc, TNat, NamedPort weeTgt "")
    let nv' = fmap (const (VPar (toEnd idSrc))) nv -- weeTgt is the only thing to replace
    bigSrc <- buildNatVal nv'
