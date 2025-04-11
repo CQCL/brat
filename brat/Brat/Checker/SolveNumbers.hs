@@ -76,7 +76,7 @@ unifyNum mine nv0 nv1 = do
 -- ...But we don't need to do any wiring here, right?
 unifyNum' :: (End -> Maybe String) -> NumVal (VVar Z) -> NumVal (VVar Z) -> Checking ()
 -- unifyNum' a b | trace ("unifyNum'\n  " ++ show a ++ "\n  " ++ show b) False = undefined
-unifyNum' mine (NumValue lup lgro) (NumValue rup rgro)
+unifyNum' mine nvl@(NumValue lup lgro) nvr@(NumValue rup rgro)
   | lup <= rup = lhsFun00 lgro (NumValue (rup - lup) rgro)
   | otherwise  = lhsFun00 rgro (NumValue (lup - rup) lgro)
  where
@@ -181,10 +181,15 @@ unifyNum' mine (NumValue lup lgro) (NumValue rup rgro)
     -- Check a numval is odd, and return its rounded down half
     oddGro :: Fun00 (VVar Z) -> Checking (NumVal (VVar Z))
     oddGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
-      Linear (VPar e) | Just loc <- mine e -> loc -! do
-        pred <- traceChecking "makePred" makePred e
-        half <- traceChecking "makeHalf" makeHalf pred
-        pure (nVar (VPar half))
+      Linear (VPar e)
+       | Just loc <- mine e -> loc -! do
+         pred <- traceChecking "makePred" makePred e
+         half <- traceChecking "makeHalf" makeHalf pred
+         pure (nVar (VPar half))
+       | otherwise -> do
+         mkYield "oddGro" (S.singleton e)
+         nv <- quoteNum Zy <$> numEval S0 mono
+         demandEven (nPlus 1 nv) -- Is this dumb?
       -- full(n + 1) = 1 + 2 * full(n)
       -- hence, full(n) is the rounded down half
       Full sm -> nFull <$> traceChecking "demandSucc" demandSucc sm
