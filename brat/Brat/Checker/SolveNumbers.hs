@@ -31,9 +31,9 @@ trail = const id
 --
 -- We assume that the caller has done the occurs check and rules out trivial equations.
 -- The caller also must check we have the right to solve the End
-solveNumMeta :: End -> NumVal (VVar Z) -> Checking ()
--- solveNumMeta e nv | trace ("solveNumMeta " ++ show e ++ " " ++ show nv) False = undefined
-solveNumMeta e nv = case (e, numVars nv) of
+solveNumMeta :: (End -> Maybe String) -> End -> NumVal (VVar Z) -> Checking ()
+solveNumMeta _ e nv | trace ("solveNumMeta " ++ show e ++ " " ++ show nv) False = undefined
+solveNumMeta mine e nv = case (e, numVars nv) of
  -- Compute the thing that the rhs should be based on the src, and instantiate src to that
  (ExEnd src,  [InEnd _tgt]) -> do
    -- Compute the value of the `tgt` variable from the known `src` value by inverting nv
@@ -45,15 +45,16 @@ solveNumMeta e nv = case (e, numVars nv) of
 
  -- Both targets, we need to create the thing that they both derive from
  (InEnd bigTgt, [InEnd weeTgt]) -> do
-   (_, [(idTgt, _)], [(idSrc, _)], _) <- anext "numval id" Id (S0, Some (Zy :* S0))
+     (_, [(idTgt, _)], [(idSrc, _)], _) <- anext "numval id" Id (S0, Some (Zy :* S0))
                                          (REx ("n", Nat) R0) (REx ("n", Nat) R0)
-   defineSrc idSrc (VNum (nVar (VPar (toEnd idTgt))))
-   instantiateMeta (InEnd bigTgt) (VNum (nVar (VPar (toEnd idSrc))))
-   wire (idSrc, TNat, NamedPort weeTgt "")
-   let nv' = fmap (const (VPar (toEnd idSrc))) nv -- weeTgt is the only thing to replace
-   bigSrc <- buildNatVal nv'
-   instantiateMeta (InEnd bigTgt) (VNum nv')
-   wire (bigSrc, TNat, NamedPort bigTgt "")
+     defineSrc idSrc (VNum (nVar (VPar (toEnd idTgt))))
+     let nv' = fmap (const (VPar (toEnd idSrc))) nv -- weeTgt is the only thing to replace
+     bigSrc <- buildNatVal nv'
+     instantiateMeta (InEnd bigTgt) (VNum nv')
+     wire (bigSrc, TNat, NamedPort bigTgt "")
+     unifyNum mine (nVar (VPar (toEnd idSrc))) (nVar (VPar (toEnd weeTgt)))
+   
+
 
  -- RHS is constant or Src, wire it into tgt
  (InEnd tgt,  _) -> do
@@ -120,14 +121,14 @@ unifyNum' mine nvl@(NumValue lup lgro) nvr@(NumValue rup rgro)
   lhsMono (Linear (VPar e)) num = case mine e of
     Just loc -> do
       throwLeft (doesntOccur e (VNum num))  -- too much?
-      loc -! solveNumMeta e num -- really?
+      loc -! solveNumMeta mine e num -- really?
     _ -> mkYield "lhsMono" (S.singleton e) >>
          unifyNum mine (nVar (VPar e)) num
   lhsMono (Full sm) (NumValue 0 (StrictMonoFun (StrictMono 0 (Full sm'))))
     = lhsFun00 (StrictMonoFun sm) (NumValue 0 (StrictMonoFun sm'))
   lhsMono m@(Full _) (NumValue 0 gro) = lhsFun00 gro (NumValue 0 (StrictMonoFun (StrictMono 0 m)))
   lhsMono (Full sm) (NumValue up gro) = do
-    smPred <- traceChecking "lhsMono demandSucc" demandSucc sm
+    smPred <- traceChecking "lhsMono demandSucc" demandSucc (NumValue 0 (StrictMonoFun sm))
     sm <- numEval S0 sm
     -- traceM $ "succ now " ++ show (quoteNum Zy sm)
     unifyNum mine (n2PowTimes 1 (nFull smPred)) (NumValue (up - 1) gro)
@@ -135,28 +136,35 @@ unifyNum' mine nvl@(NumValue lup lgro) nvr@(NumValue rup rgro)
   demand0 :: NumVal (VVar Z) -> Checking ()
   demand0 (NumValue 0 Constant0) = pure ()
   demand0 n@(NumValue 0 (StrictMonoFun (StrictMono _ mono))) = case mono of
-    Linear (VPar e) | Just _ <- mine e -> solveNumMeta e (nConstant 0)
+    Linear (VPar e) | Just _ <- mine e -> solveNumMeta mine e (nConstant 0)
     Full sm -> demand0 (NumValue 0 (StrictMonoFun sm))
     _ -> err . UnificationError $ "Couldn't force " ++ show n ++ " to be 0"
   demand0 n = err . UnificationError $ "Couldn't force " ++ show n ++ " to be 0"
 
   -- Complain if a number isn't a successor, else return its predecessor
-  demandSucc :: StrictMono (VVar Z) -> Checking (NumVal (VVar Z))
+  demandSucc :: NumVal (VVar Z) -> Checking (NumVal (VVar Z))
       --   2^k * x
       -- = 2^k * (y + 1)
       -- = 2^k + 2^k * y
       -- Hence, the predecessor is (2^k - 1) + (2^k * y)
-  demandSucc (StrictMono k (Linear (VPar e))) | Just loc <- mine e = do
-    pred <- loc -! traceChecking "makePred" makePred e
-    pure (nPlus ((2^k) - 1) (nVar (VPar pred)))
+  demandSucc (NumValue k x) | k > 0 = pure (NumValue (k - 1) x)
+  demandSucc (NumValue 0 (StrictMonoFun (mono@(StrictMono k (Linear (VPar e))))))
+    | Just loc <- mine e = do
+      pred <- loc -! traceChecking "makePred" makePred e
+      pure (nPlus ((2^k) - 1) (nVar (VPar pred)))
 
   --   2^k * full(n + 1)
   -- = 2^k * (1 + 2 * full(n))
   -- = 2^k + 2^(k + 1) * full(n)
 
+    | otherwise = do
+      mkYield "demandSucc" (S.singleton e)
+      nv <- quoteNum Zy <$> numEval S0 mono
+      demandSucc nv
+
   -- if it's not "mine" should we wait?
-  demandSucc x@(StrictMono k (Full nPlus1)) = do
-    n <- traceChecking "demandSucc" demandSucc nPlus1
+  demandSucc (NumValue 0 (StrictMonoFun x@(StrictMono k (Full nPlus1)))) = do
+    n <- traceChecking "demandSucc" demandSucc (NumValue 0 (StrictMonoFun nPlus1))
     -- foo <- numEval S0 x
     -- traceM $ "ds: " ++ show x ++ " -> " ++ show (quoteNum Zy foo)
     pure $ nPlus ((2 ^ k) - 1) $ n2PowTimes (k + 1) $ nFull n
@@ -165,32 +173,26 @@ unifyNum' mine nvl@(NumValue lup lgro) nvr@(NumValue rup rgro)
   -- Complain if a number isn't even, otherwise return half
   demandEven :: NumVal (VVar Z) -> Checking (NumVal (VVar Z))
   demandEven n@(NumValue up gro) = case up `divMod` 2 of
-    (up, 0) -> NumValue up <$> traceChecking "evenGro" evenGro gro
-    (up, 1) -> nPlus (up + 1) <$> traceChecking "oddGro" oddGro gro
+    (up, 0) -> nPlus up <$> traceChecking "evenGro" evenGro gro
+    (up, 1) -> nPlus (up + 1) <$> traceChecking "oddGro" oddGro (NumValue 0 gro)
    where
-    evenGro :: Fun00 (VVar Z) -> Checking (Fun00 (VVar Z))
-    evenGro Constant0 = pure Constant0
+    evenGro :: Fun00 (VVar Z) -> Checking (NumVal (VVar Z))
+    evenGro Constant0 = pure $ nConstant 0
     evenGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
-      Linear (VPar e) | Just loc <- mine e -> loc -! do
-        -- traceM $ "Calling makeHalf (" ++ show e ++ ")"
-        half <- traceChecking "makeHalf" makeHalf e
-        pure (StrictMonoFun (StrictMono 0 (Linear (VPar half))))
-      Full sm -> StrictMonoFun sm <$ demand0 (NumValue 0 (StrictMonoFun sm))
-    evenGro (StrictMonoFun (StrictMono n mono)) = pure (StrictMonoFun (StrictMono (n - 1) mono))
+      Linear (VPar e)
+        | Just loc <- mine e -> loc -! do
+          -- traceM $ "Calling makeHalf (" ++ show e ++ ")"
+          half <- traceChecking "makeHalf" makeHalf e
+          pure (NumValue 0 (StrictMonoFun (StrictMono 0 (Linear (VPar half)))))
+	| otherwise -> do
+	  mkYield "evenGro" (S.singleton e)
+	  nv <- quoteNum Zy <$> numEval S0 mono
+	  demandEven nv
+      Full sm -> nConstant 0 <$ demand0 (NumValue 0 (StrictMonoFun sm))
+    evenGro (StrictMonoFun (StrictMono n mono)) = pure (NumValue 0 (StrictMonoFun (StrictMono (n - 1) mono)))
 
     -- Check a numval is odd, and return its rounded down half
-    oddGro :: Fun00 (VVar Z) -> Checking (NumVal (VVar Z))
-    oddGro (StrictMonoFun (StrictMono 0 mono)) = case mono of
-      Linear (VPar e)
-       | Just loc <- mine e -> loc -! do
-         pred <- traceChecking "makePred" makePred e
-         half <- traceChecking "makeHalf" makeHalf pred
-         pure (nVar (VPar half))
-       | otherwise -> do
-         mkYield "oddGro" (S.singleton e)
-         nv <- quoteNum Zy <$> numEval S0 mono
-         demandEven (nPlus 1 nv)
-      -- full(n + 1) = 1 + 2 * full(n)
-      -- hence, full(n) is the rounded down half
-      Full sm -> nFull <$> traceChecking "demandSucc" demandSucc sm
-    oddGro _ = err . UnificationError $ "Can't force " ++ show n ++ " to be even"
+    oddGro :: NumVal (VVar Z) -> Checking (NumVal (VVar Z))
+    oddGro x = do
+     pred <- demandSucc x
+     demandEven pred
