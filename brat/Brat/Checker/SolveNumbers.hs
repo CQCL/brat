@@ -189,7 +189,7 @@ unifyNum' mine nvl@(NumValue lup lgro) nvr@(NumValue rup rgro)
        | otherwise -> do
          mkYield "oddGro" (S.singleton e)
          nv <- quoteNum Zy <$> numEval S0 mono
-         demandEven (nPlus 1 nv) -- Is this dumb?
+         demandEven (nPlus 1 nv)
       -- full(n + 1) = 1 + 2 * full(n)
       -- hence, full(n) is the rounded down half
       Full sm -> nFull <$> traceChecking "demandSucc" demandSucc sm
