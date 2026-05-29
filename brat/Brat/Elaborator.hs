@@ -197,15 +197,15 @@ elaborate' FUnderscore = Left (dumbErr (InternalError "Unexpected '_'"))
 elaborate' FFanOut = pure $ SomeRaw' RFanOut
 elaborate' FFanIn = pure $ SomeRaw' RFanIn
 
-elaborateKindOrFlat :: WC (KindOr Flat) -> Either Error (WC (KindOr (Raw Chk Noun)))
-elaborateKindOrFlat (WC fc (Left k)) = pure (WC fc (Left k))
-elaborateKindOrFlat (WC fc (Right ty)) = fmap Right <$> elaborateChkNoun (WC fc ty)
+elaborateBratType :: WC (KindOr Flat) -> Either Error (WC (KindOr (Raw Chk Noun)))
+elaborateBratType (WC fc (Left k)) = pure (WC fc (Left k))
+elaborateBratType (WC fc (Right ty)) = fmap Right <$> elaborateChkNoun (WC fc ty)
 
 elabSig :: Traversable t => t (TypeRowElem (WC Flat)) -> Either Error (t (TypeRowElem (WC (Raw Chk Noun))))
 elabSig = traverse (traverse elaborateChkNoun)
 
 elabIO :: Traversable t => t FlatIO -> Either Error (t (TypeRowElem (WC (KindOr (Raw Chk Noun)))))
-elabIO = traverse (traverse elaborateKindOrFlat)
+elabIO = traverse (traverse elaborateBratType)
 
 elabBody :: FBody -> FC -> Either Error (FunBody Raw Noun)
 elabBody (FClauses cs) fc = ThunkOf . WC fc . Clauses <$> traverse elab1Clause cs
