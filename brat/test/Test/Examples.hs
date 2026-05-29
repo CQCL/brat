@@ -41,15 +41,15 @@ instance IsTest ValidationTest where
     (exitCode, stdout, stderr) <- readCreateProcessWithExitCode (shell $ "cat " ++ outFile ++ " | hugr_validator") ""
     let (outcome, msg1, msg2) = case exitCode of
           ExitSuccess -> (Success, "Validated hugr", "PASSED")
-          _ -> case lookupOption @IgnoreValidation opts of
-            IgnoreValidation False -> (Failure TestDepFailed, stderr, "FAILED")
+          _ -> case lookupOption @ValidationConfig opts of
+            RunValidation -> (Failure TestDepFailed, stderr, "FAILED")
             -- should we include the error message in the output for the skipped case? It might be a useful diagnostic, or just noise.
-            IgnoreValidation True  -> (Success, "Validation failed", yellowText "SKIPPED")
+            IgnoreValidation -> (Success, "Validation failed", yellowText "SKIPPED")
     pure $ Result outcome msg1 msg2 0.0 noResultDetails
    where
     yellowText text = setSGRCode [SetColor Foreground Vivid Yellow] ++ text ++ setSGRCode [Reset]
 
-    testOptions = pure [Option (Proxy :: Proxy ValidationConfig)]
+  testOptions = pure [Option (Proxy :: Proxy ValidationConfig)]
 
 outputDir :: FilePath
 outputDir = "test" </> "examples"
