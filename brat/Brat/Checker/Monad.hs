@@ -272,7 +272,7 @@ handler (Req s k) ctx
       AskNS -> error "AskNS in handler, should only happen under `-!`"
       Throw err -> Left err
       LogHole hole -> do (v,ctx,holes) <- handler (k ()) ctx
-                         return (v,ctx,(hole:holes))
+                         return (v,ctx,hole:holes)
       AskFC -> error "AskFC in handler - shouldn't happen, should always be in localFC"
       VLup s -> handler (k $ M.lookup s (globalVEnv ctx)) ctx
       ALup s -> handler (k $ M.lookup s (aliasTable ctx)) ctx
