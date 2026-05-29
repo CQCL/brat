@@ -61,9 +61,9 @@ interpreterOutputPrefix = "Finished "
 
 getExamplesTests :: IO TestTree
 getExamplesTests =  do
-  interpreterInPath <- checkValidatorInPath
+  validatorAvailable <- checkValidatorInPath
   paths <- findByExtension [".brat"] "examples"
-  testGroup "examples" <$> mapM (mkTest interpreterInPath) paths
+  testGroup "examples" <$> mapM (mkTest validatorAvailable) paths
  where
   mkTest :: Bool -> FilePath -> IO TestTree
   mkTest interpreterInPath path = readFile path <&> \cts ->
@@ -122,9 +122,7 @@ interpreterTestsForExample interpreterInPath path start =
 checkValidatorInPath :: IO Bool
 checkValidatorInPath = do
   (exitCode, output, _) <- readCreateProcessWithExitCode (shell "hugr_validator --version") ""
-  if exitCode == ExitSuccess
-  then pure ("hugr_validator 0." `isPrefixOf` output)
-  else pure False
+  pure (exitCode == ExitSuccess && "hugr_validator 0." `isPrefixOf` output)
 
 validateTest :: FilePath -> Assertion
 validateTest file = do
