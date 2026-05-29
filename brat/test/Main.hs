@@ -5,7 +5,7 @@ import Test.Tasty.Options (OptionDescription(Option))
 import Test.Tasty.Runners (defaultMainWithIngredients, listingTests)
 
 import Test.Abstractor
-import Test.Config (IgnoreValidation)
+import Test.Config (ValidationConfig)
 import Test.Examples
 import Test.Graph
 import Test.Elaboration
@@ -72,7 +72,7 @@ main = do
        ]
   -- The default `consoleTestReporter` adds a hook giving a pattern to run with
   -- `-p` to rerun skipped tests, which adds more noise
-  defaultMainWithIngredients [includingOptions [Option (Proxy :: Proxy IgnoreValidation)]
+  defaultMainWithIngredients [includingOptions [Option (Proxy :: Proxy ValidationConfig)]
                              ,listingTests
                              ,consoleTestReporterWithHook (\_ r -> pure r)
                              ] $

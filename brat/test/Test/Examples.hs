@@ -2,7 +2,7 @@ module Test.Examples (getExamplesTests) where
 
 import Test.Checking (parseAndCheckNamed)
 import Test.Compile.Hugr (compileToOutput, getHoles)
-import Test.Config (IgnoreValidation(..))
+import Test.Config (ValidationConfig(..))
 import Brat.Load (parseFile)
 import Brat.Machine (runInterpreter)
 import Data.HugrGraph (to_json)
@@ -48,7 +48,8 @@ instance IsTest ValidationTest where
     pure $ Result outcome msg1 msg2 0.0 noResultDetails
    where
     yellowText text = setSGRCode [SetColor Foreground Vivid Yellow] ++ text ++ setSGRCode [Reset]
-  testOptions = pure [Option (Proxy :: Proxy IgnoreValidation)]
+
+    testOptions = pure [Option (Proxy :: Proxy ValidationConfig)]
 
 outputDir :: FilePath
 outputDir = "test" </> "examples"
