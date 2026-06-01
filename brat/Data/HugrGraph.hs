@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Data.HugrGraph(NodeId,
-                      HugrGraph(..), -- do NOT export contents, keep abstract
+                      HugrGraph(..), -- TODO: do NOT export contents, keep abstract
                       new,
                       freshNode,
                       getRoot, getNodes,

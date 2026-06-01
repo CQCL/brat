@@ -66,9 +66,8 @@ printAST printRaw printAST file = do
 writeDot :: [FilePath] -> String -> String -> IO ()
 writeDot libDirs file out = do
   env <- runExceptT $ loadFilename root libDirs file
-  -- Discard captureSets; perhaps we could incorporate into the graph
-  (_, _, _, graph, _) <- eitherIO env
-  writeFile out (toDotString graph)
+  (_, _, _, graph, cs) <- eitherIO env
+  writeFile out (toDotString graph cs)
 {-
  where
   isMain (PrefixName [] "main", _) = True
@@ -90,9 +89,9 @@ compileToGraph ns libDirs file = do
 -- Map from box name to (compiled hugr, list of hole nodes in it)
 type CompilationResult = M.Map Name (HugrGraph NodeId, [NodeId])
 
-compileFile :: [FilePath] -> String -> IO (Either CompilingHoles CompilationResult)
-compileFile libDirs file = do
-  (newRoot, (declEnv, holes, st, outerGraph, _)) <- compileToGraph root libDirs file
+compileFile :: Namespace -> [FilePath] -> String -> IO (Either CompilingHoles CompilationResult)
+compileFile ns libDirs file = do
+  (newRoot, (declEnv, holes, st, outerGraph, _)) <- compileToGraph ns libDirs file
   let venv = M.map fst declEnv
   case holes of
     [] -> let box_decls = (M.keys declEnv) >>= (findBoxes venv outerGraph)
@@ -115,7 +114,7 @@ compileFile libDirs file = do
     | otherwise = False
 
 compileAndPrintFile :: [FilePath] -> String -> IO ()
-compileAndPrintFile libDirs file = compileFile libDirs file >>= \case
+compileAndPrintFile libDirs file = compileFile root libDirs file >>= \case
   Right hs -> for_ (M.toList hs) $ \(n, (hugr, splices)) -> do
     putStrLn $ "Compiled box: " ++ show n
     BS.putStr (to_json hugr)

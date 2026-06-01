@@ -1,8 +1,10 @@
 module Test.Compile.Hugr (compileToOutput, getHoles) where
 
 import Control.Monad (forM)
-import qualified Data.Map as M
 import qualified Data.ByteString as BS
+import Data.List (sort)
+import qualified Data.Map as M
+import Data.Maybe (isJust)
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath
 import Test.Tasty
@@ -10,9 +12,8 @@ import Test.Tasty.HUnit
 
 import Data.Hugr (isHole)
 import Data.HugrGraph (to_json, getOp, HugrGraph, getNodes)
-import Data.List (sort)
-import Data.Maybe (isJust)
 import Brat.Compiler (compileFile, CompilingHoles(..))
+import Brat.Naming (root)
 
 prefix = "test/compilation"
 outputDir = prefix </> "output"
@@ -20,7 +21,7 @@ outputDir = prefix </> "output"
 compileToOutput :: String -> FilePath -> TestTree
 compileToOutput name file = testCaseInfo name $ do
     createDirectoryIfMissing False outputDir
-    compileFile [] file >>= \case
+    compileFile root [] file >>= \case
         Right hs -> mconcat <$> (forM (M.toList hs) $ \(boxName, (hugr, holes)) -> do
             sort (getHoles hugr) @?= sort holes
             -- ignore splices for now
