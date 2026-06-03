@@ -5,15 +5,30 @@ import qualified Data.ByteString as BS
 import Data.List (sort)
 import qualified Data.Map as M
 import Data.Maybe (isJust)
+import System.Console.ANSI (Color(..), ColorIntensity(..), ConsoleLayer(..), SGR(..), setSGRCode)
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath
 import Test.Tasty
 import Test.Tasty.HUnit
+import Test.Tasty.Providers (IsTest(..))
+import Test.Tasty.Providers.ConsoleFormat (noResultDetails)
+import Test.Tasty.Runners (FailureReason(..), Result(..), Outcome(..), TestTree(..))
 
 import Data.Hugr (isHole)
 import Data.HugrGraph (to_json, getOp, HugrGraph, getNodes)
 import Brat.Compiler (compileFile, CompilingHoles(..))
 import Brat.Naming (root)
+
+data HugrTest = Validate TestTree | Skipped String | SkipNoValidator
+
+instance IsTest HugrTest where
+  -- BAD: Uses implementation
+  run opts (Validate (SingleTest _ t)) f = run opts t f
+  run opts (Skipped msg) f = pure $ Result (Failure TestDepFailed) msg (yellowText "SKIPPED") 0.0 noResultDetails
+   where
+    yellowText text = setSGRCode [SetColor Foreground Vivid Yellow] ++ text ++ setSGRCode [Reset]
+
+  testOptions = pure []
 
 prefix = "test/compilation"
 outputDir = prefix </> "output"
