@@ -42,7 +42,7 @@ fn main() {
             }
         }
     } else if num_args == 2 && args[1] == "--version" {
-        println!("hugr_validator 0.4.1");
+        println!("hugr_validator 0.5.0");
         exit(0);
     } else {
         println!("hugr_validator [--version] -- [HUGR]");

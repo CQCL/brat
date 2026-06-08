@@ -1,15 +1,14 @@
 module Test.Examples (getExamplesTests) where
 
+import Brat.Compile.Model (toModelEnvelope)
+import Brat.Load (parseFile)
+import Brat.Machine (runInterpreter)
+import Brat.Naming (root, split)
 import Test.Checking (parseAndCheckNamed)
 import Test.Compile.Hugr (compileToOutput, getHoles)
 import Test.Config (ValidationConfig(..))
-import Brat.Load (parseFile)
-import Brat.Machine (runInterpreter)
-import Brat.Naming (root)
-import Data.HugrGraph (to_json)
+import Test.ValidatorVersion
 
-import qualified Data.ByteString as BS
-import Data.ByteString.Lazy (ByteString)
 import Data.Char (isAlphaNum)
 import Data.Functor ((<&>))
 import Data.List (isPrefixOf)
@@ -32,20 +31,25 @@ import Test.Tasty.ExpectedFailure
 
 --import Debug.Trace
 
-data ValidationTest = VTest (IO ByteString) FilePath
+expectedValidatorVersion :: Version
+expectedValidatorVersion = Version (0,5,0)
+
+data ValidationTest = VTest (IO String) FilePath ValidatorStatus
 
 instance IsTest ValidationTest where
-  run opts (VTest hugr outFile) _ = do
+  run opts (VTest hugr outFile validatorStatus) _ = do
     hugr_bytes <- hugr
     createDirectoryIfMissing True (takeDirectory outFile)
-    BS.writeFile outFile $! (BS.toStrict $ hugr_bytes)
+    writeFile outFile $! hugr_bytes
     (exitCode, stdout, stderr) <- readCreateProcessWithExitCode (shell $ "cat " ++ outFile ++ " | hugr_validator") ""
-    let (outcome, msg1, msg2) = case exitCode of
-          ExitSuccess -> (Success, "Validated hugr", "PASSED")
-          _ -> case lookupOption @ValidationConfig opts of
-            RunValidation -> (Failure TestDepFailed, stderr, "FAILED")
-            -- should we include the error message in the output for the skipped case? It might be a useful diagnostic, or just noise.
-            IgnoreValidation -> (Success, "Validation failed", yellowText "SKIPPED")
+    let (outcome, msg1, msg2) = case (exitCode, validatorStatus, lookupOption @ValidationConfig opts) of
+          -- should we include the error message in the output for the skipped case? It might be a useful diagnostic, or just noise.
+          (ExitSuccess, Good, _) -> (Success, "Validated hugr", "PASSED")
+          (_, _, IgnoreValidation) -> (Success, "Skipped validation", yellowText "SKIPPED")
+          (ExitFailure _, Good, _) -> (Failure TestDepFailed, stdout, "FAILED")
+          (_, NotInPath, _) -> (Failure TestDepFailed, "Validation failed", "hugr_validator not found")
+          (_, BadVersion v, _) -> (Failure TestDepFailed, "hugr_validator at wrong version", "Version is " ++ show v ++ ". Need " ++ show expectedValidatorVersion)
+          (_, MalformedOutput err, _) -> (Failure TestDepFailed, "hugr_validator gave unexpected output", err)
     pure $ Result outcome msg1 msg2 0.0 noResultDetails
    where
     yellowText text = setSGRCode [SetColor Foreground Vivid Yellow] ++ text ++ setSGRCode [Reset]
@@ -63,12 +67,12 @@ interpreterOutputPrefix = "Finished "
 
 getExamplesTests :: IO TestTree
 getExamplesTests =  do
-  validatorAvailable <- checkValidatorInPath
+  validatorStatus <- checkValidatorInPath
   paths <- findByExtension [".brat"] "examples"
-  testGroup "examples" <$> mapM (mkTest validatorAvailable) paths
+  testGroup "examples" <$> mapM (mkTest validatorStatus) paths
  where
-  mkTest :: Bool -> FilePath -> IO TestTree
-  mkTest interpreterInPath path = readFile path <&> \cts ->
+  mkTest :: ValidatorStatus -> FilePath -> IO TestTree
+  mkTest validatorStatus path = readFile path <&> \cts ->
     let parseTest = testCase "parsing" $ do
           case parseFile path cts of
             Left err -> assertFailure (show err)
@@ -80,7 +84,7 @@ getExamplesTests =  do
          testGroup (show path) [parseTest, expectFail checkTest]
        else
         let execStrings = snd <$> T.breakOnAll execTestPrefix (T.pack cts)
-            interpreterTests = concat $ interpreterTestsForExample interpreterInPath path <$> execStrings
+            interpreterTests = concat $ interpreterTestsForExample validatorStatus path <$> execStrings
             compileTest = compileToOutput "compilation" path
             checkAndCompile = if isPrefixOf "--!xfail-compilation" cts
               then [checkTest, expectFail compileTest] else [compileTest]
@@ -90,8 +94,8 @@ getExamplesTests =  do
               (checkAndCompile ++ [testGroup "execution" intTests])
 
 
-interpreterTestsForExample :: Bool -> FilePath -> T.Text -> [TestTree]
-interpreterTestsForExample interpreterInPath path start =
+interpreterTestsForExample :: ValidatorStatus -> FilePath -> T.Text -> [TestTree]
+interpreterTestsForExample validatorStatus path start =
   let (testLine, newlineDefn) = T.breakOn (T.pack "\n") start
       -- this repeats/roughly duplicates the logic for "identifiers" in the parser
       func_name = T.unpack $ T.takeWhile (\c -> isAlphaNum c || c == '_' || c == '\'') (T.drop 1 newlineDefn)
@@ -101,15 +105,15 @@ interpreterTestsForExample interpreterInPath path start =
       -- "-hugr\n" (checks no splices, outputs hugr for validation)
       restLine = fromJust $ T.stripPrefix execTestPrefix testLine
   in if (T.pack "-hugr") == restLine
-     then let outFile = outputDir </> dropExtension (takeFileName path) ++ "_" ++ func_name <.> "json"
+     then let outFile = outputDir </> dropExtension (takeFileName path) ++ "_" ++ func_name <.> "hugr"
               makeHugr = do
                 -- this completely recompiles the file for each test, which is pretty bad
                 hugr <- runInterpreter root [] path func_name >>= \case
                   Left s -> assertFailure $ "Expected hugr, got " ++ T.unpack s
                   Right hugr -> pure hugr
                 getHoles hugr @?= []
-                pure $ to_json hugr
-          in [singleTest func_name (VTest makeHugr outFile)]
+                pure $ toModelEnvelope (fst (split "v" root)) hugr
+          in [singleTest func_name (VTest makeHugr outFile validatorStatus)]
      else let (is_xfail, eOut) = case T.stripPrefix (T.pack "-xfail ") restLine of
                 Just out -> (True, out)
                 Nothing | Just out <- T.stripPrefix (T.pack " ") restLine -> (False, out)
@@ -121,10 +125,23 @@ interpreterTestsForExample interpreterInPath path start =
               Left t -> T.unpack t @?= expectedOutput
               Right _ -> assertFailure $ "Expected output: '" ++ expectedOutput ++ "' but got a hugr!"
 
-checkValidatorInPath :: IO Bool
+checkValidatorInPath :: IO ValidatorStatus
 checkValidatorInPath = do
   (exitCode, output, _) <- readCreateProcessWithExitCode (shell "hugr_validator --version") ""
-  pure (exitCode == ExitSuccess && "hugr_validator 0." `isPrefixOf` output)
+  if exitCode == ExitSuccess
+  then pure $ validVersion (parseValidatorVersion output) output
+  else pure NotInPath
+ where
+  validVersion :: Maybe Version -> (String -> ValidatorStatus)
+  validVersion Nothing = MalformedOutput
+  validVersion (Just act@(Version (maj, min, patch))) =
+    let Version (majExp, minExp, patchExp) = expectedValidatorVersion in
+      const $
+      if (maj > majExp || (maj == majExp && (min > minExp || (min == minExp && patch >= patchExp))))
+      then Good
+      else BadVersion act
+
+
 
 validateTest :: FilePath -> Assertion
 validateTest file = do

@@ -178,7 +178,8 @@ test-suite tests
                        Test.Substitution,
                        Test.Syntax.Let,
                        Test.TypeArith,
-                       Test.Util
+                       Test.Util,
+                       Test.ValidatorVersion
 
   build-depends:       aeson,
                        base <5,
