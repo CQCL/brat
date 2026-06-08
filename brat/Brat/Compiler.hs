@@ -9,6 +9,7 @@ module Brat.Compiler (printAST
 
 import Brat.Checker.Types (TypedHole, Modey(Kerny), VEnv)
 import Brat.Compile.Hugr
+import Brat.Compile.Model (toModelEnvelope)
 import Brat.Dot (toDotString)
 import Brat.Elaborator
 import Brat.Error
@@ -24,9 +25,8 @@ import Control.Monad (forM, when)
 import Control.Monad.Except
 import Data.List (intercalate)
 import qualified Data.Map as M
-import qualified Data.ByteString.Lazy as BS
 import Data.Foldable (for_)
-import Data.HugrGraph (HugrGraph, NodeId, to_json)
+import Data.HugrGraph (HugrGraph, NodeId)
 import System.Exit (die)
 
 printDeclsHoles :: [FilePath] -> String -> IO ()
@@ -117,6 +117,6 @@ compileAndPrintFile :: [FilePath] -> String -> IO ()
 compileAndPrintFile libDirs file = compileFile root libDirs file >>= \case
   Right hs -> for_ (M.toList hs) $ \(n, (hugr, splices)) -> do
     putStrLn $ "Compiled box: " ++ show n
-    BS.putStr (to_json hugr)
+    putStrLn (toModelEnvelope (fst (split "v" root)) hugr)
     putStrLn $ "With splices: " ++ show splices
   Left err -> die (show err)
