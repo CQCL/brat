@@ -1,7 +1,7 @@
 module Test.Examples (getExamplesTests) where
 
 import Test.Checking (parseAndCheckNamed)
-import Test.Compile.Hugr (compileToOutput, getHoles)
+import Test.Compile.Hugr (compileToOutput, getHoles, ValidationTest(..))
 import Test.Config (ValidationConfig(..))
 import Brat.Load (parseFile)
 import Brat.Machine (runInterpreter)
@@ -24,32 +24,12 @@ import Test.Tasty
 import Test.Tasty.Providers
 import Test.Tasty.Providers.ConsoleFormat (noResultDetails)
 import Test.Tasty.HUnit
-import Test.Tasty.Options (lookupOption, OptionDescription(..))
+import Test.Tasty.Options (OptionDescription(..))
 import Test.Tasty.Runners (FailureReason(..), Outcome(..), Result(..))
 import Test.Tasty.Silver
 import Test.Tasty.ExpectedFailure
 
 --import Debug.Trace
-
-data ValidationTest = VTest (IO ByteString) FilePath
-
-instance IsTest ValidationTest where
-  run opts (VTest hugr outFile) _ = do
-    hugr_bytes <- hugr
-    createDirectoryIfMissing True (takeDirectory outFile)
-    BS.writeFile outFile $! (BS.toStrict $ hugr_bytes)
-    (exitCode, stdout, stderr) <- readCreateProcessWithExitCode (shell $ "cat " ++ outFile ++ " | hugr_validator") ""
-    let (outcome, msg1, msg2) = case exitCode of
-          ExitSuccess -> (Success, "Validated hugr", "PASSED")
-          _ -> case lookupOption @ValidationConfig opts of
-            RunValidation -> (Failure TestDepFailed, stderr, "FAILED")
-            -- should we include the error message in the output for the skipped case? It might be a useful diagnostic, or just noise.
-            IgnoreValidation -> (Success, "Validation failed", yellowText "SKIPPED")
-    pure $ Result outcome msg1 msg2 0.0 noResultDetails
-   where
-    yellowText text = setSGRCode [SetColor Foreground Vivid Yellow] ++ text ++ setSGRCode [Reset]
-
-  testOptions = pure [Option (Proxy :: Proxy ValidationConfig)]
 
 outputDir :: FilePath
 outputDir = "test" </> "examples"
