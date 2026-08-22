@@ -1,31 +1,20 @@
 module Test.Examples (getExamplesTests) where
 
 import Test.Checking (parseAndCheckNamed)
-import Test.Compile.Hugr (compileToOutput, getHoles, ValidationTest(..))
-import Test.Config (ValidationConfig(..))
+import Test.Compile.Hugr (compileToOutput, ValidationTest(..))
 import Brat.Load (parseFile)
 import Brat.Machine (runInterpreter)
-import Data.HugrGraph (to_json)
 
-import qualified Data.ByteString as BS
-import Data.ByteString.Lazy (ByteString)
 import Data.Char (isAlphaNum)
-import Data.Functor ((<&>))
 import Data.List (isPrefixOf)
 import Data.Maybe (fromJust)
-import Data.Proxy
 import qualified Data.Text.Lazy as T
-import System.Console.ANSI (Color(..), ColorIntensity(..), ConsoleLayer(..), SGR(..), setSGRCode)
-import System.Directory (createDirectoryIfMissing)
 import System.Exit (ExitCode(..))
 import System.FilePath
 import System.Process (readCreateProcessWithExitCode, shell)
 import Test.Tasty
 import Test.Tasty.Providers
-import Test.Tasty.Providers.ConsoleFormat (noResultDetails)
 import Test.Tasty.HUnit
-import Test.Tasty.Options (OptionDescription(..))
-import Test.Tasty.Runners (FailureReason(..), Outcome(..), Result(..))
 import Test.Tasty.Silver
 import Test.Tasty.ExpectedFailure
 
@@ -47,23 +36,23 @@ getExamplesTests =  do
   testGroup "examples" <$> mapM (mkTest validatorAvailable) paths
  where
   mkTest :: Bool -> FilePath -> IO TestTree
-  mkTest interpreterInPath path = readFile path <&> \cts ->
+  mkTest interpreterInPath path = readFile path >>= \cts ->
     let parseTest = testCase "parsing" $ do
           case parseFile path cts of
             Left err -> assertFailure (show err)
             Right _ -> return () -- OK
         checkTest = parseAndCheckNamed "checking" [] path
     in if isPrefixOf "--!xfail-parsing" cts then
-         testGroup (show path) [expectFail parseTest]
+         pure $ testGroup (show path) [expectFail parseTest]
        else if isPrefixOf "--!xfail-checking" cts then
-         testGroup (show path) [parseTest, expectFail checkTest]
-       else
+         pure $ testGroup (show path) [parseTest, expectFail checkTest]
+       else do
         let execStrings = snd <$> T.breakOnAll execTestPrefix (T.pack cts)
             interpreterTests = concat $ interpreterTestsForExample interpreterInPath path <$> execStrings
-            compileTest = compileToOutput "compilation" path
-            checkAndCompile = if isPrefixOf "--!xfail-compilation" cts
+        compileTest <- compileToOutput "compilation" path
+        let checkAndCompile = if isPrefixOf "--!xfail-compilation" cts
               then [checkTest, expectFail compileTest] else [compileTest]
-        in case interpreterTests of
+        pure $ case interpreterTests of
           [] -> testGroup (show path) checkAndCompile
           intTests -> sequentialTestGroup path AllSucceed
               (checkAndCompile ++ [testGroup "execution" intTests])
@@ -86,8 +75,7 @@ interpreterTestsForExample interpreterInPath path start =
                 hugr <- runInterpreter [] path func_name >>= \case
                   Left s -> assertFailure $ "Expected hugr, got " ++ T.unpack s
                   Right hugr -> pure hugr
-                getHoles hugr @?= []
-                pure $ to_json hugr
+                pure (hugr, []) --Expect no hole ops as spliced by interpreter
           in [singleTest func_name (VTest makeHugr outFile)]
      else let (is_xfail, eOut) = case T.stripPrefix (T.pack "-xfail ") restLine of
                 Just out -> (True, out)
