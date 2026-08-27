@@ -103,7 +103,7 @@ convertType HTUSize = M.Var "prelude.usize"
 --convertType HTArray = _
 convertType (HTSum (SU (UnitSum n))) = M.Apply "core.adt" [M.List [M.Item (M.List []) | _ <- [1..n]]]
 convertType (HTSum (SG (GeneralSum rows)))
- = M.Apply "core.adt" [(M.List (M.Item . convertType <$> row)) | row <- rows ]
+ = M.Apply "core.adt" [M.List [M.Item (M.List (M.Item . convertType <$> row)) | row <- rows ]]
 convertType (HTOpaque ext typ [] _bound) = M.Var (ext ++ "." ++ typ)
 convertType (HTOpaque ext typ args _bound)
  = M.Apply (ext ++ "." ++ typ) [(convertTypeArg arg) | arg <- args]
@@ -230,7 +230,7 @@ convertNode hg nodeId = case getOp hg nodeId of
     let inTys = M.List (M.Item . convertType <$> sumTy !! tag)
     let outTy = M.List
                 [M.Item (M.Apply "core.adt"
-                 [ M.List (M.Item . convertType <$> row) | row <- sumTy]
+                 [M.List [M.Item (M.List (M.Item . convertType <$> row)) | row <- sumTy]]
                 )]
     let signature = M.Apply "core.fn" [inTys, outTy]
     pure (Just (M.Node
