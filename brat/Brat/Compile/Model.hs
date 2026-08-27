@@ -102,9 +102,11 @@ convertType HTQubit = M.Var "prelude.qubit"
 convertType HTUSize = M.Var "prelude.usize"
 --convertType HTArray = _
 convertType (HTSum (SU (UnitSum n))) = M.Apply "core.adt" [M.List [M.Item (M.List []) | _ <- [1..n]]]
---convertType (HTOpaque ext typ args bound) = _
 convertType (HTSum (SG (GeneralSum rows)))
  = M.Apply "core.adt" [(M.List (M.Item . convertType <$> row)) | row <- rows ]
+convertType (HTOpaque ext typ [] _bound) = M.Var (ext ++ "." ++ typ)
+convertType (HTOpaque ext typ args _bound)
+ = M.Apply (ext ++ "." ++ typ) [(convertTypeArg arg) | arg <- args]
 --convertType (HTFunc polyFuncType) = _
 convertType x = error $ "convertType " ++ show x
 
