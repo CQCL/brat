@@ -220,8 +220,22 @@ compileClauses parent ins ((matchData, rhs) :| clauses) = do
   didntMatch outTys parent ins = case nonEmpty clauses of
     Just clauses -> compileClauses parent ins clauses
     -- If there are no more clauses left to test, then the Hugr panics
-    Nothing -> let sig = FunctionType (snd <$> ins) outTys ["BRAT"] in
-      addNodeWithInputs "Panic" (parent, OpCustom (CustomOp "BRAT" "panic" sig [])) ins outTys
+    Nothing -> let sig = FunctionType ((HTOpaque "prelude" "error" [] TBAny) : (snd <$> ins)) outTys ["BRAT"] in do
+      --addNodeWithInputs "Panic" (parent, OpCustom (CustomOp "BRAT" "panic" sig [])) ins outTys
+      -- TODO: Add a const error and wire it in as the first argument
+      signalConst <- addNodeWithInputs "ErrorSigConst" (parent, OpConst (ConstOp (HVUSize 1))) [] [HTUSize]
+      errSignal <- addNodeWithInputs "ErrorSigLoad" (parent, OpLoadConstant (LoadConstantOp HTUSize)) signalConst [HTUSize]
+
+
+      msgConst <- addNodeWithInputs "ErrorStringConst" (parent, OpConst (ConstOp (HVString "no match!"))) [] [HTString]
+      errStr <- addNodeWithInputs "ErrorStringLoad" (parent, OpLoadConstant (LoadConstantOp HTString)) msgConst [HTString]
+      errs <- addNodeWithInputs "MakeError" (parent, OpCustom (CustomOp "prelude" "MakeError" (FunctionType [HTUSize, HTString] [HTOpaque "prelude" "error" [] TBAny] []) [])) (errSignal ++ errStr) [HTString]
+      case errs of
+        [err] -> let argRow = TASequence (TAType . snd <$> ins)
+                     op = (CustomOp "prelude" "panic" sig [argRow, argRow])
+                 in addNodeWithInputs "Panic" (parent, OpCustom op) (err:ins) outTys
+        _ -> error "wtf?"
+
 
   didMatch :: [HugrType] -> NodeId -> [TypedPort] -> Compile [TypedPort]
   didMatch outTys parent ins = gets bratGraph >>= \(ns,_) -> case ns M.! rhs of
@@ -519,7 +533,7 @@ makeConditional lbl parent discrim otherInputs cases = do
     let outTys = snd <$> outs
     setOp outId (OpOut (OutputNode outTys [("source", "makeCase")]))
     for_ (zip (fst <$> outs) (Port outId <$> [0..])) addEdge
-    setOp caseId (OpCase (Case (FunctionType tys outTys bratExts) [("name",lbl ++ "/" ++ name)]))
+    setOp caseId (OpCase (Case (FunctionType tys outTys bratExts) [{-("name",lbl ++ "/" ++ name)-}]))
     pure (outTys, caseId)
 
   allRowsEqual :: [[HugrType]] -> Bool

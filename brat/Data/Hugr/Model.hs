@@ -27,7 +27,10 @@ printDoc :: Doc -> String
 printDoc (Leaf str) = str
 printDoc Nowt = ""
 printDoc (a :<> b) = printDoc a ++ printDoc b
-printDoc (Line n d) = "\n" ++ unlines ((replicate n ' ' ++) <$> lines (printDoc d))
+printDoc (Line n d) = "\n" ++ unlines (indent n <$> lines (printDoc d))
+ where
+  indent _ "" = ""
+  indent n str = replicate n ' ' ++ str
 
 parens :: Doc -> Doc
 parens x = "(" <> x <> ")"
@@ -64,7 +67,7 @@ type LinkName = String
 instance Serialise Package where
   serialise (H hugr) = "(hugr 0)" <> Line 0 "(mod)" <> Line 0 (serialise hugr)
 
-type Module = Region
+type Module = Node
 
 data RegionKind = DFG | CFG | MOD
 
@@ -101,7 +104,7 @@ instance Serialise Visibility where
 data Param = Param String Term -- Term is the type of the param
 
 instance Serialise Param where
-  serialise (Param name ty) = "(param" <> doc name <> serialise ty <> ")"
+  serialise (Param name ty) = "(param" <+> doc name <+> serialise ty <> ")"
 
 type SymbolName = String
 
@@ -114,13 +117,13 @@ data Symbol = Symbol
   }
 
 instance Serialise Symbol where
-  serialise (Symbol { .. }) = mconcat
-    [ maybe Nowt serialise vis
-    , doc name
-    , mconcat (serialise <$> params)
-    , mconcat (serialise <$> constraints)
-    , serialise symbolSig
-    ]
+  serialise (Symbol { .. }) =
+    maybe Nowt serialise vis
+    <+> doc name
+    <> foldr (<+>) Nowt (serialise <$> params)
+    <> foldr (<+>) Nowt (serialise <$> constraints)
+    <+> serialise symbolSig
+
 
 data Operation
  = Invalid
@@ -144,16 +147,16 @@ instance Serialise Operation where
     Dfg -> "dfg"
     Cfg -> "cfg"
     Block -> "block"
-    DefineFunc fn -> "define-func" <> serialise fn
-    DeclareFunc fn -> "declare-func" <> serialise fn
+    DefineFunc fn -> "define-func" <+> serialise fn
+    DeclareFunc fn -> "declare-func" <+> serialise fn
     Custom tm -> serialise tm
     DefineAlias _ _ -> undefined
     DeclareAlias _ -> undefined
     TailLoop -> "tail-loop"
     Conditional -> "cond"
-    DeclareConstructor con -> "declare-ctr" <> serialise con
-    DeclareOperation op -> "declare-operation" <> serialise op
-    Import name -> "import" <> doc name
+    DeclareConstructor con -> "declare-ctr" <+> serialise con
+    DeclareOperation op -> "declare-operation" <+> serialise op
+    Import name -> "import" <+> doc name
 
 data Node = Node
  { op :: Operation
@@ -169,7 +172,9 @@ printPortLists [] [] = mempty
 printPortLists ins outs = brackets (printList ins) <+> brackets (printList outs)
  where
   printList :: [LinkName] -> Doc
-  printList xs = mconcat (doc <$> xs)
+  printList [] = Nowt
+  printList [x] = doc x
+  printList (x:xs) = doc x <+> printList xs
 
 printSignature :: Maybe Term -> Doc
 printSignature Nothing = mempty
@@ -213,7 +218,7 @@ data SeqPart
 
 instance Serialise SeqPart where
    serialise (Item tm) = serialise tm
-   serialise (Splice tm) = serialise tm <> "..."
+   serialise (Splice tm) = serialise tm <+> "..."
 
 printListParts :: [SeqPart] -> Doc
 printListParts [Splice (List xs)] = printListParts xs
@@ -223,8 +228,8 @@ printListParts (x:xs) = serialise x <+> printListParts xs
 printListParts [] = mempty
 
 printTupleParts :: [SeqPart] -> Doc
-printTupleParts (Splice (Tuple ys):xs) = printTupleParts ys <> printTupleParts xs
-printTupleParts (x:xs) = serialise x <> printTupleParts xs
+printTupleParts (Splice (Tuple ys):xs) = printTupleParts ys <+> printTupleParts xs
+printTupleParts (x:xs) = serialise x <+> printTupleParts xs
 printTupleParts [] = mempty
 
 data Literal
@@ -236,9 +241,9 @@ data Literal
 
 instance Serialise Literal where
    serialise = \case
-     LitStr str -> doc str
+     LitStr str -> doc (show str)
      LitNat n -> doc (show n)
-     LitBytes bs -> parens ("bytes" <> printBytes bs)
+     LitBytes bs -> parens ("bytes" <+> printBytes bs)
      LitFloat flt -> doc (show flt)
 
 printBytes :: [Word8] -> Doc

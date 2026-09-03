@@ -117,6 +117,6 @@ compileAndPrintFile :: [FilePath] -> String -> IO ()
 compileAndPrintFile libDirs file = compileFile root libDirs file >>= \case
   Right hs -> for_ (M.toList hs) $ \(n, (hugr, splices)) -> do
     putStrLn $ "Compiled box: " ++ show n
-    putStrLn (toModelEnvelope (fst (split "v" root)) hugr)
+    putStrLn (toModelEnvelope (fst (split "v" root)) "main" hugr)
     putStrLn $ "With splices: " ++ show splices
   Left err -> die (show err)

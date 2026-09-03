@@ -2,16 +2,19 @@
 module Brat.Compile.Model (toModelString, toModelEnvelope) where
 
 import Control.Monad.State
-import Data.Traversable (for)
-import Data.List (delete)
+import Data.List (delete, sortBy)
 import qualified Data.Map as Map
 import Data.Maybe (catMaybes, fromMaybe)
+import Data.Maybe.HT (toMaybe)
+import Data.Ord (comparing)
+import Data.Traversable (for)
 
 import Brat.Naming (Name, Namespace, fresh)
 import Data.Hugr
 import Data.HugrGraph
 import qualified Data.Hugr as H
 import qualified Data.Hugr.Model as M
+
 
 data ModelState = State
  { ns :: Namespace
@@ -24,7 +27,6 @@ data ModelState = State
 type Model = State ModelState -- out nodes that have been compiled
 
 setOutVar :: NodeId -> [(Int, M.LinkName)] -> Model ()
---setOutVar key val | trace ("setOutVar " ++ show key ++ " " ++ show val) False = undefined
 setOutVar key val = do
   ms <- get
   let newVal = case Map.lookup key (outVars ms) of
@@ -33,7 +35,6 @@ setOutVar key val = do
   put (ms { outVars = Map.insert key newVal (outVars ms) })
 
 setInpVar :: NodeId -> [(Int, M.LinkName)] -> Model ()
---setInpVar key val | trace ("setInpVar " ++ show key ++ " " ++ show val) False = undefined
 setInpVar key val = do
   ms <- get
   let newVal = case Map.lookup key (inpVars ms) of
@@ -80,9 +81,16 @@ makeOutputLink nid port = do
   setOutVar nid [(port, ('%':show name))]
   pure link
 
-freshInputLinks :: NodeId -> [a] -> Model [M.LinkName]
-freshInputLinks nodeId xs = do
-  links <- for xs (\_ -> (('%':) . show) <$> freshName)
+freshInputLinks :: NodeId
+                -- List representing input ports.
+                -- * Nothing means we create a fresh link for the port
+                -- * (Just link) means it will be filled with an existing link
+                -> [Maybe M.LinkName]
+                -> Model [M.LinkName] -- Combined fresh and existing links
+freshInputLinks nodeId mLinks = do
+  links <- for mLinks $ \case
+    Nothing -> (('%':) . show) <$> freshName
+    Just link -> pure link
   for (zip [0..] links) $ \(ix, link) -> setInpVar nodeId [(ix, link)]
   pure links
 
@@ -94,14 +102,18 @@ freshOutputLinks nodeId xs = do
 
 convertMeta :: [(String, String)] -> [M.Term]
 convertMeta [] = []
-convertMeta ((key,_):xs) = M.Tuple [M.Item (M.Literal (M.LitStr key)), M.Item (M.Literal (M.LitStr key))] : convertMeta xs
+convertMeta ((key,val):xs) = M.Tuple [M.Item (M.Literal (M.LitStr key))
+                                     ,M.Item (M.Literal (M.LitStr val))]
+                             : convertMeta xs
 
 -- TODO: Work out how qubit should be represented and do that
 convertType :: HugrType -> M.Term
 convertType HTQubit = M.Var "prelude.qubit"
 convertType HTUSize = M.Var "prelude.usize"
+convertType HTString = M.Var "prelude.string" -- TODO: Need to add prelude.string, this is a hack
 --convertType HTArray = _
-convertType (HTSum (SU (UnitSum n))) = M.Apply "core.adt" [M.List [M.Item (M.List []) | _ <- [1..n]]]
+convertType (HTSum (SU (UnitSum n)))
+ = M.Apply "core.adt" [M.List [M.Item (M.List []) | _ <- [1..n]]]
 convertType (HTSum (SG (GeneralSum rows)))
  = M.Apply "core.adt" [M.List [M.Item (M.List (M.Item . convertType <$> row)) | row <- rows ]]
 convertType (HTOpaque ext typ [] _bound) = M.Var (ext ++ "." ++ typ)
@@ -110,8 +122,19 @@ convertType (HTOpaque ext typ args _bound)
 --convertType (HTFunc polyFuncType) = _
 convertType x = error $ "convertType " ++ show x
 
+convertTypeArg :: TypeArg -> M.Term
+convertTypeArg (TAType ht) = convertType ht
+convertTypeArg (TANat n) = M.Literal (M.LitNat n)
+--convertTypeArg (TAOpaque CustomTypeArg
+convertTypeArg (TASequence tas) = M.List [M.Item (convertTypeArg ta) | ta <- tas]
+-- convertTypeArg (TAVariable TypeArgVariable)
+
+
+
 convertValue :: HugrValue -> M.Term
 -- convertValue (HVFunction hugr) = undefined
+convertValue (HVUSize n) = M.Literal (M.LitNat n)
+convertValue (HVString str) = M.Literal (M.LitStr str)
 convertValue (HVTuple vs) = M.Tuple (M.Item . convertValue <$> vs)
 convertValue hv@(HVExtension _ _ (CC _ _)) = error $ show hv
 
@@ -122,18 +145,43 @@ convertSig (FunctionType { .. }) = M.Apply "core.fn" [inpTm, outTm]
   outTm = M.List (M.Item . convertType <$> output)
 
 -- TODO: Rewrite this so that we don't rely on HugrGraph internals
-hugrToModel :: HugrGraph NodeId -> Model M.Package
-hugrToModel hg@(HugrGraph { ..  }) =
+hugrToModel :: String -> HugrGraph NodeId -> Model M.Package
+hugrToModel fnName hg@(HugrGraph { ..  }) =
   case getOp hg root of
-    OpDFG (DFG sig meta) -> M.H <$> dfgToRegion hg (root, sig, meta)
+    OpDFG (DFG sig meta) -> M.H <$> dfgToFunc fnName hg (root, sig, meta)
     _ -> error "TODO: Non-DFG root op"
+
+dfgToFunc :: String -> HugrGraph NodeId -> (NodeId, H.FunctionType, [(String, String)]) -> Model M.Node
+dfgToFunc fnName hg (nodeId, sig, meta) = do
+  dfgRegion <- dfgToRegion hg (nodeId, sig, meta)
+  let op = M.DefineFunc (M.Symbol (Just M.Private) fnName [] [] (convertSig sig))
+  pure (M.Node
+       { op = op
+       , inputs = []
+       , outputs = []
+       , regions = [dfgRegion]
+       , nodeMetas = []
+       , nodeSignature = Nothing
+       })
 
 -- Invariant: NodeId points to a DFG
 dfgToRegion :: HugrGraph NodeId -> (NodeId, H.FunctionType, [(String, String)]) -> Model M.Region
 dfgToRegion hg@(HugrGraph { ..  }) (nodeId, sig, meta) = do
   let [inp, out] = fromMaybe (error "no kids") $ Map.lookup nodeId first_children
+  -- This isn't great, because if any inputs are wired to the outputs, we
+  -- shouldn't make fresh links for them
   sourceVars <- freshOutputLinks inp (input sig)
-  targetVars <- freshInputLinks out (output sig)
+  targetVars <- do
+    let inputsToOutputNode = sortBy (comparing snd) (inEdges hg out)
+    -- Check if any of the inputs to the output node come directly from the input
+    -- node. If so, we shouldn't make fresh links for them.
+    case (\p@(Port src _, _) -> toMaybe (src == inp) p) <$> inputsToOutputNode of
+      [] -> freshInputLinks out (Prelude.const Nothing <$> output sig)
+      ps -> do
+        danglingLinks <- getOutVars inp
+        let mInputLinks = fmap (>>= (\(Port _ outIx, _) -> lookup outIx danglingLinks)) ps
+        freshInputLinks out mInputLinks
+
   let regionMetas = convertMeta meta
   let regionSignature = Just (convertSig sig)
   children <- traverse (convertNode hg)
@@ -150,7 +198,7 @@ dfgToRegion hg@(HugrGraph { ..  }) (nodeId, sig, meta) = do
 -- Get the links corresponding to the inputs and outputs of a Model Node
 nodeInputs :: HugrGraph NodeId -> NodeId -> Model [M.LinkName] -- inputs
 nodeInputs hg nodeId =
-  for (inEdges hg nodeId) $ \(Port srcNode srcIx, tgtIx) -> do
+  for (sortBy (comparing snd) (inEdges hg nodeId)) $ \(Port srcNode srcIx, tgtIx) -> do
     getDangling srcNode srcIx >>= \case
       Just link -> pure link
       Nothing -> makeInputLink nodeId tgtIx
@@ -241,44 +289,47 @@ convertNode hg nodeId = case getOp hg nodeId of
          , nodeMetas = []
          , nodeSignature = Just signature
          }))
-  (OpCustom (CustomOp ext op sig _args)) -> do
+  (OpCustom (CustomOp ext op sig args)) -> do
     inWires <- if null (input sig) then pure [] else nodeInputs hg nodeId
     outWires <- nodeOutputs hg nodeId
     pure (Just (M.Node
-         { op = M.Custom (M.Apply (ext ++ "." ++ op) [])
+         { op = M.Custom (M.Apply (ext ++ "." ++ op) (convertTypeArg <$> args))
          , inputs = inWires
          , outputs = outWires
          , regions = []
          , nodeMetas = []
          , nodeSignature = Just (convertSig sig)
          }))
+  (OpLoadConstant (LoadConstantOp ty)) -> case inEdges hg nodeId of
+    [(Port constNode 0, 0)] -> case getOp hg constNode of
+      OpConst (ConstOp val) -> do
+        outputs <- nodeOutputs hg nodeId
+        pure (Just (M.Node
+         { op = M.Custom (M.Apply "core.load_const" [convertType ty, convertValue val])
+         , inputs = []
+         , outputs = outputs
+         , regions = []
+         , nodeMetas = []
+         , nodeSignature = Just (convertSig (FunctionType [] [ty] []))
+         }))
+
+      _ -> error "Expected a const node"
+    _ -> error "Bad const node"
+  (OpConst _) -> pure Nothing
+  x -> error ("Unimplemented: emission of " ++ show x)
 
 {-
-convertOp hg (OpConst (ConstOp hv)) = convertValue hv
 convertOp hg (OpMakeTuple MakeTupleOp
 convertOp hg (OpCustom CustomOp
 convertOp hg (OpCall CallOp
 convertOp hg (OpCallIndirect CallIndirectOp
-convertOp hg (OpLoadConstant LoadConstantOp
 convertOp hg (OpLoadFunction LoadFunctionOp
 -}
 
-
-
-{- TODO: Ditch BS, encode bytes in Doc?
-
--- Magic prefix for encoded hugr that says it's uncompressed text
-magic :: Builder
-magic = "HUGRiHJv(" <> word8 64
-
-printPackage :: HugrGraph NodeId -> Builder
-printPackage hg = "(hugr 0)\n(mod)" <> (M.serialise hugrToModel)
--}
-
-toModelString :: Namespace -> HugrGraph NodeId -> String
-toModelString ns hg = M.printDoc (M.serialise (evalState (hugrToModel hg) (State ns 0 Map.empty Map.empty)))
+toModelString :: Namespace -> String -> HugrGraph NodeId -> String
+toModelString ns fnName hg = M.printDoc (M.serialise (evalState (hugrToModel fnName hg) (State ns 0 Map.empty Map.empty)))
 
 magic = "HUGRiHJv(@"
 
-toModelEnvelope :: Namespace -> HugrGraph NodeId -> String
-toModelEnvelope ns hg = magic ++ M.printDoc (M.serialise (evalState (hugrToModel hg) (State ns 0 Map.empty Map.empty)))
+toModelEnvelope :: Namespace -> String -> HugrGraph NodeId -> String
+toModelEnvelope ns fnName hg = magic ++ M.printDoc (M.serialise (evalState (hugrToModel fnName hg) (State ns 0 Map.empty Map.empty)))

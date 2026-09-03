@@ -74,6 +74,7 @@ data HugrType
   = HTQubit
   | HTUSize
   | HTArray
+  | HTString
   | HTSum SumType
   | HTOpaque {-extension :: -}String {-type id :: -}String [TypeArg] TypeBound
   | HTFunc PolyFuncType
@@ -93,6 +94,7 @@ instance ToJSON HugrType where
                                                  ,"rows" .= rows
                                                  ]
   toJSON HTUSize = object ["t" .= ("I" :: Text)]
+  toJSON HTString = error "TODO" -- Am I even bothered about the json now?
   toJSON (HTOpaque ext id args bound) = object ["t" .= ("Opaque" :: Text)
                                                ,"extension" .= pack ext
                                                ,"id" .= pack id
@@ -214,6 +216,8 @@ data HugrValue
  = HVFunction (Hugr Int)
  | HVTuple [HugrValue]
  | HVExtension [ExtensionName] HugrType CustomConst
+ | HVUSize Int
+ | HVString String
  deriving (Eq, Show)
 
 instance ToJSON HugrValue where
@@ -223,6 +227,9 @@ instance ToJSON HugrValue where
   toJSON (HVTuple vs) = object ["v" .= ("Tuple" :: Text)
                                   ,"vs" .= vs
                                   ]
+  toJSON (HVString s) = object ["v" .= ("String" :: Text)
+                               ,"vs" .= s
+                               ]
   toJSON (HVExtension exts ty val) = object ["v" .= ("Extension" :: Text)
                                             ,"typ" .= ty
                                             ,"value" .= val
@@ -240,7 +247,7 @@ hvRotation rad = HVExtension ["tket.rotation"] hugrRotation
 valFromSimple :: SimpleTerm -> HugrValue
 valFromSimple (Num x) = hvInt x
 valFromSimple (Float x) = hvFloat x
-valFromSimple (Text _) = error "todo"
+valFromSimple (Text t) = HVString t
 valFromSimple Unit = hvUnit
 
 -------------------------------------- OPS -------------------------------------

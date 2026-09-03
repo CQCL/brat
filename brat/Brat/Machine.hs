@@ -24,7 +24,9 @@ import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Bwd
-import Util (zipSameLength)
+import Util (mapLup, zipSameLength)
+
+import Debug.Trace
 
 type GraphInfo = (Graph, Store, Namespace, CaptureSets)
 
@@ -34,11 +36,12 @@ runInterpreter ns libDirs file runFunc = do
     (ns, (declEnv, _, st, outerGraph, capSets)) <- compileToGraph ns libDirs file
     let venv = M.map fst declEnv
     --print (show outerGraph)
-    let outPorts = [op | (NamedPort op _, _ty) <- venv M.! (plain runFunc)]
+    let outPorts = [op | (NamedPort op _, _ty) <- trace (unlines["VEnv",show venv,show (plain runFunc)]) mapLup "interp" venv (plain runFunc)]
     let outTask = evalPorts (outerGraph, st, ns, capSets) (B0 :< BratValues M.empty) B0 outPorts
     -- we hope outTask is a Finished. Or a Suspend.
     pure $ case outTask of
       Finished [(KernelV hugr)] -> Right hugr
+--      Finished [bc@(BratClosure _ _ _)] -> runThunk (outerGraph, st, ns, capSets) B0 bc []
       _ -> Left $ T.pack $ show outTask
 
 data Frame where
@@ -172,7 +175,7 @@ runThunk gi fz (VectorisedThunks ths) inputs =
 
 -- Evaluate a node given its inputs (graph edges, excluding e.g. func to Eval)
 evalNode :: GraphInfo -> Bwd Frame -> Name -> [Value] -> Task
-evalNode gi@(g@(nodes, _), st, root, cs) fz n ins = case nodes M.! n of
+evalNode gi@(g@(nodes, _), st, root, cs) fz n ins = case mapLup "evalNode" nodes n of
   --nw | trace ("EVALNODE " ++ show nw) False -> undefined
   (BratNode (Const st) _ _) -> run gi fz (Finished [evalSimpleTerm st])
   (BratNode (ArithNode op) _ _) -> run gi fz (Finished [evalArith op ins])
@@ -309,7 +312,7 @@ miniEval :: GraphInfo -> EvalEnv -> OutPort -> Value
 miniEval _ env x | Just v <- M.lookup x env = v
 miniEval gi@((nodes, _), _, _, _) env (Ex node 0) =
   let inputs = miniEval gi env <$> getNodeInputs gi node
-  in  case nodes M.! node of
+  in  case mapLup "miniEval" nodes node of
         BratNode (ArithNode op) _ _ -> evalArith op inputs
         BratNode (Const x) _ _ -> evalSimpleTerm x
         BratNode (Constructor c) _ _ -> evalConstructor c inputs
@@ -341,11 +344,11 @@ doAllTests :: EvalEnv -> [(Src, PrimTest (BinderType Brat))] -> Maybe EvalEnv
 doAllTests env [] = Just env
 doAllTests env ((NamedPort outport _, test):tests) =
   case test of
-    PrimLitTest term -> if testLiteral term (env M.! outport)
+    PrimLitTest term -> if testLiteral term (mapLup "PRimLitTest" env outport)
                         then doAllTests env tests
                         else Nothing
     PrimCtorTest ctor ty _ outSrcs -> do
-      outputs <- testCtor ty ctor (env M.! outport)
+      outputs <- testCtor ty ctor (mapLup "PrimCtorTest" env outport)
       doAllTests (env `M.union` M.fromList (zip (end . fst <$> outSrcs) outputs)) tests
 
 captureEnv :: Bwd Frame -> S.Set OutPort -> EvalEnv
@@ -430,6 +433,7 @@ data BratThunk =
     BratClosure EvalEnv Name Name  -- Captured environment, src node, tgt node
   | BratPrim String String (CTy Brat Z)
   | VectorisedThunks [BratThunk] -- result of MapFun
+ deriving Show
 
 instance Show Value where
   show (IntV x) = show x
@@ -437,7 +441,7 @@ instance Show Value where
   show (BoolV x) = show x
   show (VecV xs) = show xs
   show (ThunkV (VectorisedThunks ths)) = "<vectorized thunk of " ++ show (length ths) ++ ">"
-  show (ThunkV _) = "<thunk>"
+  show (ThunkV th) = "<" ++ show th ++ ">"
   show (KernelV k) = "Kernel (" ++ show k ++ ")"
   show (ThinConsV b val) = (if b then "1" else "0") ++ "-" ++ show val
   show DummyV = "Dummy"

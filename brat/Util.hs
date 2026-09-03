@@ -1,5 +1,7 @@
 module Util where
 
+import qualified Data.Map as M
+
 zipSameLength :: [a] -> [b] -> Maybe [(a,b)]
 zipSameLength (x:xs) (y:ys) = ((x,y):) <$> zipSameLength xs ys
 zipSameLength [] [] = Just []
@@ -49,3 +51,8 @@ log2 :: Integer -> Maybe Integer
 log2 m | m > 1, (n, 0) <- m `divMod` 2 = (1+) <$> log2 n
 log2 1 = pure 0
 log2 _ = Nothing
+
+mapLup :: Ord k => String -> M.Map k v -> k -> v
+mapLup lbl m k = case M.lookup k m of
+  Nothing -> error $ "mapLup fail: " ++ lbl
+  Just v -> v

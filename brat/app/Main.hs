@@ -52,5 +52,5 @@ main = do
     let (modelNS, newRoot) = split "v" root
     result <- runInterpreter newRoot libDirs file runFunc
     case result of
-      Right hugr -> putStr (toModelEnvelope modelNS hugr)
+      Right hugr -> putStr (toModelEnvelope modelNS runFunc hugr)
       Left s -> TIO.putStr s
